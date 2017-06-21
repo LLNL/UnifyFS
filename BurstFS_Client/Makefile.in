@@ -1,0 +1,117 @@
+all: src/libcruise-posix.a
+
+DESTDIR =
+srcdir = @srcdir@
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+datarootdir = $(DESTDIR)@datarootdir@
+includedir = $(DESTDIR)@includedir@
+mandir = $(DESTDIR)@mandir@
+sbindir = $(DESTDIR)@sbindir@
+bindir = $(DESTDIR)@bindir@
+libdir = $(DESTDIR)@libdir@
+LDFLAGS = @LDFLAGS@
+CC = @CC@
+LD = @LD@
+
+NUMA_LIBS = -lnuma
+
+
+DISABLE_LDPRELOAD = @DISABLE_LDPRELOAD@
+
+ifndef DISABLE_LDPRELOAD
+all: src/libcruise.so 
+endif
+
+VPATH = $(srcdir)
+
+CFLAGS = -DCRUISE_CONFIG_H=\"cruise-runtime-config.h\" -I . -I ../ -I $(srcdir) -I$(srcdir)/../ @CFLAGS@ @CPPFLAGS@ -D_LARGEFILE64_SOURCE 
+
+CFLAGS_SHARED = -DCRUISE_CONFIG_H=\"cruise-runtime-config.h\" -I . -I$(srcdir) -I$(srcdir)/../ @CFLAGS@ @CPPFLAGS@ -D_LARGEFILE64_SOURCE -shared -fpic -DPIC -DCRUISE_PRELOAD
+
+LIBS = @LIBBZ2@ $(NUMA_LIBS)
+
+lib::
+	@mkdir -p $@
+
+HEADERS = \
+  src/cruise-stack.h \
+  src/cruise-fixed.h \
+  src/cruise-sysio.h \
+  src/cruise-stdio.h \
+  src/cruise-internal.h \
+  src/cruise.h
+
+OBJS = \
+  src/cruise-stack.o \
+  src/cruise-fixed.o \
+  src/cruise-sysio.o \
+  src/cruise-stdio.o \
+  src/cruise.o
+
+POBJS = \
+  src/cruise-stack.po \
+  src/cruise-fixed.po \
+  src/cruise-sysio.po \
+  src/cruise-stdio.po \
+  src/cruise.po
+
+src/cruise-fixed.o: src/cruise-fixed.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+src/cruise-fixed.po: src/cruise-fixed.c $(HEADERS)
+	$(CC) $(CFLAGS_SHARED) -c $< -o $@
+
+
+src/cruise.o: src/cruise.c $(HEADERS)
+	$(CC) $(CFLAGS) -c src/cruise.c -o $@
+
+src/cruise.po: src/cruise.c $(HEADERS)
+	$(CC) $(CFLAGS_SHARED) -c src/cruise.c -o $@
+
+
+src/cruise-sysio.o: src/cruise-sysio.c $(HEADERS)
+	$(CC) $(CFLAGS) -c src/cruise-sysio.c -o $@
+
+src/cruise-sysio.po: src/cruise-sysio.c $(HEADERS)
+	$(CC) $(CFLAGS_SHARED) -c src/cruise-sysio.c -o $@
+
+
+src/cruise-stdio.o: src/cruise-stdio.c $(HEADERS)
+	$(CC) $(CFLAGS) -c src/cruise-stdio.c -o $@
+
+src/cruise-stdio.po: src/cruise-stdio.c $(HEADERS)
+	$(CC) $(CFLAGS_SHARED) -c src/cruise-stdio.c -o $@
+
+
+src/cruise-stack.o: src/cruise-stack.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+src/cruise-stack.po: src/cruise-stack.c $(HEADERS)
+	$(CC) $(CFLAGS_SHARED) -c $< -o $@
+
+
+%.i: %.c
+	$(CC) -E $(CFLAGS) -c $< -o $@
+
+src/libcruise-posix.a: $(OBJS)
+	ar rcs $@ $^
+
+src/libcruise.so: $(POBJS)
+	$(CC) $(CFLAGS_SHARED) $(LDFLAGS) -ldl -o $@ $^ -lpthread -lrt
+
+install:: all
+	install -d $(libdir)
+	install -m 755 src/libcruise-posix.a $(libdir)
+ifndef DISABLE_LDPRELOAD
+	install -m 755 src/libcruise.so $(libdir)
+endif
+	install -d $(bindir)
+	install -m 755 cruise-config $(bindir)
+
+clean::
+	rm -f *.o *.po *.a src/*.o src/*.po src/*.a src/*.so *.in~ 
+
+distclean:: clean
+	rm -f cruise-runtime-config.h aclocal.m4 autom4te.cache/* config.status config.log Makefile 
+	rm -rf autom4te.cache

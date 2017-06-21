@@ -1,0 +1,16 @@
+#!/bin/bash
+
+. /usr/local/tools/dotkit/init.sh
+use -q ic-11.1.046 
+
+set -x
+
+./prepare
+./configure \
+  --prefix=`pwd`/install \
+  --enable-ld-preload \
+  CC=mpiicc CFLAGS="-O3 -DENABLE_NUMA_POLICY" || exit 1
+
+make clean || exit 1
+make || exit 1
+make install || exit 1

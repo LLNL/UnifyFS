@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -x
+
+./prepare
+./configure \
+  --prefix=`pwd`/install_bgq \
+  --disable-ld-preload \
+  CC=mpixlc CFLAGS="-g -O0 -DMACHINE_BGQ" || exit 1
+#  CC=mpixlc CFLAGS="-O3 -DMACHINE_BGQ" || exit 1
+
+make clean || exit 1
+make || exit 1
+make install || exit 1

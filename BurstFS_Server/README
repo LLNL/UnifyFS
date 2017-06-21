@@ -1,0 +1,109 @@
+===============================================================================
+               BurstFS: A Distributed Burst Buffer File System - 0.1.1
+===============================================================================
+
+Node-local burst buffers are becoming an indispensable hardware
+resource on large-scale supercomputers to buffer the bursty
+I/O from scientific applications. However, there is a lack of
+software support for burst buffers to be efficiently shared by
+applications within a batch-submitted job and recycled across
+different batch jobs. In addition, burst buffers need to cope with
+a variety of challenging I/O patterns from data-intensive scientific
+applications.
+
+BurstFS is a user-level burst buffer file system that supports scalable 
+and efficient aggregation of I/O bandwidth from burst buffers while
+having the same life cycle as a batch-submitted job. It is layered 
+on top of CRUISE, a scalable checkpointing/restart I/O library. 
+While CRUISE is designed for N-N write/read, BurstFS compliments its 
+functionality with the support for N-1 write/read. It efficiently 
+accelerates scientific I/O based on scalable metadata 
+indexing, co-located I/O delegation, and server-side read clustering and
+pipelining.
+
+
+Please note that the current implementation of BurstFS is not of production 
+quality, and is for research purpose only. The current client-side interface is based on POSIX, including open, 
+pwrite, lio_listio, pread, write, read, lseek, close and fsync. BurstFS is designed 
+for batched write and read operations under a typical bursty I/O workload (e.g. checkpoint/restart);
+ it is optimized for bursty write/read 
+based on pwrite/lio_listio respectively. It is still an open research question on 
+whether we should give BurstFS a comprehensive POSIX support, or provide a few POSIX 
+APIs, but layer on top of them with other higher-level I/O functions. Below is the 
+guide on how to install and use BurstFS server.
+
+1. Prepare and run 'configure':
+
+./configure --with-mdhim=<directory of MDHIM> --with-leveldb=<directory of leveldb>
+
+2. Build library
+
+make clean
+make
+make install
+
+3. Run server program:
+Be sure to launch the server 
+program before any of the client programs start. The sample 
+script (based on SLURM) for the server program is provided (runserver.sh).  
+If you don't want to use interactive job, you can combine the 
+client and server scripts into one job script. 
+The number of ranks launched on each node is configurable. You can 
+tune the number of ranks per node to get the optimal performance.  
+
+5. How to use BurstFS client?
+Below is the explanation of some configurable 
+environment variables for BurstFS server:
+
+BURSTFS_META_DB_PATH: the directory used by 
+MDHIM to store the metadata.
+BURSTFS_META_SERVER_RATIO: rserver_factor in MDHIM.
+BURSTFS_META_RANGE_SZ: the slice size in MDHIM.
+
+Some important constant in burstfs_const.h:
+RECV_BUF_LEN: the size of 
+receive buffer used by the request 
+manager to receive the data from the remote service 
+manager.
+REQ_BUF_LEN: the size of request buffer for each 
+MPI_Send when a request manager sends the read requests 
+to a remote service manager. 
+SEND_BLOCK_SIZE: the size of send buffer used by the service manager 
+to send the data back to the remote request manager.
+READ_BUF_SZ: size of the read buffer for clustered read on the 
+service manager.
+
+
+
+6. Future works for a production system include but are not limited to:
+a. Provide the exception handling for the following scenarios:
+-- When REQ_BUF_LEN is insufficient, transfer the read 
+requests in multiple rounds.
+-- Exception handling under various scenarios (e.g. the ones 
+defined in burstfs_const.h)
+
+b. Automatic index synchronization
+-- Automatically store the indices to the key-value 
+servers at a configurable frequency.
+
+c. On-demand services triggered by BurstFS_unmount
+-- Provide on-demand data flush or other on-demand services along 
+with the implemented resource sanitization.
+
+d. Comprehensive testing and debugging under the following scenarios:
+-- When data are stored on both DRAM and SSD, the service manager 
+reads data from the combined storage of both the shared DRAM space 
+and SSD, this feature is not tested yet.
+-- Restart from a different number of processes (non-uniform restart).
+-- Coupling multiple different programs together for sharing 
+data.
+-- Test and debug with various data sizes and transfer sizes.
+e. locality-aware optimization
+-- For soft failure, client program can recover directly from
+   its local data without talking with the delegator. May bypass
+   the delegator when the client find the data are stored locally.
+ 
+
+
+
+  

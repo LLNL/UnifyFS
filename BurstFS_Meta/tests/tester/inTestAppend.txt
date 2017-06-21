@@ -1,0 +1,11 @@
+# Put first copy of record
+put 08642 abcdefg
+
+# Get original copy
+get 08642
+
+# Append by using the -a flag in the tester program
+put 08642 ABCEDFG
+
+# Returned value should be concatenated
+get 08642

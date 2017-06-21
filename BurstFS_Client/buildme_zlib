@@ -1,0 +1,16 @@
+#!/bin/bash
+
+set -x
+
+if [ ! -f zlib-1.2.7.tar.gz ] ; then
+  wget zlib.net/zlib-1.2.7.tar.gz
+fi
+
+rm -rf zlib-1.2.7
+tar -zxf zlib-1.2.7.tar.gz
+cd zlib-1.2.7
+
+export CC=mpixlc
+./configure --prefix=`pwd`/install
+make CC=mpixlc
+make install

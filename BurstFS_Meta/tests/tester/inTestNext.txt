@@ -1,0 +1,9 @@
+# Insert small set, later used to text get OPS
+bput 6 nptest.txt
+flush
+# Test differ get ops:  EQ (0), NEXT(1), PREV(2), FIRST(3) and LAST (4)
+get gt1.txt
+get gt2.txt
+get gt3.txt
+get gt4.txt
+get gt5.txt

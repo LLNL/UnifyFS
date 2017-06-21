@@ -1,0 +1,288 @@
+# http://www.gnu.org/software/libc/manual/html_node/I_002fO-Overview.html#I_002fO-Overview
+
+fopen
+fopen64
+freopen
+freopen64
+__freadable
+__fwritable
+__freading
+__fwriting
+
+fclose
+fcloseall
+
+flockfile
+ftrylockfile
+funlockfile
+fsetlocking
+
+fwide
+
+fputc
+fputwc
+fputc_unlocked
+fputwc_unlocked
+putc
+putwc
+putc_unlocked
+putwc_unlocked
+fputs
+fputws
+fputs_unlocked
+fputws_unlocked
+putw
+
+fgetc
+fgetwc
+fgetc_unlocked
+fgetwc_unlocked
+getc
+getwc
+getc_unlocked
+getwc_unlocked
+getw
+
+getline
+getdelim
+fgets
+fgetws
+fgets_unlocked
+fgetws_unlocked
+
+ungetc
+ungetwc
+
+fread
+fread_unlocked
+fwrite
+fwrite_unlocked
+
+fprintf
+fwprintf
+
+vfprintf
+vfwprintf
+
+fscanf
+fwscanf
+vfscanf
+vfwscanf
+
+feof
+feof_unlocked
+ferror
+ferror_unlocked
+
+clearerr
+clearerr_unlocked
+
+ftell
+ftello
+ftello64
+fseek
+fseeko
+fseeko64
+rewind
+
+fgetpos
+fgetpos64
+
+fflush
+fflush_unlocked
+_flushlbf
+__fpurge
+
+setvbuf
+setbuf
+setbuffer
+setlinebuf
+__flbf
+__fbufsize
+__fpending
+
+fmemopen
+open_memstream
+
+fopencookie
+
+
+# http://www.gnu.org/software/libc/manual/html_node/Opening-and-Closing-Files.html#Opening-and-Closing-Files
+open
+open64
+creat
+creat64
+close
+
+# http://www.gnu.org/software/libc/manual/html_node/I_002fO-Primitives.html#I_002fO-Primitives
+read
+pread
+pread64
+write
+pwrite
+pwrite64
+
+# http://www.gnu.org/software/libc/manual/html_node/File-Position-Primitive.html#File-Position-Primitive
+lseek
+lseek64
+
+# http://www.gnu.org/software/libc/manual/html_node/Descriptors-and-Streams.html#Descriptors-and-Streams
+fdopen
+fileno
+fileno_unlocked
+
+# http://www.gnu.org/software/libc/manual/html_node/Scatter_002dGather.html#Scatter_002dGather
+readv
+writev
+
+# http://www.gnu.org/software/libc/manual/html_node/Memory_002dmapped-I_002fO.html#Memory_002dmapped-I_002fO
+mmap
+mmap64
+munmap
+msync
+mremap
+
+# http://www.gnu.org/software/libc/manual/html_node/Waiting-for-I_002fO.html#Waiting-for-I_002fO
+select
+
+# http://www.gnu.org/software/libc/manual/html_node/Synchronizing-I_002fO.html#Synchronizing-I_002fO
+sync
+fsync
+fdatasync
+
+# http://www.gnu.org/software/libc/manual/html_node/Asynchronous-I_002fO.html#Asynchronous-I_002fO
+aio_read
+aio_read64
+aio_write
+aio_write64
+lio_listio
+lio_listio64
+
+# http://www.gnu.org/software/libc/manual/html_node/Status-of-AIO-Operations.html#Status-of-AIO-Operations
+aio_error
+aio_error64
+aio_return
+aio_return64
+
+# http://www.gnu.org/software/libc/manual/html_node/Synchronizing-AIO-Operations.html#Synchronizing-AIO-Operations
+aio_fsync
+aio_fsync64
+aio_suspend
+aio_suspend64
+
+# http://www.gnu.org/software/libc/manual/html_node/Cancel-AIO-Operations.html#Cancel-AIO-Operations
+aio_cancel
+aio_cancel64
+
+# http://www.gnu.org/software/libc/manual/html_node/Configuration-of-AIO.html#Configuration-of-AIO
+aio_init
+
+# http://www.gnu.org/software/libc/manual/html_node/Control-Operations.html#Control-Operations
+fcntl
+
+# http://www.gnu.org/software/libc/manual/html_node/Duplicating-Descriptors.html#Duplicating-Descriptors
+dup
+dup2
+
+# http://www.gnu.org/software/libc/manual/html_node/IOCTLs.html#IOCTLs
+ioctl
+
+# http://www.gnu.org/software/libc/manual/html_node/Working-Directory.html#Working-Directory
+getcwd
+getwd
+get_current_dir_name
+chdir
+fchdir
+
+# http://www.gnu.org/software/libc/manual/html_node/Opening-a-Directory.html#Opening-a-Directory
+opendir
+fdopendir
+dirfd
+
+# http://www.gnu.org/software/libc/manual/html_node/Reading_002fClosing-Directory.html#Reading_002fClosing-Directory
+readdir
+readdir_r
+readdir64
+readdir64_r
+closedir
+
+# http://www.gnu.org/software/libc/manual/html_node/Random-Access-Directory.html#Random-Access-Directory
+rewinddir
+telldir
+seekdir
+
+# http://www.gnu.org/software/libc/manual/html_node/Scanning-Directory-Content.html#Scanning-Directory-Content
+scandir
+scandir64
+
+# http://www.gnu.org/software/libc/manual/html_node/Working-with-Directory-Trees.html#Working-with-Directory-Trees
+ftw
+ftw64
+nftw
+nftw64
+
+# http://www.gnu.org/software/libc/manual/html_node/Hard-Links.html#Hard-Links
+link
+
+# http://www.gnu.org/software/libc/manual/html_node/Symbolic-Links.html#Symbolic-Links
+symlink
+readlink
+canonicalize_file_name
+realpath
+
+# http://www.gnu.org/software/libc/manual/html_node/Deleting-Files.html#Deleting-Files
+unlink
+rmdir
+remove
+
+# http://www.gnu.org/software/libc/manual/html_node/Renaming-Files.html#Renaming-Files
+rename
+
+# http://www.gnu.org/software/libc/manual/html_node/Creating-Directories.html#Creating-Directories
+mkdir
+
+# http://www.gnu.org/software/libc/manual/html_node/Reading-Attributes.html#Reading-Attributes
+stat
+stat64
+fstat
+fstat64
+lstat
+lstat64
+
+# http://www.gnu.org/software/libc/manual/html_node/File-Owner.html#File-Owner
+chown
+fchown
+
+# http://www.gnu.org/software/libc/manual/html_node/Setting-Permissions.html#Setting-Permissions
+umask
+getumask
+chmod
+fchmod
+
+# http://www.gnu.org/software/libc/manual/html_node/Testing-File-Access.html#Testing-File-Access
+access
+
+# http://www.gnu.org/software/libc/manual/html_node/File-Times.html#File-Times
+utime
+utimes
+lutimes
+futimes
+
+# http://www.gnu.org/software/libc/manual/html_node/File-Size.html#File-Size
+truncate
+truncate64
+ftruncate
+ftruncate64
+
+# http://www.gnu.org/software/libc/manual/html_node/Making-Special-Files.html#Making-Special-Files
+mknod
+
+# http://www.gnu.org/software/libc/manual/html_node/Temporary-Files.html#Temporary-Files
+tmpfile
+tmpfile64
+tmpnam
+tmpnam_r
+tempnam
+mktemp
+mkstemp
+mkdtemp

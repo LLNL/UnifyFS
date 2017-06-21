@@ -1,0 +1,87 @@
+# http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1124.pdf
+
+# 7.19.4 Operations on file
+1 remove
+2 rename
+3 tmpfile
+4 tmpnam
+
+# 7.19.5 file access functions 
+1 fclose
+2 fflush
+3 fopen
+4 freopen
+5 setbuf
+6 setvbuf
+
+# 7.19.6 formatted input/output functions
+1 fprintf
+2 fscanf
+3 printf
+4 scanf
+5 snprintf
+6 sprintf
+7 sscanf
+8 vfprintf
+9 vfscanf
+10 vprintf
+11 vscanf
+12 vsnprintf
+13 vsprintf
+14 vsscanf
+
+# 7.19.7 character input/output functions
+1 fgetc
+2 fgets
+3 fputc
+4 fputs
+5 getc
+6 getchar
+7 gets
+8 putc
+9 putchar
+10 puts
+11 ungetc
+
+# 7.19.8 direct input/output functions
+1 fread
+2 fwrite
+
+# 7.19.9 File positioning functions
+1 fgetpos
+2 fseek
+3 fsetpos
+4 ftell
+5 rewind
+
+# 7.19.10 Error-handling functions
+1 clearerr
+2 feof
+3 ferror
+4 perror
+
+# 7.24.2 formatted wide characters
+1 fwprintf
+2 fwscanf
+3 swprintf
+4 swscanf
+5 vfwprintf
+6 vfwscanf
+7 vswprintf
+8 vswscanf
+9 vwprintf
+10 vwscanf
+11 wprintf
+12 wscanf
+
+# 7.24.3 wide character input/output
+1 fgetwc
+2 fgetws
+3 fputwc
+4 fputws
+5 fwide
+6 getwc
+7 getwchar
+8 putwc
+9 putwchar
+10 ungetwc

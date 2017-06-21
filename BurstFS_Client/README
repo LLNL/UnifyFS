@@ -1,0 +1,115 @@
+===============================================================================
+               BurstFS: A Distributed Burst Buffer File System - 0.1.1
+===============================================================================
+
+Node-local burst buffers are becoming an indispensable hardware
+resource on large-scale supercomputers to buffer the bursty
+I/O from scientific applications. However, there is a lack of
+software support for burst buffers to be efficiently shared by
+applications within a batch-submitted job and recycled across
+different batch jobs. In addition, burst buffers need to cope with
+a variety of challenging I/O patterns from data-intensive scientific
+applications.
+
+BurstFS is a user-level burst buffer file system that supports scalable 
+and efficient aggregation of I/O bandwidth from burst buffers while
+having the same life cycle as a batch-submitted job. It is layered 
+on top of CRUISE, a scalable checkpointing/restart I/O library. 
+While CRUISE is designed for N-N write/read, BurstFS compliments its 
+functionality with the support for N-1 write/read. It efficiently 
+accelerates scientific I/O based on scalable metadata 
+indexing, co-located I/O delegation, and server-side read clustering and
+pipelining.
+
+
+Please note that the current implementation of BurstFS is not of production 
+quality, and is for research purpose only. The current client-side interface is based on POSIX, including open, 
+pwrite, lio_listio, pread, write, read, lseek, close and fsync. BurstFS is designed 
+for batched write and read operations under a typical bursty I/O workload (e.g. checkpoint/restart); 
+it is optimized for bursty write/read 
+based on pwrite/lio_listio respectively. It is still an open research question on 
+whether we should give BurstFS a comprehensive POSIX support, or provide a few POSIX 
+APIs, but layer on top of them with other higher-level I/O functions. Below is the 
+guide on how to install and use BurstFS client.
+
+1. Prepare and run 'configure':
+
+./prepare
+./configure --prefix=`pwd`/install CFLAGS="-g -O0"
+
+2. Build library
+
+make clean
+make
+make install
+
+3. Compile the test program
+cd tests
+chmod +rx ../cruise-config
+cp Makefile.gcc Makefile
+make
+
+4. Run client program:
+When running client program, be sure to launch the server 
+program beforehand. The sample scripts (based on SLURM) for the client 
+program is provided(runwclient.sh, runrclient.sh).
+If you don't want to use interactive job, you can combine the 
+client and server scripts into one job script.
+
+5. How to use BurstFS client?
+For all programs in the same job, before performing POSIX I/O operations, 
+use burstfs_mount to mount the program under a given 
+prefix, BurstFS will intercept the POSIX I/O functions under 
+that prefix. Use unmount in the last program to exit to terminate the 
+burstfs server. Below is the explanation of some configurable 
+environment variables for BurstFS client:
+
+CRUISE_CHUNK_MEM: the maximum amount of allocated shared memory to 
+store the data.
+CRUISE_USE_SPILLOVER: enable the spillover feature. If this feature 
+is enabled, once the preallocated 
+memory chunk is used up, the extra data are spilled to the node-local SSD.
+BURSTFS_INDEX_BUF_SIZE: the size of shared memory buffer to store the indices 
+of burstfs (The support for index spillover has not been provided). 
+BURSTFS_ATTR_BUF_SIZE: the size of shared memory buffer to store the 
+file attribute.
+CRUISE_EXTERNAL_DATA_DIR: the external directory on SSD to store the spillover 
+data.
+CRUISE_EXTERNAL_META_DIR: the external directory  on SSD to store the spillover 
+indices.
+SHM_REQ_SIZE: size of the request shared memory (the client will put all 
+its read requests in this buffer and notify its delegator to fetch its requested 
+data). 
+SHM_RECV_SIZE: size of the receive shared memory (the delegator will put 
+the fetched data in this buffer).
+
+6. Some future works for a production system include but are not limited to:
+a. Provide the exception handling for the following scenarios:
+--  When the index buffer is full, spill over to SSD (Todo in cruise-fixed.c).
+--  When the number of read requests in lio_listio exceeds the threshhold (BURSTFS_MAX_READ_CNT), or 
+the read requests in the shared read request buffer overflows, split the read requests into 
+multiple transfers (Todo in cruise-sysio.c).
+--  Handle the exception when only partial data are returned for read or the returned data are incorrect.
+
+b. Finalize file attribute management for open and fsync
+-- Avoid the conflict on file id. Current implementation generate files id based on 
+hashcode of file name, conflict happens when two file names are hashed to the same file id.
+-- Provide atomic update on file id. When a file is openned with O_CREAT, the client first 
+checks if the file is created, then creates a file if it does not exist, or returns error 
+if O_EXCL is set. These operations needs to be atomic.
+-- During fsync, the final file size should be the largest size (typically in the checkpoint workload) 
+among the metadata sent by all clients. 
+current implementation takes the last file size received as the final file size for fsync, which may not be the 
+correct one.
+
+c. Define the high-level API or provide the comprehensive implementation of all the POSIX functions. 
+Because BurstFS is specialized for bursty I/O workloads, using POSIX will heavily constrain its 
+performance benefit. May consider layering on top of it with higher-level APIs for bursty workloads 
+(e.g. MPI-IO/burst buffer-specific APIs).
+
+e. Garbage collection
+-- When to conduct garbage collection is undetermined. Recommend lazily performing garbage collection when 
+DRAM and SSD usage reaches a high watermmark.
+
+
+  

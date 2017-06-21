@@ -1,0 +1,59 @@
+1. Prepare and run 'configure':
+
+# debug
+use -q ic-11.1.046 
+./prepare
+./configure \
+  --prefix=`pwd`/install \
+  CFLAGS="-g -O0"
+
+# optimized
+use -q ic-11.1.046 
+./prepare
+./configure \
+  --prefix=`pwd`/install \
+  CFLAGS="-O3"
+
+  --disable-ld-preload
+
+    If you do not want to generate the .so library used for LD_PRELOAD.
+
+  --with-numa=$PATH_TO_NUMA
+
+    Needed to enable NUMA-aware memory allocation on Linux machines
+    (set NUMA policy at runtime with CRUISE_NUMA_POLICY = local | interleaved,
+     set NUMA node explicitly with CRUISE_USE_NUMA_BANK = <node no.> )
+
+
+
+2. Build library
+
+make clean
+make
+make install
+
+3. Run "./install/bin/cruise-config --pre-ld-flags"
+   and "./install/bin/cruise-config --post-ld-flags"
+
+	Copy the output of each of these commands to a separate variable,'
+	say $(PRE_CRUISE_FLAGS) and $(POST_CRUISE_FLAGS)
+
+4. Compile the test program
+
+	If you're compiling test_ramdisk.c for instance, you would do
+	something like this in your makefile:
+	
+setenv PRE_CRUISE_FLAGS `./install/bin/cruise-config --pre-ld-flags`
+setenv POST_CRUISE_FLAGS `./install/bin/cruise-config --post-ld-flags`
+mpicc $PRE_CRUISE_FLAGS -g -O0 -o test_ramdisk test_ramdisk.c $POST_CRUISE_FLAGS
+
+	If you are running test_interpose, you can do something similar in
+	tests/Makefile.
+
+6. If you don't want to statically build, but just preload instead, preload this shared object:
+
+	LD_PRELOAD=$INSTALL_PATH/lib/libcruise.so ./test_interpose
+
+7. Use the "ipcs" command to list the currently opened shm segments.  Use
+   "ipcrm -M key" to delete it after a run, or use the "ipc_cleanup" script
+   in the base folder to delete all shm segements belonging to you on a node.

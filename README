@@ -1,0 +1,27 @@
+===============================================================================
+               BurstFS: A Distributed Burst Buffer File System - 0.1.1
+===============================================================================
+
+Please note that the current implementation of BurstFS is not of production 
+quality, and is for research purposes only.  
+
+How to build (with CRUISE tests):
+1. download and build leveldb-1.14 (wget https://github.com/google/leveldb/archive/v1.14.tar.gz). 
+   Then, change the path in BurstFS_Meta/Makefile.cfg to point to your leveldb directory  
+2. change directory to BurstFS_Meta
+   make
+3. change directory to BurstFS_Client
+   ./buildme_opt
+   cd tests
+   ./buildme.sh
+4. change directory to BurstFS_Server
+   ./buildme_autotools (the first time you build the server only)
+   ./buildme.sh
+
+How to run (with CRUISE tests): 
+1. Make sure you are in BurstFS_Server directory
+2. allocate a node 
+3. ./runserver.sh
+4. ./runwrclient.sh
+
+Note: If at Oak Ridge you will probably have to change the MPI path as well in BurstFS_Meta/Makefile.cfg in the 1st build step.

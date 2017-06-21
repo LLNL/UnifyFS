@@ -1,0 +1,79 @@
+# Intel compilers
+#MPICC = mpiicc
+#CC = icc
+
+MPICC = mpixlc
+CC = xlc
+
+#ZLIB = -L/usr/local/tools/zlib-1.2.6/lib -lz
+#ZLIB = -L../zlib-1.2.7/install/lib -lz
+
+# GNU compilers
+#MPICC = mpicc
+#CC = gcc
+
+CFLAGS = -g -O0
+LIBS = -lpthread
+
+NUMA_HOME =
+NUMA_INCS =
+NUMA_LDFLAGS =
+NUMA_LIBS =
+#NUMA_HOME = ../numactl
+#NUMA_INCS = -I$(NUMA_HOME)
+#NUMA_LDFLAGS = -L$(NUMA_HOME)
+#NUMA_LIBS = -lnuma
+
+CONTAINER_HOME =
+CONTAINER_INCS =
+CONTAINER_LDFLAGS =
+CONTAINER_LIBS =
+#CONTAINER_HOME = ../container
+#CONTAINER_INCS = -I$(CONTAINER_HOME)/include
+#CONTAINER_LDFLAGS = -L$(CONTAINER_HOME)/lib
+#CONTAINER_LIBS = -lcontainer 
+
+CRUISE_LIBS = $(LIBS) $(NUMA_LIBS) $(CONTAINER_LIBS)
+CRUISE_LDFLAGS = $(LDFLAGS) $(NUMA_LDFLAGS) $(CONTAINER_LDFLAGS)
+
+PRE_CRUISE_FLAGS := $(shell echo `../install_bgq/bin/cruise-config --pre-ld-flags`)
+POST_CRUISE_FLAGS := $(shell echo `../install_bgq/bin/cruise-config --post-ld-flags`)
+
+all: test_writeread test_readwrite test_truncate test_fopen test_fprintf test_memcpy test_ramdisk
+
+clean: 
+	rm -f *.o test1 test1_container test_writeread test_readwrite test_truncate test_fopen test_fprintf test_ungetc test_scanf test_wscanf test_memcpy test_ramdisk
+
+test1: test1.c
+	$(CC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test1.c -o test1 $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS) $(ZLIB)
+
+test_writeread: test_writeread.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_writeread.c -o test_writeread $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS) $(ZLIB)
+
+test_readwrite: test_readwrite.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_readwrite.c -o test_readwrite $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS) $(ZLIB)
+
+test_truncate: test_truncate.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_truncate.c -o test_truncate $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS) $(ZLIB)
+
+test_fopen: test_fopen.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_fopen.c -o test_fopen $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS) $(ZLIB)
+
+test_fprintf: test_fprintf.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_fprintf.c -o test_fprintf $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS) $(ZLIB)
+
+test_ungetc: test_ungetc.c
+	$(CC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_ungetc.c -o test_ungetc $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS)  $(ZLIB)
+
+test_scanf: test_scanf.c
+	$(CC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_scanf.c -o test_scanf $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS)  $(ZLIB)
+
+test_wscanf: test_wscanf.c
+	$(CC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_wscanf.c -o test_wscanf $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS) $(ZLIB) 
+
+test_memcpy: test_memcpy.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) test_memcpy.c -o test_memcpy $(LDFLAGS) $(LIBS) $(ZLIB)
+
+test_ramdisk: test_ramdisk.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) test_ramdisk.c -o test_ramdisk $(LDFLAGS) $(LIBS) $(ZLIB)
+

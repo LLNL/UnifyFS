@@ -1,0 +1,11 @@
+# Put n=40000 set of random records, key_size (for string/byte) of 128 chars
+# value_size of 2040 chars. Last param makes sizes to be exact. If a 0
+# is used instead then sizes are 1 char up to x_size.
+nput 40000 500 2040 1
+
+flush
+
+# get a sequence of n record starting starting with a random value or zero if
+# the second parameter is set to zero. The last parameter works in a similar
+# manner as stated above.
+ngetn 5000 500 1

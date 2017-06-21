@@ -1,0 +1,3 @@
+#!/bin/sh
+
+aclocal -I ./maint/config && autoheader && autoconf

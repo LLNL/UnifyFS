@@ -1,0 +1,15 @@
+# wrapped but not implemented
+
+freopen
+fwprintf
+fwscanf
+vfwprintf
+vfwscanf
+fgetwc
+fgetws
+fputwc
+fputws
+fwide
+getwc
+putwc
+ungetwc
