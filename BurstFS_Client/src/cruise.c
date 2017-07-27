@@ -24,7 +24,8 @@
 * For details, see https://github.com/hpc/cruise
 * Please also read this file LICENSE.CRUISE 
 */
-
+#define _GNU_SOURCE
+#include <sched.h>
 #include "cruise-runtime-config.h"
 #include <stdio.h>
 #include <unistd.h>

@@ -96,9 +96,9 @@ CRUISE_DECL(msync, int, (void *addr, size_t length, int flags));
 CRUISE_DECL(__fxstat, int, (int vers, int fd, struct stat *buf));
 CRUISE_DECL(__fxstat64, int, (int vers, int fd, struct stat64 *buf));
 CRUISE_DECL(close, int, (int fd));
-CRUISE_DECL(lio_listio, ssize_t, (int mode,\
+/*CRUISE_DECL(lio_listio, ssize_t, (int mode,\
    struct aiocb *const aiocb_list[], \
-                      int nitems, struct sigevent *sevp));
+                      int nitems, struct sigevent *sevp));*/
 
 /* -------------------
  * define external variables
@@ -938,7 +938,7 @@ ssize_t CRUISE_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
     }
 }
 
-ssize_t CRUISE_WRAP(lio_listio)(int mode,\
+/*ssize_t CRUISE_WRAP(lio_listio)(int mode,\
    struct aiocb *const aiocb_list[],
                       int nitems, struct sigevent *sevp) {
 
@@ -948,7 +948,7 @@ ssize_t CRUISE_WRAP(lio_listio)(int mode,\
 
 	for (i = 0; i < nitems; i++) {
 		if (aiocb_list[i]->aio_lio_opcode != LIO_READ) {
-			/*does not support write operation currently*/
+			//does not support write operation currently
 			return -1;
 		}
 		glb_read_reqs[i].fid = aiocb_list[i]->aio_fildes;
@@ -961,7 +961,7 @@ ssize_t CRUISE_WRAP(lio_listio)(int mode,\
 	ret = cruise_fd_logreadlist(glb_read_reqs, nitems);
 	free(glb_read_reqs);
 	return ret;
-}
+}*/
 
 int compare_index_entry(const void *a, const void *b) {
 
