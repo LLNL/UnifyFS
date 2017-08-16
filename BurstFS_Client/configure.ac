@@ -24,7 +24,7 @@ fi]
 ,)
 
 AC_ARG_ENABLE(ld-preload, 
-[  --disable-ld-preload    Disables support for LD_PRELOAD library], 
+[  --enable-ld-preload    Disables support for LD_PRELOAD library], 
 [if test "x$enableval" = "xno" ; then
     DISABLE_LDPRELOAD="1"
 fi]
@@ -192,7 +192,7 @@ eval cruise_bin_path=$bindir
 prefix=$savePrefix
 exec_prefix=$saveExecprefix
 
-CFLAGS="$old_cflags"
+CFLAGS="$old_cflags -I/g/g0/sikich1/gotcha_inst/include -L/g/g0/sikich1/gotcha_inst/lib -lgotcha"
 LIBS="$old_libs"
 
 AC_SUBST(cruise_lib_path)

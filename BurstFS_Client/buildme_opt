@@ -8,8 +8,8 @@ set -x
 ./prepare
 ./configure \
   --prefix=`pwd`/install \
-  --enable-ld-preload \
-  CC=mpicc CFLAGS="-O0 -DENABLE_NUMA_POLICY" || exit 1
+  CC=mpicc CFLAGS="-g -O0 -fPIC -DCRUISE_GOTCHA -DENABLE_NUMA_POLICY" || exit 1
+  #--disable-ld-preload \
 
 make clean || exit 1
 make || exit 1

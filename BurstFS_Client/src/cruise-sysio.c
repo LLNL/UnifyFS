@@ -46,66 +46,66 @@
 #include <aio.h>
 #define __USE_GNU
 #include <pthread.h>
-
+#include "cruise-sysio.h"
 #include "cruise-internal.h"
 
-/* ---------------------------------------
- * POSIX wrappers: paths
- * --------------------------------------- */
+//CRUISE_DEF(write, ssize_t, (int fd, const void *buf, size_t count));
+//CRUISE_DEF(lseek, off_t, (int fd, off_t offset, int whence));
+//CRUISE_DEF(open, int, (const char *path, int flags, ...));
 
-CRUISE_DECL(access, int, (const char *pathname, int mode));
-CRUISE_DECL(mkdir, int, (const char *path, mode_t mode));
-CRUISE_DECL(rmdir, int, (const char *path));
-CRUISE_DECL(unlink, int, (const char *path));
-CRUISE_DECL(remove, int, (const char *path));
-CRUISE_DECL(rename, int, (const char *oldpath, const char *newpath));
-CRUISE_DECL(truncate, int, (const char *path, off_t length));
-CRUISE_DECL(stat, int,( const char *path, struct stat *buf));
-CRUISE_DECL(__lxstat, int, (int vers, const char* path, struct stat *buf));
-CRUISE_DECL(__lxstat64, int, (int vers, const char* path, struct stat64 *buf));
-CRUISE_DECL(__xstat, int, (int vers, const char* path, struct stat *buf));
-CRUISE_DECL(__xstat64, int, (int vers, const char* path, struct stat64 *buf));
+CRUISE_DEF(access, int, (const char *pathname, int mode));
+CRUISE_DEF(mkdir, int, (const char *path, mode_t mode));
+CRUISE_DEF(rmdir, int, (const char *path));
+CRUISE_DEF(unlink, int, (const char *path));
+CRUISE_DEF(remove, int, (const char *path));
+CRUISE_DEF(rename, int, (const char *oldpath, const char *newpath));
+CRUISE_DEF(truncate, int, (const char *path, off_t length));
+CRUISE_DEF(stat, int,( const char *path, struct stat *buf));
+CRUISE_DEF(__lxstat, int, (int vers, const char* path, struct stat *buf));
+CRUISE_DEF(__lxstat64, int, (int vers, const char* path, struct stat64 *buf));
+CRUISE_DEF(__xstat, int, (int vers, const char* path, struct stat *buf));
+CRUISE_DEF(__xstat64, int, (int vers, const char* path, struct stat64 *buf));
 
 /* ---------------------------------------
  * POSIX wrappers: file descriptors
  * --------------------------------------- */
 
-CRUISE_DECL(creat, int, (const char* path, mode_t mode));
-CRUISE_DECL(creat64, int, (const char* path, mode_t mode));
-CRUISE_DECL(open, int, (const char *path, int flags, ...));
-CRUISE_DECL(open64, int, (const char *path, int flags, ...));
-CRUISE_DECL(read, ssize_t, (int fd, void *buf, size_t count));
-CRUISE_DECL(write, ssize_t, (int fd, const void *buf, size_t count));
-CRUISE_DECL(readv, ssize_t, (int fd, const struct iovec *iov, int iovcnt));
-CRUISE_DECL(writev, ssize_t, (int fd, const struct iovec *iov, int iovcnt));
-CRUISE_DECL(pread, ssize_t, (int fd, void *buf, size_t count, off_t offset));
-CRUISE_DECL(pread64, ssize_t, (int fd, void *buf, size_t count, off64_t offset));
-CRUISE_DECL(pwrite, ssize_t, (int fd, const void *buf, size_t count, off_t offset));
-CRUISE_DECL(pwrite64, ssize_t, (int fd, const void *buf, size_t count, off64_t offset));
-CRUISE_DECL(posix_fadvise, int, (int fd, off_t offset, off_t len, int advice));
-CRUISE_DECL(lseek, off_t, (int fd, off_t offset, int whence));
-CRUISE_DECL(lseek64, off64_t, (int fd, off64_t offset, int whence));
-CRUISE_DECL(ftruncate, int, (int fd, off_t length));
-CRUISE_DECL(fsync, int, (int fd));
-CRUISE_DECL(fdatasync, int, (int fd));
-CRUISE_DECL(flock, int, (int fd, int operation));
-CRUISE_DECL(mmap, void*, (void *addr, size_t length, int prot, int flags, int fd, off_t offset));
-CRUISE_DECL(mmap64, void*, (void *addr, size_t length, int prot, int flags, int fd, off64_t offset));
-CRUISE_DECL(munmap, int,(void *addr, size_t length));
-CRUISE_DECL(msync, int, (void *addr, size_t length, int flags));
-CRUISE_DECL(__fxstat, int, (int vers, int fd, struct stat *buf));
-CRUISE_DECL(__fxstat64, int, (int vers, int fd, struct stat64 *buf));
-CRUISE_DECL(close, int, (int fd));
+CRUISE_DEF(creat, int, (const char* path, mode_t mode));
+CRUISE_DEF(creat64, int, (const char* path, mode_t mode));
+CRUISE_DEF(open, int, (const char *path, int flags, ...));
+CRUISE_DEF(open64, int, (const char *path, int flags, ...));
+CRUISE_DEF(read, ssize_t, (int fd, void *buf, size_t count));
+CRUISE_DEF(write, ssize_t, (int fd, const void *buf, size_t count));
+CRUISE_DEF(readv, ssize_t, (int fd, const struct iovec *iov, int iovcnt));
+CRUISE_DEF(writev, ssize_t, (int fd, const struct iovec *iov, int iovcnt));
+CRUISE_DEF(pread, ssize_t, (int fd, void *buf, size_t count, off_t offset));
+CRUISE_DEF(pread64, ssize_t, (int fd, void *buf, size_t count, off64_t offset));
+CRUISE_DEF(pwrite, ssize_t, (int fd, const void *buf, size_t count, off_t offset));
+CRUISE_DEF(pwrite64, ssize_t, (int fd, const void *buf, size_t count, off64_t offset));
+CRUISE_DEF(posix_fadvise, int, (int fd, off_t offset, off_t len, int advice));
+CRUISE_DEF(lseek, off_t, (int fd, off_t offset, int whence));
+CRUISE_DEF(lseek64, off64_t, (int fd, off64_t offset, int whence));
+CRUISE_DEF(ftruncate, int, (int fd, off_t length));
+CRUISE_DEF(fsync, int, (int fd));
+CRUISE_DEF(fdatasync, int, (int fd));
+CRUISE_DEF(flock, int, (int fd, int operation));
+CRUISE_DEF(mmap, void*, (void *addr, size_t length, int prot, int flags, int fd, off_t offset));
+CRUISE_DEF(mmap64, void*, (void *addr, size_t length, int prot, int flags, int fd, off64_t offset));
+CRUISE_DEF(munmap, int,(void *addr, size_t length));
+CRUISE_DEF(msync, int, (void *addr, size_t length, int flags));
+CRUISE_DEF(__fxstat, int, (int vers, int fd, struct stat *buf));
+CRUISE_DEF(__fxstat64, int, (int vers, int fd, struct stat64 *buf));
+CRUISE_DEF(close, int, (int fd));
 /*CRUISE_DECL(lio_listio, ssize_t, (int mode,\
    struct aiocb *const aiocb_list[], \
                       int nitems, struct sigevent *sevp));*/
-
 /* -------------------
  * define external variables
  * --------------------*/
 extern int cruise_spilloverblock; 
 extern int cruise_use_spillover;
 extern int dbgrank;
+
 /* ---------------------------------------
  * POSIX wrappers: paths
  * --------------------------------------- */
@@ -631,7 +631,7 @@ int CRUISE_WRAP(creat64)(const char* path, mode_t mode)
 int CRUISE_WRAP(open)(const char *path, int flags, ...)
 {
     int ret;
-
+    printf("in cruise open with gotcha!\n");
     /* if O_CREAT is set, we should also have some mode flags */
     int mode = 0;
     if (flags & O_CREAT) {
@@ -707,6 +707,7 @@ int CRUISE_WRAP(open64)(const char* path, int flags, ...)
 
 off_t CRUISE_WRAP(lseek)(int fd, off_t offset, int whence)
 {
+    printf("in cruise lseek with gotcha!\n");
     /* check whether we should intercept this file descriptor */
     if (cruise_intercept_fd(&fd)) {
         /* TODO: check that fd is actually in use */
@@ -872,6 +873,7 @@ ssize_t CRUISE_WRAP(read)(int fd, void *buf, size_t count)
 /* TODO: find right place to msync spillover mapping */
 ssize_t CRUISE_WRAP(write)(int fd, const void *buf, size_t count)
 {
+    printf("in cruise write with gotcha!\n"); 
     ssize_t ret;
 
     /* check whether we should intercept this file descriptor */
@@ -923,7 +925,7 @@ ssize_t CRUISE_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
     }
 }
 
-ssize_t CRUISE_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
+static ssize_t CRUISE_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
 {
     /* check whether we should intercept this file descriptor */
     if (cruise_intercept_fd(&fd)) {

@@ -27,7 +27,10 @@
 #define _GNU_SOURCE
 #include <sched.h>
 #include "cruise-runtime-config.h"
+#include "cruise-sysio.h"
 #include <stdio.h>
+#include "gotcha/gotcha_types.h"
+#include "gotcha/gotcha.h"
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -47,7 +50,7 @@
 #include <pthread.h>
 #include <mpi.h>
 #include <openssl/md5.h>
-#define __USE_GNU
+//#define __USE_GNU
 
 
 #ifdef ENABLE_NUMA_POLICY
@@ -70,6 +73,15 @@
 #include <mpix.h>
 #endif /* MACHINE_BGQ */
 
+#define NUM_IOFUNCS 3 
+struct gotcha_binding_t iofuncs[] = {
+    { "write", CRUISE_WRAP(write), &CRUISE_REAL(write) },
+    { "open" , CRUISE_WRAP(open),  &CRUISE_REAL(open)  },
+    { "lseek", CRUISE_WRAP(lseek), &CRUISE_REAL(lseek) } 
+};
+
+int local_rank_idx = 0;
+
 #ifndef HAVE_OFF64_T
 typedef int64_t off64_t;
 #endif
@@ -91,7 +103,7 @@ int cruise_spillmetablock;
 
 int *local_rank_lst = NULL;
 int local_rank_cnt = 0;
-int local_rank_idx = -1;
+
 int local_del_cnt = 0;
 int client_sockfd;
 struct pollfd cmd_fd;
@@ -911,7 +923,7 @@ static int set_global_file_meta(burstfs_fattr_t *f_meta) {
 				if (rc > 0) {
 					if (cmd_fd.revents != 0) {
 						if (cmd_fd.revents == POLLIN) {
-							bytes_read = __real_read(client_sockfd,\
+							bytes_read = read(client_sockfd,\
 									cmd_buf, sizeof(cmd_buf));
 							if (bytes_read == 0) {
 								/*remote connection is closed*/
@@ -981,7 +993,7 @@ static int get_global_file_meta(int gfid, burstfs_fattr_t **file_meta) {
 				if (rc > 0) {
 					if (cmd_fd.revents != 0) {
 						if (cmd_fd.revents == POLLIN) {
-							bytes_read = __real_read(client_sockfd,\
+							bytes_read = read(client_sockfd,\
 									cmd_buf, sizeof(cmd_buf));
 							if (bytes_read == 0) {
 								/*remote connection is closed*/
@@ -1649,6 +1661,16 @@ static int cruise_abtoull(char* str, unsigned long long* val)
 static int cruise_init(int rank)
 {
     if (! cruise_initialized) {
+
+#ifdef CRUISE_GOTCHA  
+        enum gotcha_error_t result;
+
+        result = gotcha_wrap(iofuncs, NUM_IOFUNCS, "cruise");
+        if (result != GOTCHA_SUCCESS) {
+            fprintf(stderr, "gotcha_wrap returned %d\n", (int) result);
+            return -1;
+        }
+#endif
         char* env;
         unsigned long long bytes;
 
@@ -1944,7 +1966,7 @@ int burstfs_unmount() {
 				if (rc > 0) {
 					if (cmd_fd.revents != 0) {
 						if (cmd_fd.revents == POLLIN) {
-							bytes_read = __real_read(cmd_fd.fd, cmd_buf,\
+							bytes_read = read(cmd_fd.fd, cmd_buf,\
 								 sizeof(cmd_buf));
 							if (bytes_read == 0) {
 								return CRUISE_FAILURE;
@@ -2195,7 +2217,7 @@ static int burstfs_sync_to_del() {
 				if (rc > 0) {
 					if (cmd_fd.revents != 0) {
 						if (cmd_fd.revents == POLLIN) {
-							bytes_read = __real_read(client_sockfd, cmd_buf,\
+							bytes_read = read(client_sockfd, cmd_buf,\
 								 sizeof(cmd_buf));
 							if (bytes_read == 0) {
 								/*remote connection is closed*/
@@ -2342,7 +2364,7 @@ static int get_del_cnt() {
 				if (rc > 0) {
 					if (cmd_fd.revents != 0) {
 						if (cmd_fd.revents == POLLIN) {
-							bytes_read = __real_read(client_sockfd, cmd_buf,\
+							bytes_read = read(client_sockfd, cmd_buf,\
 								 sizeof(cmd_buf));
 							if (bytes_read == 0) {
 								/*remote connection is closed*/

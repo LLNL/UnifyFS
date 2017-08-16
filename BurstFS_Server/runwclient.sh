@@ -38,4 +38,4 @@ ulimit -c unlimited
 
 nlist=`scontrol show hostnames ${SLURM_NODELIST}|paste -d, -s|cut -d ',' -f1-${nnodes}`
 
-srun --drop-caches --nodelist=${nlist} --distribution=block --ntasks-per-node=${procs_per_node} -n ${nprocs} -N ${nnodes} ${CRUISE_DIR}/test_pwrite -b ${BLK_SZ} -s ${SEG_CNT} -t ${TRAN_SZ} -f /tmp/abc -u ${TO_UNMOUNT} -p ${PAT} 2>&1|tee wclient_${nprocs}.log
+srun --drop-caches --nodelist=${nlist} --distribution=block --ntasks-per-node=${procs_per_node} -n ${nprocs} -N ${nnodes} ${CRUISE_DIR}/test_write -b ${BLK_SZ} -s ${SEG_CNT} -t ${TRAN_SZ} -f /tmp/abc -u ${TO_UNMOUNT} -p ${PAT} 2>&1|tee wclient_${nprocs}.log

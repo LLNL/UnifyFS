@@ -131,7 +131,9 @@ int main(int argc, char *argv[]) {
 			else if (pat == 1)
 				offset = i * blk_sz + j * tran_sz;
 			lseek(fd, offset, SEEK_SET);
+                        printf("right before write call\n"); 
 			rc = write(fd, buf, tran_sz);
+                        printf("right after write call\n");
 			if (rc < 0) {
 				printf("write failure\n");
 				fflush(stdout);
