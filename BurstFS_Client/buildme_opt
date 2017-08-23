@@ -5,11 +5,13 @@ use -q ic-11.1.046
 
 set -x
 
+link_gotcha="-I/g/g0/sikich1/gotcha_inst/include -L/g/g0/sikich1/gotcha_inst/lib -lgotcha"
+
 ./prepare
 ./configure \
+  --enable-ld-preload \
   --prefix=`pwd`/install \
-  CC=mpicc CFLAGS="-g -O0 -fPIC -DCRUISE_GOTCHA -DENABLE_NUMA_POLICY" || exit 1
-  #--disable-ld-preload \
+  CC=mpicc CFLAGS="-g -O0 -fPIC -DCRUISE_GOTCHA -DENABLE_NUMA_POLICY ${link_gotcha}" || exit 1
 
 make clean || exit 1
 make || exit 1

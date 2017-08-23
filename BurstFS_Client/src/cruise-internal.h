@@ -67,8 +67,30 @@
  * along with user-defined string */
 #define CRUISE_UNSUPPORTED(fmt, args...) \
       cruise_unsupported(__func__, __FILE__, __LINE__, fmt, ##args)
-#if 0
-#ifdef CRUISE_PRELOAD
+
+#ifdef CRUISE_GOTCHA
+
+    /* gotcha fills in address of original/real function 
+     * and we need to declare function prototype for each
+     * wrapper */
+    #define CRUISE_DECL(name,ret,args) \
+      extern ret(*__real_ ## name)args;  \
+      ret __wrap_ ## name args;
+
+    /* define each DECL function in a .c file */
+    #define CRUISE_DEF(name,ret,args) \
+      ret(*__real_ ## name)args = NULL; 
+
+    /* we define our wrapper function as __wrap_<iofunc> instead of <iofunc> */
+    #define CRUISE_WRAP(name) __wrap_ ## name
+
+    /* gotcha maps the <iofunc> call to __real_<iofunc>() */
+    #define CRUISE_REAL(name) __real_ ## name
+
+    /* no need to look up the address of the real function (gotcha does that) */
+    #define MAP_OR_FAIL(func)
+
+#elif CRUISE_PRELOAD
 
     /* ===================================================================
      * Using LD_PRELOAD to intercept
@@ -104,29 +126,7 @@
                exit(1); \
            } \
         }
-#endif
-#endif
-#ifdef CRUISE_GOTCHA
-
-    /* gotcha fills in address of original/real function */
-    #define CRUISE_DECL(name,ret,args) \
-      extern ret(*__real_ ## name)args;  \
-      ret __wrap_ ## name args;
-
-    #define CRUISE_DEF(name,ret,args) \
-      ret(*__real_ ## name)args = NULL; 
-
-    /* we define our wrapper function as __wrap_<iofunc> instead of <iofunc> */
-    #define CRUISE_WRAP(name) __wrap_ ## name
-
-    /* gotcha maps the <iofunc> call to __real_<iofunc>() */
-    #define CRUISE_REAL(name) __real_ ## name
-
-    /* no need to look up the address of the real function */
-    #define MAP_OR_FAIL(func)
-#endif
-#if 0
-//#else
+#else
 
     /* ===================================================================
      * Using ld -wrap option to intercept
@@ -139,7 +139,7 @@
      * just declare the existence of __real_open so the compiler knows the
      * prototype of this function (linker will provide it) */
     #define CRUISE_DECL(name,ret,args) \
-      extern ret __real_ ## name args;
+      extern ret __real_ ## name args;  \
 
     /* we define our wrapper function as __wrap_open instead of open */
     #define CRUISE_WRAP(name) __wrap_ ## name
@@ -150,7 +150,6 @@
     /* no need to look up the address of the real function */
     #define MAP_OR_FAIL(func)
 
-//#endif
 #endif
 
 #define CRUISE_SUCCESS     0
@@ -348,7 +347,7 @@ extern long burstfs_key_slice_range;
 #include "cruise-stack.h"
 #include "cruise-fixed.h"
 #include "cruise-sysio.h"
-//#include "cruise-stdio.h"
+#include "cruise-stdio.h"
 
 /* -------------------------------
  * Global varaible declarations

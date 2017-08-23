@@ -49,10 +49,7 @@
 #include "cruise-sysio.h"
 #include "cruise-internal.h"
 
-//CRUISE_DEF(write, ssize_t, (int fd, const void *buf, size_t count));
-//CRUISE_DEF(lseek, off_t, (int fd, off_t offset, int whence));
-//CRUISE_DEF(open, int, (const char *path, int flags, ...));
-
+#ifdef CRUISE_GOTCHA
 CRUISE_DEF(access, int, (const char *pathname, int mode));
 CRUISE_DEF(mkdir, int, (const char *path, mode_t mode));
 CRUISE_DEF(rmdir, int, (const char *path));
@@ -60,7 +57,7 @@ CRUISE_DEF(unlink, int, (const char *path));
 CRUISE_DEF(remove, int, (const char *path));
 CRUISE_DEF(rename, int, (const char *oldpath, const char *newpath));
 CRUISE_DEF(truncate, int, (const char *path, off_t length));
-CRUISE_DEF(stat, int,( const char *path, struct stat *buf));
+CRUISE_DEF(stat, int, (const char *path, struct stat *buf));
 CRUISE_DEF(__lxstat, int, (int vers, const char* path, struct stat *buf));
 CRUISE_DEF(__lxstat64, int, (int vers, const char* path, struct stat64 *buf));
 CRUISE_DEF(__xstat, int, (int vers, const char* path, struct stat *buf));
@@ -96,9 +93,11 @@ CRUISE_DEF(msync, int, (void *addr, size_t length, int flags));
 CRUISE_DEF(__fxstat, int, (int vers, int fd, struct stat *buf));
 CRUISE_DEF(__fxstat64, int, (int vers, int fd, struct stat64 *buf));
 CRUISE_DEF(close, int, (int fd));
-/*CRUISE_DECL(lio_listio, ssize_t, (int mode,\
+/*CRUISE_DEF(lio_listio, ssize_t, (int mode,\
    struct aiocb *const aiocb_list[], \
                       int nitems, struct sigevent *sevp));*/
+
+#endif
 /* -------------------
  * define external variables
  * --------------------*/
@@ -631,7 +630,6 @@ int CRUISE_WRAP(creat64)(const char* path, mode_t mode)
 int CRUISE_WRAP(open)(const char *path, int flags, ...)
 {
     int ret;
-    printf("in cruise open with gotcha!\n");
     /* if O_CREAT is set, we should also have some mode flags */
     int mode = 0;
     if (flags & O_CREAT) {
@@ -707,7 +705,6 @@ int CRUISE_WRAP(open64)(const char* path, int flags, ...)
 
 off_t CRUISE_WRAP(lseek)(int fd, off_t offset, int whence)
 {
-    printf("in cruise lseek with gotcha!\n");
     /* check whether we should intercept this file descriptor */
     if (cruise_intercept_fd(&fd)) {
         /* TODO: check that fd is actually in use */
@@ -873,7 +870,6 @@ ssize_t CRUISE_WRAP(read)(int fd, void *buf, size_t count)
 /* TODO: find right place to msync spillover mapping */
 ssize_t CRUISE_WRAP(write)(int fd, const void *buf, size_t count)
 {
-    printf("in cruise write with gotcha!\n"); 
     ssize_t ret;
 
     /* check whether we should intercept this file descriptor */
@@ -925,7 +921,7 @@ ssize_t CRUISE_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
     }
 }
 
-static ssize_t CRUISE_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
+ssize_t CRUISE_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
 {
     /* check whether we should intercept this file descriptor */
     if (cruise_intercept_fd(&fd)) {
@@ -940,7 +936,7 @@ static ssize_t CRUISE_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
     }
 }
 
-/*ssize_t CRUISE_WRAP(lio_listio)(int mode,\
+ssize_t CRUISE_WRAP(lio_listio)(int mode,\
    struct aiocb *const aiocb_list[],
                       int nitems, struct sigevent *sevp) {
 
@@ -963,7 +959,7 @@ static ssize_t CRUISE_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
 	ret = cruise_fd_logreadlist(glb_read_reqs, nitems);
 	free(glb_read_reqs);
 	return ret;
-}*/
+}
 
 int compare_index_entry(const void *a, const void *b) {
 
