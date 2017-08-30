@@ -73,11 +73,8 @@
 #endif /* MACHINE_BGQ */
 
 #ifdef CRUISE_GOTCHA
-#include "cruise-sysio.h"
-#include "cruise-stdio.h"
 #include "gotcha/gotcha_types.h"
 #include "gotcha/gotcha.h"
-#include <unistd.h>
 #include "gotcha_map_cruise_list.h"
 #endif
 
