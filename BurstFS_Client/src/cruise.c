@@ -29,6 +29,7 @@
 #include "cruise-runtime-config.h"
 
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -1667,8 +1668,14 @@ static int cruise_init(int rank)
 
         result = gotcha_wrap(wrap_cruise_list, NFUNCS, "cruise");
         if (result != GOTCHA_SUCCESS) {
-            fprintf(stderr, "gotcha_wrap returned %d\n", (int) result);
-            return -1;
+            debug("gotcha_wrap returned %d\n", (int) result);
+        }
+         
+        int i;
+        for (i = 0; i < NFUNCS; i++) {
+            if (*(void**)(wrap_cruise_list[i].function_address_pointer) == 0) {
+                printf("This function name failed to be wrapped: %s\n", wrap_cruise_list[i].name); 
+            }
         }
 #endif
         char* env;
@@ -2200,7 +2207,7 @@ static int burstfs_sync_to_del() {
 	memcpy(cmd_buf + 7 * sizeof(int) + 7 * sizeof(long),\
 				external_spill_dir, CRUISE_MAX_FILENAME); /*adjust to add debug info*/
 
-	int res = CRUISE_WRAP(write)(client_sockfd,\
+	int res = __real_write(client_sockfd,\
 			cmd_buf, sizeof(cmd_buf));
 	if (res != 0) {
 		 	int bytes_read = 0;

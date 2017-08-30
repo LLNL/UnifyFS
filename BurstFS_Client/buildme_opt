@@ -16,3 +16,4 @@ link_gotcha="-I/g/g0/sikich1/gotcha_inst/include -L/g/g0/sikich1/gotcha_inst/lib
 make clean || exit 1
 make || exit 1
 make install || exit 1
+chmod +x cruise-config
