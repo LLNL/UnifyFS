@@ -1,0 +1,77 @@
+# Intel compilers
+#MPICC = mpiicc
+#CC = icc
+
+#MPICC = mpixlc
+#CC = xlc
+
+#ZLIB = -L/usr/local/tools/zlib-1.2.6/lib -lz
+#ZLIB = -L../zlib-1.2.7/install/lib -lz
+
+# GNU compilers
+MPICC = mpicc
+CC = mpicc
+
+CFLAGS = -ggdb3 -O0
+LIBS = -lpthread
+
+NUMA_HOME =
+NUMA_INCS =
+NUMA_LDFLAGS =
+NUMA_LIBS = -lnuma
+#NUMA_HOME = ../numactl
+#NUMA_INCS = -I$(NUMA_HOME)
+#NUMA_LDFLAGS = -L$(NUMA_HOME)
+#NUMA_LIBS = -lnuma
+
+CONTAINER_HOME =
+CONTAINER_INCS =
+CONTAINER_LDFLAGS =
+CONTAINER_LIBS =
+#CONTAINER_HOME = ../container
+#CONTAINER_INCS = -I$(CONTAINER_HOME)/include
+#CONTAINER_LDFLAGS = -L$(CONTAINER_HOME)/lib
+#CONTAINER_LIBS = -lcontainer 
+
+MPI_CFLAGS = $(shell pkg-config --cflags mpich | sed 's/-O2 -g//')
+MPI_LDFLAGS = $(shell pkg-config --libs mpich)
+
+CFLAGS += $(MPI_CFLAGS)
+LDFLAGS += $(MPI_LDFLAGS)
+
+CRUISE_LIBS = $(LIBS) $(NUMA_LIBS) $(CONTAINER_LIBS)
+CRUISE_LDFLAGS = $(LDFLAGS) $(NUMA_LDFLAGS) $(CONTAINER_LDFLAGS) -lrt
+
+PRE_CRUISE_FLAGS := $(shell echo `../cruise-config --pre-ld-flags`)
+POST_CRUISE_FLAGS := $(shell echo `../cruise-config --post-ld-flags`)
+
+TARGETS = test_write test_read test_pwrite test_listread test_pread test_writeread test_btio test_tileio
+
+all: $(TARGETS)
+
+clean: 
+	rm -f *.o $(TARGETS)
+
+test_read: test_read.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_read.c -o test_read $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS)
+
+test_write: test_write.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_write.c -o test_write $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS)
+
+test_pread: test_pread.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_pread.c -o test_pread $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS)
+
+test_pwrite: test_pwrite.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_pwrite.c -o test_pwrite $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS)
+
+test_listread: test_listread.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_listread.c -o test_listread $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS)
+
+test_writeread: test_writeread.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_writeread.c -o test_writeread $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS)
+
+test_btio: test_btio.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_btio.c -o test_btio $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS)
+
+test_tileio: test_tileio.c
+	$(MPICC) $(CFLAGS) $(INCLUDES) $(PRE_CRUISE_FLAGS) test_tileio.c -o test_tileio $(CRUISE_LDFLAGS) $(CRUISE_LIBS) $(POST_CRUISE_FLAGS)
