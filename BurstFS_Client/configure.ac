@@ -24,7 +24,7 @@ fi]
 ,)
 
 AC_ARG_ENABLE(ld-preload, 
-[  --enable-ld-preload    Disables support for LD_PRELOAD library], 
+[  --disable-ld-preload    Disables support for LD_PRELOAD library], 
 [if test "x$enableval" = "xno" ; then
     DISABLE_LDPRELOAD="1"
 fi]
