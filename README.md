@@ -18,7 +18,6 @@ accelerates scientific I/O based on scalable metadata
 indexing, co-located I/O delegation, and server-side read clustering and
 pipelining.
 
-
 Please note that the current implementation of BurstFS is not of production 
 quality, and is for research purpose only. The current client-side interface is based on POSIX, 
 including open, pwrite, lio_listio, pread, write, read, lseek, close and fsync. BurstFS is designed 
@@ -52,7 +51,7 @@ BurstFS_Meta/Makefile.cfg in the 1st build step.
  
 ## I/O Interception in BurstFS_Client:
 
-** Steps for switching between and/or building with different I/O wrapping strategies **
+**Steps for switching between and/or building with different I/O wrapping strategies**
 
 In order to use gotcha for I/O wrapping install the latest release:
 https://github.com/LLNL/GOTCHA/releases
