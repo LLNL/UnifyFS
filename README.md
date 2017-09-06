@@ -1,4 +1,4 @@
-## BurstFS: A Distributed Burst Buffer File System - 0.1.1
+# BurstFS: A Distributed Burst Buffer File System - 0.1.1
 Node-local burst buffers are becoming an indispensable hardware
 resource on large-scale supercomputers to buffer the bursty
 I/O from scientific applications. However, there is a lack of
@@ -28,7 +28,7 @@ research question on whether we should give BurstFS a comprehensive POSIX suppor
 APIs, but layer on top of them with other higher-level I/O functions. Below is the 
 guide on how to install and use BurstFS server.
 
-**How to build (with CRUISE tests):**
+# How to build (with CRUISE tests):
 1. download and build leveldb-1.14 (wget https://github.com/google/leveldb/archive/v1.14.tar.gz). 
    Then, change the path in BurstFS_Meta/Makefile.cfg to point to your leveldb directory  
 2. change directory to BurstFS_Meta
@@ -41,7 +41,7 @@ guide on how to install and use BurstFS server.
    ./buildme_autotools (the first time you build the server only)
    ./buildme.sh
 
-**How to run (with CRUISE tests): **
+#How to run (with CRUISE tests): 
 1. Make sure you are in BurstFS_Server directory
 2. allocate a node 
 3. ./runserver.sh
@@ -50,21 +50,21 @@ guide on how to install and use BurstFS server.
 Note: If at Oak Ridge you will probably have to change the MPI path as well in 
 BurstFS_Meta/Makefile.cfg in the 1st build step.
  
-**I/O Interception in BurstFS_Client:**
+#I/O Interception in BurstFS_Client:
 
-Steps for switching between and/or building with different I/O wrapping strategies 
+##steps for switching between and/or building with different I/O wrapping strategies
 
 In order to use gotcha for I/O wrapping install the latest release:
 https://github.com/LLNL/GOTCHA/releases
 
-Steps for using gotcha:
+**Steps for using gotcha:**
 1. Run buildme_opt like this: "./buildme_opt -DCRUISE_GOTCHA"
 
-Steps for using --wrap:
+**Steps for using --wrap:**
 1. This is the default so you shouldn't have to do anything unless 
 a different option is turned on 
 2. Run buildme_opt normally: "./buildme_opt"
 
-Steps for using CRUISE_PRELOAD (LD_PRELOAD):
+**Steps for using CRUISE_PRELOAD (LD_PRELOAD):**
 1. Run buildme_opt like this: "./buildme_opt -DCRUISE_PRELOAD"
   
