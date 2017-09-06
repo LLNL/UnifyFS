@@ -41,7 +41,7 @@ guide on how to install and use BurstFS server.
    ./buildme_autotools (the first time you build the server only)
    ./buildme.sh
 
-#How to run (with CRUISE tests): 
+# How to run (with CRUISE tests): 
 1. Make sure you are in BurstFS_Server directory
 2. allocate a node 
 3. ./runserver.sh
@@ -50,9 +50,9 @@ guide on how to install and use BurstFS server.
 Note: If at Oak Ridge you will probably have to change the MPI path as well in 
 BurstFS_Meta/Makefile.cfg in the 1st build step.
  
-#I/O Interception in BurstFS_Client:
+# I/O Interception in BurstFS_Client:
 
-##steps for switching between and/or building with different I/O wrapping strategies
+## steps for switching between and/or building with different I/O wrapping strategies
 
 In order to use gotcha for I/O wrapping install the latest release:
 https://github.com/LLNL/GOTCHA/releases
