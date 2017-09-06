@@ -1,6 +1,4 @@
-===============================================================================
-               ##H2 BurstFS: A Distributed Burst Buffer File System - 0.1.1
-===============================================================================
+## BurstFS: A Distributed Burst Buffer File System - 0.1.1
 Node-local burst buffers are becoming an indispensable hardware
 resource on large-scale supercomputers to buffer the bursty
 I/O from scientific applications. However, there is a lack of
