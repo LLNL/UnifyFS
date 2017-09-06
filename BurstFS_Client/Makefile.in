@@ -27,7 +27,7 @@ VPATH = $(srcdir)
 
 CFLAGS = -DCRUISE_CONFIG_H=\"cruise-runtime-config.h\" -I . -I ../ -I $(srcdir) -I$(srcdir)/../ @CFLAGS@ @CPPFLAGS@ -D_LARGEFILE64_SOURCE 
 
-CFLAGS_SHARED = -DCRUISE_CONFIG_H=\"cruise-runtime-config.h\" -I . -I$(srcdir) -I$(srcdir)/../ @CFLAGS@ @CPPFLAGS@ -D_LARGEFILE64_SOURCE -shared -fpic -DPIC -DCRUISE_PRELOAD
+CFLAGS_SHARED = -DCRUISE_CONFIG_H=\"cruise-runtime-config.h\" -I . -I$(srcdir) -I$(srcdir)/../ @CFLAGS@ @CPPFLAGS@ -D_LARGEFILE64_SOURCE -shared -fpic -DPIC 
 
 LIBS = @LIBBZ2@ $(NUMA_LIBS)
 

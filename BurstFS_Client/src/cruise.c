@@ -24,9 +24,12 @@
 * For details, see https://github.com/hpc/cruise
 * Please also read this file LICENSE.CRUISE 
 */
-
+#define _GNU_SOURCE
+#include <sched.h>
 #include "cruise-runtime-config.h"
+
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -46,7 +49,7 @@
 #include <pthread.h>
 #include <mpi.h>
 #include <openssl/md5.h>
-#define __USE_GNU
+//#define __USE_GNU
 
 
 #ifdef ENABLE_NUMA_POLICY
@@ -69,6 +72,14 @@
 #include <mpix.h>
 #endif /* MACHINE_BGQ */
 
+#ifdef CRUISE_GOTCHA
+#include "gotcha/gotcha_types.h"
+#include "gotcha/gotcha.h"
+#include "gotcha_map_cruise_list.h"
+#endif
+
+int local_rank_idx = 0;
+
 #ifndef HAVE_OFF64_T
 typedef int64_t off64_t;
 #endif
@@ -90,7 +101,7 @@ int cruise_spillmetablock;
 
 int *local_rank_lst = NULL;
 int local_rank_cnt = 0;
-int local_rank_idx = -1;
+
 int local_del_cnt = 0;
 int client_sockfd;
 struct pollfd cmd_fd;
@@ -1648,6 +1659,22 @@ static int cruise_abtoull(char* str, unsigned long long* val)
 static int cruise_init(int rank)
 {
     if (! cruise_initialized) {
+
+#ifdef CRUISE_GOTCHA  
+        enum gotcha_error_t result;
+
+        result = gotcha_wrap(wrap_cruise_list, NFUNCS, "cruise");
+        if (result != GOTCHA_SUCCESS) {
+            debug("gotcha_wrap returned %d\n", (int) result);
+        }
+         
+        int i;
+        for (i = 0; i < NFUNCS; i++) {
+            if (*(void**)(wrap_cruise_list[i].function_address_pointer) == 0) {
+                printf("This function name failed to be wrapped: %s\n", wrap_cruise_list[i].name); 
+            }
+        }
+#endif
         char* env;
         unsigned long long bytes;
 
