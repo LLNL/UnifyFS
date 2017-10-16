@@ -102,29 +102,3 @@ e. locality-aware optimization
 -- For soft failure, client program can recover directly from
    its local data without talking with the delegator. May bypass
    the delegator when the client find the data are stored locally.
- 
-
-
-Switching between and/or building with different I/O wrapping strategies 
-in BurstFS_Client:
-
-In order to use gotcha for I/O wrapping install the latest release:
-https://github.com/LLNL/GOTCHA/releases
-
-Steps for using gotcha:
-1. Go to BurstFS_Client
-2. Modify buildme_opt script to link with gotcha and define CRUISE_GOTCHA
-   a. To link: -I/path/to/gotcha_install/include -L/path/to/gotcha_install/lib -lgotcha        
-   b. To define add -DCRUISE_GOTCHA to CFLAGS: 
-        CC=mpicc CFLAGS="-g -O0 -fPIC -DCRUISE_GOTCHA -DENABLE_NUMA_POLICY ${link_gotcha}" || exit 1
-3. Now, in applications I've been testing with I link with libcruise.so 
-
-Steps for using --wrap:
-1. This is the default so you shouldn't have to do anything unless 
-a different option is turned on (i.e. gotcha). In that case,
-just remove the -DCRUISE_GOTCHA line from the CFLAGS in 
-BurstFS_Client/buildme_opt
-
-Steps for using CRUISE_PRELOAD (LD_PRELOAD):
-1. Follow steps 1-3 in the steps for gotcha, but replace the 
--DCRUISE_GOTCHA with -DCRUISE_PRELOAD instead.    
