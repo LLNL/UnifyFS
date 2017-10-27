@@ -58,7 +58,7 @@ client and server scripts into one job script.
 
 5. How to use BurstFS client?
 For all programs in the same job, before performing POSIX I/O operations, 
-use burstfs_mount to mount the program under a given 
+use unifycr_mount to mount the program under a given 
 prefix, BurstFS will intercept the POSIX I/O functions under 
 that prefix. Use unmount in the last program to exit to terminate the 
 burstfs server. Below is the explanation of some configurable 

@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
 		  }
 		}
 
-	burstfs_mount("/tmp", rank, rank_num, 0, 1);
+	unifycr_mount("/tmp", rank, rank_num, 0, 1);
 
 	char *buf = malloc (tran_sz);
 	if (buf == NULL)
@@ -156,7 +156,7 @@ int main(int argc, char *argv[]) {
 
 	if (to_unmount) {
 		if (rank == 0) {
-			burstfs_unmount();
+			unifycr_unmount();
 		}
 	}
 

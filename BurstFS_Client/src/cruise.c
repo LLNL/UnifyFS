@@ -1922,7 +1922,7 @@ static int cruise_init(int rank)
 * @param l_app_id: application ID
 * @return success/error code
 */
-int burstfs_mount(const char prefix[], int rank, size_t size,\
+int unifycr_mount(const char prefix[], int rank, size_t size,\
 		int l_app_id, int subtype) {
 	switch(subtype) {
 		case CRUISEFS:
@@ -1948,7 +1948,7 @@ int burstfs_mount(const char prefix[], int rank, size_t size,\
 * data flush for persistence.
 * @return success/error code
 */
-int burstfs_unmount() {
+int unifycr_unmount() {
     if (fs_type == BURSTFS_LOG) {
 	    int cmd = COMM_UNMOUNT;
 	    char cmd_buf[GEN_STR_LEN] = {0};

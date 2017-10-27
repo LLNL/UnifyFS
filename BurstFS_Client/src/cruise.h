@@ -63,7 +63,7 @@ static int burstfs_init_socket(int proc_id,\
 			int l_num_del_per_node);
 static int CountTasksPerNode(int rank, int numTasks);
 static int burstfs_init_req_shm(int local_rank_idx, int app_id);
-int burstfs_mount(const char prefix[], int rank, size_t size,\
+int unifycr_mount(const char prefix[], int rank, size_t size,\
 		int l_app_id, int subtype);
 static int burstfs_init_recv_shm(int local_rank_idx, int app_id);
 static int burstfs_init_req_shm(int local_rank_idx, int app_id);
