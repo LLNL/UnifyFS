@@ -786,7 +786,7 @@ ssize_t CRUISE_WRAP(read)(int fd, void *buf, size_t count)
         /* read data from file */
         size_t retcount;
 
-        if (fs_type != BURSTFS_LOG) {
+        if (fs_type != UNIFYCR_LOG) {
 			int read_rc = cruise_fd_read(fd, filedesc->pos, buf, count, &retcount);
 			if (read_rc != CRUISE_SUCCESS) {
 				errno = cruise_err_map_to_errno(read_rc);
@@ -833,7 +833,7 @@ ssize_t CRUISE_WRAP(write)(int fd, const void *buf, size_t count)
             return (ssize_t)-1;
         }
 
-        if (fs_type != BURSTFS_LOG) {
+        if (fs_type != UNIFYCR_LOG) {
         /* write data to file */
 			int write_rc = cruise_fd_write(fd, filedesc->pos, buf, count);
 			if (write_rc != CRUISE_SUCCESS) {
@@ -1382,7 +1382,7 @@ ssize_t CRUISE_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
         }
 
         size_t retcount;
-        if (fs_type != BURSTFS_LOG) {
+        if (fs_type != UNIFYCR_LOG) {
 			int read_rc = cruise_fd_read(fd, offset, buf, count, &retcount);
 			if (read_rc != CRUISE_SUCCESS) {
 				errno = cruise_err_map_to_errno(read_rc);
@@ -1520,7 +1520,7 @@ int CRUISE_WRAP(fsync)(int fd)
 			}
 		}
 
-		if (fs_type == BURSTFS_LOG) {
+		if (fs_type == UNIFYCR_LOG) {
 			/*put indices to key-value store*/
 			int cmd = COMM_META;
 			memcpy(cmd_buf, &cmd, sizeof(int));

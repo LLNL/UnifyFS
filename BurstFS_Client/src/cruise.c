@@ -89,7 +89,7 @@ static int cruise_fpos_enabled   = 1;  /* whether we can use fgetpos/fsetpos */
  * burstfs variable:
  * */
 
-fs_type_t fs_type = CRUISEFS;
+fs_type_t fs_type = UNIFYCRFS;
 burstfs_index_buf_t burstfs_indices;
 burstfs_fattr_buf_t burstfs_fattrs;
 static size_t burstfs_index_buf_size;	/* size of metadata log for log-structured io*/
@@ -491,7 +491,7 @@ static int cruise_fid_store_alloc(int fid)
     /* get meta data for this file */
     cruise_filemeta_t* meta = cruise_get_meta_from_fid(fid);
 
-    if (fs_type == BURSTFS_LOG) {
+    if (fs_type == UNIFYCR_LOG) {
     	meta->storage = FILE_STORAGE_LOGIO;
     }
     else
@@ -1079,7 +1079,7 @@ int cruise_fid_open(const char* path, int flags, mode_t mode, int* outfid, off_t
     debug("cruise_get_fid_from_path() gave %d\n", fid);
 
     int gfid = -1, rc = 0;
-    if (fs_type == BURSTFS_LOG) {
+    if (fs_type == UNIFYCR_LOG) {
 		if (fid < 0) {
 			rc = cruise_get_global_fid(path, &gfid);
 			if (rc != CRUISE_SUCCESS) {
@@ -1148,7 +1148,7 @@ int cruise_fid_open(const char* path, int flags, mode_t mode, int* outfid, off_t
                 return CRUISE_ERR_IO;
             }
 
-            if (fs_type == BURSTFS_LOG) {
+            if (fs_type == UNIFYCR_LOG) {
             	/*create a file and send its attribute to key-value store*/
  				burstfs_fattr_t *new_fmeta =\
  						(burstfs_fattr_t *)malloc(sizeof(burstfs_fattr_t));
@@ -1293,7 +1293,7 @@ static void* cruise_init_pointers(void* superblock)
     }
 
 	/* pointer to the log-structured metadata structures*/
-    if (fs_type == BURSTFS_LOG) {
+    if (fs_type == UNIFYCR_LOG) {
       burstfs_indices.ptr_num_entries = (unsigned long *)ptr;
 
       ptr += cruise_page_size;
@@ -1337,7 +1337,7 @@ static int cruise_init_structures()
         cruise_stack_init(free_spillchunk_stack, cruise_spillover_max_chunks);
     }
 
-    if (fs_type == BURSTFS_LOG) {
+    if (fs_type == UNIFYCR_LOG) {
     	*(burstfs_indices.ptr_num_entries) = 0;
     	*(burstfs_fattrs.ptr_num_entries) = 0;
     }
@@ -1386,7 +1386,7 @@ static void* cruise_superblock_shmget(size_t size, key_t key)
     int scr_shmblock_shmid;
 
     debug("Key for superblock = %x\n", key);
-    if (fs_type != BURSTFS_LOG) {
+    if (fs_type != UNIFYCR_LOG) {
 		#ifdef ENABLE_NUMA_POLICY
 			/* if user requested to use 1 shm/process along with NUMA optimizations */
 			if ( key != IPC_PRIVATE ) {
@@ -1753,7 +1753,7 @@ static int cruise_init(int rank)
         /* set number of chunks in spillover device */
         cruise_spillover_max_chunks = cruise_spillover_size >> cruise_chunk_bits;
 
-        if (fs_type == BURSTFS_LOG) {
+        if (fs_type == UNIFYCR_LOG) {
             burstfs_index_buf_size = BURSTFS_INDEX_BUF_SIZE;
             env = getenv("BURSTFS_INDEX_BUF_SIZE");
             if (env) {
@@ -1839,7 +1839,7 @@ static int cruise_init(int rank)
         }
 
         /*burstfs: add the index and attribute region size of burstfs*/
-        if (fs_type == BURSTFS_LOG) {
+        if (fs_type == UNIFYCR_LOG) {
         	superblock_size += burstfs_max_index_entries\
         			* sizeof(burstfs_index_t) + cruise_page_size;
         	superblock_size += burstfs_max_fattr_entries\
@@ -1893,7 +1893,7 @@ static int cruise_init(int rank)
         /*ToDo: add the spillover feature for the index metadata*/
         sprintf(spillfile_prefix, "%s/spill_index_%d_%d.log",\
         		external_meta_dir, app_id, local_rank_idx);
-        if (fs_type == BURSTFS_LOG) {
+        if (fs_type == UNIFYCR_LOG) {
         	cruise_spillmetablock =\
         			cruise_get_spillblock(burstfs_index_buf_size, spillfile_prefix);
         	if (cruise_spillmetablock < 0) {
@@ -1925,14 +1925,14 @@ static int cruise_init(int rank)
 int unifycr_mount(const char prefix[], int rank, size_t size,\
 		int l_app_id, int subtype) {
 	switch(subtype) {
-		case CRUISEFS:
-			fs_type = CRUISEFS; break;
-		case BURSTFS_LOG:
-			fs_type = BURSTFS_LOG; break;
-		case BURSTFS_STRIPE:
-			fs_type = BURSTFS_STRIPE; break;
+		case UNIFYCRFS:
+			fs_type = UNIFYCRFS; break;
+		case UNIFYCR_LOG:
+			fs_type = UNIFYCR_LOG; break;
+		case UNIFYCR_STRIPE:
+			fs_type = UNIFYCR_STRIPE; break;
 		default:
-			fs_type = BURSTFS_LOG; break;
+			fs_type = UNIFYCR_LOG; break;
 	}
 
 	dbg_rank = rank;
@@ -1949,7 +1949,7 @@ int unifycr_mount(const char prefix[], int rank, size_t size,\
 * @return success/error code
 */
 int unifycr_unmount() {
-    if (fs_type == BURSTFS_LOG) {
+    if (fs_type == UNIFYCR_LOG) {
 	    int cmd = COMM_UNMOUNT;
 	    char cmd_buf[GEN_STR_LEN] = {0};
 	    memcpy(cmd_buf, &cmd, sizeof(int));
@@ -2025,7 +2025,7 @@ int cruise_mount(const char prefix[], size_t size, int rank)
         cruise_mount_shmget_key = IPC_PRIVATE;
     }
 
-    if (fs_type == BURSTFS_LOG || fs_type == BURSTFS_STRIPE) {
+    if (fs_type == UNIFYCR_LOG || fs_type == UNIFYCR_STRIPE) {
     	int rc = CountTasksPerNode(rank, size);
     	if (rc < 0) {
     		debug("rank:%d, cannot get the local rank list.", dbg_rank);
@@ -2050,7 +2050,7 @@ int cruise_mount(const char prefix[], size_t size, int rank)
     /* initialize our library */
     cruise_init(rank);
 
-	if (fs_type == BURSTFS_LOG || fs_type == BURSTFS_STRIPE) {
+	if (fs_type == UNIFYCR_LOG || fs_type == UNIFYCR_STRIPE) {
 		char host_name[CRUISE_MAX_FILENAME] = {0};
 		int rc = gethostname(host_name, CRUISE_MAX_FILENAME);
 		if (rc != 0) {

@@ -18,4 +18,4 @@ nlist=`scontrol show hostnames ${SLURM_NODELIST}|paste -d, -s|cut -d ',' -f1-${n
 #done
 
 ulimit -c unlimited
-srun --clear-ssd --nodelist=${nlist} --ntasks-per-node=${procs_per_node}  --distribution=block -n ${nprocs} -N ${nnodes} ./burstfsd 2>&1 |tee server_${nprocs}.log &
+srun --clear-ssd --nodelist=${nlist} --ntasks-per-node=${procs_per_node}  --distribution=block -n ${nprocs} -N ${nnodes} ./unifycrd 2>&1 |tee server_${nprocs}.log &

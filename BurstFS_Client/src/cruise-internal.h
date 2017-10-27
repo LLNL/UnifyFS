@@ -299,9 +299,9 @@ typedef struct {
 } index_set_t;
 
 typedef enum {
-	CRUISEFS,
-	BURSTFS_LOG,
-	BURSTFS_STRIPE,
+	UNIFYCRFS,
+	UNIFYCR_LOG,
+	UNIFYCR_STRIPE,
 }fs_type_t;
 
 typedef struct {
