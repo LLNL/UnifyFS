@@ -1,0 +1,45 @@
+#!/bin/sh
+
+#
+#  (C) 2012 by Argonne National Laboratory.
+#      See COPYRIGHT in top-level directory.
+#
+
+
+
+CP_WRAPPERS="-Wl,-wrap,access,-wrap,lio_listio,-wrap,mkdir,-wrap,rmdir,-wrap,unlink,-wrap,remove,-wrap,rename,-wrap,truncate,-wrap,stat,-wrap,__lxstat,-wrap,__lxstat64,-wrap,__xstat,-wrap,__xstat64,-wrap,creat,-wrap,creat64,-wrap,open,-wrap,open64,-wrap,read,-wrap,write,-wrap,readv,-wrap,writev,-wrap,pread,-wrap,pread64,-wrap,pwrite,-wrap,pwrite64,-wrap,posix_fadvise,-wrap,lseek,-wrap,lseek64,-wrap,ftruncate,-wrap,fsync,-wrap,fdatasync,-wrap,flock,-wrap,mmap,-wrap,mmap64,-wrap,munmap,-wrap,msync,-wrap,__fxstat,-wrap,__fxstat64,-wrap,close"
+UNIFYCR_LIB_PATH="/g/g0/sikich1/unifycr/UnifyCR_Client/install/lib"
+UNIFYCR_LD_FLAGS=""
+
+PRE_LD_FLAGS="-L$UNIFYCR_LIB_PATH $UNIFYCR_LD_FLAGS -lz $CP_WRAPPERS"
+POST_LD_FLAGS="-L$UNIFYCR_LIB_PATH -lunifycr-posix -lcrypto -lm"
+
+
+usage="\
+Usage: unifycr-config [--pre-ld-flags] [--post-ld-flags]"
+
+if test $# -eq 0; then
+      echo "${usage}" 1>&2
+      exit 1
+fi
+
+while test $# -gt 0; do
+  case "$1" in
+  -*=*) optarg=`echo "$1" | sed 's/[-_a-zA-Z0-9]*=//'` ;;
+  *) optarg= ;;
+  esac
+
+  case $1 in
+    --pre-ld-flags)
+      echo $PRE_LD_FLAGS
+      ;;
+    --post-ld-flags)
+      echo $POST_LD_FLAGS
+      ;;
+    *)
+      echo "${usage}" 1>&2
+      exit 1
+      ;;
+  esac
+  shift
+done

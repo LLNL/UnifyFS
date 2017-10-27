@@ -1,0 +1,117 @@
+all: src/libunifycr-posix.a
+
+DESTDIR =
+srcdir = @srcdir@
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+datarootdir = $(DESTDIR)@datarootdir@
+includedir = $(DESTDIR)@includedir@
+mandir = $(DESTDIR)@mandir@
+sbindir = $(DESTDIR)@sbindir@
+bindir = $(DESTDIR)@bindir@
+libdir = $(DESTDIR)@libdir@
+LDFLAGS = @LDFLAGS@
+CC = @CC@
+LD = @LD@
+
+NUMA_LIBS = -lnuma
+
+
+DISABLE_LDPRELOAD = @DISABLE_LDPRELOAD@
+
+ifndef DISABLE_LDPRELOAD
+all: src/libunifycr.so 
+endif
+
+VPATH = $(srcdir)
+
+CFLAGS = -DUNIFYCR_CONFIG_H=\"unifycr-runtime-config.h\" -I . -I ../ -I $(srcdir) -I$(srcdir)/../ @CFLAGS@ @CPPFLAGS@ -D_LARGEFILE64_SOURCE 
+
+CFLAGS_SHARED = -DUNIFYCR_CONFIG_H=\"unifycr-runtime-config.h\" -I . -I$(srcdir) -I$(srcdir)/../ @CFLAGS@ @CPPFLAGS@ -D_LARGEFILE64_SOURCE -shared -fpic -DPIC 
+
+LIBS = @LIBBZ2@ $(NUMA_LIBS)
+
+lib::
+	@mkdir -p $@
+
+HEADERS = \
+  src/unifycr-stack.h \
+  src/unifycr-fixed.h \
+  src/unifycr-sysio.h \
+  src/unifycr-stdio.h \
+  src/unifycr-internal.h \
+  src/unifycr.h
+
+OBJS = \
+  src/unifycr-stack.o \
+  src/unifycr-fixed.o \
+  src/unifycr-sysio.o \
+  src/unifycr-stdio.o \
+  src/unifycr.o
+
+POBJS = \
+  src/unifycr-stack.po \
+  src/unifycr-fixed.po \
+  src/unifycr-sysio.po \
+  src/unifycr-stdio.po \
+  src/unifycr.po
+
+src/unifycr-fixed.o: src/unifycr-fixed.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+src/unifycr-fixed.po: src/unifycr-fixed.c $(HEADERS)
+	$(CC) $(CFLAGS_SHARED) -c $< -o $@
+
+
+src/unifycr.o: src/unifycr.c $(HEADERS)
+	$(CC) $(CFLAGS) -c src/unifycr.c -o $@
+
+src/unifycr.po: src/unifycr.c $(HEADERS)
+	$(CC) $(CFLAGS_SHARED) -c src/unifycr.c -o $@
+
+
+src/unifycr-sysio.o: src/unifycr-sysio.c $(HEADERS)
+	$(CC) $(CFLAGS) -c src/unifycr-sysio.c -o $@
+
+src/unifycr-sysio.po: src/unifycr-sysio.c $(HEADERS)
+	$(CC) $(CFLAGS_SHARED) -c src/unifycr-sysio.c -o $@
+
+
+src/unifycr-stdio.o: src/unifycr-stdio.c $(HEADERS)
+	$(CC) $(CFLAGS) -c src/unifycr-stdio.c -o $@
+
+src/unifycr-stdio.po: src/unifycr-stdio.c $(HEADERS)
+	$(CC) $(CFLAGS_SHARED) -c src/unifycr-stdio.c -o $@
+
+
+src/unifycr-stack.o: src/unifycr-stack.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+src/unifycr-stack.po: src/unifycr-stack.c $(HEADERS)
+	$(CC) $(CFLAGS_SHARED) -c $< -o $@
+
+
+%.i: %.c
+	$(CC) -E $(CFLAGS) -c $< -o $@
+
+src/libunifycr-posix.a: $(OBJS)
+	ar rcs $@ $^
+
+src/libunifycr.so: $(POBJS)
+	$(CC) $(CFLAGS_SHARED) $(LDFLAGS) -ldl -o $@ $^ -lpthread -lrt
+
+install:: all
+	install -d $(libdir)
+	install -m 755 src/libunifycr-posix.a $(libdir)
+ifndef DISABLE_LDPRELOAD
+	install -m 755 src/libunifycr.so $(libdir)
+endif
+	install -d $(bindir)
+	install -m 755 unifycr-config $(bindir)
+
+clean::
+	rm -f *.o *.po *.a src/*.o src/*.po src/*.a src/*.so *.in~ 
+
+distclean:: clean
+	rm -f unifycr-runtime-config.h aclocal.m4 autom4te.cache/* config.status config.log Makefile 
+	rm -rf autom4te.cache

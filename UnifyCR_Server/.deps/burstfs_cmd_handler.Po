@@ -1,0 +1,250 @@
+unifycr_cmd_handler.o: unifycr_cmd_handler.c /usr/include/unistd.h \
+ /usr/include/features.h /usr/include/stdc-predef.h /usr/include/sys/cdefs.h \
+ /usr/include/bits/wordsize.h /usr/include/gnu/stubs.h \
+ /usr/include/gnu/stubs-64.h /usr/include/bits/posix_opt.h \
+ /usr/include/bits/environments.h /usr/include/bits/wordsize.h \
+ /usr/include/bits/types.h /usr/include/bits/wordsize.h \
+ /usr/include/bits/typesizes.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stddef.h \
+ /usr/include/bits/confname.h /usr/include/getopt.h \
+ /usr/tce/packages/mvapich2/mvapich2-2.2-intel-16.0.3/include/mpi.h \
+ /usr/tce/packages/mvapich2/mvapich2-2.2-intel-16.0.3/include/mpio.h \
+ /usr/tce/packages/mvapich2/mvapich2-2.2-intel-16.0.3/include/mpi.h \
+ /usr/include/stdio.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stddef.h \
+ /usr/include/libio.h /usr/include/_G_config.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stddef.h \
+ /usr/include/wchar.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stdarg.h \
+ /usr/include/bits/stdio_lim.h /usr/include/bits/sys_errlist.h \
+ /usr/include/bits/stdio.h /usr/include/stdlib.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stddef.h \
+ /usr/include/bits/waitflags.h /usr/include/bits/waitstatus.h \
+ /usr/include/endian.h /usr/include/bits/endian.h /usr/include/bits/byteswap.h \
+ /usr/include/bits/wordsize.h /usr/include/bits/byteswap-16.h \
+ /usr/include/sys/types.h /usr/include/time.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stddef.h \
+ /usr/include/sys/select.h /usr/include/bits/select.h \
+ /usr/include/bits/wordsize.h /usr/include/bits/sigset.h /usr/include/time.h \
+ /usr/include/bits/time.h /usr/include/sys/sysmacros.h \
+ /usr/include/bits/pthreadtypes.h /usr/include/bits/wordsize.h \
+ /usr/include/alloca.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stddef.h \
+ /usr/include/bits/stdlib-float.h /usr/include/sys/mman.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stddef.h \
+ /usr/include/bits/mman.h /usr/include/string.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stddef.h \
+ /usr/include/xlocale.h /usr/include/bits/string.h /usr/include/bits/string2.h \
+ log.h /usr/include/time.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stddef.h \
+ /usr/include/bits/time.h /usr/include/sys/syscall.h /usr/include/asm/unistd.h \
+ /usr/include/asm/unistd_64.h /usr/include/bits/syscall.h /usr/include/sys/time.h \
+ /usr/include/bits/time.h unifycr_global.h /usr/include/pthread.h \
+ /usr/include/sched.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stddef.h \
+ /usr/include/bits/sched.h /usr/include/bits/setjmp.h \
+ /usr/include/bits/wordsize.h /usr/include/bits/wordsize.h unifycr_const.h \
+ /usr/include/fcntl.h /usr/include/bits/fcntl.h /usr/include/bits/fcntl-linux.h \
+ /usr/include/bits/stat.h arraylist.h unifycr_cmd_handler.h \
+ unifycr_request_manager.h unifycr_setup.h unifycr_sock.h /usr/include/poll.h \
+ /usr/include/sys/poll.h /usr/include/bits/poll.h unifycr_metadata.h \
+ /usr/include/sys/stat.h /usr/include/bits/stat.h \
+ /g/g0/sikich1/unifycr/UnifyCR_Meta/src/mdhim.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stdint.h \
+ /usr/tce/packages/gcc/gcc-4.9.3/lib64/gcc/x86_64-unknown-linux-gnu/4.9.3/include/stdint.h \
+ /usr/include/stdint.h /usr/include/bits/wchar.h /usr/include/bits/wordsize.h \
+ /usr/include/bits/wordsize.h /g/g0/sikich1/unifycr/UnifyCR_Meta/src/data_store.h \
+ /g/g0/sikich1/unifycr/UnifyCR_Meta/src/uthash/uthash.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stddef.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stdint.h \
+ /usr/include/inttypes.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stdint.h \
+ /g/g0/sikich1/unifycr/UnifyCR_Meta/src/mdhim_options.h \
+ /usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stdint.h \
+ /g/g0/sikich1/unifycr/UnifyCR_Meta/src/range_server.h \
+ /g/g0/sikich1/unifycr/UnifyCR_Meta/src/messages.h \
+ /g/g0/sikich1/unifycr/UnifyCR_Meta/src/range_server.h \
+ /g/g0/sikich1/unifycr/UnifyCR_Meta/src/indexes.h \
+ /g/g0/sikich1/unifycr/UnifyCR_Meta/src/partitioner.h \
+ /g/g0/sikich1/unifycr/UnifyCR_Meta/src/mdhim.h \
+ /g/g0/sikich1/unifycr/UnifyCR_Meta/src/Mlog2/mlog2.h \
+ /g/g0/sikich1/unifycr/UnifyCR_Meta/src/Mlog2/mlogfacs2.h \
+ /g/g0/sikich1/unifycr/UnifyCR_Meta/src/mdhim_private.h
+
+/usr/include/unistd.h:
+
+/usr/include/features.h:
+
+/usr/include/stdc-predef.h:
+
+/usr/include/sys/cdefs.h:
+
+/usr/include/bits/wordsize.h:
+
+/usr/include/gnu/stubs.h:
+
+/usr/include/gnu/stubs-64.h:
+
+/usr/include/bits/posix_opt.h:
+
+/usr/include/bits/environments.h:
+
+/usr/include/bits/types.h:
+
+/usr/include/bits/typesizes.h:
+
+/usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stddef.h:
+
+/usr/include/bits/confname.h:
+
+/usr/include/getopt.h:
+
+/usr/tce/packages/mvapich2/mvapich2-2.2-intel-16.0.3/include/mpi.h:
+
+/usr/tce/packages/mvapich2/mvapich2-2.2-intel-16.0.3/include/mpio.h:
+
+/usr/include/stdio.h:
+
+/usr/include/libio.h:
+
+/usr/include/_G_config.h:
+
+/usr/include/wchar.h:
+
+/usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stdarg.h:
+
+/usr/include/bits/stdio_lim.h:
+
+/usr/include/bits/sys_errlist.h:
+
+/usr/include/bits/stdio.h:
+
+/usr/include/stdlib.h:
+
+/usr/include/bits/waitflags.h:
+
+/usr/include/bits/waitstatus.h:
+
+/usr/include/endian.h:
+
+/usr/include/bits/endian.h:
+
+/usr/include/bits/byteswap.h:
+
+/usr/include/bits/byteswap-16.h:
+
+/usr/include/sys/types.h:
+
+/usr/include/time.h:
+
+/usr/include/sys/select.h:
+
+/usr/include/bits/select.h:
+
+/usr/include/bits/sigset.h:
+
+/usr/include/bits/time.h:
+
+/usr/include/sys/sysmacros.h:
+
+/usr/include/bits/pthreadtypes.h:
+
+/usr/include/alloca.h:
+
+/usr/include/bits/stdlib-float.h:
+
+/usr/include/sys/mman.h:
+
+/usr/include/bits/mman.h:
+
+/usr/include/string.h:
+
+/usr/include/xlocale.h:
+
+/usr/include/bits/string.h:
+
+/usr/include/bits/string2.h:
+
+log.h:
+
+/usr/include/sys/syscall.h:
+
+/usr/include/asm/unistd.h:
+
+/usr/include/asm/unistd_64.h:
+
+/usr/include/bits/syscall.h:
+
+/usr/include/sys/time.h:
+
+unifycr_global.h:
+
+/usr/include/pthread.h:
+
+/usr/include/sched.h:
+
+/usr/include/bits/sched.h:
+
+/usr/include/bits/setjmp.h:
+
+unifycr_const.h:
+
+/usr/include/fcntl.h:
+
+/usr/include/bits/fcntl.h:
+
+/usr/include/bits/fcntl-linux.h:
+
+/usr/include/bits/stat.h:
+
+arraylist.h:
+
+unifycr_cmd_handler.h:
+
+unifycr_request_manager.h:
+
+unifycr_setup.h:
+
+unifycr_sock.h:
+
+/usr/include/poll.h:
+
+/usr/include/sys/poll.h:
+
+/usr/include/bits/poll.h:
+
+unifycr_metadata.h:
+
+/usr/include/sys/stat.h:
+
+/g/g0/sikich1/unifycr/UnifyCR_Meta/src/mdhim.h:
+
+/usr/tce/packages/intel/intel-16.0.3/compilers_and_libraries_2016.3.210/linux/compiler/include/stdint.h:
+
+/usr/tce/packages/gcc/gcc-4.9.3/lib64/gcc/x86_64-unknown-linux-gnu/4.9.3/include/stdint.h:
+
+/usr/include/stdint.h:
+
+/usr/include/bits/wchar.h:
+
+/g/g0/sikich1/unifycr/UnifyCR_Meta/src/data_store.h:
+
+/g/g0/sikich1/unifycr/UnifyCR_Meta/src/uthash/uthash.h:
+
+/usr/include/inttypes.h:
+
+/g/g0/sikich1/unifycr/UnifyCR_Meta/src/mdhim_options.h:
+
+/g/g0/sikich1/unifycr/UnifyCR_Meta/src/range_server.h:
+
+/g/g0/sikich1/unifycr/UnifyCR_Meta/src/messages.h:
+
+/g/g0/sikich1/unifycr/UnifyCR_Meta/src/indexes.h:
+
+/g/g0/sikich1/unifycr/UnifyCR_Meta/src/partitioner.h:
+
+/g/g0/sikich1/unifycr/UnifyCR_Meta/src/Mlog2/mlog2.h:
+
+/g/g0/sikich1/unifycr/UnifyCR_Meta/src/Mlog2/mlogfacs2.h:
+
+/g/g0/sikich1/unifycr/UnifyCR_Meta/src/mdhim_private.h:

@@ -1,0 +1,38 @@
+#!/bin/bash
+
+. /usr/local/tools/dotkit/init.sh
+use -q ic-11.1.046 
+
+set -x
+
+# if nothing is passed in then the interception method will be --wrap,
+# but run like: ./buildme_opt -DUNIFYCR_GOTCHA or ./buildme_opt -DUNIFYCR_PRELOAD
+# for the gotcha or preload interception methods  
+intercept=$1
+
+# path link to gotcha -- only needs to be set if you ran with
+# ./buildme_opt -DUNIFYCR_GOTCHA         
+gotcha_path="/g/g0/sikich1/gotcha_inst"
+if [ ! -z ${intercept} ]; then
+
+        echo "using ${intercept} for I/O interception"
+
+        if [ ${intercept} == "-DUNIFYCR_GOTCHA" ]; then
+                link_gotcha="-I${gotcha_path}/include -L${gotcha_path}/lib -lgotcha"
+        else 
+                link_gotcha=""
+        fi
+else
+        echo "using --wrap for I/O interception"
+fi
+
+./prepare
+./configure \
+  --enable-ld-preload \
+  --prefix=`pwd`/install \
+  CC=mpicc CFLAGS="-g -O0 -fPIC ${intercept} -DENABLE_NUMA_POLICY ${link_gotcha}" || exit 1
+
+make clean || exit 1
+make || exit 1
+make install || exit 1
+chmod +x unifycr-config
