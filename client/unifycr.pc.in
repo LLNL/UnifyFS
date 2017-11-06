@@ -1,0 +1,12 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: unifycr
+Description: client library for unifycr userspace checkpoint file system
+Version: @LIBUNIFYCR_VERSION@
+Requires:
+Libs: -L${libdir} -lunifycr
+Cflags: -I${includedir} -D__FILE_OFFSET_BITS=64
+

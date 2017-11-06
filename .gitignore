@@ -1,0 +1,45 @@
+clocal.m4
+autom4te.cache
+build
+config.*
+configure
+cscope.*
+tags
+depcomp
+INSTALL
+install-sh
+ltmain.sh
+Makefile
+Makefile.in
+missing
+stamp-h1
+stamp-h2
+test-driver
+*compile
+*.gcda
+*.gcno
+*.sw?
+*~
+*.lo
+*.la
+*.o
+*.tar.gz
+*.rpm
+*.diff
+*.patch
+.libs
+.deps
+.nfs*
+
+# Softlinks to test and log
+log
+*.vol
+
+# cmocka unit tests
+*.log
+*.trs
+*_unittest
+
+# project files
+server/src/unifycrd
+
