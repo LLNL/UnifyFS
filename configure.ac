@@ -3,7 +3,7 @@ dnl This file is a part of UnifyCR. Please see LICENSE for the license
 dnl information.
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([unifycr], [2.0.1], [unifycr@llnl.gov])
+AC_INIT([unifycr], [1.0.0], [unifycr@llnl.gov])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([./client/maint/config/])
@@ -75,7 +75,6 @@ AC_ARG_WITH(pkgconfigdir,
             [pkgconfigdir='${libdir}/pkgconfig'])
 AC_SUBST(pkgconfigdir)
 
-
 ## unifycr options
 AC_ARG_ENABLE(cuserid, 
 [  --disable-cuserid       Disables attempted use of cuserid() at run time], 
@@ -136,6 +135,10 @@ AC_TRY_COMPILE(
 CFLAGS="$old_cflags"
 
 AC_CHECK_HEADERS(mntent.h sys/mount.h)
+
+# check leveldb
+PKG_CHECK_MODULES([LEVELDB], [leveldb], ,
+                  AC_MSG_ERROR(['leveldb is required to build unifycr.']))
 
 # libc functions wrapped by unifycr
 
@@ -265,22 +268,6 @@ AC_SUBST(DISABLE_LDPRELOAD)
 AC_OUTPUT(client/unifycr-config)
 AC_OUTPUT(client/unifycr-runtime-config.h)
 
-AC_MSG_RESULT([
-
-    =========================
-    UNIFYCR Checkpoint-Restart
-    =========================
-    prefix      ${prefix}
-    compiler    ${CC}
-    CFLAGS      ${CFLAGS}
-    =========================
-    
-    Supported POSIX wrappers:
-    
-    ${CP_WRAPPERS}
-
-])
-
 AC_CONFIG_FILES([Makefile
                  meta/Makefile
                  meta/src/Makefile
@@ -290,11 +277,28 @@ AC_CONFIG_FILES([Makefile
                  client/src/Makefile
                  client/unifycr.pc])
 
-# check leveldb
-PKG_CHECK_MODULES([LEVELDB], [leveldb], ,
-                  AC_MSG_ERROR(['leveldb is required to build unifycr.']))
-
 UNIFYCR_VERSION=${PACKAGE_VERSION}
 AC_SUBST(UNIFYCR_VERSION)
+AC_SUBST([LIBUNIFYCR_LT_VERSION], [1:0:0])
+
+# pkgconfig versioning
+LIBUNIFYCR_API_VERSION="1.0.0"
+AC_SUBST(LIBUNIFYCR_API_VERSION)
 
 AC_OUTPUT
+
+AC_MSG_RESULT([
+
+    ==========================
+    UNIFYCR Checkpoint-Restart
+    ==========================
+    prefix      ${prefix}
+    compiler    ${CC}
+    CFLAGS      ${CFLAGS}
+    ==========================
+    
+    Supported POSIX wrappers:
+    
+    ${CP_WRAPPERS}
+
+])

@@ -83,6 +83,11 @@ ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/client/maint/config/check_arch.m4 \
 	$(top_srcdir)/client/maint/config/check_numa.m4 \
 	$(top_srcdir)/client/maint/config/inttypes-pri.m4 \
+	$(top_srcdir)/client/maint/config/libtool.m4 \
+	$(top_srcdir)/client/maint/config/ltoptions.m4 \
+	$(top_srcdir)/client/maint/config/ltsugar.m4 \
+	$(top_srcdir)/client/maint/config/ltversion.m4 \
+	$(top_srcdir)/client/maint/config/lt~obsolete.m4 \
 	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -181,7 +186,7 @@ AUTOMAKE = ${SHELL} /ccs/techint/home/hs2/projects/UnifyCR/missing automake-1.13
 AWK = gawk
 CC = mpicc
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2
+CFLAGS = -g -O0
 CPP = mpicc -E
 CPPFLAGS = 
 CP_WRAPPERS = -Wl,-wrap,access,-wrap,lio_listio,-wrap,mkdir,-wrap,rmdir,-wrap,unlink,-wrap,remove,-wrap,rename,-wrap,truncate,-wrap,stat,-wrap,__lxstat,-wrap,__lxstat64,-wrap,__xstat,-wrap,__xstat64,-wrap,creat,-wrap,creat64,-wrap,open,-wrap,open64,-wrap,read,-wrap,write,-wrap,readv,-wrap,writev,-wrap,pread,-wrap,pread64,-wrap,pwrite,-wrap,pwrite64,-wrap,posix_fadvise,-wrap,lseek,-wrap,lseek64,-wrap,ftruncate,-wrap,fsync,-wrap,fdatasync,-wrap,flock,-wrap,mmap,-wrap,mmap64,-wrap,munmap,-wrap,msync,-wrap,__fxstat,-wrap,__fxstat64,-wrap,close
@@ -211,6 +216,8 @@ LEVELDB_LIBS = -lleveldb
 LIBOBJS = 
 LIBS = 
 LIBTOOL = $(SHELL) $(top_builddir)/libtool
+LIBUNIFYCR_API_VERSION = 1.0.0
+LIBUNIFYCR_LT_VERSION = 1:0:0
 LIPO = 
 LN_S = ln -s
 LTLIBOBJS = 
@@ -226,10 +233,10 @@ OTOOL64 =
 PACKAGE = unifycr
 PACKAGE_BUGREPORT = unifycr@llnl.gov
 PACKAGE_NAME = unifycr
-PACKAGE_STRING = unifycr 2.0.1
+PACKAGE_STRING = unifycr 1.0.0
 PACKAGE_TARNAME = unifycr
 PACKAGE_URL = 
-PACKAGE_VERSION = 2.0.1
+PACKAGE_VERSION = 1.0.0
 PATH_SEPARATOR = :
 PKG_CONFIG = /usr/bin/pkg-config
 PKG_CONFIG_LIBDIR = 
@@ -241,8 +248,8 @@ SED = /usr/bin/sed
 SET_MAKE = 
 SHELL = /bin/sh
 STRIP = strip
-UNIFYCR_VERSION = 2.0.1
-VERSION = 2.0.1
+UNIFYCR_VERSION = 1.0.0
+VERSION = 1.0.0
 __CP_LOG_PATH = 
 abs_builddir = /ccs/techint/home/hs2/projects/UnifyCR/meta
 abs_srcdir = /ccs/techint/home/hs2/projects/UnifyCR/meta

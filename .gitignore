@@ -35,6 +35,9 @@ test-driver
 log
 *.vol
 
+# editor
+*.swp
+
 # cmocka unit tests
 *.log
 *.trs
@@ -42,4 +45,8 @@ log
 
 # project files
 server/src/unifycrd
+
+# generated package files
+client/unifycr-config
+client/unifycr.pc
 
