@@ -38,6 +38,9 @@ log
 # editor
 *.swp
 
+# nfs files
+*.nfs0*
+
 # cmocka unit tests
 *.log
 *.trs
