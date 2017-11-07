@@ -28,17 +28,20 @@ APIs, but layer on top of them with other higher-level I/O functions. Below is t
 guide on how to install and use UnifyCR server.
 
 ## How to build (with UNIFYCR tests):
-1. download and build leveldb-1.14 (wget https://github.com/google/leveldb/archive/v1.14.tar.gz). 
-   Then, change the path in UnifyCR_Meta/Makefile.cfg to point to your leveldb directory  
-2. change directory to UnifyCR_Meta
-   make
-3. change directory to UnifyCR_Client
-   ./buildme_opt
-   cd tests
-   ./buildme.sh
-4. change directory to UnifyCR_Server
-   ./buildme_autotools (the first time you build the server only)
-   ./buildme.sh
+UnifyCR requires MPI and LevelDB. After installing required packages:
+
+```
+shell $ ./autogen.sh             # this will generate the build script
+shell $ ./configure --prefix=/install/path/you/want --enable-debug
+shell $ make
+shell $ make install
+```
+
+For the complete build options:
+
+```
+shell $ ./configure --help
+```
 
 ## How to run (with UNIFYCR tests): 
 1. Make sure you are in UnifyCR_Server directory
