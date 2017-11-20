@@ -49,9 +49,6 @@ shell $ ./configure --help
 3. ./runserver.sh
 4. ./runwrclient.sh
 
-Note: If at Oak Ridge you will probably have to change the MPI path as well in 
-UnifyCR_Meta/Makefile.cfg in the 1st build step.
- 
 ## I/O Interception in UnifyCR_Client:
 
 **Steps for switching between and/or building with different I/O wrapping strategies**
