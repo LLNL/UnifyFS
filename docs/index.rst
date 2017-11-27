@@ -3,16 +3,34 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to unifycr's documentation...!
 ===================================
-
-Contents:
+UnifyCR 
+===================================
 
 .. toctree::
    :maxdepth: 2
+   :caption: User Guide 
 
+   overview 
+   definitions  
+   assumptions     
+   api 
+   starting
+   stopping      
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Building & Linking 
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Dependencies 
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Reference
+
+==================
 Indices and tables
 ==================
 
