@@ -67,3 +67,6 @@ a different option is turned on
 **Steps for using UNIFYCR_PRELOAD (LD_PRELOAD):**
 1. Run buildme_opt like this: "./buildme_opt -DUNIFYCR_PRELOAD"
 
+## Contribute and Develop
+We have a separate document with
+[contribution guidelines](./.github/CONTRIBUTING.md).
