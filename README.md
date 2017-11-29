@@ -16,15 +16,14 @@ write/read. It efficiently accelerates scientific I/O based on scalable
 metadata indexing, co-located I/O delegation, and server-side read clustering
 and pipelining.
 
-Please note that the current implementation of UnifyCR is not of production
-quality, and is for research purpose only. The current client-side interface is
+Please note that the current implementation of UnifyCR is still in development and
+is not yet of production quality. The client-side interface is
 based on POSIX, including open, pwrite, lio_listio, pread, write, read, lseek,
 close and fsync. UnifyCR is designed for batched write and read operations
 under a typical bursty I/O workload (e.g. checkpoint/restart); it is optimized
-for bursty write/read based on pwrite/lio_listio respectively. It is still an
-open research question on whether we should give UnifyCR a comprehensive POSIX
-support, or provide a few POSIX APIs, but layer on top of them with other
-higher-level I/O functions. Below is the guide on how to install and use
+for bursty write/read based on pwrite/lio_listio respectively. 
+
+Below is the guide on how to install and use
 UnifyCR server.
 
 ## How to build (with UNIFYCR tests):
