@@ -14,13 +14,10 @@ UnifyCR: A file system for burst buffers
    overview 
    definitions  
    assumptions     
-   api 
+   api
    starting
    stopping      
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Building & Linking 
+   interception      
 
 .. toctree::
    :maxdepth: 2

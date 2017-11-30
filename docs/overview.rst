@@ -2,12 +2,34 @@
 Overview
 ================
 
-The view of storage systems for HPC is changing rapidly. Traditional, single-target parallel file systems have reached their cost-effective scaling limit. As a result, hierarchical storage systems are being designed and installed for our nation¿s next-generation leadership class systems. Current designs employ ¿burst buffers¿ as a fast cache between compute nodes and the parallel file system for data needed by running jobs and workflows. Burst buffers are implemented as compute-node local storage (e.g., SSD) or as shared intermediate storage (e.g., SSD on shared burst buffer nodes).
-
-The hierarchical storage for future HPC systems will include compute-node local SSDs as burst buffers. This distributed burst buffer design promises fast, scalable I/O performance because burst buffer bandwidth and capacity will automatically scale with the compute resources used by jobs and workflows. However, a major concern for this distributed design is how to present the disjoint storage devices as a single storage location to applications that use shared files. The primary issue is that when concurrent processes on different compute nodes perform I/O operations, e.g., writes, to a shared file, the data for the file are scattered across the separate compute-node local burst buffers instead of being stored in a single location. Consequently, if a process wants to access bytes from the shared file that exist in the burst buffer of a different compute node, that process needs to somehow track or look up the information for locating and retrieving those bytes. Additionally, there is no common interface across vendors for accessing remote burst buffers, so code for cross-node file sharing will not be easily portable across multiple DOE systems with different burst buffer architectures, further increasing programming complexity to support shared files.
-
-To address this concern, we will develop UnifyCR, a user-level file system, highly-specialized for shared file access on HPC systems with distributed burst buffers. Because checkpoint/restart has been reported to cause 75-80% of the I/O traffic on some HPC systems, we target our approach at checkpoint/restart workloads. Thus, UnifyCR will address a major usability factor of the CORAL and other future systems. We will design UnifyCR such that it transparently intercepts I/O calls, so we expect it to integrate cleanly with other software including I/O and checkpoint/restart libraries. Additionally, because UnifyCR is tailored for HPC systems and workloads, it can deliver high performance.
+UnifyCR is a user level file system currently under active development. An 
+application can use node-local storage as burst buffers for shared files. 
+UnifyCR is designed to support both checkpoint/restart which is the most 
+important I/O workload for HPC and other common I/O workloads as well. With 
+UnifyCR, applications can write to fast, scalable, node-local burst buffers as 
+easily as they do the parallel file system. This section will provide a high 
+level design of UnifyCR. It will describe the UnifyCR library and the UnifyCR 
+daemon.
 
 ---------------------------
 High Level Design
 ---------------------------
+
+.. image:: design-high-lvl.png
+
+UnifyCR will present a shared namespace (e.g., /unifycr as a mount point) to 
+all compute nodes in a users job allocation. There are two main components of 
+UnifyCR: the UnifyCR library and the UnifyCR daemon. The UnifyCR library (also 
+referred to as the UnifyCR client library) is linked into the user application 
+and is responsible for intercepting I/O calls from the user application and 
+then sending the I/O requests on to a UnifyCR server to be handled. The UnifyCR 
+client library uses the ECP `GOTCHA <https://github.com/LLNL/GOTCHA>`_ software 
+as its primary mechanism for intercepting I/O calls. Each UnifyCR daemon (also 
+referred to as a UnifyCR server daemon) runs as a daemon on a compute node in 
+the users allocation. The UnifyCR server is responsible for handling the I/O 
+requests from the UnifyCR library. On each compute node, there will be user 
+application processes running as well as tool daemon processes. The user 
+application is linked with the UnifyCR client library and a high-level I/O 
+library, e.g. HDF5, ADIOS, or PnetCDF. The UnifyCR server daemon also runs on 
+the compute node and is linked with the MDHIM library which is used for 
+metadata services.

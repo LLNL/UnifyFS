@@ -5,11 +5,15 @@
 SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
 PAPER         =
-BUILDDIR      = /g/g0/sikich1/unifycrdocs
+BUILDDIR      = _build
 
 # User-friendly check for sphinx-build
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
-    $(error The '$(SPHINXBUILD)' command was not found. Make sure you have Sphinx installed, then set the SPHINXBUILD environment variable to point to the full path of the '$(SPHINXBUILD)' executable. Alternatively you can add the directory with the executable to your PATH. If you don\'t have Sphinx installed, grab it from http://sphinx-doc.org/)
+    $(error The '$(SPHINXBUILD)' command was not found. Make sure you have 
+Sphinx installed, then set the SPHINXBUILD environment variable to point to the 
+full path of the '$(SPHINXBUILD)' executable. Alternatively you can add the 
+directory with the executable to your PATH. If you don\'t have Sphinx 
+installed, grab it from http://sphinx-doc.org/)
 endif
 
 # Internal variables.
@@ -33,20 +37,25 @@ help:
 	@echo "  devhelp    to make HTML files and a Devhelp project"
 	@echo "  epub       to make an epub"
 	@echo "  epub3      to make an epub3"
-	@echo "  latex      to make LaTeX files, you can set PAPER=a4 or PAPER=letter"
+	@echo "  latex      to make LaTeX files, you can set PAPER=a4 or " \
+              "PAPER=letter"
 	@echo "  latexpdf   to make LaTeX files and run them through pdflatex"
-	@echo "  latexpdfja to make LaTeX files and run them through platex/dvipdfmx"
+	@echo "  latexpdfja to make LaTeX files and run them through " \   
+	      "platex/dvipdfmx"
 	@echo "  text       to make text files"
 	@echo "  man        to make manual pages"
 	@echo "  texinfo    to make Texinfo files"
 	@echo "  info       to make Texinfo files and run them through makeinfo"
 	@echo "  gettext    to make PO message catalogs"
-	@echo "  changes    to make an overview of all changed/added/deprecated items"
+	@echo "  changes    to make an overview of all changed/added/deprecated " \
+ 	      "items"
 	@echo "  xml        to make Docutils-native XML files"
 	@echo "  pseudoxml  to make pseudoxml-XML files for display purposes"
 	@echo "  linkcheck  to check all external links for integrity"
-	@echo "  doctest    to run all doctests embedded in the documentation (if enabled)"
-	@echo "  coverage   to run coverage check of the documentation (if enabled)"
+	@echo "  doctest    to run all doctests embedded in the documentation " \
+	      "(if enabled)"
+	@echo "  coverage   to run coverage check of the documentation (if " \
+	      "enabled)"
 
 .PHONY: clean
 clean:
@@ -94,7 +103,8 @@ htmlhelp:
 qthelp:
 	$(SPHINXBUILD) -b qthelp $(ALLSPHINXOPTS) $(BUILDDIR)/qthelp
 	@echo
-	@echo "Build finished; now you can run "qcollectiongenerator" with the" \
+	@echo "Build finished; now you can run "qcollectiongenerator" with the" 
+\
 	      ".qhcp project file in $(BUILDDIR)/qthelp, like this:"
 	@echo "# qcollectiongenerator $(BUILDDIR)/qthelp/unifycr.qhcp"
 	@echo "To view the help file:"
@@ -221,4 +231,5 @@ xml:
 pseudoxml:
 	$(SPHINXBUILD) -b pseudoxml $(ALLSPHINXOPTS) $(BUILDDIR)/pseudoxml
 	@echo
-	@echo "Build finished. The pseudo-XML files are in $(BUILDDIR)/pseudoxml."
+	@echo "Build finished. The pseudo-XML files are in " \
+	      "$(BUILDDIR)/pseudoxml."
