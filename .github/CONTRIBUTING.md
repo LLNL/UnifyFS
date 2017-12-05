@@ -100,8 +100,11 @@ able to quickly identify and resolve issues.
 ## Style Guides
 
 ### Coding Conventions
-We use [FIXME: add coding style guide](https://) as our
-coding convention.
+UnifyCR follows the [Linux kernel coding
+style](https://www.kernel.org/doc/html/latest/process/coding-style.html)
+except that code is indented using four spaces per level instead of tabs. Please
+run `make checkstyle` to check your patch for style problems before submitting
+it for review.
 
 ### Commit Message Format
 Commit messages for new changes must meet the following guidelines:

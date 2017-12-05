@@ -8,3 +8,6 @@ pkgconfigdir = @pkgconfigdir@
 pkgconfig_DATA = client/unifycr.pc
 
 CLEANFILES =
+
+checkstyle:
+	scripts/checkpatch.sh
