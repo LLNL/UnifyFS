@@ -12,8 +12,8 @@ unifycrd_SOURCES = arraylist.c \
 
 unifycrd_LDFLAGS = -static
 
-unifycrd_LDADD = -lpthread -lm -lstdc++ -lrt \
-                 $(top_srcdir)/meta/src/libmdhim.a \
+unifycrd_LDADD = $(top_srcdir)/meta/src/libmdhim.a \
+                 -lpthread -lm -lstdc++ -lrt \
                  $(LEVELDB_LIBS)
 
 noinst_HEADERS = arraylist.h \
