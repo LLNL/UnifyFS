@@ -20,8 +20,6 @@ checkpatch_ignore+=",CODE_INDENT"       # Don't require tabs for indentation
 checkpatch_ignore+=",MISSING_SIGN_OFF"  # No Signed-off-by: in commit msg
 checkpatch_ignore+=",FILE_PATH_CHANGES" # Don't nag about updating MAINTAINERS
 
-# Allow spaces for indentation.
-# Don't require Signed-off-by: in commit message.
 checkpatch_cmd+=" --ignore $checkpatch_ignore"
 
 # Suppress summary warning about white space errors.
@@ -32,12 +30,12 @@ checkpatch_cmd+=" --no-tree"
 
 #
 # Check the tip of the current branch by if no argument is given.
-# Otherwise check the given git revision, e.g. to check the previous
-# commit:
+# Otherwise check the given git revision, e.g. to check the all
+# patches ahead of origin/dev:
 #
-#    ./checkpatch.sh HEAD^
+#    ./checkpatch.sh origin/dev..HEAD
 #
-revisions=${1:-HEAD}
+revisions=${1:-"HEAD^..HEAD"}
 
 #
 # If we're reading from a pipe then pass input directly into
@@ -46,7 +44,7 @@ revisions=${1:-HEAD}
 if [ ! -t 0 ] ; then
     show_patch_cmd="cat"
 else
-    show_patch_cmd="git show $revisions"
+    show_patch_cmd="git format-patch -k --stdout $revisions"
 fi
 
 $show_patch_cmd | $checkpatch_cmd

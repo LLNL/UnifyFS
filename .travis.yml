@@ -1,0 +1,13 @@
+language: c
+sudo: required
+before_install:
+    # The default environment variable $CC is known to interfere with
+    # MPI projects.
+    - test -n $CC && unset CC
+    - sudo apt-get -qq update
+    - sudo apt-get install --yes -qq build-essential autoconf libtool
+    - sudo apt-get install --yes -qq libleveldb1 libleveldb-dev
+    - sudo apt-get install --yes -qq libopenmpi-dev openmpi-bin
+script:
+    - sh autogen.sh && ./configure && make
+    - make checkstyle
