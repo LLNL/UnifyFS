@@ -9,11 +9,13 @@ BUILDDIR      = _build
 
 # User-friendly check for sphinx-build
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
-    $(error The '$(SPHINXBUILD)' command was not found. Make sure you have 
-Sphinx installed, then set the SPHINXBUILD environment variable to point to the 
-full path of the '$(SPHINXBUILD)' executable. Alternatively you can add the 
-directory with the executable to your PATH. If you don\'t have Sphinx 
-installed, grab it from http://sphinx-doc.org/)
+    $(info The '$(SPHINXBUILD)' command was not found. Make sure you have)
+    $(info Sphinx installed, then set the SPHINXBUILD environment variable)
+    $(info to point to the full path of the '$(SPHINXBUILD)' executable.)
+    $(info Alternatively you can add the directory with the executable to)
+    $(info your PATH. If you don\'t have Sphinx installed, grab it from)
+    $(info http://sphinx-doc.org/)
+    $(error missing '$(SPHINXBUILD)')
 endif
 
 # Internal variables.
@@ -40,7 +42,7 @@ help:
 	@echo "  latex      to make LaTeX files, you can set PAPER=a4 or " \
               "PAPER=letter"
 	@echo "  latexpdf   to make LaTeX files and run them through pdflatex"
-	@echo "  latexpdfja to make LaTeX files and run them through " \   
+	@echo "  latexpdfja to make LaTeX files and run them through " \
 	      "platex/dvipdfmx"
 	@echo "  text       to make text files"
 	@echo "  man        to make manual pages"
