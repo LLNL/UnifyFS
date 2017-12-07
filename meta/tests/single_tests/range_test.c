@@ -8,15 +8,14 @@
 * Written by: Teng Wang, Adam Moody, Weikuan Yu, Kento Sato, Kathryn Mohror
 * LLNL-CODE-728877. All rights reserved.
 *
-* This file is part of burstfs. For details, see https://github.com/llnl/burstfs
+* This file is part of burstfs. For details,
+* see https://github.com/llnl/burstfs
 * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
 */
 
 /*
-*
 * Copyright (c) 2014, Los Alamos National Laboratory
 *	All rights reserved.
-*
 */
 
 #include <stdio.h>
@@ -38,7 +37,7 @@ double puttime;
 double putbw;
 double putops;
 double caltime;
-double putreleasetime = 0;
+double putreleasetime;
 
 struct timeval getstart, getend;
 
@@ -53,23 +52,24 @@ typedef struct {
 	unsigned long offset;
 	unsigned long addr;
 	unsigned long len;
-}meta_t;
+} meta_t;
 
 typedef struct {
 	unsigned long fid;
 	unsigned long offset;
-}ulfs_key_t;
+} ulfs_key_t;
 
 typedef struct {
 	unsigned long nodeid;
 	unsigned long len;
 	unsigned long addr;
-}ulfs_val_t;
+} ulfs_val_t;
 
 int init_meta_lst(meta_t *meta_lst, ulfs_key_t **key_lst, ulfs_val_t **value_lst, \
 		long segnum, long transz, int rank);
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
 	int c, serratio, bulknum, ret, provided, size, path_len;
 
 	long transz, segnum, rangesz;
@@ -84,25 +84,25 @@ int main(int argc, char **argv) {
 	struct mdhim_bgetrm_t *bgrm, *bgrmp;
 	mdhim_options_t *db_opts; // Local variable for db create options to be passed
 
-	static const char * opts = "c:t:s:r:n:p:d:";
+	static const char *opts = "c:t:s:r:n:p:d:";
 
-	while((c = getopt(argc, argv, opts)) != -1){
+	while ((c = getopt(argc, argv, opts)) != -1) {
 	    switch (c)  {
 
-	      case 'c': /*number of batched key-value pairs in each bput*/
-	          bulknum = atoi(optarg); break;
-	      case 's': /*server factor same as MDHIM*/
-	          serratio = atoi(optarg); break;
-	      case 't': /*transfer size*/
-	          transz = atol(optarg); break;
-	      case 'r': /*the key range for each slice*/
-	          rangesz = atol(optarg); break;
-	      case 'n': /*number of transfers*/
-	          segnum = atol(optarg); break;
-	      case 'p': /*path of the database*/
-	    	  strcpy(db_path, optarg); break;
-	      case 'd': /*name of the database*/
-	    	  strcpy(db_name, optarg); break;
+	    case 'c': /*number of batched key-value pairs in each bput*/
+	        bulknum = atoi(optarg); break;
+	    case 's': /*server factor same as MDHIM*/
+	        serratio = atoi(optarg); break;
+	    case 't': /*transfer size*/
+	        transz = atol(optarg); break;
+	    case 'r': /*the key range for each slice*/
+	        rangesz = atol(optarg); break;
+	    case 'n': /*number of transfers*/
+	        segnum = atol(optarg); break;
+	    case 'p': /*path of the database*/
+	        strcpy(db_path, optarg); break;
+	    case 'd': /*name of the database*/
+	        strcpy(db_name, optarg); break;
 	    }
 	}
 
@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
 		if (!brmp || brmp->error) {
               printf("Rank - %d: Error inserting keys/values into MDHIM\n", md->mdhim_rank);
 		}
-	
+
 		gettimeofday(&putreleasestart, NULL);
 		while (brmp) {
 			if (brmp->error < 0) {
@@ -204,8 +204,8 @@ int main(int argc, char **argv) {
 	}
 	MPI_Barrier(MPI_COMM_WORLD);
 	gettimeofday(&putend, NULL);
-	puttime = 1000000*(putend.tv_sec - putstart.tv_sec) + putend.tv_usec -putstart.tv_usec;
-	puttime/=1000000;
+	puttime = 1000000*(putend.tv_sec - putstart.tv_sec) + putend.tv_usec - putstart.tv_usec;
+	puttime /= 1000000;
 	putbw = (sizeof(ulfs_key_t)+sizeof(ulfs_val_t))*segnum*size/puttime;
 	putops = segnum/puttime;
 	gettimeofday(&calstart, NULL);
@@ -244,12 +244,12 @@ int main(int argc, char **argv) {
 		mdhim_full_release_msg(bgrm);
 		bgrm = bgrmp;
 	}
-	total_keys += bulknum; 
+	total_keys += bulknum;
 	}
 	MPI_Barrier(MPI_COMM_WORLD);
 	gettimeofday(&getend, NULL);
-	gettime = 1000000*(getend.tv_sec - getstart.tv_sec)+getend.tv_usec-getstart.tv_usec;
-	gettime/=1000000;
+	gettime = 1000000 * (getend.tv_sec - getstart.tv_sec)+getend.tv_usec-getstart.tv_usec;
+	gettime /= 1000000;
 	getops = segnum/gettime;
 
 	if (md->mdhim_rank == size - 1) {
@@ -262,13 +262,13 @@ int main(int argc, char **argv) {
 	free(meta_lst);
 
 	free(key_lens);
-	for (i=0; i<segnum; i++) {
+	for (i = 0; i < segnum; i++) {
 		free(key_lst[i]);
 	}
 	free(key_lst);
 
 	free(val_lens);
-	for (i=0; i<segnum; i++) {
+	for (i = 0; i < segnum; i++) {
 		free(val_lst[i]);
 	}
 	free(val_lst);
@@ -292,9 +292,10 @@ done:
 /*generate the metadata for N-1 segmented write, where each process
  * writes a non-overlapping region of a shared file*/
 int init_meta_lst(meta_t *meta_lst, ulfs_key_t **key_lst, ulfs_val_t **value_lst, \
-		long segnum, long transz, int rank) {
+		long segnum, long transz, int rank)
+{
 
-	long i=0;
+	long i = 0;
 	for (i = 0; i < segnum; i++) {
 		meta_lst[i].fid = 0;
 
