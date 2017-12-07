@@ -8,8 +8,8 @@
 * Written by: Teng Wang, Adam Moody, Weikuan Yu, Kento Sato, Kathryn Mohror
 * LLNL-CODE-728877. All rights reserved.
 *
-* This file is part of UnifyCR. For details, see https://github.com/llnl/unifycr
-* Please read https://github.com/llnl/unifycr/LICENSE for full license text.
+* This file is part of burstfs. For details, see https://github.com/llnl/burstfs
+* Please read https://github.com/llnl/burstfs/LICENSE for full license text.
 */
 
 #ifndef UNIFYCR_DEBUG_H
