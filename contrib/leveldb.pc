@@ -1,0 +1,10 @@
+#leveldb.pc
+prefix=__INSTALLDIR__
+exec_prefix=__INSTALLDIR__ 
+libdir=__INSTALLDIR__/lib64
+includedir=__INSTALLDIR__/include
+Name: leveldb
+Description: a fast key-value storage library
+Version: 1.20
+Cflags: -I${includedir}
+Libs: -L${libdir} -lleveldb
