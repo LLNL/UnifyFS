@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Produced at the Lawrence Livermore National Laboratory.
+ *
+ * Copyright 2017, UT-Battelle, LLC.
+ *
+ * LLNL-CODE-741539
+ * All rights reserved.
+ *
+ * This is the license for UnifyCR.
+ * For details, see https://github.com/LLNL/UnifyCR.
+ * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ */
+
 // build:  mpigcc -g -O3 -o test_ramdisk test_ramdisk.c
 // run:    srun -n64 -N4 ./test_ramdisk
 
