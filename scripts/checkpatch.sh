@@ -44,7 +44,7 @@ revisions=${1:-"HEAD^..HEAD"}
 if [ ! -t 0 ] ; then
     show_patch_cmd="cat"
 else
-    show_patch_cmd="git format-patch -k --stdout $revisions"
+    show_patch_cmd="git format-patch -p -k --stdout $revisions"
 fi
 
 $show_patch_cmd | $checkpatch_cmd
