@@ -12,9 +12,7 @@ UNIFYCR_DEF(unlink, int, (const char *path));
 UNIFYCR_DEF(remove, int, (const char *path));
 UNIFYCR_DEF(stat, int, (const char *path, struct stat *buf));
 UNIFYCR_DEF(__xstat, int, (int vers, const char *path, struct stat *buf));
-UNIFYCR_DEF(__xstat64, int, (int vers, const char *path, struct stat64 *buf));
 UNIFYCR_DEF(__lxstat, int, (int vers, const char *path, struct stat *buf));
-UNIFYCR_DEF(__lxstat64, int, (int vers, const char *path, struct stat64 *buf));
 UNIFYCR_DEF(creat, int, (const char* path, mode_t mode));
 UNIFYCR_DEF(creat64, int, (const char* path, mode_t mode));
 UNIFYCR_DEF(open, int, (const char *path, int flags, ...));
@@ -38,12 +36,11 @@ UNIFYCR_DEF(mmap, void*, (void *addr, size_t length, int prot, int flags, int fd
 UNIFYCR_DEF(msync, int, (void *addr, size_t length, int flags));
 UNIFYCR_DEF(mmap64, void*, (void *addr, size_t length, int prot, int flags, int fd, off_t offset));
 UNIFYCR_DEF(__fxstat, int, (int vers, int fd, struct stat *buf));
-UNIFYCR_DEF(__fxstat64, int, (int vers, int fd, struct stat64 *buf));
 UNIFYCR_DEF(close, int, (int fd));
 UNIFYCR_DEF(fopen, FILE*, (const char *path, const char *mode));
 UNIFYCR_DEF(freopen, FILE*, (const char *path, const char *mode, FILE *stream));
 UNIFYCR_DEF(setvbuf, int, (FILE* stream, char* buf, int type, size_t size));
-UNIFYCR_DEF(setbuf, void*, (FILE* stream, char* buf));
+UNIFYCR_DEF(setbuf, void, (FILE* stream, char* buf));
 UNIFYCR_DEF(ungetc, int, (int c, FILE *stream));
 UNIFYCR_DEF(fgetc, int, (FILE *stream));
 UNIFYCR_DEF(fputc, int, (int c, FILE *stream));
@@ -95,9 +92,7 @@ struct gotcha_binding_t wrap_unifycr_list[] = {
 	{ "remove", UNIFYCR_WRAP(remove), &UNIFYCR_REAL(remove) },
 	{ "stat", UNIFYCR_WRAP(stat), &UNIFYCR_REAL(stat) },
 	{ "__xstat", UNIFYCR_WRAP(__xstat), &UNIFYCR_REAL(__xstat) },
-	{ "__xstat64", UNIFYCR_WRAP(__xstat64), &UNIFYCR_REAL(__xstat64) },
 	{ "__lxstat", UNIFYCR_WRAP(__lxstat), &UNIFYCR_REAL(__lxstat) },
-	{ "__lxstat64", UNIFYCR_WRAP(__lxstat64), &UNIFYCR_REAL(__lxstat64) },
 	{ "creat", UNIFYCR_WRAP(creat), &UNIFYCR_REAL(creat) },
 	{ "creat64", UNIFYCR_WRAP(creat64), &UNIFYCR_REAL(creat64) },
 	{ "open", UNIFYCR_WRAP(open), &UNIFYCR_REAL(open) },
@@ -121,7 +116,6 @@ struct gotcha_binding_t wrap_unifycr_list[] = {
 	{ "msync", UNIFYCR_WRAP(msync), &UNIFYCR_REAL(msync) },
 	{ "mmap64", UNIFYCR_WRAP(mmap64), &UNIFYCR_REAL(mmap64) },
 	{ "__fxstat", UNIFYCR_WRAP(__fxstat), &UNIFYCR_REAL(__fxstat) },
-	{ "__fxstat64", UNIFYCR_WRAP(__fxstat64), &UNIFYCR_REAL(__fxstat64) },
 	{ "close", UNIFYCR_WRAP(close), &UNIFYCR_REAL(close) },
 	{ "fopen", UNIFYCR_WRAP(fopen), &UNIFYCR_REAL(fopen) },
 	{ "freopen", UNIFYCR_WRAP(freopen), &UNIFYCR_REAL(freopen) },

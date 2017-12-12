@@ -57,9 +57,7 @@ UNIFYCR_DECL(rename, int, (const char *oldpath, const char *newpath));
 UNIFYCR_DECL(truncate, int, (const char *path, off_t length));
 UNIFYCR_DECL(stat, int,( const char *path, struct stat *buf));
 UNIFYCR_DECL(__lxstat, int, (int vers, const char* path, struct stat *buf));
-UNIFYCR_DECL(__lxstat64, int, (int vers, const char* path, struct stat64 *buf));
 UNIFYCR_DECL(__xstat, int, (int vers, const char* path, struct stat *buf));
-UNIFYCR_DECL(__xstat64, int, (int vers, const char* path, struct stat64 *buf));
 
 /* ---------------------------------------
  * POSIX wrappers: file descriptors
@@ -89,7 +87,6 @@ UNIFYCR_DECL(mmap64, void*, (void *addr, size_t length, int prot, int flags, int
 UNIFYCR_DECL(munmap, int,(void *addr, size_t length));
 UNIFYCR_DECL(msync, int, (void *addr, size_t length, int flags));
 UNIFYCR_DECL(__fxstat, int, (int vers, int fd, struct stat *buf));
-UNIFYCR_DECL(__fxstat64, int, (int vers, int fd, struct stat64 *buf));
 UNIFYCR_DECL(close, int, (int fd));
 /*UNIFYCR_DECL(lio_listio, ssize_t, (int mode,\
    struct aiocb *const aiocb_list[], \

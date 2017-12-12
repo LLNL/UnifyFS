@@ -3,12 +3,14 @@ dnl This file is a part of UnifyCR. Please see LICENSE for the license
 dnl information.
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([unifycr], [1.0.0], [unifycr@llnl.gov])
+AC_INIT([unifycr], [0.1.0], [unifycr@llnl.gov])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
-AC_CONFIG_MACRO_DIR([./client/maint/config/])
+AC_CONFIG_MACRO_DIR([m4])
 
-AM_INIT_AUTOMAKE([tar-pax subdir-objects])
+AM_INIT_AUTOMAKE([foreign tar-pax subdir-objects])
+
+AM_MAINTAINER_MODE([disable])
 
 AC_PROG_CC([mpicc])
 AC_PROG_AWK
@@ -146,6 +148,9 @@ PKG_CHECK_MODULES([LEVELDB], [leveldb], ,
         ],
         AC_MSG_ERROR(['leveldb is required to build unifycr.'])))
 
+# look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
+UNIFYCR_AC_GOTCHA
+
 # libc functions wrapped by unifycr
 
 CP_WRAPPERS+="-Wl,-wrap,access"
@@ -281,6 +286,7 @@ AC_CONFIG_FILES([Makefile
                  server/src/Makefile
                  client/Makefile
                  client/src/Makefile
+                 client/tests/Makefile
                  client/unifycr.pc])
 
 UNIFYCR_VERSION=${PACKAGE_VERSION}
