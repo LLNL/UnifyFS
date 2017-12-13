@@ -8,7 +8,7 @@ AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([./client/maint/config/])
 
-AM_INIT_AUTOMAKE(tar-pax)
+AM_INIT_AUTOMAKE([tar-pax subdir-objects])
 
 AC_PROG_CC([mpicc])
 AC_PROG_AWK
