@@ -42,6 +42,8 @@ AC_CHECK_HEADERS([fcntl.h limits.h stdlib.h string.h sys/socket.h sys/time.h])
 AC_CHECK_HEADERS([unistd.h arpa/inet.h inttypes.h netdb.h netinet/in.h])
 AC_CHECK_HEADERS([stddef.h stdint.h strings.h syslog.h])
 AC_CHECK_HEADERS([inttypes.h wchar.h wctype.h])
+AC_CHECK_HEADER([openssl/md5.h], [], [AC_MSG_FAILURE([
+        *** openssl/md5.h missing, openssl-devel package required])])
 
 # Checks for library functions.
 AC_FUNC_MALLOC
