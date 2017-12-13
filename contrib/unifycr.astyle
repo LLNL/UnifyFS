@@ -1,0 +1,23 @@
+# Linux Kernel Style
+--style=linux
+
+# use 4 spaces instead of 8
+--indent=spaces=4
+
+# no tabs
+--convert-tabs
+
+# avoid CTRL-M characters
+--lineend=linux
+
+# avoid single line if() code;
+--break-one-line-headers
+
+# always use braces
+--add-braces
+
+# limit lines to 80 chars
+--max-code-length=80
+
+# void *foo
+--align-pointer=name
