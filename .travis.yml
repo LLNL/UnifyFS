@@ -10,4 +10,4 @@ before_install:
     - sudo apt-get install --yes -qq libopenmpi-dev openmpi-bin
 script:
     - sh autogen.sh && ./configure && make
-    - make checkstyle
+    - ./scripts/checkpatch.sh

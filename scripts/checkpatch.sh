@@ -17,8 +17,9 @@ checkpatch_cmd=$basedir/linux_kernel_checkpatch/checkpatch.pl
 #
 checkpatch_ignore="LEADING_SPACE"       # Allow spaces for indentation
 checkpatch_ignore+=",CODE_INDENT"       # Don't require tabs for indentation
-checkpatch_ignore+=",MISSING_SIGN_OFF"  # No Signed-off-by: in commit msg
+checkpatch_ignore+=",MISSING_SIGN_OFF"  # Signed-off-by: line is optional
 checkpatch_ignore+=",FILE_PATH_CHANGES" # Don't nag about updating MAINTAINERS
+checkpatch_ignore+=",CONST_STRUCT"      # Don't nag about const structs
 
 checkpatch_cmd+=" --ignore $checkpatch_ignore"
 
