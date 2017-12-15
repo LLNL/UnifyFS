@@ -27,44 +27,49 @@ Below is the guide on how to install and use
 UnifyCR server.
 
 ## How to build (with UNIFYCR tests):
-UnifyCR requires MPI and LevelDB. After installing required packages:
-
-```
-shell $ ./autogen.sh             # this will generate the build script
-shell $ ./configure --prefix=/install/path/you/want --enable-debug
-shell $ make
-shell $ make install
-```
-
-For the complete build options:
-
-```
-shell $ ./configure --help
-```
-
-## How to run (with UNIFYCR tests):
-1. Make sure you are in UnifyCR_Server directory
-2. allocate a node
-3. ./runserver.sh
-4. ./runwrclient.sh
-
-## I/O Interception in UnifyCR_Client:
-
-**Steps for switching between and/or building with different I/O wrapping strategies**
+UnifyCR requires MPI and LevelDB.
 
 In order to use gotcha for I/O wrapping install the latest release:
 https://github.com/LLNL/GOTCHA/releases
 
-**Steps for using gotcha:**
-1. Run buildme_opt like this: "./buildme_opt -DUNIFYCR_GOTCHA"
+Download the latest UnifyCR release from the [Releases](https://github.com/LLNL/UnifyCR/releases) page.
 
-**Steps for using --wrap:**
-1. This is the default so you shouldn't have to do anything unless
-a different option is turned on
-2. Run buildme_opt normally: "./buildme_opt"
+    ./configure --prefix=/path/to/install --with-gotcha=/path/to/gotcha --enable-debug
+    make
+    make install
 
-**Steps for using UNIFYCR_PRELOAD (LD_PRELOAD):**
-1. Run buildme_opt like this: "./buildme_opt -DUNIFYCR_PRELOAD"
+For the complete build options:
+
+    ./configure --help
+
+## How to run (with UNIFYCR tests):
+1. cd server
+2. Allocate a compute node on your system
+3. Set LD_LIBRARY_PATH to include the path to the LevelDB library (and gotcha library if used)
+4. ./runserver.sh
+5. ./runwclient.sh
+
+## I/O Interception
+
+**Steps for static link using --wrap:**
+
+To intercept I/O calls using a static link,
+you must add flags to your link line.
+UnifyCR installs a unifycr-config script that returns those flags, e.g.,
+
+    mpicc -o test_write \
+      `<unifycr>/bin/unifycr-config --pre-ld-flags` \
+      test_write.c \
+      `<unifycr>/bin/unifycr-config --post-ld-flags`
+
+**Steps for link using gotcha:**
+
+To intercept I/O calls using gotcha,
+use the following syntax to link an application.
+
+    mpicc -o test_write test_write.c \
+      -I<unifycr>/include -L<unifycy>/lib -lunifycr_gotcha \
+      -L<gotcha>/lib64 -lgotcha
 
 ## Contribute and Develop
 We have a separate document with

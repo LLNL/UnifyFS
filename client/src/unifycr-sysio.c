@@ -358,6 +358,7 @@ int UNIFYCR_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
     }
 }
 
+#if 0
 int UNIFYCR_WRAP(__xstat64)(int vers, const char *path, struct stat64 *buf)
 {
     /* check whether we should intercept this path */
@@ -372,6 +373,7 @@ int UNIFYCR_WRAP(__xstat64)(int vers, const char *path, struct stat64 *buf)
         return ret;
     }
 }
+#endif
 
 int UNIFYCR_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
 {
@@ -388,6 +390,7 @@ int UNIFYCR_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
     }
 }
 
+#if 0
 int UNIFYCR_WRAP(__lxstat64)(int vers, const char *path, struct stat64 *buf)
 {
     /* check whether we should intercept this path */
@@ -402,6 +405,7 @@ int UNIFYCR_WRAP(__lxstat64)(int vers, const char *path, struct stat64 *buf)
         return ret;
     }
 }
+#endif
 
 /* ---------------------------------------
  * POSIX wrappers: file descriptors
@@ -902,7 +906,7 @@ ssize_t UNIFYCR_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
     }
 }
 
-ssize_t UNIFYCR_WRAP(lio_listio)(int mode,\
+int UNIFYCR_WRAP(lio_listio)(int mode,\
    struct aiocb *const aiocb_list[],
                       int nitems, struct sigevent *sevp) {
 
@@ -1783,6 +1787,7 @@ int UNIFYCR_WRAP(__fxstat)(int vers, int fd, struct stat *buf)
     }
 }
 
+#if 0
 int UNIFYCR_WRAP(__fxstat64)(int vers, int fd, struct stat64 *buf)
 {
     /* check whether we should intercept this file descriptor */
@@ -1797,6 +1802,7 @@ int UNIFYCR_WRAP(__fxstat64)(int vers, int fd, struct stat64 *buf)
         return ret;
     }
 }
+#endif
 
 int UNIFYCR_WRAP(close)(int fd)
 {

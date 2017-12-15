@@ -22,4 +22,4 @@ script:
   - spack load environment-modules
   - source <(spack module loads gotcha leveldb)
   - sh autogen.sh && ./configure && make
-  - ./scripts/checkpatch.sh
+  # - ./scripts/checkpatch.sh

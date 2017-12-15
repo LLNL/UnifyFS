@@ -52,7 +52,7 @@ UNIFYCR_DECL(fclose, int, (FILE *stream));
 UNIFYCR_DECL(fflush, int, (FILE *stream));
 UNIFYCR_DECL(fopen, FILE*, (const char *path, const char *mode));
 UNIFYCR_DECL(freopen, FILE*, (const char *path, const char *mode, FILE *stream));
-UNIFYCR_DECL(setbuf, void*, (FILE *stream, char* buf));
+UNIFYCR_DECL(setbuf, void, (FILE *stream, char* buf));
 UNIFYCR_DECL(setvbuf, int, (FILE *stream, char* buf, int type, size_t size));
 
 UNIFYCR_DECL(fprintf,  int, (FILE* stream, const char* format, ...));
