@@ -28,7 +28,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <assert.h>
 
-/* 
+/*
  * This file contains macros to manipulate singly and doubly-linked lists.
  *
  * 1. LL_ macros:  singly-linked lists.
@@ -38,7 +38,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * To use singly-linked lists, your structure must have a "next" pointer.
  * To use doubly-linked lists, your structure must "prev" and "next" pointers.
  * Either way, the pointer to the head of the list must be initialized to NULL.
- * 
+ *
  * ----------------.EXAMPLE -------------------------
  * struct item {
  *      int id;
@@ -85,7 +85,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define _PREVASGN(elt,list,to) { char **_alias = (char**)&((list)->prev); *_alias=(char*)(to); }
 #define _RS(list) { char **_alias = (char**)&(list); *_alias=_tmp; }
 #define _CASTASGN(a,b) { char **_alias = (char**)&(a); *_alias=(char*)(b); }
-#else 
+#else
 #define _SV(elt,list)
 #define _NEXT(elt,list) ((elt)->next)
 #define _NEXTASGN(elt,list,to) ((elt)->next)=(to)
@@ -385,14 +385,14 @@ do {                                                                            
     LL_FOREACH(head,out) {                                                                     \
       if ((out)->field == (val)) break;                                                        \
     }                                                                                          \
-} while(0) 
+} while(0)
 
 #define LL_SEARCH(head,out,elt,cmp)                                                            \
 do {                                                                                           \
     LL_FOREACH(head,out) {                                                                     \
       if ((cmp(out,elt))==0) break;                                                            \
     }                                                                                          \
-} while(0) 
+} while(0)
 
 /******************************************************************************
  * doubly linked list macros (non-circular)                                   *
@@ -421,7 +421,7 @@ do {                                                                            
       (head)->prev = (head);                                                                   \
       (head)->next = NULL;                                                                     \
   }                                                                                            \
-} while (0) 
+} while (0)
 
 #define DL_CONCAT(head1,head2)                                                                 \
 do {                                                                                           \
@@ -436,7 +436,7 @@ do {                                                                            
         (head1)=(head2);                                                                       \
     }                                                                                          \
   }                                                                                            \
-} while (0) 
+} while (0)
 
 #define DL_DELETE(head,del)                                                                    \
 do {                                                                                           \
@@ -454,7 +454,7 @@ do {                                                                            
           (head)->prev = (del)->prev;                                                          \
       }                                                                                        \
   }                                                                                            \
-} while (0) 
+} while (0)
 
 
 #define DL_FOREACH(head,el)                                                                    \
@@ -494,10 +494,10 @@ do {                                                                            
      (del)->prev->next = (del)->next;                                                          \
      if ((del) == (head)) (head)=(del)->next;                                                  \
   }                                                                                            \
-} while (0) 
+} while (0)
 
 #define CDL_FOREACH(head,el)                                                                   \
-    for(el=head;el;el=((el)->next==head ? 0L : (el)->next)) 
+    for(el=head;el;el=((el)->next==head ? 0L : (el)->next))
 
 #define CDL_FOREACH_SAFE(head,el,tmp1,tmp2)                                                    \
   for((el)=(head), ((tmp1)=(head)?((head)->prev):NULL);                                        \
@@ -509,14 +509,14 @@ do {                                                                            
     CDL_FOREACH(head,out) {                                                                    \
       if ((out)->field == (val)) break;                                                        \
     }                                                                                          \
-} while(0) 
+} while(0)
 
 #define CDL_SEARCH(head,out,elt,cmp)                                                           \
 do {                                                                                           \
     CDL_FOREACH(head,out) {                                                                    \
       if ((cmp(out,elt))==0) break;                                                            \
     }                                                                                          \
-} while(0) 
+} while(0)
 
 #endif /* UTLIST_H */
 

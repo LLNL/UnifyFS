@@ -35,7 +35,7 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 
-extern FILE* dbg_stream;
+extern FILE *dbg_stream;
 extern char dbg_line[1024];
 extern int glb_rank;
 
@@ -58,19 +58,19 @@ double mlogtm;
 extern int log_print_level;
 #define gettid() syscall(__NR_gettid)
 #define LOG(level, ...) \
-				if(level <= log_print_level) { \
-					gettimeofday(&logstart, NULL); \
-					ltime = time(NULL); \
-					ttime = localtime(&ltime); \
-					strftime(timestamp, sizeof(timestamp), \
-							"%Y-%m-%dT%H:%M:%S", ttime); \
-					fprintf(dbg_stream,"logtime:%lf rank [%d] [%s] [%ld] [%s:%d] [%s] ", \
-								mlogtm/1000000, glb_rank, timestamp, gettid(), \
-										__FILE__, __LINE__, __FUNCTION__); \
-					fprintf(dbg_stream, __VA_ARGS__); \
-					fprintf(dbg_stream, "\n"); \
-					fflush(dbg_stream); \
-					gettimeofday(&logend, NULL); \
-					mlogtm += 1000000*(logend.tv_sec-logstart.tv_sec)+logend.tv_usec-logstart.tv_usec; \
-						}	
+                if(level <= log_print_level) { \
+                    gettimeofday(&logstart, NULL); \
+                    ltime = time(NULL); \
+                    ttime = localtime(&ltime); \
+                    strftime(timestamp, sizeof(timestamp), \
+                            "%Y-%m-%dT%H:%M:%S", ttime); \
+                    fprintf(dbg_stream,"logtime:%lf rank [%d] [%s] [%ld] [%s:%d] [%s] ", \
+                                mlogtm/1000000, glb_rank, timestamp, gettid(), \
+                                        __FILE__, __LINE__, __FUNCTION__); \
+                    fprintf(dbg_stream, __VA_ARGS__); \
+                    fprintf(dbg_stream, "\n"); \
+                    fflush(dbg_stream); \
+                    gettimeofday(&logend, NULL); \
+                    mlogtm += 1000000*(logend.tv_sec-logstart.tv_sec)+logend.tv_usec-logstart.tv_usec; \
+                        }
 #endif /* LOG_H */

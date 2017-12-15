@@ -47,7 +47,7 @@
  * of 0 to size-1, entire structure stored in an int array of size+2
  *   int size
  *   int last
- *   int entries[size] 
+ *   int entries[size]
  * last records index within entries that points to item one past
  * the item at the top of the stack
  *
@@ -56,20 +56,20 @@
 #include <stddef.h>
 
 typedef struct {
-  int size;
-  int last;
+    int size;
+    int last;
 } unifycr_stack;
 
 /* returns number of bytes needed to represent stack data structure */
 size_t unifycr_stack_bytes(int size);
-  
+
 /* intializes stack to record all entries as being free */
-void unifycr_stack_init(void* start, int size);
+void unifycr_stack_init(void *start, int size);
 
 /* pops one entry from stack and returns its value */
-int unifycr_stack_pop(void* start);
+int unifycr_stack_pop(void *start);
 
 /* pushes item onto free stack */
-void unifycr_stack_push(void* start, int value);
+void unifycr_stack_push(void *start, int value);
 
 #endif /* UNIFYCR_STACK_H */

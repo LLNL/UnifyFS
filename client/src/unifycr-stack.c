@@ -53,67 +53,67 @@
 /* returns number of bytes needed to represent stack data structure */
 size_t unifycr_stack_bytes(int size)
 {
-  size_t bytes = sizeof(unifycr_stack) + size * sizeof(int);
-  return bytes;
+    size_t bytes = sizeof(unifycr_stack) + size * sizeof(int);
+    return bytes;
 }
-  
-/* intializes stack to record all entries as being free */
-void unifycr_stack_init(void* start, int size)
-{
-  unifycr_stack* stack = (unifycr_stack*) start;
-  stack->size = size;
-  stack->last = size;
 
-  int i;
-  int* entries = (int*) ((char*)start + sizeof(unifycr_stack));
-  for (i = 0; i < size; i++) {
-    /* flip the order so low numbers are at the top
-     * to make debugging easier */
-    entries[i] = size-1 - i;
-  }
+/* intializes stack to record all entries as being free */
+void unifycr_stack_init(void *start, int size)
+{
+    unifycr_stack *stack = (unifycr_stack *) start;
+    stack->size = size;
+    stack->last = size;
+
+    int i;
+    int *entries = (int *)((char *)start + sizeof(unifycr_stack));
+    for (i = 0; i < size; i++) {
+        /* flip the order so low numbers are at the top
+         * to make debugging easier */
+        entries[i] = size - 1 - i;
+    }
 }
 
 /* pops one entry from stack and returns its value */
-int unifycr_stack_pop(void* start)
+int unifycr_stack_pop(void *start)
 {
-  unifycr_stack* stack = (unifycr_stack*) start;
+    unifycr_stack *stack = (unifycr_stack *) start;
 
-  /* check that the stack isn't empty */
-  if (stack->last > 0) {
-    /* decrement the last pointer by one */
-    stack->last--;
-	
-    /* return the index into entries array,
-     * this now points to item at top of stack */
-    int idx = stack->last;
+    /* check that the stack isn't empty */
+    if (stack->last > 0) {
+        /* decrement the last pointer by one */
+        stack->last--;
 
-    /* return the value of this item */
-    int* entries = (int*) ((char*)start + sizeof(unifycr_stack));
-    int value = entries[idx];
-    return value;
-  } else {
-    /* out of space */
-    return -1;
-  }
+        /* return the index into entries array,
+         * this now points to item at top of stack */
+        int idx = stack->last;
+
+        /* return the value of this item */
+        int *entries = (int *)((char *)start + sizeof(unifycr_stack));
+        int value = entries[idx];
+        return value;
+    } else {
+        /* out of space */
+        return -1;
+    }
 }
 
 /* pushes item onto free stack */
-void unifycr_stack_push(void* start, int value)
+void unifycr_stack_push(void *start, int value)
 {
-  unifycr_stack* stack = (unifycr_stack*) start;
+    unifycr_stack *stack = (unifycr_stack *) start;
 
-  /* check that we have space to push item onto stack */
-  if (stack->last < stack->size) {
-    /* get index of first free slot in entries array */
-    int idx = stack->last;
+    /* check that we have space to push item onto stack */
+    if (stack->last < stack->size) {
+        /* get index of first free slot in entries array */
+        int idx = stack->last;
 
-    /* place item on stack */
-    int* entries = (int*) ((char*)start + sizeof(unifycr_stack));
-    entries[idx] = value;
+        /* place item on stack */
+        int *entries = (int *)((char *)start + sizeof(unifycr_stack));
+        entries[idx] = value;
 
-    /* increment last pointer to point to next item */
-    stack->last++;
-  } else {
-    /* freed one too many */
-  }
+        /* increment last pointer to point to next item */
+        stack->last++;
+    } else {
+        /* freed one too many */
+    }
 }

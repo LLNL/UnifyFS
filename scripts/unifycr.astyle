@@ -1,3 +1,6 @@
+# don't bother creating .orig file
+--suffix=none
+
 # Linux Kernel Style
 --style=linux
 
@@ -21,3 +24,12 @@
 
 # void *foo
 --align-pointer=name
+
+# add spaces in operations
+--pad-oper
+
+# add space between control and its conditional
+--pad-header
+
+# get rid of other whitespace in parens
+--unpad-paren
