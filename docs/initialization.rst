@@ -1,6 +1,6 @@
-====================
-Starting & Stopping
-====================
+======================
+Initialization
+======================
 
 In this section, we describe the mechanisms for starting and stopping UnifyCR in
 a user's allocation. The important features to consider are:
@@ -22,7 +22,7 @@ First, we need to start the UnifyCR daemon on the nodes in your allocation.
         NODES=1
         PROCS=1
 
-        mpirun -nnodes ${NODES} -np ${PROCS} ./unifycrd &
+        mpirun -nodes ${NODES} -np ${PROCS} ./unifycrd &
 
 The example above will start the UnifyCR daemon on the number of nodes specified
 in the NODES variable.
@@ -37,7 +37,7 @@ Next, we can start run our application with UnifyCR in the following manner:
         NODES=1
         PROCS=1
 
-        mpirun -nnodes ${NODES} -np ${PROCS} ${HOME}/my_app
+        mpirun -nodes ${NODES} -np ${PROCS} ${HOME}/my_app
 
 The APP_PATH variable is the directory where your application lives.
 
