@@ -1,13 +1,25 @@
 language: c
 sudo: required
+
 before_install:
-    # The default environment variable $CC is known to interfere with
-    # MPI projects.
-    - test -n $CC && unset CC
-    - sudo apt-get -qq update
-    - sudo apt-get install --yes -qq build-essential autoconf libtool
-    - sudo apt-get install --yes -qq libleveldb1 libleveldb-dev
-    - sudo apt-get install --yes -qq libopenmpi-dev openmpi-bin
+  # The default environment variable $CC is known to interfere with
+  # MPI projects.
+  - test -n $CC && unset CC
+  - sudo apt-get -qq update
+  - sudo apt-get install --yes -qq build-essential autoconf libtool
+  - sudo apt-get install --yes -qq libopenmpi-dev openmpi-bin
+  - (cd $HOME/spack; git describe) || git clone https://github.com/spack/spack $HOME/spack
+  - $HOME/spack/bin/spack install leveldb
+  - $HOME/spack/bin/spack install gotcha
+  - $HOME/spack/bin/spack install environment-modules
+
+cache:
+  directories:
+    - $HOME/spack
+
 script:
-    - sh autogen.sh && ./configure && make
-    - ./scripts/checkpatch.sh
+  - . $HOME/spack/share/spack/setup-env.sh
+  - spack load environment-modules
+  - source <(spack module loads gotcha leveldb)
+  - sh autogen.sh && ./configure && make
+  - ./scripts/checkpatch.sh
