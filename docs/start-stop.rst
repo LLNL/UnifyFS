@@ -1,5 +1,5 @@
 ======================
-Initialization
+Starting & Stopping
 ======================
 
 In this section, we describe the mechanisms for starting and stopping UnifyCR in

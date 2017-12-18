@@ -1,6 +1,6 @@
-================
-API
-================
+=================
+Mounting UnifyCR
+=================
 
 In this section, we describe how to use the UnifyCR API in an application.
 
