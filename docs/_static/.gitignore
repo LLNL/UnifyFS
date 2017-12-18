@@ -1,4 +1,0 @@
-# ignore what is in directory
-*
-# but have directory show up
-!.gitignore
