@@ -36,9 +36,9 @@
 
 /* ********************** ULFS ERROR CODES ************************ */
 #define ULFS_SUCCESS        0
-#define ULFS_ERROR_BASE		-2000
-#define ULFS_ERROR_DBG		( ULFS_ERROR_BASE - 1 )
-#define ULFS_ERROR_MDHIM	( ULFS_ERROR_BASE - 2 )
+#define ULFS_ERROR_BASE     -2000
+#define ULFS_ERROR_DBG      ( ULFS_ERROR_BASE - 1 )
+#define ULFS_ERROR_MDHIM    ( ULFS_ERROR_BASE - 2 )
 #define ULFS_ERROR_THRD ( ULFS_ERROR_BASE - 3 )
 #define ULFS_ERROR_GENERAL ( ULFS_ERROR_BASE - 4 )
 #define ULFS_ERROR_NOENV ( ULFS_ERROR_BASE - 5 )
@@ -64,13 +64,13 @@
 #define ULFS_ERROR_ADDR ( ULFS_ERROR_BASE+10 )
 #define ULFS_ERROR_ROUTE ( ULFS_ERROR_BASE+11 )
 #define ULFS_ERROR_EVENT_UNKNOWN ( ULFS_ERROR_BASE+12 )
-#define ULFS_ERROR_CONTEXT	( ULFS_ERROR_BASE+13 )
-#define ULFS_ERROR_QP	( ULFS_ERROR_BASE+14 )
-#define ULFS_ERROR_REGMEM	( ULFS_ERROR_BASE+15 )
+#define ULFS_ERROR_CONTEXT  ( ULFS_ERROR_BASE+13 )
+#define ULFS_ERROR_QP   ( ULFS_ERROR_BASE+14 )
+#define ULFS_ERROR_REGMEM   ( ULFS_ERROR_BASE+15 )
 #define ULFS_ERROR_POSTRECV ( ULFS_ERROR_BASE+17 )
 #define ULFS_ERROR_PD ( ULFS_ERROR_BASE+18 )
 #define ULFS_ERROR_CHANNEL ( ULFS_ERROR_BASE+19 )
-#define ULFS_ERROR_CQ	( ULFS_ERROR_BASE+20 )
+#define ULFS_ERROR_CQ   ( ULFS_ERROR_BASE+20 )
 #define ULFS_ERROR_CONNECT ( ULFS_ERROR_BASE+21 )
 #define ULFS_ERROR_POSTSEND ( ULFS_ERROR_BASE+22 )
 #define ULFS_ERROR_ACCEPT ( ULFS_ERROR_BASE+23 )
@@ -106,17 +106,17 @@
 #define ULFS_STR_ERROR_ADDR "Fail to parse ip address and port."
 #define ULFS_STR_ERROR_ROUTE "Fail to resolve route."
 #define ULFS_STR_ERROR_EVENT_UNKNOWN "Unknown event detected."
-#define ULFS_STR_ERROR_CONTEXT	"Wrong connection context."
+#define ULFS_STR_ERROR_CONTEXT  "Wrong connection context."
 #define ULFS_STR_ERROR_QP "Error creating or destroying QP."
 #define ULFS_STR_ERROR_REGMEM "Registering or de-registering memory failure."
 #define ULFS_STR_ERROR_POSTRECV "Failed in posting receive operation."
-#define ULFS_STR_ERROR_PD	"Error creating PD."
+#define ULFS_STR_ERROR_PD   "Error creating PD."
 #define ULFS_STR_ERROR_CHANNEL "Error creating completion channel."
-#define ULFS_STR_ERROR_CQ	"Error creating or polling completion queue."
-#define ULFS_STR_ERROR_CONNECT	"Error in RDMA connect or disconnect."
+#define ULFS_STR_ERROR_CQ   "Error creating or polling completion queue."
+#define ULFS_STR_ERROR_CONNECT  "Error in RDMA connect or disconnect."
 #define ULFS_STR_ERROR_POSTSEND "Failed in posting send operation."
-#define ULFS_STR_ERROR_ACCEPT	"Failed to accept rdma connection."
-#define ULFS_STR_ERROR_WC	"Write completion with error."
+#define ULFS_STR_ERROR_ACCEPT   "Failed to accept rdma connection."
+#define ULFS_STR_ERROR_WC   "Write completion with error."
 #define ULFS_STR_ERROR_DEFAULT "Undefined error."
 #define ULFS_STR_ERROR_FILE "File operation error."
 #define ULFS_STR_ERROR_SOCKET_FD_EXCEED "Number of client-side connections exceeds the max value."
@@ -162,7 +162,7 @@
 #define MMAP_OPEN_MODE 00777
 #define MAX_BURSTY_INTERVAL 10000 /*unit: us*/
 #define SLEEP_INTERVAL 100 /* how long to wait before
-							  the next test*/
+                              the next test*/
 #define SHM_WAIT_INTERVAL 10
 #define SLEEP_SLICE_PER_UNIT 10
 
@@ -186,7 +186,7 @@
 // the buffer size on the service manager for read clustering and pipelining
 #define SERVICE_MEM_POOL_SIZE 2147483648
 /* ********************** ULFS Constant Functions ************************ */
-const char * ULFS_str_errno(int rc);
+const char *ULFS_str_errno(int rc);
 #endif
 
 

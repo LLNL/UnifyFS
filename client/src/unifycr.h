@@ -64,30 +64,30 @@ typedef struct {
 #define MMAP_OPEN_MODE 00777
 
 typedef struct {
-	char hostname[UNIFYCR_MAX_FILENAME];
-	int rank;
-}name_rank_pair_t;
+    char hostname[UNIFYCR_MAX_FILENAME];
+    int rank;
+} name_rank_pair_t;
 
 static int get_del_cnt();
 static int compare_int(void *a, void *b);
 static int compare_name_rank_pair(const void *a, const void *b);
-static int find_rank_idx(int rank,\
-		int *local_rank_lst, int local_rank_cnt);
-static int unifycr_init_socket(int proc_id,\
-		int l_num_procs_per_node, \
-			int l_num_del_per_node);
+static int find_rank_idx(int rank,
+                         int *local_rank_lst, int local_rank_cnt);
+static int unifycr_init_socket(int proc_id,
+                               int l_num_procs_per_node,
+                               int l_num_del_per_node);
 static int CountTasksPerNode(int rank, int numTasks);
 static int unifycr_init_req_shm(int local_rank_idx, int app_id);
-int unifycr_mount(const char prefix[], int rank, size_t size,\
-		int l_app_id, int subtype);
+int unifycr_mount(const char prefix[], int rank, size_t size,
+                  int l_app_id, int subtype);
 static int unifycr_init_recv_shm(int local_rank_idx, int app_id);
 static int unifycr_init_req_shm(int local_rank_idx, int app_id);
 static int unifycr_sync_to_del();
 static int unifycr_get_global_fid(const char *path, int *gfid);
 static int get_global_file_meta(int gfid, unifycr_fattr_t **file_meta);
 static int set_global_file_meta(unifycr_fattr_t *f_meta);
-static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,\
-		unifycr_fattr_t *ins_fattr);
+static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,
+                         unifycr_fattr_t *ins_fattr);
 int compare_fattr(void *a, void *b);
 
 
@@ -99,10 +99,10 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank);
 size_t unifycr_get_data_region(void **ptr);
 
 /* get a list of chunks for a given file (useful for RDMA, etc.) */
-chunk_list_t* unifycr_get_chunk_list(char* path);
+chunk_list_t *unifycr_get_chunk_list(char *path);
 
 /* debug function to print list of chunks constituting a file
  * and to test above function*/
-void unifycr_print_chunk_list(char* path);
+void unifycr_print_chunk_list(char *path);
 
 #endif /* UNIFYCR_H */

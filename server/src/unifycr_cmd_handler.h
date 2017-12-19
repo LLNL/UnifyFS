@@ -31,20 +31,20 @@
 #define UNIFYCR_CMD_HANDLER_H
 int delegator_handle_command(char *ptr_cmd, int sock_id);
 int sync_with_client(char *buf, int client_id);
-int open_log_file(app_config_t *app_config,\
-		int app_id, int client_id);
-int attach_to_shm(app_config_t *app_config,\
-		int app_id, int sock_id);
-int pack_ack_msg(char *ptr_cmd, int cmd,\
-		int rc, void *val,\
-		int val_len);
+int open_log_file(app_config_t *app_config,
+                  int app_id, int client_id);
+int attach_to_shm(app_config_t *app_config,
+                  int app_id, int sock_id);
+int pack_ack_msg(char *ptr_cmd, int cmd,
+                 int rc, void *val,
+                 int val_len);
 int unifycr_broadcast_exit(int sock_id);
 int sync_with_client(char *cmd_buf, int sock_id);
-int open_log_file(app_config_t *app_config,\
-		int app_id, int sock_id);
-int attach_to_shm(app_config_t *app_config,\
-		int app_id, int sock_id);
-int pack_ack_msg(char *ptr_cmd, int cmd,\
-		int rc, void *val, int val_len);
+int open_log_file(app_config_t *app_config,
+                  int app_id, int sock_id);
+int attach_to_shm(app_config_t *app_config,
+                  int app_id, int sock_id);
+int pack_ack_msg(char *ptr_cmd, int cmd,
+                 int rc, void *val, int val_len);
 int unifycr_broadcast_exit(int sock_id);
 #endif
