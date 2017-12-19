@@ -358,21 +358,6 @@ int UNIFYCR_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
     }
 }
 
-int UNIFYCR_WRAP(__xstat64)(int vers, const char *path, struct stat64 *buf)
-{
-    /* check whether we should intercept this path */
-    if (unifycr_intercept_path(path)) {
-        /* ERROR: fn not yet supported */
-        fprintf(stderr, "Function not yet supported @ %s:%d\n", __FILE__, __LINE__);
-        errno = ENOENT;
-        return -1;
-    } else {
-        MAP_OR_FAIL(__xstat64);
-        int ret = UNIFYCR_REAL(__xstat64)(vers, path, buf);
-        return ret;
-    }
-}
-
 int UNIFYCR_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
 {
     /* check whether we should intercept this path */
@@ -384,21 +369,6 @@ int UNIFYCR_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
     } else {
         MAP_OR_FAIL(__lxstat);
         int ret = UNIFYCR_REAL(__lxstat)(vers, path, buf);
-        return ret;
-    }
-}
-
-int UNIFYCR_WRAP(__lxstat64)(int vers, const char *path, struct stat64 *buf)
-{
-    /* check whether we should intercept this path */
-    if (unifycr_intercept_path(path)) {
-        /* ERROR: fn not yet supported */
-        fprintf(stderr, "Function not yet supported @ %s:%d\n", __FILE__, __LINE__);
-        errno = ENOENT;
-        return -1;
-    } else {
-        MAP_OR_FAIL(__lxstat64);
-        int ret = UNIFYCR_REAL(__lxstat64)(vers, path, buf);
         return ret;
     }
 }
@@ -902,7 +872,7 @@ ssize_t UNIFYCR_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
     }
 }
 
-ssize_t UNIFYCR_WRAP(lio_listio)(int mode,\
+int UNIFYCR_WRAP(lio_listio)(int mode,\
    struct aiocb *const aiocb_list[],
                       int nitems, struct sigevent *sevp) {
 
@@ -1779,21 +1749,6 @@ int UNIFYCR_WRAP(__fxstat)(int vers, int fd, struct stat *buf)
     } else {
         MAP_OR_FAIL(__fxstat);
         int ret = UNIFYCR_REAL(__fxstat)(vers, fd, buf);
-        return ret;
-    }
-}
-
-int UNIFYCR_WRAP(__fxstat64)(int vers, int fd, struct stat64 *buf)
-{
-    /* check whether we should intercept this file descriptor */
-    if (unifycr_intercept_fd(&fd)) {
-        /* ERROR: fn not yet supported */
-        fprintf(stderr, "Function not yet supported @ %s:%d\n", __FILE__, __LINE__);
-        errno = EBADF;
-        return -1;
-    } else {
-        MAP_OR_FAIL(__fxstat64);
-        int ret = UNIFYCR_REAL(__fxstat64)(vers, fd, buf);
         return ret;
     }
 }
