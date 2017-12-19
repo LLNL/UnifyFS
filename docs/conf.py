@@ -226,13 +226,12 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'unifycr.tex', u'unifycr Documentation',
-     u'Kathryn Mohror, Adam Moody, Oral Sarp, Feiyi Wang, Hyogi Sim, Danielle Sikich, Joseph Moore, Ned Bass', 'manual'),
+    (master_doc, 'unifycr.tex', u'UnifyCR Documentation', author, 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
 # the title page.
-#latex_logo = None
+latex_logo = 'unify-logo.png'
 
 # For "manual" documents, if this is true, then toplevel headings are parts,
 # not chapters.
@@ -256,8 +255,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'unifycr', u'unifycr Documentation',
-     [author], 1)
+    (master_doc, 'unifycr', u'UnifyCR Documentation', [author], 1)
 ]
 
 # If true, show URL addresses after external links.
@@ -270,8 +268,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'unifycr', u'unifycr Documentation',
-     author, 'unifycr', 'One line description of project.',
+    (master_doc, 'unifycr', u'UnifyCR Documentation',
+     'unifycr', 'One line description of project.',
      'Miscellaneous'),
 ]
 

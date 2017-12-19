@@ -14,6 +14,9 @@ Initialization Example
 First, we need to start the UnifyCR daemon on the nodes in your allocation.
 
 .. code-block:: Bash
+    :linenos:
+
+        #!/bin/bash
 
         export UNIFYCR_META_SERVER_RATIO=1
         export UNIFYCR_META_DB_NAME=unifycr_db
@@ -30,6 +33,9 @@ in the NODES variable.
 Next, we can start run our application with UnifyCR in the following manner:
 
 .. code-block:: Bash
+    :linenos:
+
+        #!/bin/bash
 
         export UNIFYCR_USE_SPILLOVER=1
         APP_PATH=/path/to/my/app
