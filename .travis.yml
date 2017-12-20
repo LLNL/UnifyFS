@@ -12,14 +12,15 @@ before_install:
   - $HOME/spack/bin/spack install leveldb
   - $HOME/spack/bin/spack install gotcha
   - $HOME/spack/bin/spack install environment-modules
+  - . $HOME/spack/share/spack/setup-env.sh
+  - spack load environment-modules
+  - source <(spack module loads gotcha leveldb)
+  - eval $(./scripts/git_log_test_env.sh)
 
 cache:
   directories:
     - $HOME/spack
 
 script:
-  - . $HOME/spack/share/spack/setup-env.sh
-  - spack load environment-modules
-  - source <(spack module loads gotcha leveldb)
   - sh autogen.sh && ./configure && make
-  - ./scripts/checkpatch.sh
+  - ./scripts/checkpatch.sh || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
