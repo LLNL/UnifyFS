@@ -59,10 +59,9 @@ Then to build with UnifyCR:
 
 	``--with-numa=$PATH_TO_NUMA``
 
-	    This is needed to enable NUMA-aware memory allocation on Linux machines
-		(set NUMA policy at runtime with ``UNIFYCR_NUMA_POLICY = local |
-		interleaved``, set NUMA node explicitly with
-		``UNIFYCR_USE_NUMA_BANK = <node no.>``)
+	This is needed to enable NUMA-aware memory allocation on Linux machines. Set the
+	NUMA policy at runtime with ``UNIFYCR_NUMA_POLICY = local | interleaved``, or set
+	NUMA nodes explicitly with ``UNIFYCR_USE_NUMA_BANK = <node no.>``)
 
 ---------------------------
 I/O Interception
