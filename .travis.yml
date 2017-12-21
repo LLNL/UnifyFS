@@ -23,4 +23,5 @@ cache:
 
 script:
   - sh autogen.sh && ./configure && make
+  - make distcheck
   - ./scripts/checkpatch.sh || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
