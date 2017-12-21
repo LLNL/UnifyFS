@@ -54,7 +54,7 @@ The unifycr_list.txt file specifies the set of wrappers in UnifyCR.
 Most but not all such wrappers are supported.
 The command to build unifycr list:
 
-    grep UNIFYCR_WRAP ../runtime/lib/*.c > unifycr_list.txt
+    grep UNIFYCR_WRAP ../src/*.c > unifycr_list.txt
 
 ## unifycr_unsupported_list.txt
 The unify_unsupported_list.txt file specifies wrappers that are in UnifyCR, but are known to not actually be supported.
