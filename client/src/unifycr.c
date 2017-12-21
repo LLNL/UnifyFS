@@ -348,22 +348,6 @@ inline int unifycr_would_overflow_long(long a, long b)
     return 0;
 }
 
-#if 0
-/* simple memcpy which compilers should be able to vectorize
- * from: http://software.intel.com/en-us/articles/memcpy-performance/
- * icc -restrict -O3 ... */
-static inline void *unifycr_memcpy(void *restrict b, const void *restrict a,
-                                   size_t n)
-{
-    char *s1 = b;
-    const char *s2 = a;
-    for (; 0 < n; --n) {
-        *s1++ = *s2++;
-    }
-    return b;
-}
-#endif
-
 /* given an input mode, mask it with umask and return, can specify
  * an input mode==0 to specify all read/write bits */
 mode_t unifycr_getmode(mode_t perms)
@@ -2786,63 +2770,6 @@ size_t unifycr_get_data_region(void **ptr)
 /* get a list of chunks for a given file (useful for RDMA, etc.) */
 chunk_list_t *unifycr_get_chunk_list(char *path)
 {
-#if 0
-    if (unifycr_intercept_path(path)) {
-        int i = 0;
-        chunk_list_t *chunk_list = NULL;
-        chunk_list_t *chunk_list_elem;
-
-        /* get the file id for this file descriptor */
-        /* Rag: We decided to use the path instead.. Can add flexibility to support both */
-        //int fid = unifycr_get_fid_from_fd(fd);
-        int fid = unifycr_get_fid_from_path(path);
-        if (fid < 0) {
-            errno = EACCES;
-            return NULL;
-        }
-
-        /* get meta data for this file */
-        unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
-        if (meta) {
-
-            while (i < meta->chunks) {
-                chunk_list_elem = (chunk_list_t *)malloc(sizeof(chunk_list_t));
-
-                /* get the chunk id for the i-th chunk and
-                 * add it to the chunk_list */
-                unifycr_chunkmeta_t *chunk_meta = &(meta->chunk_meta[i]);
-                chunk_list_elem->chunk_id = chunk_meta->id;
-                chunk_list_elem->location = chunk_meta->location;
-
-                if (chunk_meta->location == CHUNK_LOCATION_MEMFS) {
-                    /* update the list_elem with the memory address of this chunk */
-                    chunk_list_elem->chunk_offset = unifycr_compute_chunk_buf(meta, chunk_meta->id,
-                                                    0);
-                    chunk_list_elem->spillover_offset = 0;
-                } else if (chunk_meta->location == CHUNK_LOCATION_SPILLOVER) {
-                    /* update the list_elem with the offset of this chunk in the spillover file*/
-                    chunk_list_elem->spillover_offset = unifycr_compute_spill_offset(meta,
-                                                        chunk_meta->id, 0);
-                    chunk_list_elem->chunk_offset = NULL;
-                } else {
-                    /*TODO: Handle the container case.*/
-                }
-
-                /* currently using macros from utlist.h to
-                 * handle link-list operations */
-                LL_APPEND(chunk_list, chunk_list_elem);
-                i++;
-            }
-            return chunk_list;
-        } else {
-            return NULL;
-        }
-    } else {
-        /* file not managed by UNIFYCR */
-        errno = EACCES;
-        return NULL;
-    }
-#endif
     return NULL;
 }
 
@@ -2850,24 +2777,4 @@ chunk_list_t *unifycr_get_chunk_list(char *path)
  * and to test above function*/
 void unifycr_print_chunk_list(char *path)
 {
-#if 0
-    chunk_list_t *chunk_list;
-    chunk_list_t *chunk_element;
-
-    chunk_list = unifycr_get_chunk_list(path);
-
-    fprintf(stdout, "-------------------------------------\n");
-    LL_FOREACH(chunk_list, chunk_element) {
-        printf("%d,%d,%p,%ld\n", chunk_element->chunk_id,
-               chunk_element->location,
-               chunk_element->chunk_offset,
-               chunk_element->spillover_offset);
-    }
-
-    LL_FOREACH(chunk_list, chunk_element) {
-        free(chunk_element);
-    }
-    fprintf(stdout, "\n");
-    fprintf(stdout, "-------------------------------------\n");
-#endif
 }

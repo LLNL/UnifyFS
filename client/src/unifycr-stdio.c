@@ -165,30 +165,6 @@ int unifycr_unsupported_stream(
     return rc;
 }
 
-#if 0
-static int unifycr_stream_alloc(int fd)
-{
-    /* check that file descriptor is valid */
-    if (fd >= 0 && fd < UNIFYCR_FILE_DESCS) {
-        /* TODO: use a stack to allocate a new stream */
-        /* check that stream corresponding to this file descriptor is free */
-        if (unifycr_streams[fd].fd < 0) {
-            unifycr_streams[fd].fd = fd;
-            return fd;
-        }
-    }
-    return -1;
-}
-
-static int unifycr_stream_free(int sid)
-{
-    if (sid >= 0 && sid < UNIFYCR_FILE_DESCS) {
-        /* mark file descriptor as -1 to indicate stream is not in use */
-        unifycr_streams[sid].fd = -1;
-    }
-}
-#endif
-
 static int unifycr_stream_set_pointers(unifycr_stream_t *s)
 {
     /* get pointer to file descriptor structure */
@@ -409,7 +385,6 @@ static int unifycr_fopen(
     s->ubufsize = 0;
     s->ubuflen  = 0;
 
-//ATM
     s->_p = NULL;
     s->_r = 0;
 
@@ -522,7 +497,6 @@ static int unifycr_stream_read(
     /* lookup stream */
     unifycr_stream_t *s = (unifycr_stream_t *) stream;
 
-//ATM
     /* clear pointers, will force a reset when refill is called */
     s->_p = NULL;
     s->_r = 0;
@@ -659,9 +633,6 @@ static int unifycr_stream_read(
     /* update file position */
     filedesc->pos += (off_t) * retcount;
 
-//ATM
-//    unifycr_stream_set_pointers(s);
-
     /* set end of file indicator if we hit the end */
     if (*retcount < count) {
         s->eof = 1;
@@ -682,7 +653,6 @@ static int unifycr_stream_write(
     /* lookup stream */
     unifycr_stream_t *s = (unifycr_stream_t *) stream;
 
-//ATM
     /* clear pointers, will force a reset when refill is called */
     s->_p = NULL;
     s->_r = 0;
@@ -768,9 +738,6 @@ static int unifycr_stream_write(
 
         /* update file position */
         filedesc->pos = current + (off_t) count;
-
-//ATM
-//        unifycr_stream_set_pointers(s);
 
         return UNIFYCR_SUCCESS;
     }
@@ -860,9 +827,6 @@ static int unifycr_stream_write(
     /* update file position */
     filedesc->pos = current;
 
-//ATM
-//    unifycr_stream_set_pointers(s);
-
     return UNIFYCR_SUCCESS;
 }
 
@@ -874,7 +838,6 @@ static int unifycr_fseek(FILE *stream, off_t offset, int whence)
     /* lookup stream */
     unifycr_stream_t *s = (unifycr_stream_t *) stream;
 
-//ATM
     /* clear pointers, will force a reset when refill is called */
     s->_p = NULL;
     s->_r = 0;
@@ -949,9 +912,6 @@ static int unifycr_fseek(FILE *stream, off_t offset, int whence)
      * fflush? */
     /* save new position */
     filedesc->pos = current_pos;
-
-//ATM
-//    unifycr_stream_set_pointers(s);
 
     /* clear end-of-file indicator */
     s->eof = 0;
@@ -1103,7 +1063,6 @@ int UNIFYCR_WRAP(ungetc)(int c, FILE *stream)
         /* decrement file position */
         filedesc->pos--;
 
-// ATM
         /* update buffer pointer and remaining count */
         s->_p = pos;
         s->_r = s->ubuflen;
@@ -2154,13 +2113,7 @@ wint_t UNIFYCR_WRAP(ungetwc)(wint_t c, FILE *stream)
  * SUCH DAMAGE.
  */
 
-#if defined(LIBC_SCCS) && !defined(lint)
-//ATMstatic char sccsid[] = "@(#)vfscanf.c  8.1 (Berkeley) 6/4/93";
-#endif /* LIBC_SCCS and not lint */
 #include <sys/cdefs.h>
-//ATM __FBSDID("$FreeBSD$");
-
-//ATM #include "namespace.h"
 #include <ctype.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -2172,16 +2125,6 @@ wint_t UNIFYCR_WRAP(ungetwc)(wint_t c, FILE *stream)
 #include <wctype.h>
 #include "unifycr-stdio.h"
 #include "unifycr-internal.h"
-//ATM #include "un-namespace.h"
-
-//ATM #include "collate.h"
-//ATM #include "libc_private.h"
-//ATM #include "local.h"
-//ATM #include "xlocale_private.h"
-
-#ifndef NO_FLOATING_POINT
-//ATM #include <locale.h>
-#endif
 
 #define BUF     513 /* Maximum length of numeric string. */
 
@@ -2220,17 +2163,13 @@ wint_t UNIFYCR_WRAP(ungetwc)(wint_t c, FILE *stream)
 #define CT_INT      3   /* %[dioupxX] conversion */
 #define CT_FLOAT    4   /* %[efgEFG] conversion */
 
-//ATM
 #undef __inline
 #define __inline
 
 static const u_char *__sccl(char *, const u_char *);
 #ifndef NO_FLOATING_POINT
-//ATM static int parsefloat(unifycr_stream_t *, char *, char *, locale_t);
 static int parsefloat(unifycr_stream_t *, char *, char *);
 #endif
-
-//ATM __weak_reference(__vfscanf, vfscanf);
 
 /*
  * Conversion functions are passed a pointer to this object instead of
@@ -2242,9 +2181,6 @@ static int parsefloat(unifycr_stream_t *, char *, char *);
 static const int suppress;
 #define SUPPRESS_PTR    ((void *)&suppress)
 
-//ATM static const mbstate_t initial_mbs;
-
-// ATM
 static int __srefill(unifycr_stream_t *stream)
 {
     /* lookup stream */
@@ -2363,7 +2299,6 @@ convert_char(unifycr_stream_t *fp, char *p, int width)
         }
         return (sum);
     } else {
-        //ATM size_t r = __fread(p, 1, width, fp);
         size_t r = fread(p, 1, width, (FILE *)fp);
 
         if (r == 0) {
@@ -2372,31 +2307,6 @@ convert_char(unifycr_stream_t *fp, char *p, int width)
         return (r);
     }
 }
-
-//ATM
-#if 0
-static __inline int
-convert_wchar(unifycr_stream_t *fp, wchar_t *wcp, int width, locale_t locale)
-{
-    mbstate_t mbs;
-    int n, nread;
-    wint_t wi;
-
-    mbs = initial_mbs;
-    n = 0;
-    while (width-- != 0 &&
-           (wi = __fgetwc_mbs(fp, &mbs, &nread, locale)) != WEOF) {
-        if (wcp != SUPPRESS_PTR) {
-            *wcp++ = (wchar_t)wi;
-        }
-        n += nread;
-    }
-    if (n == 0) {
-        return (-1);
-    }
-    return (n);
-}
-#endif
 
 static __inline int
 convert_ccl(unifycr_stream_t *fp, char *p, int width, const char *ccltab)
@@ -2439,44 +2349,6 @@ convert_ccl(unifycr_stream_t *fp, char *p, int width, const char *ccltab)
     return (n);
 }
 
-//ATM
-#if 0
-static __inline int
-convert_wccl(unifycr_stream_t *fp, wchar_t *wcp, int width, const char *ccltab,
-             locale_t locale)
-{
-    mbstate_t mbs;
-    wint_t wi;
-    int n, nread;
-
-    mbs = initial_mbs;
-    n = 0;
-    if (wcp == SUPPRESS_PTR) {
-        while ((wi = __fgetwc_mbs(fp, &mbs, &nread, locale)) != WEOF &&
-               width-- != 0 && ccltab[wctob(wi)]) {
-            n += nread;
-        }
-        if (wi != WEOF) {
-            __ungetwc(wi, fp, __get_locale());
-        }
-    } else {
-        while ((wi = __fgetwc_mbs(fp, &mbs, &nread, locale)) != WEOF &&
-               width-- != 0 && ccltab[wctob(wi)]) {
-            *wcp++ = (wchar_t)wi;
-            n += nread;
-        }
-        if (wi != WEOF) {
-            __ungetwc(wi, fp, __get_locale());
-        }
-        if (n == 0) {
-            return (0);
-        }
-        *wcp = 0;
-    }
-    return (n);
-}
-#endif
-
 static __inline int
 convert_string(unifycr_stream_t *fp, char *p, int width)
 {
@@ -2511,40 +2383,6 @@ convert_string(unifycr_stream_t *fp, char *p, int width)
     }
     return (n);
 }
-
-//ATM
-#if 0
-static __inline int
-convert_wstring(unifycr_stream_t *fp, wchar_t *wcp, int width, locale_t locale)
-{
-    mbstate_t mbs;
-    wint_t wi;
-    int n, nread;
-
-    mbs = initial_mbs;
-    n = 0;
-    if (wcp == SUPPRESS_PTR) {
-        while ((wi = __fgetwc_mbs(fp, &mbs, &nread, locale)) != WEOF &&
-               width-- != 0 && !iswspace(wi)) {
-            n += nread;
-        }
-        if (wi != WEOF) {
-            __ungetwc(wi, fp, __get_locale());
-        }
-    } else {
-        while ((wi = __fgetwc_mbs(fp, &mbs, &nread, locale)) != WEOF &&
-               width-- != 0 && !iswspace(wi)) {
-            *wcp++ = (wchar_t)wi;
-            n += nread;
-        }
-        if (wi != WEOF) {
-            __ungetwc(wi, fp, __get_locale());
-        }
-        *wcp = '\0';
-    }
-    return (n);
-}
-#endif
 
 /*
  * Read an integer, storing it in buf.  The only relevant bit in the
@@ -2684,54 +2522,21 @@ ok:
      */
     if (flags & NDIGITS) {
         if (p > buf)
-            //ATM (void) __ungetc(*(u_char *)--p, fp);
-        {
             (void) ungetc(*(u_char *)--p, (FILE *)fp);
-        }
         return (0);
     }
     c = ((u_char *)p)[-1];
     if (c == 'x' || c == 'X') {
         --p;
-        //ATM (void) __ungetc(c, fp);
         (void) ungetc(c, (FILE *)fp);
     }
     return (p - buf);
 }
 
-//ATM
-#if 0
-/*
- * __vfscanf - MT-safe version
- */
-int
-__vfscanf(unifycr_stream_t *fp, char const *fmt0, va_list ap)
-{
-    int ret;
-
-    FLOCKFILE(fp);
-    ret = __svfscanf(fp, __get_locale(), fmt0, ap);
-    FUNLOCKFILE(fp);
-    return (ret);
-}
-int
-vfscanf_l(unifycr_stream_t *fp, locale_t locale, char const *fmt0, va_list ap)
-{
-    int ret;
-    FIX_LOCALE(locale);
-
-    FLOCKFILE(fp);
-    ret = __svfscanf(fp, locale, fmt0, ap);
-    FUNLOCKFILE(fp);
-    return (ret);
-}
-#endif
-
 /*
  * __svfscanf - non-MT-safe version of __vfscanf
  */
 static int
-//ATM __svfscanf(unifycr_stream_t *fp, locale_t locale, const char *fmt0, va_list ap)
 __svfscanf(unifycr_stream_t *fp, const char *fmt0, va_list ap)
 {
 #define GETARG(type)    ((flags & SUPPRESS) ? SUPPRESS_PTR : va_arg(ap, type))
@@ -2746,8 +2551,6 @@ __svfscanf(unifycr_stream_t *fp, const char *fmt0, va_list ap)
     int base;       /* base argument to conversion function */
     char ccltab[256];   /* character class table for %[...] */
     char buf[BUF];      /* buffer for numeric conversions */
-
-    //ATM ORIENT(fp, -1);
 
     nassigned = 0;
     nconversions = 0;
@@ -2980,10 +2783,8 @@ literal:
                 width = 1;
             }
             if (flags & LONG) {
-//ATM               nr = convert_wchar(fp, GETARG(wchar_t *),
-//                  width, locale);
-                unifycr_unsupported_stream((FILE *)fp, __func__, __FILE__, __LINE__, "%s",
-                                           fmt0);
+                unifycr_unsupported_stream((FILE *)fp, __func__, __FILE__,
+                                           __LINE__, "%s", fmt0);
             } else {
                 nr = convert_char(fp, GETARG(char *), width);
             }
@@ -2998,10 +2799,8 @@ literal:
                 width = (size_t)~0;    /* `infinity' */
             }
             if (flags & LONG) {
-//ATM               nr = convert_wccl(fp, GETARG(wchar_t *), width,
-//                  ccltab, locale);
-                unifycr_unsupported_stream((FILE *)fp, __func__, __FILE__, __LINE__, "%s",
-                                           fmt0);
+                unifycr_unsupported_stream((FILE *)fp, __func__, __FILE__,
+                                           __LINE__, "%s", fmt0);
             } else {
                 nr = convert_ccl(fp, GETARG(char *), width,
                                  ccltab);
@@ -3021,10 +2820,8 @@ literal:
                 width = (size_t)~0;
             }
             if (flags & LONG) {
-//ATM               nr = convert_wstring(fp, GETARG(wchar_t *),
-//                  width, locale);
-                unifycr_unsupported_stream((FILE *)fp, __func__, __FILE__, __LINE__, "%s",
-                                           fmt0);
+                unifycr_unsupported_stream((FILE *)fp, __func__, __FILE__,
+                                           __LINE__, "%s", fmt0);
             } else {
                 nr = convert_string(fp, GETARG(char *), width);
             }
@@ -3088,7 +2885,6 @@ literal:
             if (width == 0 || width > sizeof(buf) - 1) {
                 width = sizeof(buf) - 1;
             }
-//ATM           nr = parsefloat(fp, buf, buf + width, locale);
             nr = parsefloat(fp, buf, buf + width);
             if (nr == 0) {
                 goto match_failure;
@@ -3132,9 +2928,6 @@ char *tab;
 const u_char *fmt;
 {
     int c, n, v, i;
-//ATM
-//  struct xlocale_collate *table =
-//      (struct xlocale_collate*)__get_locale()->components[XLC_COLLATE];
 
     /* first `clear' the whole table */
     c = *fmt++;     /* first char hat => negated scanset */
@@ -3189,60 +2982,32 @@ doswitch:
              * we just stored in the table (c).
              */
             n = *fmt;
-            if (n == ']'
-//ATM
-//              || (table->__collate_load_error ? n < c :
-//              __collate_range_cmp (table, n, c) < 0
-//                 )
-                || n < c
-               ) {
+            if (n == ']' || n < c) {
                 c = '-';
                 break;  /* resume the for(;;) */
             }
             fmt++;
             /* fill in the range */
-//ATM           if (table->__collate_load_error) {
             do {
                 tab[++c] = v;
             } while (c < n);
-//ATM
-#if 0
-        } else {
-            for (i = 0; i < 256; i ++)
-                if (__collate_range_cmp(table, c, i) < 0
-                    && __collate_range_cmp(table, i, n) <= 0
-                   ) {
-                    tab[i] = v;
-                }
-        }
-#endif
-#if 1   /* XXX another disgusting compatibility hack */
-        c = n;
-        /*
-         * Alas, the V7 Unix scanf also treats formats
-         * such as [a-c-e] as `the letters a through e'.
-         * This too is permitted by the standard....
-         */
-        goto doswitch;
-#else
-        c = *fmt++;
-        if (c == 0) {
-            return (fmt - 1);
-        }
-        if (c == ']') {
+            c = n;
+            /*
+             * Alas, the V7 Unix scanf also treats formats
+             * such as [a-c-e] as `the letters a through e'.
+             * This too is permitted by the standard....
+             */
+            goto doswitch;
+            break;
+
+        case ']':       /* end of scanset */
             return (fmt);
+
+        default:        /* just another character */
+            c = n;
+            break;
         }
-#endif
-        break;
-
-    case ']':       /* end of scanset */
-        return (fmt);
-
-    default:        /* just another character */
-        c = n;
-        break;
     }
-}
 /* NOTREACHED */
 }
 
@@ -3258,11 +3023,8 @@ parsefloat(unifycr_stream_t *fp, char *buf, char *end)
         S_DIGITS, S_DECPT, S_FRAC, S_EXP, S_EXPDIGITS
     } state = S_START;
     unsigned char c;
-//ATM
     const char us_decpt[] = ".";
     const char *decpt = us_decpt;
-    //ATMconst char *decpt = localeconv_l(locale)->decimal_point;
-    //ATM_Bool gotmantdig = 0, ishex = 0;
     int gotmantdig = 0, ishex = 0;
 
     /*
@@ -3429,10 +3191,7 @@ reswitch:
 
 parsedone:
     while (commit < --p)
-        //ATM __ungetc(*(u_char *)p, fp);
-    {
         ungetc(*(u_char *)p, (FILE *)fp);
-    }
     *++commit = '\0';
     return (commit - buf);
 }
