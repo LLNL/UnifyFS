@@ -21,6 +21,10 @@ cache:
   directories:
     - $HOME/spack
 
+# Don't update the cache just because the spack lock file changed
+before_cache:
+  - rm -f $HOME/spack/opt/spack/.spack-db/prefix_lock
+
 script:
   - sh autogen.sh && ./configure && make
   - ./scripts/checkpatch.sh || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
