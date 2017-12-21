@@ -472,16 +472,16 @@ int rm_init(int size)
     return ULFS_SUCCESS;
 }
 
-int compare_delegators(void *a, void *b)
+int compare_delegators(const void *a, const void *b)
 {
-    if (((send_msg_t *)a)->dest_delegator_rank
-        - ((send_msg_t *)b)->dest_delegator_rank > 0) {
+    const send_msg_t *ptr_a = a;
+    const send_msg_t *ptr_b = b;
+
+    if (ptr_a->dest_delegator_rank - ptr_b->dest_delegator_rank > 0)
         return 1;
-    }
-    if (((send_msg_t *)a)->dest_delegator_rank
-        - ((send_msg_t *)b)->dest_delegator_rank < 0) {
+
+    if (ptr_a->dest_delegator_rank - ptr_b->dest_delegator_rank < 0)
         return -1;
-    }
 
     return 0;
 }

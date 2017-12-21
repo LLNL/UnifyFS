@@ -902,47 +902,42 @@ int UNIFYCR_WRAP(lio_listio)(int mode,
 
 int compare_index_entry(const void *a, const void *b)
 {
+    const unifycr_index_t *ptr_a = a;
+    const unifycr_index_t *ptr_b = b;
 
-    if (((unifycr_index_t *)a)->fid - ((unifycr_index_t *)b)->fid > 0) {
+    if (ptr_a->fid - ptr_b->fid > 0)
         return 1;
-    }
 
-    if (((unifycr_index_t *)a)->fid - ((unifycr_index_t *)b)->fid < 0) {
+    if (ptr_a->fid - ptr_b->fid < 0)
         return -1;
-    }
 
-    if (((unifycr_index_t *)a)->file_pos - ((unifycr_index_t *)b)->file_pos > 0) {
+    if (ptr_a->file_pos - ptr_b->file_pos > 0)
         return 1;
-    }
 
-    if (((unifycr_index_t *)a)->file_pos - ((unifycr_index_t *)b)->file_pos < 0) {
+    if (ptr_a->file_pos - ptr_b->file_pos < 0)
         return -1;
-    } else {
-        return 0;
-    }
 
+    return 0;
 }
 
 int compare_read_req(const void *a, const void *b)
 {
-    if (((read_req_t *)a)->fid - ((read_req_t *)b)->fid > 0) {
+    const read_req_t *ptr_a = a;
+    const read_req_t *ptr_b = b;
+
+    if (ptr_a->fid - ptr_b->fid > 0)
         return 1;
-    }
 
-    if (((read_req_t *)a)->fid - ((read_req_t *)b)->fid < 0) {
+    if (ptr_a->fid - ptr_b->fid < 0)
         return -1;
-    }
 
-    if (((read_req_t *)a)->offset - ((read_req_t *)b)->offset > 0) {
+    if (ptr_a->offset - ptr_b->offset > 0)
         return 1;
-    }
 
-    if (((read_req_t *)a)->offset - ((read_req_t *)b)->offset < 0) {
+    if (ptr_a->offset - ptr_b->offset < 0)
         return -1;
-    } else {
-        return 0;
-    }
 
+    return 0;
 }
 
 int unifycr_locate_req(read_req_t *read_req, int count,
