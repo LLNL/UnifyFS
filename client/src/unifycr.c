@@ -2500,49 +2500,46 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
 
 }
 
-int compare_fattr(void *a, void *b)
+int compare_fattr(const void *a, const void *b)
 {
-    unifycr_fattr_t *ptr_a = a;
-    unifycr_fattr_t *ptr_b = b;
+    const unifycr_fattr_t *ptr_a = a;
+    const unifycr_fattr_t *ptr_b = b;
 
-    if (ptr_a->fid > ptr_b->fid) {
+    if (ptr_a->fid > ptr_b->fid)
         return 1;
-    }
-    if (ptr_a->fid < ptr_b->fid) {
+
+    if (ptr_a->fid < ptr_b->fid)
         return -1;
-    }
+
     return 0;
 }
 
-static int compare_int(void *a, void *b)
+static int compare_int(const void *a, const void *b)
 {
-    int *ptr_a = (int *)a;
-    int *ptr_b = (int *)b;
+    const int *ptr_a = a;
+    const int *ptr_b = b;
 
-    if (*ptr_a - *ptr_b > 0) {
+    if (*ptr_a - *ptr_b > 0)
         return 1;
-    }
 
-    if (*ptr_a - *ptr_b < 0) {
+    if (*ptr_a - *ptr_b < 0)
         return -1;
-    }
 
     return 0;
 }
 
 static int compare_name_rank_pair(const void *a, const void *b)
 {
-    name_rank_pair_t *pair_a = (name_rank_pair_t *)a;
-    name_rank_pair_t *pair_b = (name_rank_pair_t *)b;
-    if (strcmp(pair_a->hostname, pair_b->hostname) > 0) {
-        return 1;
-    }
-    if (strcmp(pair_a->hostname, pair_b->hostname) < 0) {
-        return -1;
-    } else {
-        return 0;
-    }
+    const name_rank_pair_t *pair_a = a;
+    const name_rank_pair_t *pair_b = b;
 
+    if (strcmp(pair_a->hostname, pair_b->hostname) > 0)
+        return 1;
+
+    if (strcmp(pair_a->hostname, pair_b->hostname) < 0)
+        return -1;
+
+    return 0;
 }
 
 /**

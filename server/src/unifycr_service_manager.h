@@ -100,7 +100,7 @@ void *sm_service_reads(void *ctx);
 int sm_decode_msg(char *recv_msg_buf);
 int sm_classfy_reads(service_msgs_t *service_msgs);
 int sm_ack_reads(service_msgs_t *service_msgs);
-int compare_send_msg(void *a, void *b);
+int compare_send_msg(const void *a, const void *b);
 int sm_wait_until_digested(task_set_t *read_task_set,
                            service_msgs_t *service_msgs,
                            rank_ack_task_t *read_ack_task);
@@ -122,7 +122,7 @@ int sm_cluster_reads(task_set_t *read_task_set,
                      service_msgs_t *service_msgs);
 void reset_read_tasks(task_set_t *read_task_set,
                       service_msgs_t *service_msgs, int index);
-int compare_read_task(void *a, void *b);
+int compare_read_task(const void *a, const void *b);
 int sm_exit();
 void print_task_set(task_set_t *read_task_set,
                     service_msgs_t *service_msgs);
@@ -134,5 +134,5 @@ void print_task_set(task_set_t *read_task_set,
 void print_pended_reads(arraylist_t *pended_reads);
 void print_pended_sends(arraylist_t *pended_sends);
 void print_ack_meta(rank_ack_task_t *rank_ack_tasks);
-int compare_ack_stat(void *a, void *b);
+int compare_ack_stat(const void *a, const void *b);
 #endif

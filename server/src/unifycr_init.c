@@ -57,8 +57,6 @@ arraylist_t *thrd_list;
 int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
 int log_print_level = 5;
 
-static int compare_int(void *a, void *b);
-static int compare_name_rank_pair(const void *a, const void *b);
 int main(int argc, char *argv[])
 {
 
@@ -368,35 +366,32 @@ static int find_rank_idx(int my_rank,
 
 }
 
-static int compare_int(void *a, void *b)
+static int compare_int(const void *a, const void *b)
 {
-    int *ptr_a = (int *)a;
-    int *ptr_b = (int *)b;
+    const int *ptr_a = a;
+    const int *ptr_b = b;
 
-    if (*ptr_a - *ptr_b > 0) {
+    if (*ptr_a - *ptr_b > 0)
         return 1;
-    }
 
-    if (*ptr_a - *ptr_b < 0) {
+    if (*ptr_a - *ptr_b < 0)
         return -1;
-    }
 
     return 0;
 }
 
 static int compare_name_rank_pair(const void *a, const void *b)
 {
-    name_rank_pair_t *pair_a = (name_rank_pair_t *)a;
-    name_rank_pair_t *pair_b = (name_rank_pair_t *)b;
-    if (strcmp(pair_a->hostname, pair_b->hostname) > 0) {
-        return 1;
-    }
-    if (strcmp(pair_a->hostname, pair_b->hostname) < 0) {
-        return -1;
-    } else {
-        return 0;
-    }
+    const name_rank_pair_t *pair_a = a;
+    const name_rank_pair_t *pair_b = b;
 
+    if (strcmp(pair_a->hostname, pair_b->hostname) > 0)
+        return 1;
+
+    if (strcmp(pair_a->hostname, pair_b->hostname) < 0)
+        return -1;
+
+    return 0;
 }
 
 static int unifycr_exit()

@@ -69,7 +69,7 @@ typedef struct {
 } name_rank_pair_t;
 
 static int get_del_cnt();
-static int compare_int(void *a, void *b);
+static int compare_int(const void *a, const void *b);
 static int compare_name_rank_pair(const void *a, const void *b);
 static int find_rank_idx(int rank,
                          int *local_rank_lst, int local_rank_cnt);
@@ -88,7 +88,7 @@ static int get_global_file_meta(int gfid, unifycr_fattr_t **file_meta);
 static int set_global_file_meta(unifycr_fattr_t *f_meta);
 static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,
                          unifycr_fattr_t *ins_fattr);
-int compare_fattr(void *a, void *b);
+int compare_fattr(const void *a, const void *b);
 
 
 /* mount memfs at some prefix location */

@@ -47,7 +47,7 @@ int rm_pack_send_requests(char *req_msg_buf,
                           send_msg_t *send_metas, int req_num,
                           long *tot_sz);
 
-int compare_delegators(void *a, void *b);
+int compare_delegators(const void *a, const void *b);
 int rm_pack_send_msg(int rank, char *send_msg_buf,
                      send_msg_t *send_metas, int meta_num,
                      long *tot_sz);

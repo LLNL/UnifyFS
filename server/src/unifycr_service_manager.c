@@ -702,25 +702,22 @@ int sm_ack_remote_delegator(rank_ack_meta_t *ptr_ack_meta)
     return ULFS_SUCCESS;
 }
 
-int compare_ack_stat(void *a, void *b)
+int compare_ack_stat(const void *a, const void *b)
 {
-    ack_stat_t *ptr_a = a;
-    ack_stat_t *ptr_b = b;
-    if (ptr_a->src_rank > ptr_b->src_rank) {
+    const ack_stat_t *ptr_a = a;
+    const ack_stat_t *ptr_b = b;
+
+    if (ptr_a->src_rank > ptr_b->src_rank)
         return 1;
-    }
 
-    if (ptr_a->src_rank < ptr_b->src_rank) {
+    if (ptr_a->src_rank < ptr_b->src_rank)
         return -1;
-    }
 
-    if (ptr_a->src_thrd > ptr_b->src_thrd) {
+    if (ptr_a->src_thrd > ptr_b->src_thrd)
         return 1;
-    }
 
-    if (ptr_a->src_thrd < ptr_b->src_thrd) {
+    if (ptr_a->src_thrd < ptr_b->src_thrd)
         return -1;
-    }
 
     return 0;
 }
@@ -1068,61 +1065,50 @@ void print_service_msgs(service_msgs_t *service_msgs)
 }
 
 
-int compare_send_msg(void *a, void *b)
+int compare_send_msg(const void *a, const void *b)
 {
-    if (((send_msg_t *)a)->dest_app_id
-        - ((send_msg_t *)b)->dest_app_id > 0) {
+    const send_msg_t *ptr_a = a;
+    const send_msg_t *ptr_b = b;
+
+    if (ptr_a->dest_app_id - ptr_b->dest_app_id > 0)
         return 1;
-    }
 
-    if (((send_msg_t *)a)->dest_app_id
-        - ((send_msg_t *)b)->dest_app_id < 0) {
+    if (ptr_a->dest_app_id - ptr_b->dest_app_id < 0)
         return -1;
-    }
 
-    if (((send_msg_t *)a)->dest_client_id
-        - ((send_msg_t *)b)->dest_client_id > 0) {
+    if (ptr_a->dest_client_id - ptr_b->dest_client_id > 0)
         return 1;
-    }
 
-    if (((send_msg_t *)a)->dest_client_id
-        - ((send_msg_t *)b)->dest_client_id < 0) {
+    if (ptr_a->dest_client_id - ptr_b->dest_client_id < 0)
         return -1;
-    }
 
-    if (((send_msg_t *)a)->dest_offset -
-        ((send_msg_t *)b)->dest_offset > 0) {
+    if (ptr_a->dest_offset - ptr_b->dest_offset > 0)
         return 1;
-    }
 
-    if (((send_msg_t *)a)->dest_offset -
-        ((send_msg_t *)b)->dest_offset < 0) {
+    if (ptr_a->dest_offset - ptr_b->dest_offset < 0)
         return -1;
-    } else {
-        return 0;
-    }
 
+    return 0;
 }
 
-int compare_read_task(void *a, void *b)
+int compare_read_task(const void *a, const void *b)
 {
-    read_task_t *ptr_a = (read_task_t *)a;
-    read_task_t *ptr_b = (read_task_t *)b;
+    const read_task_t *ptr_a = a;
+    const read_task_t *ptr_b = b;
 
-    if (ptr_a->size > ptr_b->size) {
+    if (ptr_a->size > ptr_b->size)
         return 1;
-    }
-    if (ptr_a->size < ptr_b->size) {
+
+    if (ptr_a->size < ptr_b->size)
         return -1;
-    }
-    if (ptr_a->arrival_time > ptr_b->arrival_time) {
+
+    if (ptr_a->arrival_time > ptr_b->arrival_time)
         return 1;
-    }
-    if (ptr_a->arrival_time < ptr_b->arrival_time) {
+
+    if (ptr_a->arrival_time < ptr_b->arrival_time)
         return -1;
-    }
+
     return 0;
-
 }
 
 void print_task_set(task_set_t *read_task_set,
