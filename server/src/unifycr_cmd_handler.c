@@ -319,8 +319,8 @@ int sync_with_client(char *cmd_buf, int sock_id)
 
     thrd_ctrl->has_waiting_delegator = 0;
     thrd_ctrl->has_waiting_dispatcher = 0;
-    rc = pthread_create(&(thrd_ctrl->thrd),
-                        NULL, rm_delegate_request, (void *)(cli_signature));
+    rc = pthread_create(&(thrd_ctrl->thrd), NULL, rm_delegate_request_thread,
+                        cli_signature);
     if (rc != 0) {
         return  ULFS_ERROR_THRDINIT;
     }
