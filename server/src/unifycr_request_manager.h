@@ -39,7 +39,7 @@ typedef struct {
     long length;
 } shm_meta_t; /*metadata format in the shared memory*/
 
-int rm_delegate_request(cli_signature_t *my_sig);
+void *rm_delegate_request_thread(void *arg);
 int rm_read_remote_data(int sock_id, int num);
 int rm_send_remote_requests(thrd_ctrl_t *thrd_ctrl,
                             int thrd_tag, long *tot_sz);

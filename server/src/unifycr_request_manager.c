@@ -208,13 +208,13 @@ int rm_send_remote_requests(thrd_ctrl_t *thrd_ctrl,
 * for the delegator thread's client. Each
 * delegator thread handles one connection to
 * one client-side rank.
-* @param my_sig: the signature of the delegator thread,
+* @param arg: the signature of the delegator thread,
 * marked by its client's app_id and the socket id.
-* @return success/error code
+* @return NULL
 */
-int rm_delegate_request(cli_signature_t *my_sig)
+void *rm_delegate_request_thread(void *arg)
 {
-    int rc = ULFS_SUCCESS;
+    cli_signature_t *my_sig = arg;
     int app_id = my_sig->app_id;
     int sock_id = my_sig->sock_id;
 
@@ -225,6 +225,8 @@ int rm_delegate_request(cli_signature_t *my_sig)
         (thrd_ctrl_t *)arraylist_get(thrd_list, thrd_id);
 
     while (1) {
+        int rc;
+
         pthread_mutex_lock(&thrd_ctrl->thrd_lock);
         thrd_ctrl->has_waiting_delegator = 1;
         if (thrd_ctrl->has_waiting_dispatcher == 1) {
@@ -243,17 +245,17 @@ int rm_delegate_request(cli_signature_t *my_sig)
                                      thrd_id, &tot_sz);
         if (rc != ULFS_SUCCESS) {
             pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
-            return rc;
+            return NULL;
         }
 
         rc = rm_receive_remote_message(app_id, sock_id, tot_sz);
         if (rc != 0) {
             pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
-            return rc;
+            return NULL;
         }
         pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
     }
-    return rc;
+    return NULL;
 }
 
 /**
