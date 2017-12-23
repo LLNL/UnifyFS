@@ -457,8 +457,8 @@ int meta_batch_get(int app_id, int client_id,
     }
 
     md->primary_index = unifycr_indexes[0];
-    bgrm = mdhimBGet(md, md->primary_index, unifycr_keys, unifycr_key_lens,
-                     2 * num, MDHIM_RANGE_BGET);
+    bgrm = mdhimBGet(md, md->primary_index, (void **)unifycr_keys,
+                     unifycr_key_lens, 2 * num, MDHIM_RANGE_BGET);
 
     int tot_num = 0;
     int dest_client, dest_app;
