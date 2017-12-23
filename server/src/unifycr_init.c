@@ -277,7 +277,7 @@ static int CountTasksPerNode(int rank, int numTasks)
 
             /*broadcast the rank_cnt and rank_set information to each
              * rank*/
-            int root_set_no;
+            int root_set_no = -1;
             for (i = 0; i < set_counter; i++) {
                 for (j = 0; j < rank_cnt[i]; j++) {
                     if (rank_set[i][j] != 0) {
@@ -303,11 +303,12 @@ static int CountTasksPerNode(int rank, int numTasks)
 
 
             /* root process set its own local rank set and rank_cnt*/
-            local_rank_lst = (int *)malloc(rank_cnt[root_set_no] * sizeof(int));
-            for (i = 0; i < rank_cnt[root_set_no]; i++) {
-                local_rank_lst[i] = rank_set[root_set_no][i];
+            if (root_set_no >= 0) {
+                local_rank_lst = malloc(rank_cnt[root_set_no] * sizeof(int));
+                for (i = 0; i < rank_cnt[root_set_no]; i++)
+                    local_rank_lst[i] = rank_set[root_set_no][i];
+                local_rank_cnt = rank_cnt[root_set_no];
             }
-            local_rank_cnt = rank_cnt[root_set_no];
 
             for (i = 0; i < set_counter; i++) {
                 free(rank_set[i]);
