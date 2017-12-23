@@ -795,22 +795,19 @@ int range_server_bget(struct mdhim_t *md, struct mdhim_bgetm_t *bgm, int source)
 
 	if (bgm->op == MDHIM_RANGE_BGET) {
 		values = malloc(sizeof(void *) * bgm->num_keys/2);
-		value_lens = (int32_t *)malloc(sizeof(int32_t) * bgm->num_keys/2);
+		value_lens = malloc(sizeof(int32_t) * bgm->num_keys/2);
 		memset(value_lens, 0, sizeof(int) * bgm->num_keys/2);
 
-		void **ret_keys =\
-				(void **)malloc(bgm->num_keys * sizeof(void *)/2);
-		int32_t *ret_key_lens =\
-				(int32_t *)malloc(bgm->num_keys * sizeof(int32_t));
+		void **ret_keys = malloc(bgm->num_keys * sizeof(char *)/2);
+		int32_t *ret_key_lens = malloc(bgm->num_keys * sizeof(int32_t));
 		memset(ret_key_lens, 0, sizeof(int) * bgm->num_keys/2);
 
 		int out_record_cnt = 0;
-		levedb_batch_ranges(index->mdhim_store->db_handle,\
-				bgm->keys, bgm->key_lens,\
-				&ret_keys, &ret_key_lens,\
-					&values, &value_lens,\
-						bgm->num_keys,\
-							&out_record_cnt);
+		levedb_batch_ranges(index->mdhim_store->db_handle,
+                                    (char **)bgm->keys, bgm->key_lens,
+                                    (char ***)&ret_keys, &ret_key_lens,
+                                    (char ***)&values, &value_lens,
+                                    bgm->num_keys, &out_record_cnt);
 
 		if (source != md->mdhim_rank) {
 			for (i = 0; i < bgm->num_keys; i++) {
