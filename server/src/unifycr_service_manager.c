@@ -214,7 +214,12 @@ void *sm_service_reads(void *ctx)
 
         }
 
-        cmd = *((int *)req_msg_buf);
+        /*
+         * Reinterpret memory type of req_msg_buf as an integer array
+         * to extract service command from message header.
+         */
+        union rmb { int *i; char *c; };
+        cmd = *(((union rmb)req_msg_buf).i);
         if (cmd == XFER_COMM_DATA)  {
             sm_decode_msg(req_msg_buf);
         }
