@@ -874,14 +874,12 @@ ssize_t UNIFYCR_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
     }
 }
 
-int UNIFYCR_WRAP(lio_listio)(int mode,
-                             struct aiocb *const aiocb_list[],
+int UNIFYCR_WRAP(lio_listio)(int mode, struct aiocb *const aiocb_list[],
                              int nitems, struct sigevent *sevp)
 {
 
     int ret = 0, i;
-    read_req_t *glb_read_reqs = (read_req_t *)malloc(nitems
-                                * sizeof(read_req_t));
+    read_req_t *glb_read_reqs = malloc(nitems * sizeof(read_req_t));
 
     for (i = 0; i < nitems; i++) {
         if (aiocb_list[i]->aio_lio_opcode != LIO_READ) {
@@ -889,7 +887,7 @@ int UNIFYCR_WRAP(lio_listio)(int mode,
             return -1;
         }
         glb_read_reqs[i].fid = aiocb_list[i]->aio_fildes;
-        glb_read_reqs[i].buf = aiocb_list[i]->aio_buf;
+        glb_read_reqs[i].buf = (char *)aiocb_list[i]->aio_buf;
         glb_read_reqs[i].length = aiocb_list[i]->aio_nbytes;
         glb_read_reqs[i].offset = aiocb_list[i]->aio_offset;
 
