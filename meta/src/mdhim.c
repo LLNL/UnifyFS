@@ -706,15 +706,14 @@ struct mdhim_bgetrm_t *mdhimBGet(struct mdhim_t *md, struct index_t *index,
 		//Get the number of keys/values we received
 		plen = 0;
 		while (bgrm_head) {
-			for (i = 0; i < bgrm_head->num_keys; i++) {	      
-				plen++;					
-			}
-			
+			for (i = 0; i < bgrm_head->num_keys; i++)
+				plen++;
 			bgrm_head = bgrm_head->next;
 		}
 
 		if (plen > MAX_BULK_OPS) {
-			printf("plen is %ld, MAX_BULK_OPS is %ld\n", plen, MAX_BULK_OPS);
+			printf("plen is %d, MAX_BULK_OPS is %d\n", plen,
+			       MAX_BULK_OPS);
 			fflush(stdout);
 			mlog(MDHIM_CLIENT_CRIT, "MDHIM Rank: %d - " 
 			     "Too many bulk operations would be performed " 
@@ -729,7 +728,7 @@ struct mdhim_bgetrm_t *mdhimBGet(struct mdhim_t *md, struct index_t *index,
 		//Initialize the primary keys array and key lens array
 		memset(primary_keys, 0, sizeof(void *) * plen);
 		memset(primary_key_lens, 0, sizeof(int) * plen);
-		
+
 		//Get the primary keys from the previously received messages' values
 		plen = 0;
 		while (bgrm_head) {
@@ -786,25 +785,27 @@ struct mdhim_bgetrm_t *mdhimBGet(struct mdhim_t *md, struct index_t *index,
  * @param op           the operation to perform (i.e., MDHIM_GET_NEXT or MDHIM_GET_PREV)
  * @return mdhim_bgetrm_t * or NULL on error
  */
-struct mdhim_bgetrm_t *mdhimBGetOp(struct mdhim_t *md, struct index_t *index, 
-				   void *key, int key_len, 
-				   int num_records, int op) {
+struct mdhim_bgetrm_t *mdhimBGetOp(struct mdhim_t *md, struct index_t *index,
+				   void *key, int key_len,
+				   int num_records, int op)
+{
 	void **keys;
 	int *key_lens;
 	struct mdhim_bgetrm_t *bgrm_head;
-	printf("num_records is is %ld, MAX_BULK_OPS is %ld\n", num_records, MAX_BULK_OPS);
+	printf("num_records is is %d, MAX_BULK_OPS is %d\n", num_records,
+	       MAX_BULK_OPS);
 	fflush(stdout);
 
 	if (num_records > MAX_BULK_OPS) {
-		mlog(MDHIM_CLIENT_CRIT, "MDHIM Rank: %d - " 
-		     "To many bulk operations requested in mdhimBGetOp", 
-		     md->mdhim_rank);
+		mlog(MDHIM_CLIENT_CRIT, "MDHIM Rank: %d - "
+		     "To many bulk operations requested in %s",
+		     md->mdhim_rank, __func__);
 		return NULL;
 	}
 
 	if (op == MDHIM_GET_EQ || op == MDHIM_GET_PRIMARY_EQ) {
-		mlog(MDHIM_CLIENT_CRIT, "MDHIM Rank: %d - " 
-		     "Invalid op specified for mdhimGet", 
+		mlog(MDHIM_CLIENT_CRIT, "MDHIM Rank: %d - "
+		     "Invalid op specified for mdhimGet",
 		     md->mdhim_rank);
 		return NULL;
 	}
