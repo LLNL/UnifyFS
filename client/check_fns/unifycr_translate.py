@@ -47,9 +47,6 @@ def write_gotcha_file(filename, func_list, modulename):
         for function in func_list:
                 f.write(function.macro_def + "(" + function.name + ", " + function.ret_type + 
                         "," " (" + function.params[0] + "));" + "\n") 
-        
-        # get number of functions we are wrapping for gotcha struct
-	f.write("\n#define NFUNCS " + str(len(func_list)) + "\n\n")
 
 	# write map struct
 	f.write("struct gotcha_binding_t wrap_" + modulename + "[] = {\n")
@@ -57,7 +54,10 @@ def write_gotcha_file(filename, func_list, modulename):
 		f.write("\t{ " + function.name_quote + ", " + function.wrapper + ", &" + function.wrapee + " },\n")
 	f.write("};\n")
 
-        # close struct and file
+	# define number of functions we are wrapping for gotcha struct
+	f.write("\n#define GOTCHA_NFUNCS (sizeof(wrap_unifycr_list) / sizeof(wrap_unifycr_list[0]))\n")
+
+	# close struct and file
 	f.close()
 
 def main(modulename):

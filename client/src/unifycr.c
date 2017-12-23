@@ -1684,13 +1684,13 @@ static int unifycr_init(int rank)
 #ifdef UNIFYCR_GOTCHA
         enum gotcha_error_t result;
 
-        result = gotcha_wrap(wrap_unifycr_list, NFUNCS, "unifycr");
+        result = gotcha_wrap(wrap_unifycr_list, GOTCHA_NFUNCS, "unifycr");
         if (result != GOTCHA_SUCCESS) {
             debug("gotcha_wrap returned %d\n", (int) result);
         }
 
         int i;
-        for (i = 0; i < NFUNCS; i++) {
+        for (i = 0; i < GOTCHA_NFUNCS; i++) {
             if (*(void **)(wrap_unifycr_list[i].function_address_pointer) == 0) {
                 printf("This function name failed to be wrapped: %s\n",
                        wrap_unifycr_list[i].name);

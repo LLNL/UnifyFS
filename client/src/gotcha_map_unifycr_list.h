@@ -88,8 +88,6 @@ UNIFYCR_DEF(getwc, wint_t, (FILE *stream));
 UNIFYCR_DEF(putwc, wint_t, (wchar_t c, FILE *stream));
 UNIFYCR_DEF(ungetwc, wint_t, (wint_t c, FILE *stream));
 
-#define NFUNCS 79
-
 struct gotcha_binding_t wrap_unifycr_list[] = {
     { "access", UNIFYCR_WRAP(access), &UNIFYCR_REAL(access) },
     { "mkdir", UNIFYCR_WRAP(mkdir), &UNIFYCR_REAL(mkdir) },
@@ -168,3 +166,5 @@ struct gotcha_binding_t wrap_unifycr_list[] = {
     { "putwc", UNIFYCR_WRAP(putwc), &UNIFYCR_REAL(putwc) },
     { "ungetwc", UNIFYCR_WRAP(ungetwc), &UNIFYCR_REAL(ungetwc) },
 };
+
+#define GOTCHA_NFUNCS (sizeof(wrap_unifycr_list) / sizeof(wrap_unifycr_list[0]))
