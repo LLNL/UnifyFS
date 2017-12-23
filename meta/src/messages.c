@@ -982,9 +982,9 @@ int pack_bput_message(struct mdhim_t *md, struct mdhim_bputm_t *bpm, void **send
 					*sendbuf, mesg_size, &mesg_idx, md->mdhim_comm);
         }
         gettimeofday(&packmpiputend, NULL);
-				packmpiputtime += 1000000 * (packmpiputend.tv_sec - \
-					packmpiputstart.tv_sec) + packmpiputend.tv_usec - \ 
-						packmpiputstart.tv_usec;
+        packmpiputtime += 1000000 *
+                          (packmpiputend.tv_sec - packmpiputstart.tv_sec) +
+                          packmpiputend.tv_usec - packmpiputstart.tv_usec;
 
 	// If the pack did not succeed then log the error and return the error code
 	if ( return_code != MPI_SUCCESS ) {
