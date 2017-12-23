@@ -433,12 +433,6 @@ int rm_process_received_msg(int app_id, int sock_id,
         app_config_t *app_config =
             (app_config_t *)arraylist_get(app_config_list, app_id);
         int client_id = app_config->client_ranks[sock_id];
-        int dbg_rank = app_config->dbg_ranks[sock_id];
-
-        int thrd_id = app_config->thrd_idxs[sock_id];
-        // print_recv_msg(app_id, client_id, dbg_rank,
-        //thrd_id, tmp_sh_msg);
-
 
         recv_cursor += sizeof(recv_msg_t);
         *ptr_size += sizeof(shm_meta_t);
