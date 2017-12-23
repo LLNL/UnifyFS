@@ -683,7 +683,8 @@ static void vmlog(int flags, const char *fmt, va_list ap)
      * 2: log it to the log file
      */
     if (mst.logfd >= 0) {
-        (void) write(mst.logfd, b, tlen);
+        if (write(mst.logfd, b, tlen) != 0)
+            fprintf(stderr, "mlog: Failed to write(): %s", strerror(errno));
     }
     /*
      * 3: log it to the UCONs (UDP console)  [mst.oflags' MLOG_UCON_ON bit
