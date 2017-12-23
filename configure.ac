@@ -164,9 +164,7 @@ CP_WRAPPERS+=",-wrap,rename"
 CP_WRAPPERS+=",-wrap,truncate"
 CP_WRAPPERS+=",-wrap,stat"
 CP_WRAPPERS+=",-wrap,__lxstat"
-CP_WRAPPERS+=",-wrap,__lxstat64"
 CP_WRAPPERS+=",-wrap,__xstat"
-CP_WRAPPERS+=",-wrap,__xstat64"
 
 CP_WRAPPERS+=",-wrap,creat"
 CP_WRAPPERS+=",-wrap,creat64"
@@ -192,7 +190,6 @@ CP_WRAPPERS+=",-wrap,mmap64"
 CP_WRAPPERS+=",-wrap,munmap"
 CP_WRAPPERS+=",-wrap,msync"
 CP_WRAPPERS+=",-wrap,__fxstat"
-CP_WRAPPERS+=",-wrap,__fxstat64"
 CP_WRAPPERS+=",-wrap,close"
 
 # FILE* functions
