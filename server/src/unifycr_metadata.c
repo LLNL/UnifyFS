@@ -530,8 +530,6 @@ void print_bget_indices(int app_id, int cli_id,
     int src_fid;
     int dbg_rank;
 
-//  LOG(LOG_DBG, "indices: app_id:%d, cli_id:%d, tot_num:%d\n",
-//    app_id, cli_id, tot_num);
     for (i = 0; i < tot_num;  i++) {
         dest_offset = index_set[i].dest_offset;
         dest_delegator_rank = index_set[i].dest_delegator_rank;
@@ -546,11 +544,11 @@ void print_bget_indices(int app_id, int cli_id,
         src_fid = index_set[i].src_fid;
         dbg_rank = index_set[i].src_dbg_rank;
 
-        LOG(LOG_DBG, "index:dbg_rank:%d, dest_offset:%ld, \
-            dest_del_rank:%d, dest_cli_id:%d, dest_app_id:%d, \
-            length:%ld, src_app_id:%d, src_cli_id:%d, src_offset:%ld, \
-            src_del_rank:%d, \
-            src_fid:%d, num:%ld\n", dbg_rank, dest_offset,
+        LOG(LOG_DBG, "index:dbg_rank:%d, dest_offset:%ld, "
+            "dest_del_rank:%d, dest_cli_id:%d, dest_app_id:%d, "
+            "length:%ld, src_app_id:%d, src_cli_id:%d, src_offset:%ld, "
+            "src_del_rank:%d, "
+            "src_fid:%d, num:%d\n", dbg_rank, dest_offset,
             dest_delegator_rank, dest_client_id,
             dest_app_id, length, src_app_id, src_cli_id,
             src_offset, src_delegator_rank,

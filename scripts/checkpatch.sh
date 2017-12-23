@@ -20,6 +20,7 @@ checkpatch_ignore+=",CODE_INDENT"       # Don't require tabs for indentation
 checkpatch_ignore+=",MISSING_SIGN_OFF"  # Signed-off-by: line is optional
 checkpatch_ignore+=",FILE_PATH_CHANGES" # Don't nag about updating MAINTAINERS
 checkpatch_ignore+=",CONST_STRUCT"      # Don't nag about const structs
+checkpatch_ignore+=",SPLIT_STRING"      # Allow long strings to be split
 
 checkpatch_cmd+=" --ignore $checkpatch_ignore"
 
