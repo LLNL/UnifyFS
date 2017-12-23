@@ -827,15 +827,17 @@ ssize_t UNIFYCR_WRAP(write)(int fd, const void *buf, size_t count)
                 errno = unifycr_err_map_to_errno(write_rc);
                 return (ssize_t) (-1);
             }
+            ret = count;
         } else {
             fd += unifycr_fd_limit;
-            pwrite(fd, buf, count, filedesc->pos);
+            ret = pwrite(fd, buf, count, filedesc->pos);
+            /* pwrite() will set errno on error for us */
+            if (ret < 0)
+                return -1;
         }
         /* update file position */
-        filedesc->pos += count;
+        filedesc->pos += ret;
 
-        /* return number of bytes read */
-        ret = count;
     } else {
         MAP_OR_FAIL(write);
         ret = UNIFYCR_REAL(write)(fd, buf, count);
