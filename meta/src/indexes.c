@@ -1382,12 +1382,11 @@ int get_stat_flush_global(struct mdhim_t *md, struct index_t *index) {
 		} else {
 			num_items = 0;
 		}
-		if ((ret = is_float_key(index->key_type)) == 1 || \ 
-				index->key_type == MDHIM_UNIFYCR_KEY) {
-			sendsize = num_items * sizeof(struct mdhim_db_fstat);
-		} else {
-			sendsize = num_items * sizeof(struct mdhim_db_istat);
-		}
+                ret = is_float_key(index->key_type);
+                if (ret == 1 || index->key_type == MDHIM_UNIFYCR_KEY)
+                    sendsize = num_items * sizeof(struct mdhim_db_fstat);
+                else
+                    sendsize = num_items * sizeof(struct mdhim_db_istat);
 	}
 
 	if (index->myinfo.rangesrv_num > 0) {	
