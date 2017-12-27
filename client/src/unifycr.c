@@ -279,9 +279,46 @@ int unifycr_err_map_to_errno(int rc)
         return EBADF;
     case UNIFYCR_ERR_ISDIR:
         return EISDIR;
-    default:
-        return EIO;
+    case UNIFYCR_ERR_NOMEM:
+        return ENOMEM;
     }
+    return EIO;
+}
+
+/* given an errno error code, return corresponding UnifyCR error code */
+int unifycr_errno_map_to_err(int rc)
+{
+    switch (rc) {
+    case 0:
+        return UNIFYCR_SUCCESS;
+    case ENOSPC:
+        return UNIFYCR_ERR_NOSPC;
+    case EIO:
+        return UNIFYCR_ERR_IO;
+    case ENAMETOOLONG:
+        return UNIFYCR_ERR_NAMETOOLONG;
+    case ENOENT:
+        return UNIFYCR_ERR_NOENT;
+    case EEXIST:
+        return UNIFYCR_ERR_EXIST;
+    case ENOTDIR:
+        return UNIFYCR_ERR_NOTDIR;
+    case ENFILE:
+        return UNIFYCR_ERR_NFILE;
+    case EINVAL:
+        return UNIFYCR_ERR_INVAL;
+    case EOVERFLOW:
+        return UNIFYCR_ERR_OVERFLOW;
+    case EFBIG:
+        return UNIFYCR_ERR_FBIG;
+    case EBADF:
+        return UNIFYCR_ERR_BADF;
+    case EISDIR:
+        return UNIFYCR_ERR_ISDIR;
+    case ENOMEM:
+        return UNIFYCR_ERR_NOMEM;
+    }
+    return UNIFYCR_FAILURE;
 }
 
 /* returns 1 if two input parameters will overflow their type when

@@ -264,7 +264,8 @@ static int unifycr_chunk_read(
         //MAP_OR_FAIL(pread);
         off_t spill_offset = unifycr_compute_spill_offset(meta, chunk_id, chunk_offset);
         ssize_t rc = pread(unifycr_spilloverblock, buf, count, spill_offset);
-        /* TODO: check return code for errors */
+        if (rc < 0)
+            return unifycr_errno_map_to_err(rc);
     } else {
         /* unknown chunk type */
         debug("unknown chunk type in read\n");
