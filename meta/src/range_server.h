@@ -96,5 +96,6 @@ int levedb_batch_ranges(void *dbh, char **key, int *key_len,\
 		char ***out_key, int **out_key_len,\
 			char ***out_val, int **out_val_len,\
 				int tot_records, int *out_records_cnt);
+int unifycr_compare(const char *a, const char *b);
 
 #endif
