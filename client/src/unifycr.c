@@ -1261,7 +1261,7 @@ int unifycr_fid_unlink(int fid)
 /* initialize our global pointers into the given superblock */
 static void *unifycr_init_pointers(void *superblock)
 {
-    char *ptr = (char *) superblock;
+    char *ptr = (char *)superblock;
 
     /* jump over header (right now just a uint32_t to record
      * magic value of 0xdeadbeef if initialized */
@@ -1272,21 +1272,21 @@ static void *unifycr_init_pointers(void *superblock)
     ptr += unifycr_stack_bytes(unifycr_max_files);
 
     /* record list of file names */
-    unifycr_filelist = (unifycr_filename_t *) ptr;
+    unifycr_filelist = (unifycr_filename_t *)ptr;
     ptr += unifycr_max_files * sizeof(unifycr_filename_t);
 
     /* array of file meta data structures */
-    unifycr_filemetas = (unifycr_filemeta_t *) ptr;
+    unifycr_filemetas = (unifycr_filemeta_t *)ptr;
     ptr += unifycr_max_files * sizeof(unifycr_filemeta_t);
 
     /* array of chunk meta data strucutres for each file */
-    unifycr_chunkmetas = (unifycr_chunkmeta_t *) ptr;
+    unifycr_chunkmetas = (unifycr_chunkmeta_t *)ptr;
     ptr += unifycr_max_files * unifycr_max_chunks * sizeof(unifycr_chunkmeta_t);
 
-    if (unifycr_use_spillover) {
-        ptr += unifycr_max_files * unifycr_spillover_max_chunks * sizeof(
-                   unifycr_chunkmeta_t);
-    }
+    if (unifycr_use_spillover)
+        ptr += unifycr_max_files * unifycr_spillover_max_chunks *
+               sizeof(unifycr_chunkmeta_t);
+
     /* stack to manage free memory data chunks */
     free_chunk_stack = ptr;
     ptr += unifycr_stack_bytes(unifycr_max_chunks);
@@ -1300,12 +1300,11 @@ static void *unifycr_init_pointers(void *superblock)
     /* Only set this up if we're using memfs */
     if (unifycr_use_memfs) {
         /* round ptr up to start of next page */
-        unsigned long long ull_ptr  = (unsigned long long) ptr;
-        unsigned long long ull_page = (unsigned long long) unifycr_page_size;
+        unsigned long long ull_ptr  = (unsigned long long)ptr;
+        unsigned long long ull_page = (unsigned long long)unifycr_page_size;
         unsigned long long num_pages = ull_ptr / ull_page;
-        if (ull_ptr > num_pages * ull_page) {
+        if (ull_ptr > num_pages * ull_page)
             ptr = (char *)((num_pages + 1) * ull_page);
-        }
 
         /* pointer to start of memory data chunks */
         unifycr_chunks = ptr;
@@ -1316,7 +1315,7 @@ static void *unifycr_init_pointers(void *superblock)
 
     /* pointer to the log-structured metadata structures*/
     if (fs_type == UNIFYCR_LOG) {
-        unifycr_indices.ptr_num_entries = (unsigned long *)ptr;
+        unifycr_indices.ptr_num_entries = (off_t *)ptr;
 
         ptr += unifycr_page_size;
         unifycr_indices.index_entry = (unifycr_index_t *)ptr;
@@ -1324,7 +1323,7 @@ static void *unifycr_init_pointers(void *superblock)
 
         /*data structures  to record the global metadata*/
         ptr += unifycr_max_index_entries * sizeof(unifycr_index_t);
-        unifycr_fattrs.ptr_num_entries = (unsigned long *)ptr;
+        unifycr_fattrs.ptr_num_entries = (off_t *)ptr;
         ptr += unifycr_page_size;
         unifycr_fattrs.meta_entry = (unifycr_fattr_t *)ptr;
     }
