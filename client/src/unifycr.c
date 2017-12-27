@@ -1992,8 +1992,7 @@ int unifycr_unmount()
         char cmd_buf[GEN_STR_LEN] = {0};
         memcpy(cmd_buf, &cmd, sizeof(int));
 
-        int res = __real_write(cmd_fd.fd,
-                               cmd_buf, sizeof(cmd_buf));
+        int res = __real_write(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
         if (res != 0) {
             int bytes_read = 0;
             int rc;
@@ -2030,11 +2029,9 @@ int unifycr_unmount()
         } else {
             return UNIFYCR_FAILURE;
         }
-
-    } else {
-        return UNIFYCR_FAILURE;
     }
 
+    return UNIFYCR_FAILURE;
 }
 
 /* mount memfs at some prefix location */
