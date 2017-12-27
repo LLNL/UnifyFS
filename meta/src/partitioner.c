@@ -95,17 +95,8 @@ unsigned long * get_meta_pair(void *key, uint32_t key_len) {
 }
 
 uint64_t get_byte_num(void *key, uint32_t key_len) {
-	int i;
-	unsigned char val;
 	uint64_t byte_num;
-	
-	byte_num = 0;
-	//Iterate through each character to perform the algorithm mentioned above
-/*	for (i = 0; i < key_len; i++) {
-	  val = (int)(((char *) key)[i]);       
-		byte_num += val * powl(2, i);
-	}
-*/
+
 	byte_num = *((long *)(((char *)key)+sizeof(long)));
 	return byte_num;
 }
@@ -969,13 +960,10 @@ rangesrv_list *get_range_servers_from_range(struct mdhim_t *md, struct index_t *
 					    void *start_key, void *end_key, int key_len) {
 	//The number that maps a key to range server (dependent on key type)
 
-	int slice_num, cur_slice, start_slice, end_slice;
+	int start_slice, end_slice;
 	//The range server number that we return
 	rangesrv_info *ret_rp;
 	rangesrv_list *rl;
-	int float_type = 0;
-	long double fstat = 0;
-	uint64_t istat = 0;
 
 	//If we don't have any stats info, then return null
 	if (!index->stats) {
@@ -1006,7 +994,7 @@ rangesrv_list *get_range_servers_from_range(struct mdhim_t *md, struct index_t *
 	rl = NULL;
 
 	for (i = start_slice; i <= end_slice; i++) {
-		struct mdhim_stat *cur_stat, *new_stat;
+		struct mdhim_stat *cur_stat;
 		gettimeofday(&rangehashstart, NULL);
 		HASH_FIND_INT(index->stats, &i, cur_stat);
 		gettimeofday(&rangehashend, NULL);
@@ -1028,7 +1016,7 @@ rangesrv_list *get_range_servers_from_range(struct mdhim_t *md, struct index_t *
 	}
 
 	for (i = start_slice; i <= end_slice; i++) {
-		struct mdhim_stat *cur_stat, *new_stat;
+		struct mdhim_stat *cur_stat;
 		gettimeofday(&rangehashstart, NULL);
 		HASH_FIND_INT(index->stats, &i, cur_stat);
 		gettimeofday(&rangehashend, NULL);
