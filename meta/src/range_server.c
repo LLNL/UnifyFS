@@ -150,7 +150,6 @@ int send_locally_or_remote(struct mdhim_t *md, int dest, void *message) {
 		msg_req = malloc(sizeof(MPI_Request *));
 		sendbuf = malloc(sizeof(void *));
 		sizebuf = malloc(sizeof(int));
-		struct mdhim_stat *ttmp, *stat;
 		ret = send_client_response(md, dest, message, sizebuf, 
 					   sendbuf, size_req, msg_req);
 
