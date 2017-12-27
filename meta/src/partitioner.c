@@ -573,18 +573,7 @@ int get_slice_from_fstat(struct mdhim_t *md, struct index_t *index,
 
 	switch(op) {
 	case MDHIM_GET_NEXT:
-//			printf("max is %lf, fstat is %lf, key is %ld\n", \
-				*(long double *)cur_stat->max, fstat, cur_stat->key);
-//			fflush(stdout);
-/*		if (cur_stat && *(long double *)cur_stat->max > fstat) {
-			slice_num = cur_slice;
-			goto done;
-		} else {
-			new_stat = get_next_slice_stat(md, index, cur_slice);
-			goto new_stat;
-		}
-*/
-			slice_num = cur_slice;
+		slice_num = cur_slice;
 		break;
 	case MDHIM_GET_PREV:
 		if (cur_stat && *(long double *)cur_stat->min < fstat) {
