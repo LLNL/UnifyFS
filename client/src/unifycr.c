@@ -847,7 +847,7 @@ int unifycr_fid_extend(int fid, off_t length)
     unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
 
     /* determine file storage type */
-    if (meta->storage == FILE_STORAGE_FIXED_CHUNK |
+    if (meta->storage == FILE_STORAGE_FIXED_CHUNK ||
         meta->storage == FILE_STORAGE_LOGIO) {
         /* file stored in fixed-size chunks */
         rc = unifycr_fid_store_fixed_extend(fid, meta, length);
