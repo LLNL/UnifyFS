@@ -38,6 +38,7 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <ftw.h>
 #include "mdhim.h"
 #include "range_server.h"
