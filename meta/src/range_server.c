@@ -1383,7 +1383,7 @@ int range_server_add_oreq(struct mdhim_t *md, MPI_Request *req, void *msg) {
 int range_server_clean_oreqs(struct mdhim_t *md) {
 	out_req *item;
 	out_req *t;
-	int ret;
+	int ret = MDHIM_SUCCESS;
 	int flag = 0;
 	MPI_Status status;
 
@@ -1398,6 +1398,11 @@ int range_server_clean_oreqs(struct mdhim_t *md) {
 		pthread_mutex_lock(md->mdhim_comm_lock);
 		ret = MPI_Test((MPI_Request *)item->req, &flag, &status); 
 		pthread_mutex_unlock(md->mdhim_comm_lock);
+
+		if (ret != MPI_SUCCESS) {
+			ret = MDHIM_ERROR;
+			break;
+		}
 
 		if (!flag) {
 			item = item->next;
@@ -1430,7 +1435,7 @@ int range_server_clean_oreqs(struct mdhim_t *md) {
 
 	pthread_mutex_unlock(md->mdhim_rs->out_req_mutex);
 
-	return MDHIM_SUCCESS;
+	return ret;
 }
 
 /**
