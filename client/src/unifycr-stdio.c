@@ -1677,13 +1677,10 @@ int UNIFYCR_WRAP(fflush)(FILE *stream)
 
     /* otherwise, check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
-        /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
-
         /* TODO: check that stream is active */
-
         /* flush output on stream */
         int rc = unifycr_stream_flush(stream);
+
         if (rc != UNIFYCR_SUCCESS) {
             /* ERROR: flush sets error indicator and errno */
             return EOF;
@@ -2927,7 +2924,7 @@ __sccl(tab, fmt)
 char *tab;
 const u_char *fmt;
 {
-    int c, n, v, i;
+    int c, n, v;
 
     /* first `clear' the whole table */
     c = *fmt++;     /* first char hat => negated scanset */
