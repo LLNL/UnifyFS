@@ -2072,142 +2072,6 @@ int unifycr_unmount(void)
     return UNIFYCR_FAILURE;
 }
 
-/* mount memfs at some prefix location */
-int unifycrfs_mount(const char prefix[], size_t size, int rank)
-{
-    char *env = getenv("UNIFYCR_USE_SINGLE_SHM");
-
-    unifycr_mount_prefix = strdup(prefix);
-    unifycr_mount_prefixlen = strlen(unifycr_mount_prefix);
-
-    if (env) {
-        int val = atoi(env);
-
-        if (val != 0)
-            unifycr_use_single_shm = 1;
-    }
-
-    if (unifycr_use_single_shm)
-        unifycr_mount_shmget_key = UNIFYCR_SUPERBLOCK_KEY + rank;
-    else
-        unifycr_mount_shmget_key = IPC_PRIVATE;
-
-    if (fs_type == UNIFYCR_LOG || fs_type == UNIFYCR_STRIPE) {
-        int rc = CountTasksPerNode(rank, size);
-
-        if (rc < 0) {
-            debug("rank:%d, cannot get the local rank list.", dbg_rank);
-            return -1;
-        }
-
-        local_rank_idx = find_rank_idx(rank,
-                                       local_rank_lst, local_rank_cnt);
-
-        /*
-         * unifycr_mount_shmget_key marks the start of
-         * the superblock shared memory of each rank
-         * each process has three types of shared memory:
-         * request memory, recv memory and superblock
-         * memory. We set unifycr_mount_shmget_key in
-         * this way to avoid different ranks conflicting
-         * on the same name in shm_open.
-         */
-        unifycr_mount_shmget_key = local_rank_idx;
-
-    }
-
-    /* initialize our library */
-    unifycr_init(rank);
-
-    if (fs_type == UNIFYCR_LOG || fs_type == UNIFYCR_STRIPE) {
-        char host_name[UNIFYCR_MAX_FILENAME] = {0};
-        int rc = gethostname(host_name, UNIFYCR_MAX_FILENAME);
-
-        if (rc != 0) {
-            debug("rank:%d, fail to get the host name.", dbg_rank);
-            return UNIFYCR_FAILURE;
-        }
-
-        /* get the number of collocated delegators*/
-        if (local_rank_idx == 0) {
-            rc = unifycr_init_socket(0, 1, 1);
-            if (rc < 0)
-                return -1;
-
-            local_del_cnt = get_del_cnt();
-            if (local_del_cnt > 0) {
-                int i;
-
-                for (i = 0; i < local_rank_cnt; i++) {
-                    if (local_rank_lst[i] != rank) {
-                        int rc = MPI_Send(&local_del_cnt, 1, MPI_INT,
-                                          local_rank_lst[i], 0, MPI_COMM_WORLD);
-                    }
-                }
-            } else {
-                debug("rank:%d, fail to get the delegator count.", dbg_rank);
-                return -1;
-            }
-
-        } else {
-            MPI_Status status;
-            int rc = MPI_Recv(&local_del_cnt, 1, MPI_INT, local_rank_lst[0],
-                              0, MPI_COMM_WORLD, &status);
-            if (local_del_cnt < 0 || rc < 0) {
-                debug("rank:%d, fail to initialize socket.", dbg_rank);
-                return UNIFYCR_FAILURE;
-                return -1;
-            } else  {
-                int rc = unifycr_init_socket(local_rank_idx,
-                                             local_rank_cnt, local_del_cnt);
-                if (rc < 0) {
-                    debug("rank:%d, fail to initialize socket.", dbg_rank);
-                    return UNIFYCR_FAILURE;
-                    return -1;
-                }
-            }
-        }
-
-        /*connect to server-side delegators*/
-
-        rc = unifycr_init_req_shm(local_rank_idx, app_id);
-        if (rc < 0) {
-            debug("rank:%d, fail to init shared request memory.", dbg_rank);
-            return UNIFYCR_FAILURE;
-        }
-
-        rc = unifycr_init_recv_shm(local_rank_idx, app_id);
-        if (rc < 0) {
-            debug("rank:%d, fail to init shared receive memory.", dbg_rank);
-            return UNIFYCR_FAILURE;
-        }
-
-        rc = unifycr_sync_to_del();
-        if (rc < 0) {
-            debug("rank:%d, fail to convey information to the delegator.",
-                  dbg_rank);
-            return UNIFYCR_FAILURE;
-        }
-
-    }
-    /* add mount point as a new directory in the file list */
-    if (unifycr_get_fid_from_path(prefix) >= 0) {
-        /* we can't mount this location, because it already exists */
-        errno = EEXIST;
-        return -1;
-    } else {
-        /* claim an entry in our file list */
-        int fid = unifycr_fid_create_directory(prefix);
-
-        if (fid < 0) {
-            /* if there was an error, return it */
-            return fid;
-        }
-    }
-
-    return 0;
-}
-
 /**
  * Transfer the client-side context information to the corresponding
  * delegator on the server side.
@@ -2747,6 +2611,143 @@ static int CountTasksPerNode(int rank, int numTasks)
     } else {
         debug("number of tasks is smaller than 0");
         return -1;
+    }
+
+    return 0;
+}
+
+
+/* mount memfs at some prefix location */
+int unifycrfs_mount(const char prefix[], size_t size, int rank)
+{
+    char *env = getenv("UNIFYCR_USE_SINGLE_SHM");
+
+    unifycr_mount_prefix = strdup(prefix);
+    unifycr_mount_prefixlen = strlen(unifycr_mount_prefix);
+
+    if (env) {
+        int val = atoi(env);
+
+        if (val != 0)
+            unifycr_use_single_shm = 1;
+    }
+
+    if (unifycr_use_single_shm)
+        unifycr_mount_shmget_key = UNIFYCR_SUPERBLOCK_KEY + rank;
+    else
+        unifycr_mount_shmget_key = IPC_PRIVATE;
+
+    if (fs_type == UNIFYCR_LOG || fs_type == UNIFYCR_STRIPE) {
+        int rc = CountTasksPerNode(rank, size);
+
+        if (rc < 0) {
+            debug("rank:%d, cannot get the local rank list.", dbg_rank);
+            return -1;
+        }
+
+        local_rank_idx = find_rank_idx(rank,
+                                       local_rank_lst, local_rank_cnt);
+
+        /*
+         * unifycr_mount_shmget_key marks the start of
+         * the superblock shared memory of each rank
+         * each process has three types of shared memory:
+         * request memory, recv memory and superblock
+         * memory. We set unifycr_mount_shmget_key in
+         * this way to avoid different ranks conflicting
+         * on the same name in shm_open.
+         */
+        unifycr_mount_shmget_key = local_rank_idx;
+
+    }
+
+    /* initialize our library */
+    unifycr_init(rank);
+
+    if (fs_type == UNIFYCR_LOG || fs_type == UNIFYCR_STRIPE) {
+        char host_name[UNIFYCR_MAX_FILENAME] = {0};
+        int rc = gethostname(host_name, UNIFYCR_MAX_FILENAME);
+
+        if (rc != 0) {
+            debug("rank:%d, fail to get the host name.", dbg_rank);
+            return UNIFYCR_FAILURE;
+        }
+
+        /* get the number of collocated delegators*/
+        if (local_rank_idx == 0) {
+            rc = unifycr_init_socket(0, 1, 1);
+            if (rc < 0)
+                return -1;
+
+            local_del_cnt = get_del_cnt();
+            if (local_del_cnt > 0) {
+                int i;
+
+                for (i = 0; i < local_rank_cnt; i++) {
+                    if (local_rank_lst[i] != rank) {
+                        int rc = MPI_Send(&local_del_cnt, 1, MPI_INT,
+                                          local_rank_lst[i], 0, MPI_COMM_WORLD);
+                    }
+                }
+            } else {
+                debug("rank:%d, fail to get the delegator count.", dbg_rank);
+                return -1;
+            }
+
+        } else {
+            MPI_Status status;
+            int rc = MPI_Recv(&local_del_cnt, 1, MPI_INT, local_rank_lst[0],
+                              0, MPI_COMM_WORLD, &status);
+            if (local_del_cnt < 0 || rc < 0) {
+                debug("rank:%d, fail to initialize socket.", dbg_rank);
+                return UNIFYCR_FAILURE;
+                return -1;
+            } else  {
+                int rc = unifycr_init_socket(local_rank_idx,
+                                             local_rank_cnt, local_del_cnt);
+                if (rc < 0) {
+                    debug("rank:%d, fail to initialize socket.", dbg_rank);
+                    return UNIFYCR_FAILURE;
+                    return -1;
+                }
+            }
+        }
+
+        /*connect to server-side delegators*/
+
+        rc = unifycr_init_req_shm(local_rank_idx, app_id);
+        if (rc < 0) {
+            debug("rank:%d, fail to init shared request memory.", dbg_rank);
+            return UNIFYCR_FAILURE;
+        }
+
+        rc = unifycr_init_recv_shm(local_rank_idx, app_id);
+        if (rc < 0) {
+            debug("rank:%d, fail to init shared receive memory.", dbg_rank);
+            return UNIFYCR_FAILURE;
+        }
+
+        rc = unifycr_sync_to_del();
+        if (rc < 0) {
+            debug("rank:%d, fail to convey information to the delegator.",
+                  dbg_rank);
+            return UNIFYCR_FAILURE;
+        }
+
+    }
+    /* add mount point as a new directory in the file list */
+    if (unifycr_get_fid_from_path(prefix) >= 0) {
+        /* we can't mount this location, because it already exists */
+        errno = EEXIST;
+        return -1;
+    } else {
+        /* claim an entry in our file list */
+        int fid = unifycr_fid_create_directory(prefix);
+
+        if (fid < 0) {
+            /* if there was an error, return it */
+            return fid;
+        }
     }
 
     return 0;
