@@ -479,9 +479,6 @@ struct mdhim_bgetrm_t *_bget_range_records(struct mdhim_t *md, struct index_t *i
 	calrangetime+=1000000*(confgetstart.tv_sec-localgetstart.tv_sec)+\
 		confgetstart.tv_usec-localgetstart.tv_usec;
 	while (rl) {
-//		printf("rl->ri's addr is %x, rank is %d, first_key fid is %ld, first_key offset is %ld \n", \
-				rl->ri, rl->ri->rank, *(((long *)rl->ri->first_key)),  *(((long *)rl->ri->first_key)+1));
-//		fflush(stdout);
 		if (rl->ri->rank != md->mdhim_rank) {
 			//Set the message in the list for this range server
 			bgm = bgm_list[rl->ri->rangesrv_num - 1];
