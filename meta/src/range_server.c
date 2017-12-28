@@ -48,6 +48,7 @@
 #include "range_server.h"
 #include "partitioner.h"
 #include "mdhim_options.h"
+#include "ds_leveldb.h"
 #include "uthash.h"
 
 #define UNIFYCR_FID(key) *(long *)key
@@ -1140,8 +1141,11 @@ int range_server_bget_op(struct mdhim_t *md, struct mdhim_bgetm_t *bgm, int sour
 		*get_key_len = bgm->key_lens[0];
 		key_lens[0] = *get_key_len;
 
-		error = mdhim_levedb_batch_next(index->mdhim_store->db_handle, keys, key_lens, values, value_lens, \
-					bgm->num_keys * bgm->num_recs, &num_records);
+		error = mdhim_levedb_batch_next(index->mdhim_store->db_handle,
+						(char **)keys, key_lens,
+						(char **)values, value_lens,
+						bgm->num_keys * bgm->num_recs,
+						&num_records);
 
 	}
 
