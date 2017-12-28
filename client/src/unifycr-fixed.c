@@ -72,7 +72,7 @@ extern int unifycr_spillover_max_chunks;
 
 /* given a file id and logical chunk id, return pointer to meta data
  * for specified chunk, return NULL if not found */
-static unifycr_chunkmeta_t *unifycr_get_chunkmeta(int fid, int cid)
+unifycr_chunkmeta_t *unifycr_get_chunkmeta(int fid, int cid)
 {
     /* lookup file meta data for specified file id */
     unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
