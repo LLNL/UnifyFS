@@ -561,9 +561,6 @@ static int unifycr_fid_store_alloc(int fid)
 /* free data management resource for file */
 static int unifycr_fid_store_free(int fid)
 {
-    /* get meta data for this file */
-    unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
-
     return UNIFYCR_SUCCESS;
 }
 
@@ -938,7 +935,6 @@ static int unifycr_get_global_fid(const char *path, int *gfid)
     unsigned char md[16];
     memset(md, 0, 16);
 
-    int i;
     MD5_Init(&ctx);
     MD5_Update(&ctx, path, strlen(path));
     MD5_Final(md, &ctx);
@@ -1406,9 +1402,7 @@ static int unifycr_init_structures()
 
 static int unifycr_get_spillblock(size_t size, const char *path)
 {
-    void *scr_spillblock = NULL;
     int spillblock_fd;
-
     mode_t perms = unifycr_getmode(0);
 
     //MAP_OR_FAIL(open);
@@ -1548,8 +1542,8 @@ static void *unifycr_superblock_shmget(size_t size, key_t key)
     } else {
         /* Use mmap to allocated share memory for UnifyCR*/
         int ret = -1;
-        int fd = -1;
         char shm_name[GEN_STR_LEN] = {0};
+
         sprintf(shm_name, "%d-super-%d", app_id, key);
         superblock_fd = shm_open(shm_name, MMAP_OPEN_FLAG, MMAP_OPEN_MODE);
         if (-1 == (ret = superblock_fd)) {
@@ -2078,9 +2072,7 @@ int unifycr_unmount(void)
  */
 static int unifycr_sync_to_del(void)
 {
-    int rc = -1;
     int cmd = COMM_MOUNT;
-    int superblock_start = UNIFYCR_SUPERBLOCK_KEY;
     int num_procs_per_node = local_rank_cnt;
     int req_buf_sz = shm_req_size;
     int recv_buf_sz = shm_recv_size;
@@ -2452,7 +2444,6 @@ static int CountTasksPerNode(int rank, int numTasks)
 {
     char hostname[UNIFYCR_MAX_FILENAME];
     char localhost[UNIFYCR_MAX_FILENAME];
-    int counti = 1;
     int resultsLen = 30;
     MPI_Status status;
     int rc;
@@ -2689,29 +2680,38 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
                 for (i = 0; i < local_rank_cnt; i++) {
                     if (local_rank_lst[i] != rank) {
                         int rc = MPI_Send(&local_del_cnt, 1, MPI_INT,
-                                          local_rank_lst[i], 0, MPI_COMM_WORLD);
+                                          local_rank_lst[i], 0,
+                                          MPI_COMM_WORLD);
+                        if (rc != MPI_SUCCESS) {
+                            debug("rank:%d, MPI_Send failed", dbg_rank);
+                            return UNIFYCR_FAILURE;
+                        }
+
                     }
                 }
             } else {
                 debug("rank:%d, fail to get the delegator count.", dbg_rank);
-                return -1;
+                return UNIFYCR_FAILURE;
             }
 
         } else {
             MPI_Status status;
             int rc = MPI_Recv(&local_del_cnt, 1, MPI_INT, local_rank_lst[0],
                               0, MPI_COMM_WORLD, &status);
+
+            if (rc != MPI_SUCCESS) {
+                debug("rank:%d, MPI_Recv failed.", dbg_rank);
+                return UNIFYCR_FAILURE;
+            }
             if (local_del_cnt < 0 || rc < 0) {
                 debug("rank:%d, fail to initialize socket.", dbg_rank);
                 return UNIFYCR_FAILURE;
-                return -1;
             } else  {
                 int rc = unifycr_init_socket(local_rank_idx,
                                              local_rank_cnt, local_del_cnt);
                 if (rc < 0) {
                     debug("rank:%d, fail to initialize socket.", dbg_rank);
                     return UNIFYCR_FAILURE;
-                    return -1;
                 }
             }
         }
