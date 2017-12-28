@@ -309,7 +309,7 @@ static int unifycr_fopen(
     /* assume default permissions */
     mode_t perms = unifycr_getmode(0);
 
-    int open_rc;
+    int open_rc = -1;
     int fid;
     off_t pos;
     if (read) {
