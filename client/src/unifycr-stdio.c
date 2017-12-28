@@ -1328,26 +1328,6 @@ size_t UNIFYCR_WRAP(fwrite)(const void *ptr, size_t size, size_t nitems,
     }
 }
 
-int UNIFYCR_WRAP(fprintf)(FILE *stream, const char *format, ...)
-{
-    /* check whether we should intercept this stream */
-    if (unifycr_intercept_stream(stream)) {
-        /* delegate work to vfprintf */
-        va_list args;
-        va_start(args, format);
-        int ret = UNIFYCR_WRAP(vfprintf)(stream, format, args);
-        va_end(args);
-        return ret;
-    } else {
-        va_list args;
-        va_start(args, format);
-        MAP_OR_FAIL(vfprintf);
-        int ret = UNIFYCR_REAL(vfprintf)(stream, format, args);
-        va_end(args);
-        return ret;
-    }
-}
-
 int UNIFYCR_WRAP(vfprintf)(FILE *stream, const char *format, va_list ap)
 {
     /* check whether we should intercept this stream */
@@ -1407,21 +1387,22 @@ int UNIFYCR_WRAP(vfprintf)(FILE *stream, const char *format, va_list ap)
     }
 }
 
-int UNIFYCR_WRAP(fscanf)(FILE *stream, const char *format, ...)
+int UNIFYCR_WRAP(fprintf)(FILE *stream, const char *format, ...)
 {
+    va_list args;
+    int ret;
+
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
-        /* delegate work to vfscanf */
-        va_list args;
+        /* delegate work to vfprintf */
         va_start(args, format);
-        int ret = UNIFYCR_WRAP(vfscanf)(stream, format, args);
+        ret = UNIFYCR_WRAP(vfprintf)(stream, format, args);
         va_end(args);
         return ret;
     } else {
-        va_list args;
         va_start(args, format);
-        MAP_OR_FAIL(vfscanf);
-        int ret = UNIFYCR_REAL(vfscanf)(stream, format, args);
+        MAP_OR_FAIL(vfprintf);
+        ret = UNIFYCR_REAL(vfprintf)(stream, format, args);
         va_end(args);
         return ret;
     }
@@ -1432,18 +1413,40 @@ static int __svfscanf(unifycr_stream_t *fp, const char *fmt0, va_list ap);
 
 int UNIFYCR_WRAP(vfscanf)(FILE *stream, const char *format, va_list ap)
 {
+    va_list args;
+    int ret;
+
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
-        va_list args;
         va_copy(args, ap);
-        int ret = __svfscanf((unifycr_stream_t *)stream, format, args);
+        ret = __svfscanf((unifycr_stream_t *)stream, format, args);
         va_end(args);
         return ret;
     } else {
-        va_list args;
         va_copy(args, ap);
         MAP_OR_FAIL(vfscanf);
-        int ret = UNIFYCR_REAL(vfscanf)(stream, format, args);
+        ret = UNIFYCR_REAL(vfscanf)(stream, format, args);
+        va_end(args);
+        return ret;
+    }
+}
+
+int UNIFYCR_WRAP(fscanf)(FILE *stream, const char *format, ...)
+{
+    va_list args;
+    int ret;
+
+    /* check whether we should intercept this stream */
+    if (unifycr_intercept_stream(stream)) {
+        /* delegate work to vfscanf */
+        va_start(args, format);
+        ret = UNIFYCR_WRAP(vfscanf)(stream, format, args);
+        va_end(args);
+        return ret;
+    } else {
+        va_start(args, format);
+        MAP_OR_FAIL(vfscanf);
+        ret = UNIFYCR_REAL(vfscanf)(stream, format, args);
         va_end(args);
         return ret;
     }
