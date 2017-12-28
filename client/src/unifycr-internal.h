@@ -467,7 +467,7 @@ unifycr_fd_t *unifycr_get_filedesc_from_fd(int fd);
 
 /* given a file id, return a pointer to the meta data,
  * otherwise return NULL */
-inline unifycr_filemeta_t *unifycr_get_meta_from_fid(int fid);
+unifycr_filemeta_t *unifycr_get_meta_from_fid(int fid);
 
 /* given an UNIFYCR error code, return corresponding errno code */
 int unifycr_err_map_to_errno(int rc);
