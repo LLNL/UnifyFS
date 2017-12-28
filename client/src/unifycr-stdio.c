@@ -165,7 +165,7 @@ int unifycr_unsupported_stream(
     return rc;
 }
 
-static int unifycr_stream_set_pointers(unifycr_stream_t *s)
+int unifycr_stream_set_pointers(unifycr_stream_t *s)
 {
     /* get pointer to file descriptor structure */
     unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(s->fd);
