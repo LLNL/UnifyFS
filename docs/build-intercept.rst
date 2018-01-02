@@ -61,7 +61,7 @@ Then to build with UnifyCR:
 
 	This is needed to enable NUMA-aware memory allocation on Linux machines. Set the
 	NUMA policy at runtime with ``UNIFYCR_NUMA_POLICY = local | interleaved``, or set
-	NUMA nodes explicitly with ``UNIFYCR_USE_NUMA_BANK = <node no.>``)
+	NUMA nodes explicitly with ``UNIFYCR_USE_NUMA_BANK = <node no.>``
 
 ---------------------------
 I/O Interception
