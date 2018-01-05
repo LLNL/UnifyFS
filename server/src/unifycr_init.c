@@ -60,39 +60,40 @@ int log_print_level = 5;
 int main(int argc, char *argv[])
 {
 
-    int rc = 0, provided;
+    char dbg_fname[GEN_STR_LEN] = {0};
+    int provided;
+    char *env;
+    int rc;
 
     rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
 
-    if (rc != MPI_SUCCESS) {
+    if (rc != MPI_SUCCESS)
         exit(1);
-    }
 
     rc = MPI_Comm_rank(MPI_COMM_WORLD, &glb_rank);
-    if (rc != MPI_SUCCESS) {
+    if (rc != MPI_SUCCESS)
         exit(1);
-    }
 
     rc = MPI_Comm_size(MPI_COMM_WORLD, &glb_size);
-    if (rc != MPI_SUCCESS) {
+    if (rc != MPI_SUCCESS)
         exit(1);
-    }
 
     rc = CountTasksPerNode(glb_rank, glb_size);
-    if (rc < 0) {
+    if (rc < 0)
         exit(1);
-    }
 
     local_rank_idx = find_rank_idx(glb_rank, local_rank_lst,
                                    local_rank_cnt);
 
-    char dbg_fname[GEN_STR_LEN] = {0};
-    sprintf(dbg_fname, "%s%d.log", DBG_FNAME, glb_rank);
-    rc = dbg_open(dbg_fname);
-    if (rc != ULFS_SUCCESS) {
-        LOG(LOG_ERR, "%s", ULFS_str_errno(rc));
-    }
+    env = getenv("UNIFYCR_SERVER_DEBUG_LOG");
+    if (env)
+        sprintf(dbg_fname, "%s-%d", env, glb_rank);
+    else
+        sprintf(dbg_fname, "%s-%d.log", DBG_FNAME, glb_rank);
 
+    rc = dbg_open(dbg_fname);
+    if (rc != ULFS_SUCCESS)
+        LOG(LOG_ERR, "%s", ULFS_str_errno(rc));
 
     app_config_list = arraylist_create();
     if (app_config_list == NULL) {
