@@ -12,6 +12,8 @@ Initialization Example
 ---------------------------
 
 First, we need to start the UnifyCR daemon on the nodes in your allocation.
+The specific paths and job launch command will depend on your system
+configuration.
 
 .. code-block:: Bash
     :linenos:
@@ -21,6 +23,8 @@ First, we need to start the UnifyCR daemon on the nodes in your allocation.
         export UNIFYCR_META_SERVER_RATIO=1
         export UNIFYCR_META_DB_NAME=unifycr_db
         export UNIFYCR_CHUNK_MEM=0
+        export UNIFYCR_META_DB_PATH=/mnt/ssd
+        export UNIFYCR_SERVER_DEBUG_LOG=/tmp/unifycrd_debug.$$
 
         NODES=1
         PROCS=1
@@ -37,14 +41,13 @@ Next, we can start run our application with UnifyCR in the following manner:
 
         #!/bin/bash
 
-        APP_PATH=/path/to/my/app
+        export UNIFYCR_EXTERNAL_META_DIR=/mnt/ssd
+        export UNIFYCR_EXTERNAL_DATA_DIR=/mnt/ssd
 
         NODES=1
         PROCS=1
 
-        mpirun -nodes ${NODES} -np ${PROCS} ${HOME}/my_app
-
-The APP_PATH variable is the directory where your application lives.
+        mpirun -nodes ${NODES} -np ${PROCS} /path/to/my/app
 
 So, overall the steps taken to run an application with UnifyCR include:
 
