@@ -111,7 +111,7 @@ static inline void *unifycr_compute_chunk_buf(
         start = unifycr_chunks + ((long)physical_id << unifycr_chunk_bits);
     } else {
         /* chunk is in spill over */
-        debug("wrong chunk ID\n");
+        DEBUG("wrong chunk ID\n");
         return NULL;
     }
 
@@ -135,7 +135,7 @@ static inline off_t unifycr_compute_spill_offset(
     /* compute start of chunk in spill over device */
     off_t start = 0;
     if (physical_id < unifycr_max_chunks) {
-        debug("wrong spill-chunk ID\n");
+        DEBUG("wrong spill-chunk ID\n");
         return -1;
     } else {
         /* compute buffer loc within spillover device chunk */
@@ -167,14 +167,14 @@ static int unifycr_chunk_alloc(int fid, unifycr_filemeta_t *meta, int chunk_id)
         } else if (unifycr_use_spillover) {
             /* shm segment out of space, grab a block from spill-over device */
 
-            debug("getting blocks from spill-over device\n");
+            DEBUG("getting blocks from spill-over device\n");
             /* TODO: missing lock calls? */
             /* add unifycr_max_chunks to identify chunk location */
             unifycr_stack_lock();
             id = unifycr_stack_pop(free_spillchunk_stack) + unifycr_max_chunks;
             unifycr_stack_unlock();
             if (id < unifycr_max_chunks) {
-                debug("spill-over device out of space (%d)\n", id);
+                DEBUG("spill-over device out of space (%d)\n", id);
                 return UNIFYCR_ERR_NOSPC;
             }
 
@@ -183,14 +183,14 @@ static int unifycr_chunk_alloc(int fid, unifycr_filemeta_t *meta, int chunk_id)
             chunk_meta->id = id;
         } else {
             /* spill over isn't available, so we're out of space */
-            debug("memfs out of space (%d)\n", id);
+            DEBUG("memfs out of space (%d)\n", id);
             return UNIFYCR_ERR_NOSPC;
         }
     } else if (unifycr_use_spillover) {
         /* memory file system is not enabled, but spill over is */
 
         /* shm segment out of space, grab a block from spill-over device */
-        debug("getting blocks from spill-over device \n");
+        DEBUG("getting blocks from spill-over device\n");
 
         /* TODO: missing lock calls? */
         /* add unifycr_max_chunks to identify chunk location */
@@ -198,7 +198,7 @@ static int unifycr_chunk_alloc(int fid, unifycr_filemeta_t *meta, int chunk_id)
         int id = unifycr_stack_pop(free_spillchunk_stack) + unifycr_max_chunks;
         unifycr_stack_unlock();
         if (id < unifycr_max_chunks) {
-            debug("spill-over device out of space (%d)\n", id);
+            DEBUG("spill-over device out of space (%d)\n", id);
             return UNIFYCR_ERR_NOSPC;
         }
 
@@ -221,7 +221,7 @@ static int unifycr_chunk_free(int fid, unifycr_filemeta_t *meta, int chunk_id)
 
     /* get physical id of chunk */
     int id = chunk_meta->id;
-    debug("free chunk %d from location %d\n", id, chunk_meta->location);
+    DEBUG("free chunk %d from location %d\n", id, chunk_meta->location);
 
     /* determine location of chunk */
     if (chunk_meta->location == CHUNK_LOCATION_MEMFS) {
@@ -232,7 +232,7 @@ static int unifycr_chunk_free(int fid, unifycr_filemeta_t *meta, int chunk_id)
         /* TODO: free spill over chunk */
     } else {
         /* unkwown chunk location */
-        debug("unknown chunk location %d\n", chunk_meta->location);
+        DEBUG("unknown chunk location %d\n", chunk_meta->location);
         return UNIFYCR_ERR_IO;
     }
 
@@ -268,7 +268,7 @@ static int unifycr_chunk_read(
             return unifycr_errno_map_to_err(rc);
     } else {
         /* unknown chunk type */
-        debug("unknown chunk type in read\n");
+        DEBUG("unknown chunk type in read\n");
         return UNIFYCR_ERR_IO;
     }
 
@@ -510,7 +510,7 @@ static int unifycr_logio_chunk_write(
         /* TOdo: check return code for errors */
     } else {
         /* unknown chunk type */
-        debug("unknown chunk type in read\n");
+        DEBUG("unknown chunk type in read\n");
         return UNIFYCR_ERR_IO;
     }
 
@@ -549,7 +549,7 @@ static int unifycr_chunk_write(
         /* TODO: check return code for errors */
     } else {
         /* unknown chunk type */
-        debug("unknown chunk type in read\n");
+        DEBUG("unknown chunk type in read\n");
         return UNIFYCR_ERR_IO;
     }
 
@@ -579,7 +579,7 @@ int unifycr_fid_store_fixed_extend(int fid, unifycr_filemeta_t *meta,
             /* allocate a new chunk */
             int rc = unifycr_chunk_alloc(fid, meta, meta->chunks);
             if (rc != UNIFYCR_SUCCESS) {
-                debug("failed to allocate chunk\n");
+                DEBUG("failed to allocate chunk\n");
                 return UNIFYCR_ERR_NOSPC;
             }
 

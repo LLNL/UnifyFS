@@ -176,6 +176,9 @@ extern pthread_mutex_t unifycr_stack_mutex;
 /* keep track of what we've initialized */
 int unifycr_initialized = 0;
 
+/* keep track of debug level */
+int unifycr_debug_level;
+
 /* global persistent memory block (metadata + data) */
 void *unifycr_superblock = NULL;
 static void *free_fid_stack = NULL;
@@ -456,7 +459,7 @@ inline int unifycr_intercept_fd(int *fd)
          * so intercept the call and shift the fd */
         int newfd = oldfd - unifycr_fd_limit;
         *fd = newfd;
-        debug("Changing fd from exposed %d to internal %d\n", oldfd, newfd);
+        DEBUG("Changing fd from exposed %d to internal %d\n", oldfd, newfd);
         return 1;
     }
 }
@@ -489,9 +492,8 @@ inline int unifycr_get_fid_from_path(const char *path)
     while (i < unifycr_max_files) {
         if (unifycr_filelist[i].in_use &&
             strcmp((void *)&unifycr_filelist[i].filename, path) == 0) {
-            debug("File found: unifycr_filelist[%d].filename = %s\n",
-                  i, (char *)&unifycr_filelist[i].filename
-                 );
+            DEBUG("File found: unifycr_filelist[%d].filename = %s\n",
+                  i, (char *)&unifycr_filelist[i].filename);
             return i;
         }
         i++;
@@ -600,9 +602,8 @@ int unifycr_fid_is_dir_empty(const char *path)
             char *strptr = strstr(path, unifycr_filelist[i].filename);
             if (strptr == unifycr_filelist[i].filename
                 && strcmp(path, unifycr_filelist[i].filename)) {
-                debug("File found: unifycr_filelist[%d].filename = %s\n",
-                      i, (char *)&unifycr_filelist[i].filename
-                     );
+                DEBUG("File found: unifycr_filelist[%d].filename = %s\n",
+                      i, (char *)&unifycr_filelist[i].filename);
                 return 0;
             }
         }
@@ -664,10 +665,10 @@ int unifycr_fid_alloc()
     unifycr_stack_lock();
     int fid = unifycr_stack_pop(free_fid_stack);
     unifycr_stack_unlock();
-    debug("unifycr_stack_pop() gave %d\n", fid);
+    DEBUG("unifycr_stack_pop() gave %d\n", fid);
     if (fid < 0) {
         /* need to create a new file, but we can't */
-        debug("unifycr_stack_pop() failed (%d)\n", fid);
+        DEBUG("unifycr_stack_pop() failed (%d)\n", fid);
         return -1;
     }
     return fid;
@@ -699,7 +700,8 @@ int unifycr_fid_create_file(const char *path)
      * and return appropriate error if it is greater
      */
     strcpy((void *)&unifycr_filelist[fid].filename, path);
-    debug("Filename %s got unifycr fd %d\n", unifycr_filelist[fid].filename, fid);
+    DEBUG("Filename %s got unifycr fd %d\n",
+          unifycr_filelist[fid].filename, fid);
 
     /* initialize meta data */
     unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
@@ -1128,14 +1130,14 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
 
     /* check whether this file already exists */
     int fid = unifycr_get_fid_from_path(path);
-    debug("unifycr_get_fid_from_path() gave %d\n", fid);
+    DEBUG("unifycr_get_fid_from_path() gave %d\n", fid);
 
     int gfid = -1, rc = 0;
     if (fs_type == UNIFYCR_LOG) {
         if (fid < 0) {
             rc = unifycr_get_global_fid(path, &gfid);
             if (rc != UNIFYCR_SUCCESS) {
-                debug("Failed to generate fid for file %s\n", path);
+                DEBUG("Failed to generate fid for file %s\n", path);
                 return UNIFYCR_ERR_IO;
             }
 
@@ -1151,14 +1153,14 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
                  * allocate a file id slot for this existing file */
                 fid = unifycr_fid_create_file(path);
                 if (fid < 0) {
-                    debug("Failed to create new file %s\n", path);
+                    DEBUG("Failed to create new file %s\n", path);
                     return UNIFYCR_ERR_NFILE;
                 }
 
                 /* initialize the storage for the file */
                 int store_rc = unifycr_fid_store_alloc(fid);
                 if (store_rc != UNIFYCR_SUCCESS) {
-                    debug("Failed to create storage for file %s\n", path);
+                    DEBUG("Failed to create storage for file %s\n", path);
                     return UNIFYCR_ERR_IO;
                 }
                 /* initialize the global metadata
@@ -1181,23 +1183,23 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
         /* file does not exist */
         /* create file if O_CREAT is set */
         if (flags & O_CREAT) {
-            debug("Couldn't find entry for %s in UNIFYCR\n", path);
-            debug("unifycr_superblock = %p; free_fid_stack = %p; free_chunk_stack = %p; unifycr_filelist = %p; chunks = %p\n",
-                  unifycr_superblock, free_fid_stack, free_chunk_stack, unifycr_filelist,
-                  unifycr_chunks
-                 );
+            DEBUG("Couldn't find entry for %s in UNIFYCR\n", path);
+            DEBUG("unifycr_superblock = %p; free_fid_stack = %p;"
+                  "free_chunk_stack = %p; unifycr_filelist = %p;"
+                  "chunks = %p\n", unifycr_superblock, free_fid_stack,
+                  free_chunk_stack, unifycr_filelist, unifycr_chunks);
 
             /* allocate a file id slot for this new file */
             fid = unifycr_fid_create_file(path);
             if (fid < 0) {
-                debug("Failed to create new file %s\n", path);
+                DEBUG("Failed to create new file %s\n", path);
                 return UNIFYCR_ERR_NFILE;
             }
 
             /* initialize the storage for the file */
             int store_rc = unifycr_fid_store_alloc(fid);
             if (store_rc != UNIFYCR_SUCCESS) {
-                debug("Failed to create storage for file %s\n", path);
+                DEBUG("Failed to create storage for file %s\n", path);
                 return UNIFYCR_ERR_IO;
             }
 
@@ -1217,7 +1219,7 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
             }
         } else {
             /* ERROR: trying to open a file that does not exist without O_CREATE */
-            debug("Couldn't find entry for %s in UNIFYCR\n", path);
+            DEBUG("Couldn't find entry for %s in UNIFYCR\n", path);
             return UNIFYCR_ERR_NOENT;
         }
     } else {
@@ -1255,7 +1257,7 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
     /* set in_use flag and file pointer */
     *outfid = fid;
     *outpos = pos;
-    debug("UNIFYCR_open generated fd %d for file %s\n", fid, path);
+    DEBUG("UNIFYCR_open generated fd %d for file %s\n", fid, path);
 
     /* don't conflict with active system fds that range from 0 - (fd_limit) */
     return UNIFYCR_SUCCESS;
@@ -1395,7 +1397,7 @@ static int unifycr_init_structures()
         *(unifycr_indices.ptr_num_entries) = 0;
         *(unifycr_fattrs.ptr_num_entries) = 0;
     }
-    debug("Meta-stacks initialized!\n");
+    DEBUG("Meta-stacks initialized!\n");
 
     return UNIFYCR_SUCCESS;
 }
@@ -1437,7 +1439,7 @@ static void *unifycr_superblock_shmget(size_t size, key_t key)
     void *scr_shmblock = NULL;
     int scr_shmblock_shmid;
 
-    debug("Key for superblock = %x\n", key);
+    DEBUG("Key for superblock = %x\n", key);
     if (fs_type != UNIFYCR_LOG) {
 #ifdef ENABLE_NUMA_POLICY
         /* if user requested to use 1 shm/process along with NUMA optimizations */
@@ -1446,7 +1448,7 @@ static void *unifycr_superblock_shmget(size_t size, key_t key)
             /* check to see if NUMA control capability is available */
             if (numa_available() >= 0) {
                 int max_numa_nodes = numa_max_node() + 1;
-                debug("Max. number of NUMA nodes = %d\n", max_numa_nodes);
+                DEBUG("Max. number of NUMA nodes = %d\n", max_numa_nodes);
                 int num_cores = sysconf(_SC_NPROCESSORS_CONF);
                 int my_core, i, pref_numa_bank = -1;
 
@@ -1461,22 +1463,23 @@ static void *unifycr_superblock_shmget(size_t size, key_t key)
                     }
                 }
                 if (my_core < 0) {
-                    debug("Not able to get current core affinity\n");
+                    DEBUG("Not able to get current core affinity\n");
                     return NULL;
                 }
-                debug("Process running on core %d\n", my_core);
+                DEBUG("Process running on core %d\n", my_core);
 
                 /* find out which NUMA bank this core belongs to */
                 // numa_preferred doesn't work as needed, returns 0 always. placeholder only.
                 pref_numa_bank = numa_preferred();
-                debug("Preferred NUMA bank for core %d is %d\n", my_core, pref_numa_bank);
+                DEBUG("Preferred NUMA bank for core %d is %d\n", my_core,
+                      pref_numa_bank);
 
                 /* create/attach to respective shmblock*/
                 scr_shmblock_shmid = shmget((key + pref_numa_bank), size,
                                             IPC_CREAT | IPC_EXCL | S_IRWXU);
 
             } else {
-                debug("NUMA support unavailable!\n");
+                DEBUG("NUMA support unavailable!\n");
                 return NULL;
             }
         } else {
@@ -1498,7 +1501,7 @@ static void *unifycr_superblock_shmget(size_t size, key_t key)
                     perror("shmat() failed");
                     return NULL;
                 }
-                debug("Superblock exists at %p!\n", scr_shmblock);
+                DEBUG("Superblock exists at %p!\n", scr_shmblock);
 
                 /* init our global variables to point to spots in superblock */
                 unifycr_init_pointers(scr_shmblock);
@@ -1513,7 +1516,7 @@ static void *unifycr_superblock_shmget(size_t size, key_t key)
             if (scr_shmblock == (void *) - 1) {
                 perror("shmat() failed");
             }
-            debug("Superblock created at %p!\n", scr_shmblock);
+            DEBUG("Superblock created at %p!\n", scr_shmblock);
 
 
 #ifdef ENABLE_NUMA_POLICY
@@ -1524,12 +1527,12 @@ static void *unifycr_superblock_shmget(size_t size, key_t key)
             } else if (strcmp(unifycr_numa_policy, "interleaved") == 0) {
                 /* interleave the shared-memory segment
                  * across all memory banks when all process share 1-superblock */
-                debug("Interleaving superblock across all memory banks\n");
+                DEBUG("Interleaving superblock across all memory banks\n");
                 numa_interleave_memory(scr_shmblock, size, numa_all_nodes_ptr);
             } else if (strcmp(unifycr_numa_policy, "local") == 0) {
                 /* each process has its own superblock, let it be allocated from
                  * the closest memory bank */
-                debug("Assigning memory from closest bank\n");
+                DEBUG("Assigning memory from closest bank\n");
                 numa_setlocal_memory(scr_shmblock, size);
             }
 #endif
@@ -1629,17 +1632,15 @@ static int unifycr_abtoull(char *str, unsigned long long *val)
 {
     /* check that we have a string */
     if (str == NULL) {
-        debug("scr_abtoull: Can't convert NULL string to bytes @ %s:%d",
-              __FILE__, __LINE__
-             );
+        DEBUG("scr_abtoull: Can't convert NULL string to bytes @ %s:%d",
+              __FILE__, __LINE__);
         return UNIFYCR_FAILURE;
     }
 
     /* check that we have a value to write to */
     if (val == NULL) {
-        debug("scr_abtoull: NULL address to store value @ %s:%d",
-              __FILE__, __LINE__
-             );
+        DEBUG("scr_abtoull: NULL address to store value @ %s:%d",
+              __FILE__, __LINE__);
         return UNIFYCR_FAILURE;
     }
 
@@ -1648,9 +1649,8 @@ static int unifycr_abtoull(char *str, unsigned long long *val)
     char *next = NULL;
     double num = strtod(str, &next);
     if (errno != 0) {
-        debug("scr_abtoull: Invalid double: %s @ %s:%d",
-              str, __FILE__, __LINE__
-             );
+        DEBUG("scr_abtoull: Invalid double: %s @ %s:%d",
+              str, __FILE__, __LINE__);
         return UNIFYCR_FAILURE;
     }
 
@@ -1671,9 +1671,8 @@ static int unifycr_abtoull(char *str, unsigned long long *val)
             units = 1024 * 1024 * 1024;
             break;
         default:
-            debug("scr_abtoull: Unexpected byte string %s @ %s:%d",
-                  str, __FILE__, __LINE__
-                 );
+            DEBUG("scr_abtoull: Unexpected byte string %s @ %s:%d",
+                  str, __FILE__, __LINE__);
             return UNIFYCR_FAILURE;
         }
 
@@ -1686,18 +1685,16 @@ static int unifycr_abtoull(char *str, unsigned long long *val)
 
         /* check that we've hit the end of the string */
         if (*next != 0) {
-            debug("scr_abtoull: Unexpected byte string: %s @ %s:%d",
-                  str, __FILE__, __LINE__
-                 );
+            DEBUG("scr_abtoull: Unexpected byte string: %s @ %s:%d",
+                  str, __FILE__, __LINE__);
             return UNIFYCR_FAILURE;
         }
     }
 
     /* check that we got a positive value */
     if (num < 0) {
-        debug("scr_abtoull: Byte string must be positive: %s @ %s:%d",
-              str, __FILE__, __LINE__
-             );
+        DEBUG("scr_abtoull: Byte string must be positive: %s @ %s:%d",
+              str, __FILE__, __LINE__);
         return UNIFYCR_FAILURE;
     }
 
@@ -1711,18 +1708,25 @@ static int unifycr_init(int rank)
 {
     if (! unifycr_initialized) {
 
+        /* unifycr debug level default is zero */
+        unifycr_debug_level = 0;
+
+        /* set debug level to UNIFYCR_DEBUG env variable if it is set */
+        if (getenv("UNIFYCR_DEBUG"))
+            unifycr_debug_level = atoi(getenv("UNIFYCR_DEBUG"));
+
 #ifdef UNIFYCR_GOTCHA
         enum gotcha_error_t result;
 
         result = gotcha_wrap(wrap_unifycr_list, GOTCHA_NFUNCS, "unifycr");
         if (result != GOTCHA_SUCCESS) {
-            debug("gotcha_wrap returned %d\n", (int) result);
+            DEBUG("gotcha_wrap returned %d\n", (int) result);
         }
 
         int i;
         for (i = 0; i < GOTCHA_NFUNCS; i++) {
             if (*(void **)(wrap_unifycr_list[i].function_address_pointer) == 0) {
-                printf("This function name failed to be wrapped: %s\n",
+                DEBUG("This function name failed to be wrapped: %s\n",
                        wrap_unifycr_list[i].name);
             }
         }
@@ -1762,7 +1766,7 @@ static int unifycr_init(int rank)
             }
         }
 
-        debug("are we using spillover? %d\n", unifycr_use_spillover);
+        DEBUG("are we using spillover? %d\n", unifycr_use_spillover);
 
         /* determine max number of files to store in file system */
         unifycr_max_files = UNIFYCR_MAX_FILES;
@@ -1833,7 +1837,7 @@ static int unifycr_init(int rank)
         env = getenv("UNIFYCR_NUMA_POLICY");
         if (env) {
             sprintf(unifycr_numa_policy, env);
-            debug("NUMA policy used: %s\n", unifycr_numa_policy);
+            DEBUG("NUMA policy used: %s\n", unifycr_numa_policy);
         } else {
             sprintf(unifycr_numa_policy, "default");
         }
@@ -1866,7 +1870,7 @@ static int unifycr_init(int rank)
         }
         unifycr_fd_limit = r_limit->rlim_cur;
         free(r_limit);
-        debug("FD limit for system = %ld\n", unifycr_fd_limit);
+        DEBUG("FD limit for system = %ld\n", unifycr_fd_limit);
 
         /* determine the size of the superblock */
         /* generous allocation for chunk map (one file can take entire space)*/
@@ -1918,7 +1922,7 @@ static int unifycr_init(int rank)
                              unifycr_mount_shmget_key);
 #endif /* MACHINE_BGQ */
         if (unifycr_superblock == NULL) {
-            debug("unifycr_superblock_shmget() failed\n");
+            DEBUG("unifycr_superblock_shmget() failed\n");
             return UNIFYCR_FAILURE;
         }
         char spillfile_prefix[100];
@@ -1940,7 +1944,7 @@ static int unifycr_init(int rank)
                                      spillfile_prefix);
 
             if (unifycr_spilloverblock < 0) {
-                debug("unifycr_get_spillblock() failed!\n");
+                DEBUG("unifycr_get_spillblock() failed!\n");
                 return UNIFYCR_FAILURE;
             }
         }
@@ -1959,7 +1963,7 @@ static int unifycr_init(int rank)
             unifycr_spillmetablock =
                 unifycr_get_spillblock(unifycr_index_buf_size, spillfile_prefix);
             if (unifycr_spillmetablock < 0) {
-                debug("unifycr_get_spillmetablock failed!\n");
+                DEBUG("unifycr_get_spillmetablock failed!\n");
                 return UNIFYCR_FAILURE;
             }
         }
@@ -2433,7 +2437,7 @@ static int CountTasksPerNode(int rank, int numTasks)
 
     rc = MPI_Get_processor_name(localhost, &resultsLen);
     if (rc != 0)
-        debug("failed to get the processor's name");
+        DEBUG("failed to get the processor's name");
 
     if (numTasks > 0) {
         if (rank == 0) {
@@ -2454,7 +2458,7 @@ static int CountTasksPerNode(int rank, int numTasks)
                               &status);
 
                 if (rc != 0) {
-                    debug("cannot receive hostnames");
+                    DEBUG("cannot receive hostnames");
                     return -1;
                 }
                 strcpy(host_set[i].hostname, hostname);
@@ -2518,7 +2522,7 @@ static int CountTasksPerNode(int rank, int numTasks)
                         rc = MPI_Send(&rank_cnt[i], 1, MPI_INT, rank_set[i][j],
                                       0, MPI_COMM_WORLD);
                         if (rc != 0) {
-                            debug("cannot send local rank cnt");
+                            DEBUG("cannot send local rank cnt");
                             return -1;
                         }
 
@@ -2526,7 +2530,7 @@ static int CountTasksPerNode(int rank, int numTasks)
                         rc = MPI_Send(rank_set[i], rank_cnt[i], MPI_INT,
                                       rank_set[i][j], 0, MPI_COMM_WORLD);
                         if (rc != 0) {
-                            debug("cannot send local rank list");
+                            DEBUG("cannot send local rank list");
                             return -1;
                         }
                     } else {
@@ -2558,14 +2562,14 @@ static int CountTasksPerNode(int rank, int numTasks)
             rc = MPI_Send(localhost, UNIFYCR_MAX_FILENAME,
                           MPI_CHAR, 0, 0, MPI_COMM_WORLD);
             if (rc != 0) {
-                debug("cannot send host name");
+                DEBUG("cannot send host name");
                 return -1;
             }
             /*receive the local rank count */
             rc = MPI_Recv(&local_rank_cnt, 1, MPI_INT, 0,
                           0, MPI_COMM_WORLD, &status);
             if (rc != 0) {
-                debug("cannot receive local rank cnt");
+                DEBUG("cannot receive local rank cnt");
                 return -1;
             }
 
@@ -2575,7 +2579,7 @@ static int CountTasksPerNode(int rank, int numTasks)
                           0, MPI_COMM_WORLD, &status);
             if (rc != 0) {
                 free(local_rank_lst);
-                debug("cannot receive local rank list");
+                DEBUG("cannot receive local rank list");
                 return -1;
             }
 
@@ -2586,7 +2590,7 @@ static int CountTasksPerNode(int rank, int numTasks)
 
         // scatter ranks out
     } else {
-        debug("number of tasks is smaller than 0");
+        DEBUG("number of tasks is smaller than 0");
         return -1;
     }
 
@@ -2618,7 +2622,7 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
         int rc = CountTasksPerNode(rank, size);
 
         if (rc < 0) {
-            debug("rank:%d, cannot get the local rank list.", dbg_rank);
+            DEBUG("rank:%d, cannot get the local rank list.", dbg_rank);
             return -1;
         }
 
@@ -2646,7 +2650,7 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
         int rc = gethostname(host_name, UNIFYCR_MAX_FILENAME);
 
         if (rc != 0) {
-            debug("rank:%d, fail to get the host name.", dbg_rank);
+            DEBUG("rank:%d, fail to get the host name.", dbg_rank);
             return UNIFYCR_FAILURE;
         }
 
@@ -2666,14 +2670,14 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
                                           local_rank_lst[i], 0,
                                           MPI_COMM_WORLD);
                         if (rc != MPI_SUCCESS) {
-                            debug("rank:%d, MPI_Send failed", dbg_rank);
+                            DEBUG("rank:%d, MPI_Send failed", dbg_rank);
                             return UNIFYCR_FAILURE;
                         }
 
                     }
                 }
             } else {
-                debug("rank:%d, fail to get the delegator count.", dbg_rank);
+                DEBUG("rank:%d, fail to get the delegator count.", dbg_rank);
                 return UNIFYCR_FAILURE;
             }
 
@@ -2683,17 +2687,17 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
                               0, MPI_COMM_WORLD, &status);
 
             if (rc != MPI_SUCCESS) {
-                debug("rank:%d, MPI_Recv failed.", dbg_rank);
+                DEBUG("rank:%d, MPI_Recv failed.", dbg_rank);
                 return UNIFYCR_FAILURE;
             }
             if (local_del_cnt < 0 || rc < 0) {
-                debug("rank:%d, fail to initialize socket.", dbg_rank);
+                DEBUG("rank:%d, fail to initialize socket.", dbg_rank);
                 return UNIFYCR_FAILURE;
             } else  {
                 int rc = unifycr_init_socket(local_rank_idx,
                                              local_rank_cnt, local_del_cnt);
                 if (rc < 0) {
-                    debug("rank:%d, fail to initialize socket.", dbg_rank);
+                    DEBUG("rank:%d, fail to initialize socket.", dbg_rank);
                     return UNIFYCR_FAILURE;
                 }
             }
@@ -2703,19 +2707,19 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
 
         rc = unifycr_init_req_shm(local_rank_idx, app_id);
         if (rc < 0) {
-            debug("rank:%d, fail to init shared request memory.", dbg_rank);
+            DEBUG("rank:%d, fail to init shared request memory.", dbg_rank);
             return UNIFYCR_FAILURE;
         }
 
         rc = unifycr_init_recv_shm(local_rank_idx, app_id);
         if (rc < 0) {
-            debug("rank:%d, fail to init shared receive memory.", dbg_rank);
+            DEBUG("rank:%d, fail to init shared receive memory.", dbg_rank);
             return UNIFYCR_FAILURE;
         }
 
         rc = unifycr_sync_to_del();
         if (rc < 0) {
-            debug("rank:%d, fail to convey information to the delegator.",
+            DEBUG("rank:%d, fail to convey information to the delegator.",
                   dbg_rank);
             return UNIFYCR_FAILURE;
         }
