@@ -81,19 +81,20 @@ int UNIFYCR_WRAP(access)(const char *path, int mode)
     if (unifycr_intercept_path(path)) {
         /* check if path exists */
         if (unifycr_get_fid_from_path(path) < 0) {
-            debug("access: unifycr_get_id_from path failed, returning -1, %s\n", path);
+            DEBUG("access: unifycr_get_id_from path failed, returning -1, %s\n",
+                  path);
             errno = ENOENT;
             return -1;
         }
 
         /* currently a no-op */
-        debug("access: path intercepted, returning 0, %s\n", path);
+        DEBUG("access: path intercepted, returning 0, %s\n", path);
         return 0;
     } else {
-        debug("access: calling MAP_OR_FAIL, %s\n", path);
+        DEBUG("access: calling MAP_OR_FAIL, %s\n", path);
         MAP_OR_FAIL(access);
         int ret = UNIFYCR_REAL(access)(path, mode);
-        debug("access: returning __real_access %d,%s\n", ret, path);
+        DEBUG("access: returning __real_access %d,%s\n", ret, path);
         return ret;
     }
 }
@@ -184,10 +185,10 @@ int UNIFYCR_WRAP(rename)(const char *oldpath, const char *newpath)
 
         /* verify that we really have a file by the old name */
         int fid = unifycr_get_fid_from_path(oldpath);
-        debug("orig file in position %d\n", fid);
+        DEBUG("orig file in position %d\n", fid);
         if (fid < 0) {
             /* ERROR: oldname does not exist */
-            debug("Couldn't find entry for %s in UNIFYCR\n", oldpath);
+            DEBUG("Couldn't find entry for %s in UNIFYCR\n", oldpath);
             errno = ENOENT;
             return -1;
         }
@@ -202,11 +203,12 @@ int UNIFYCR_WRAP(rename)(const char *oldpath, const char *newpath)
             }
 
             /* finally overwrite the old name with the new name */
-            debug("Changing %s to %s\n", (char *)&unifycr_filelist[fid].filename, newpath);
+            DEBUG("Changing %s to %s\n",
+                  (char *)&unifycr_filelist[fid].filename, newpath);
             strcpy((void *)&unifycr_filelist[fid].filename, newpath);
         } else {
             /* ERROR: new name already exists */
-            debug("File %s exists\n", newpath);
+            DEBUG("File %s exists\n", newpath);
             errno = EEXIST;
             return -1;
         }
@@ -234,7 +236,7 @@ int UNIFYCR_WRAP(truncate)(const char *path, off_t length)
         int fid = unifycr_get_fid_from_path(path);
         if (fid < 0) {
             /* ERROR: file does not exist */
-            debug("Couldn't find entry for %s in UNIFYCR\n", path);
+            DEBUG("Couldn't find entry for %s in UNIFYCR\n", path);
             errno = ENOENT;
             return -1;
         }
@@ -242,7 +244,7 @@ int UNIFYCR_WRAP(truncate)(const char *path, off_t length)
         /* truncate the file */
         int rc = unifycr_fid_truncate(fid, length);
         if (rc != UNIFYCR_SUCCESS) {
-            debug("unifycr_fid_truncate failed for %s in UNIFYCR\n", path);
+            DEBUG("unifycr_fid_truncate failed for %s in UNIFYCR\n", path);
             errno = EIO;
             return -1;
         }
@@ -263,7 +265,7 @@ int UNIFYCR_WRAP(unlink)(const char *path)
         int fid = unifycr_get_fid_from_path(path);
         if (fid < 0) {
             /* ERROR: file does not exist */
-            debug("Couldn't find entry for %s in UNIFYCR\n", path);
+            DEBUG("Couldn't find entry for %s in UNIFYCR\n", path);
             errno = ENOENT;
             return -1;
         }
@@ -271,7 +273,7 @@ int UNIFYCR_WRAP(unlink)(const char *path)
         /* check that it's not a directory */
         if (unifycr_fid_is_dir(fid)) {
             /* ERROR: is a directory */
-            debug("Attempting to unlink a directory %s in UNIFYCR\n", path);
+            DEBUG("Attempting to unlink a directory %s in UNIFYCR\n", path);
             errno = EISDIR;
             return -1;
         }
@@ -295,7 +297,7 @@ int UNIFYCR_WRAP(remove)(const char *path)
         int fid = unifycr_get_fid_from_path(path);
         if (fid < 0) {
             /* ERROR: file does not exist */
-            debug("Couldn't find entry for %s in UNIFYCR\n", path);
+            DEBUG("Couldn't find entry for %s in UNIFYCR\n", path);
             errno = ENOENT;
             return -1;
         }
@@ -304,7 +306,7 @@ int UNIFYCR_WRAP(remove)(const char *path)
         if (unifycr_fid_is_dir(fid)) {
             /* TODO: shall be equivalent to rmdir(path) */
             /* ERROR: is a directory */
-            debug("Attempting to remove a directory %s in UNIFYCR\n", path);
+            DEBUG("Attempting to remove a directory %s in UNIFYCR\n", path);
             errno = EISDIR;
             return -1;
         }
@@ -323,7 +325,7 @@ int UNIFYCR_WRAP(remove)(const char *path)
 
 int UNIFYCR_WRAP(stat)(const char *path, struct stat *buf)
 {
-    debug("stat was called for %s....\n", path);
+    DEBUG("stat was called for %s....\n", path);
     if (unifycr_intercept_path(path)) {
         int fid = unifycr_get_fid_from_path(path);
         if (fid < 0) {
@@ -343,7 +345,7 @@ int UNIFYCR_WRAP(stat)(const char *path, struct stat *buf)
 
 int UNIFYCR_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 {
-    debug("xstat was called for %s....\n", path);
+    DEBUG("xstat was called for %s....\n", path);
     if (unifycr_intercept_path(path)) {
         /* get file id for path */
         int fid = unifycr_get_fid_from_path(path);
@@ -544,7 +546,7 @@ int UNIFYCR_WRAP(creat)(const char *path, mode_t mode)
         filedesc->pos   = pos;
         filedesc->read  = 0;
         filedesc->write = 1;
-        debug("UNIFYCR_open generated fd %d for file %s\n", fid, path);
+        DEBUG("UNIFYCR_open generated fd %d for file %s\n", fid, path);
 
         /* don't conflict with active system fds that range from 0 - (fd_limit) */
         int ret = fid + unifycr_fd_limit;
@@ -602,7 +604,7 @@ int UNIFYCR_WRAP(open)(const char *path, int flags, ...)
                           || ((flags & O_RDWR) == O_RDWR);
         filedesc->write = ((flags & O_WRONLY) == O_WRONLY)
                           || ((flags & O_RDWR) == O_RDWR);
-        debug("UNIFYCR_open generated fd %d for file %s\n", fid, path);
+        DEBUG("UNIFYCR_open generated fd %d for file %s\n", fid, path);
 
         /* don't conflict with active system fds that range from 0 - (fd_limit) */
         ret = fid + unifycr_fd_limit;
@@ -672,7 +674,7 @@ off_t UNIFYCR_WRAP(lseek)(int fd, off_t offset, int whence)
         off_t current_pos = filedesc->pos;
 
         /* compute final file position */
-        debug("seeking from %ld\n", current_pos);
+        DEBUG("seeking from %ld\n", current_pos);
         switch (whence) {
         case SEEK_SET:
             /* seek to offset */
@@ -690,7 +692,7 @@ off_t UNIFYCR_WRAP(lseek)(int fd, off_t offset, int whence)
             errno = EINVAL;
             return (off_t) (-1);
         }
-        debug("seeking to %ld\n", current_pos);
+        DEBUG("seeking to %ld\n", current_pos);
 
         /* set and return final file position */
         filedesc->pos = current_pos;
@@ -1637,7 +1639,7 @@ int UNIFYCR_WRAP(flock)(int fd, int operation)
           switch (operation)
           {
               case LOCK_EX:
-                  debug("locking file %d..\n",fid);
+                  DEBUG("locking file %d..\n", fid);
                   ret = pthread_spin_lock(&meta->fspinlock);
                   if ( ret ) {
                       perror("pthread_spin_lock() failed");
@@ -1652,7 +1654,7 @@ int UNIFYCR_WRAP(flock)(int fd, int operation)
                   break;
               case LOCK_UN:
                   ret = pthread_spin_unlock(&meta->fspinlock);
-                  debug("unlocking file %d..\n",fid);
+                  DEBUG("unlocking file %d..\n", fid);
                   meta->flock_status = UNLOCKED;
                   break;
               default:
@@ -1781,7 +1783,7 @@ int UNIFYCR_WRAP(close)(int fd)
 {
     /* check whether we should intercept this file descriptor */
     if (unifycr_intercept_fd(&fd)) {
-        debug("closing fd %d\n", fd);
+        DEBUG("closing fd %d\n", fd);
 
         /* TODO: what to do if underlying file has been deleted? */
 
