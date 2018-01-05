@@ -1987,54 +1987,36 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
 */
 int unifycr_unmount()
 {
-    if (fs_type == UNIFYCR_LOG) {
-        int cmd = COMM_UNMOUNT;
-        char cmd_buf[GEN_STR_LEN] = {0};
-        memcpy(cmd_buf, &cmd, sizeof(int));
+    int cmd = COMM_UNMOUNT;
+    char cmd_buf[GEN_STR_LEN] = {0};
+    int bytes_read = 0;
+    int rc;
 
-        int res = __real_write(cmd_fd.fd,
-                               cmd_buf, sizeof(cmd_buf));
-        if (res != 0) {
-            int bytes_read = 0;
-            int rc;
-            cmd_fd.events = POLLIN | POLLPRI;
-            cmd_fd.revents = 0;
-
-            rc = poll(&cmd_fd, 1, -1);
-            if (rc == 0) {
-
-            } else {
-                if (rc > 0) {
-                    if (cmd_fd.revents != 0) {
-                        if (cmd_fd.revents == POLLIN) {
-                            bytes_read = __real_read(cmd_fd.fd, cmd_buf,
-                                                     sizeof(cmd_buf));
-                            if (bytes_read == 0) {
-                                return UNIFYCR_FAILURE;
-                            } else {
-                                if (*((int *)cmd_buf) != COMM_UNMOUNT
-                                    || *((int *)cmd_buf + 1)
-                                    != ACK_SUCCESS) {
-                                    return UNIFYCR_FAILURE;
-                                }
-                                return UNIFYCR_SUCCESS;
-                            }
-                        } else {
-                        }
-                    } else {
-                    }
-                } else {
-
-                }
-            }
-        } else {
-            return UNIFYCR_FAILURE;
-        }
-
-    } else {
+    if (fs_type != UNIFYCR_LOG)
         return UNIFYCR_FAILURE;
+
+    memcpy(cmd_buf, &cmd, sizeof(int));
+
+    rc = __real_write(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
+    if (rc <= 0)
+        return UNIFYCR_FAILURE;
+
+    cmd_fd.events = POLLIN | POLLPRI;
+    cmd_fd.revents = 0;
+
+    rc = poll(&cmd_fd, 1, -1);
+    if (rc < 0)
+        return UNIFYCR_FAILURE;
+
+    if (cmd_fd.revents != 0 && cmd_fd.revents == POLLIN) {
+        bytes_read = __real_read(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
+        if (bytes_read <= 0 ||
+            *((int *)cmd_buf) != COMM_UNMOUNT ||
+            *((int *)cmd_buf + 1) != ACK_SUCCESS)
+            return UNIFYCR_FAILURE;
     }
 
+    return UNIFYCR_SUCCESS;
 }
 
 /* mount memfs at some prefix location */
