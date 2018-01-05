@@ -1,8 +1,15 @@
+/* holds debug level for unifycr, this defaults to zero
+ * in unifycr_init, but can be changed at runtime by setting
+ * the UNIFYCR_DEBUG env variable to a value greater than 1
+ */
+extern int unifycr_debug_level;
+
 #define UNIFYCR_MAX_FILES        ( 128 )
 
 /* eventually could decouple these so there could be
  * more or less file descriptors than files, but for
- * now they're the same */
+ * now they're the same
+ */
 #define UNIFYCR_MAX_FILEDESCS    ( UNIFYCR_MAX_FILES )
 
 #define UNIFYCR_MAX_FILENAME     ( 128 )
