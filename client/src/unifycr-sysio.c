@@ -115,7 +115,10 @@ int UNIFYCR_WRAP(mkdir)(const char *path, mode_t mode)
 
         /* add directory to file list */
         int fid = unifycr_fid_create_directory(path);
-        return 0;
+        if (fid < 0)
+            return -1;
+        else
+            return 0;
     } else {
         MAP_OR_FAIL(mkdir);
         int ret = UNIFYCR_REAL(mkdir)(path, mode);
@@ -154,7 +157,10 @@ int UNIFYCR_WRAP(rmdir)(const char *path)
 
         /* remove the directory from the file list */
         int ret = unifycr_fid_unlink(fid);
-        return 0;
+        if (ret < 0)
+            return -1;
+        else
+            return 0;
     } else {
         MAP_OR_FAIL(rmdir);
         int ret = UNIFYCR_REAL(rmdir)(path);
@@ -1249,11 +1255,12 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
  * */
 int unifycr_fd_logreadlist(read_req_t *read_req, int count)
 {
-    int i, j, tot_sz = 0, rc = UNIFYCR_SUCCESS,
-              bytes_read = 0, num = 0, bytes_write = 0;
-    int *ptr_size = NULL, *ptr_num = NULL;
-    int tmp_counter = 0;
-    int delegator;
+    int i;
+    int tot_sz = 0;
+    int rc = UNIFYCR_SUCCESS;
+    int num = 0;
+    int *ptr_size = NULL;
+    int *ptr_num = NULL;
 
     /*
      * Todo: When the number of read requests exceed the
@@ -1324,7 +1331,8 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
             if (cmd_fd.revents != 0) {
                 if (cmd_fd.revents == POLLIN) {
                     int sh_cursor = 0;
-                    bytes_read = __real_read(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
+
+                    (void) __real_read(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
                     ptr_size = (int *)shm_recvbuf;
                     num = *((int *)shm_recvbuf + 1); /*The first int spared out for size*/
                     ptr_num = (int *)((char *)shm_recvbuf + sizeof(int));

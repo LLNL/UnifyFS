@@ -68,28 +68,9 @@ typedef struct {
     int rank;
 } name_rank_pair_t;
 
-static int get_del_cnt();
-static int compare_int(const void *a, const void *b);
-static int compare_name_rank_pair(const void *a, const void *b);
-static int find_rank_idx(int rank,
-                         int *local_rank_lst, int local_rank_cnt);
-static int unifycr_init_socket(int proc_id,
-                               int l_num_procs_per_node,
-                               int l_num_del_per_node);
-static int CountTasksPerNode(int rank, int numTasks);
-static int unifycr_init_req_shm(int local_rank_idx, int app_id);
 int unifycr_mount(const char prefix[], int rank, size_t size,
                   int l_app_id, int subtype);
-static int unifycr_init_recv_shm(int local_rank_idx, int app_id);
-static int unifycr_init_req_shm(int local_rank_idx, int app_id);
-static int unifycr_sync_to_del();
-static int unifycr_get_global_fid(const char *path, int *gfid);
-static int get_global_file_meta(int gfid, unifycr_fattr_t **file_meta);
-static int set_global_file_meta(unifycr_fattr_t *f_meta);
-static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,
-                         unifycr_fattr_t *ins_fattr);
 int compare_fattr(const void *a, const void *b);
-
 
 /* mount memfs at some prefix location */
 int unifycrfs_mount(const char prefix[], size_t size, int rank);
