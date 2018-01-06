@@ -279,46 +279,9 @@ int unifycr_err_map_to_errno(int rc)
         return EBADF;
     case UNIFYCR_ERR_ISDIR:
         return EISDIR;
-    case UNIFYCR_ERR_NOMEM:
-        return ENOMEM;
+    default:
+        return EIO;
     }
-    return EIO;
-}
-
-/* given an errno error code, return corresponding UnifyCR error code */
-int unifycr_errno_map_to_err(int rc)
-{
-    switch (rc) {
-    case 0:
-        return UNIFYCR_SUCCESS;
-    case ENOSPC:
-        return UNIFYCR_ERR_NOSPC;
-    case EIO:
-        return UNIFYCR_ERR_IO;
-    case ENAMETOOLONG:
-        return UNIFYCR_ERR_NAMETOOLONG;
-    case ENOENT:
-        return UNIFYCR_ERR_NOENT;
-    case EEXIST:
-        return UNIFYCR_ERR_EXIST;
-    case ENOTDIR:
-        return UNIFYCR_ERR_NOTDIR;
-    case ENFILE:
-        return UNIFYCR_ERR_NFILE;
-    case EINVAL:
-        return UNIFYCR_ERR_INVAL;
-    case EOVERFLOW:
-        return UNIFYCR_ERR_OVERFLOW;
-    case EFBIG:
-        return UNIFYCR_ERR_FBIG;
-    case EBADF:
-        return UNIFYCR_ERR_BADF;
-    case EISDIR:
-        return UNIFYCR_ERR_ISDIR;
-    case ENOMEM:
-        return UNIFYCR_ERR_NOMEM;
-    }
-    return UNIFYCR_FAILURE;
 }
 
 /* returns 1 if two input parameters will overflow their type when
@@ -561,6 +524,9 @@ static int unifycr_fid_store_alloc(int fid)
 /* free data management resource for file */
 static int unifycr_fid_store_free(int fid)
 {
+    /* get meta data for this file */
+    unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
+
     return UNIFYCR_SUCCESS;
 }
 
@@ -844,7 +810,7 @@ int unifycr_fid_extend(int fid, off_t length)
     unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
 
     /* determine file storage type */
-    if (meta->storage == FILE_STORAGE_FIXED_CHUNK ||
+    if (meta->storage == FILE_STORAGE_FIXED_CHUNK |
         meta->storage == FILE_STORAGE_LOGIO) {
         /* file stored in fixed-size chunks */
         rc = unifycr_fid_store_fixed_extend(fid, meta, length);
@@ -935,6 +901,7 @@ static int unifycr_get_global_fid(const char *path, int *gfid)
     unsigned char md[16];
     memset(md, 0, 16);
 
+    int i;
     MD5_Init(&ctx);
     MD5_Update(&ctx, path, strlen(path));
     MD5_Final(md, &ctx);
@@ -1294,7 +1261,7 @@ int unifycr_fid_unlink(int fid)
 /* initialize our global pointers into the given superblock */
 static void *unifycr_init_pointers(void *superblock)
 {
-    char *ptr = (char *)superblock;
+    char *ptr = (char *) superblock;
 
     /* jump over header (right now just a uint32_t to record
      * magic value of 0xdeadbeef if initialized */
@@ -1305,21 +1272,21 @@ static void *unifycr_init_pointers(void *superblock)
     ptr += unifycr_stack_bytes(unifycr_max_files);
 
     /* record list of file names */
-    unifycr_filelist = (unifycr_filename_t *)ptr;
+    unifycr_filelist = (unifycr_filename_t *) ptr;
     ptr += unifycr_max_files * sizeof(unifycr_filename_t);
 
     /* array of file meta data structures */
-    unifycr_filemetas = (unifycr_filemeta_t *)ptr;
+    unifycr_filemetas = (unifycr_filemeta_t *) ptr;
     ptr += unifycr_max_files * sizeof(unifycr_filemeta_t);
 
     /* array of chunk meta data strucutres for each file */
-    unifycr_chunkmetas = (unifycr_chunkmeta_t *)ptr;
+    unifycr_chunkmetas = (unifycr_chunkmeta_t *) ptr;
     ptr += unifycr_max_files * unifycr_max_chunks * sizeof(unifycr_chunkmeta_t);
 
-    if (unifycr_use_spillover)
-        ptr += unifycr_max_files * unifycr_spillover_max_chunks *
-               sizeof(unifycr_chunkmeta_t);
-
+    if (unifycr_use_spillover) {
+        ptr += unifycr_max_files * unifycr_spillover_max_chunks * sizeof(
+                   unifycr_chunkmeta_t);
+    }
     /* stack to manage free memory data chunks */
     free_chunk_stack = ptr;
     ptr += unifycr_stack_bytes(unifycr_max_chunks);
@@ -1333,11 +1300,12 @@ static void *unifycr_init_pointers(void *superblock)
     /* Only set this up if we're using memfs */
     if (unifycr_use_memfs) {
         /* round ptr up to start of next page */
-        unsigned long long ull_ptr  = (unsigned long long)ptr;
-        unsigned long long ull_page = (unsigned long long)unifycr_page_size;
+        unsigned long long ull_ptr  = (unsigned long long) ptr;
+        unsigned long long ull_page = (unsigned long long) unifycr_page_size;
         unsigned long long num_pages = ull_ptr / ull_page;
-        if (ull_ptr > num_pages * ull_page)
+        if (ull_ptr > num_pages * ull_page) {
             ptr = (char *)((num_pages + 1) * ull_page);
+        }
 
         /* pointer to start of memory data chunks */
         unifycr_chunks = ptr;
@@ -1348,7 +1316,7 @@ static void *unifycr_init_pointers(void *superblock)
 
     /* pointer to the log-structured metadata structures*/
     if (fs_type == UNIFYCR_LOG) {
-        unifycr_indices.ptr_num_entries = (off_t *)ptr;
+        unifycr_indices.ptr_num_entries = (unsigned long *)ptr;
 
         ptr += unifycr_page_size;
         unifycr_indices.index_entry = (unifycr_index_t *)ptr;
@@ -1356,7 +1324,7 @@ static void *unifycr_init_pointers(void *superblock)
 
         /*data structures  to record the global metadata*/
         ptr += unifycr_max_index_entries * sizeof(unifycr_index_t);
-        unifycr_fattrs.ptr_num_entries = (off_t *)ptr;
+        unifycr_fattrs.ptr_num_entries = (unsigned long *)ptr;
         ptr += unifycr_page_size;
         unifycr_fattrs.meta_entry = (unifycr_fattr_t *)ptr;
     }
@@ -1402,7 +1370,9 @@ static int unifycr_init_structures()
 
 static int unifycr_get_spillblock(size_t size, const char *path)
 {
+    void *scr_spillblock = NULL;
     int spillblock_fd;
+
     mode_t perms = unifycr_getmode(0);
 
     //MAP_OR_FAIL(open);
@@ -1542,8 +1512,8 @@ static void *unifycr_superblock_shmget(size_t size, key_t key)
     } else {
         /* Use mmap to allocated share memory for UnifyCR*/
         int ret = -1;
+        int fd = -1;
         char shm_name[GEN_STR_LEN] = {0};
-
         sprintf(shm_name, "%d-super-%d", app_id, key);
         superblock_fd = shm_open(shm_name, MMAP_OPEN_FLAG, MMAP_OPEN_MODE);
         if (-1 == (ret = superblock_fd)) {
@@ -2008,14 +1978,14 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
 }
 
 /**
- * unmount the mounted file system, triggered
- * by the root process of an application
- * ToDo: add the support for more operations
- * beyond terminating the servers. E.g.
- * data flush for persistence.
- * @return success/error code
- */
-int unifycr_unmount(void)
+* unmount the mounted file system, triggered
+* by the root process of an application
+* ToDo: add the support for more operations
+* beyond terminating the servers. E.g.
+* data flush for persistence.
+* @return success/error code
+*/
+int unifycr_unmount()
 {
     int cmd = COMM_UNMOUNT;
     char cmd_buf[GEN_STR_LEN] = {0};
@@ -2182,38 +2152,49 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     }
 
     return 0;
-  
 }
 
 /**
- * Transfer the client-side context information to the corresponding
- * delegator on the server side.
- */
-static int unifycr_sync_to_del(void)
+* transfer the client-side context information
+* to the corresponding delegator on the
+* server side.
+*/
+static int unifycr_sync_to_del()
 {
+    int rc = -1;
+
     int cmd = COMM_MOUNT;
+
+    int superblock_start = UNIFYCR_SUPERBLOCK_KEY;
     int num_procs_per_node = local_rank_cnt;
     int req_buf_sz = shm_req_size;
     int recv_buf_sz = shm_recv_size;
     long superblock_sz = glb_superblock_size;
-    long meta_offset = (void *)unifycr_indices.ptr_num_entries -
-        unifycr_superblock;
-    long meta_size = unifycr_max_index_entries * sizeof(unifycr_index_t);
-    long fmeta_offset = (void *)unifycr_fattrs.ptr_num_entries -
-        unifycr_superblock;
-    long fmeta_size = unifycr_max_fattr_entries * sizeof(unifycr_fattr_t);
-    long data_offset = (void *)unifycr_chunks - unifycr_superblock;
-    long data_size = (long)unifycr_max_chunks * unifycr_chunk_size;
-    char external_spill_dir[UNIFYCR_MAX_FILENAME] = {0};
 
+    long meta_offset =
+        (void *)unifycr_indices.ptr_num_entries
+        - unifycr_superblock;
+    long meta_size = unifycr_max_index_entries
+                     * sizeof(unifycr_index_t);
+
+    long fmeta_offset =
+        (void *)unifycr_fattrs.ptr_num_entries
+        - unifycr_superblock;
+
+    long fmeta_size = unifycr_max_fattr_entries *
+                      sizeof(unifycr_fattr_t);
+
+    long data_offset =
+        (void *)unifycr_chunks - unifycr_superblock;
+    long data_size = (long)unifycr_max_chunks * unifycr_chunk_size;
+
+    char external_spill_dir[UNIFYCR_MAX_FILENAME] = {0};
     strcpy(external_spill_dir, external_data_dir);
 
-    /*
-     * Copy the client-side information to the command
-     * buffer, then send to the delegator. The delegator
-     * will attach to the client-side shared memory and open
-     * the spill log file based on this information.
-     */
+    /* copy the client-side information to the command
+     * buffer, and then send to the delegator. The delegator
+     * will attach to the client-side shared memory, and open
+     * the spill log file based on these information*/
     memcpy(cmd_buf, &cmd, sizeof(int));
     memcpy(cmd_buf + sizeof(int), &app_id, sizeof(int));
     memcpy(cmd_buf + 2 * sizeof(int),
@@ -2241,14 +2222,13 @@ static int unifycr_sync_to_del(void)
            &data_size, sizeof(long));
 
     memcpy(cmd_buf + 7 * sizeof(int) + 7 * sizeof(long),
-           external_spill_dir, UNIFYCR_MAX_FILENAME);
+           external_spill_dir, UNIFYCR_MAX_FILENAME); /*adjust to add debug info*/
 
     int res = __real_write(client_sockfd,
                            cmd_buf, sizeof(cmd_buf));
     if (res != 0) {
         int bytes_read = 0;
         int rc = -1;
-
         cmd_fd.events = POLLIN | POLLPRI;
         cmd_fd.revents = 0;
 
@@ -2266,8 +2246,8 @@ static int unifycr_sync_to_del(void)
                             /*remote connection is closed*/
                             return -1;
                         } else {
-                            if (*((int *)cmd_buf) != COMM_MOUNT ||
-                                *((int *)cmd_buf + 1) != ACK_SUCCESS) {
+                            if (*((int *)cmd_buf) != COMM_MOUNT || *((int *)cmd_buf + 1)
+                                != ACK_SUCCESS) {
                                 /*encounter delegator-side error*/
                                 return rc;
                             } else {
@@ -2299,92 +2279,98 @@ static int unifycr_sync_to_del(void)
 }
 
 /**
- * Initialize the shared recv memory buffer to receive data from the delegators
- */
+* Initialize the shared recv memory buffer
+* to receive data from the delegators
+*/
 static int unifycr_init_recv_shm(int local_rank_idx, int app_id)
 {
-    char *env = getenv("SHM_RECV_SIZE");
-    char shm_name[GEN_STR_LEN] = {0};
     int rc = -1;
 
-    if (env)
+    char *env = getenv("SHM_RECV_SIZE");
+    if (env) {
         shm_recv_size = atol(env);
+    }
 
+    char shm_name[GEN_STR_LEN] = {0};
     sprintf(shm_name, "%d-recv-%d", app_id, local_rank_idx);
 
     recvbuf_fd = shm_open(shm_name, MMAP_OPEN_FLAG, MMAP_OPEN_MODE);
-    rc = recvbuf_fd;
-    if (rc == -1)
+    if (-1 == (rc = recvbuf_fd)) {
         return UNIFYCR_FAILURE;
+    }
 
     rc = ftruncate(recvbuf_fd, shm_recv_size);
-    if (rc == -1)
+    if (-1 == rc) {
         return UNIFYCR_FAILURE;
+    }
 
     shm_recvbuf = mmap(NULL, shm_recv_size, PROT_WRITE | PROT_READ,
                        MAP_SHARED, recvbuf_fd, SEEK_SET);
-    if (shm_recvbuf == NULL)
+    if (NULL == shm_recvbuf) {
         return UNIFYCR_FAILURE;
+    }
 
     *((int *)shm_recvbuf) = app_id + 3;
     return 0;
 }
 
 /**
- * Initialize the shared request memory, which
- * is used to buffer the list of read requests
- * to be transferred to the delegator on the
- * server side.
- * @param local_rank_idx: local process id
- * @param app_id: which application this
- *  process is from
- * @return success/error code
- */
+* Initialize the shared request memory, which
+* is used to buffer the list of read requests
+* to be transferred to the delegator on the
+* server side.
+* @param local_rank_idx: local process id
+* @param app_id: which application this
+*  process is from
+* @return success/error code
+*/
 static int unifycr_init_req_shm(int local_rank_idx, int app_id)
 {
-    char *env = getenv("SHM_REQ_SIZE");
-    char shm_name[GEN_STR_LEN] = {0};
     int rc = -1;
 
     /* initialize request buffer size*/
-    if (env)
+    char *env = getenv("SHM_REQ_SIZE");
+    if (env) {
         shm_req_size = atol(env);
+    }
 
+    char shm_name[GEN_STR_LEN] = {0};
     sprintf(shm_name, "%d-req-%d", app_id, local_rank_idx);
     reqbuf_fd = shm_open(shm_name, MMAP_OPEN_FLAG, MMAP_OPEN_MODE);
-    rc = reqbuf_fd;
-    if (rc == -1)
+    if (-1 == (rc = reqbuf_fd)) {
         return UNIFYCR_FAILURE;
+    }
 
     rc = ftruncate(reqbuf_fd, shm_req_size);
-    if (rc == -1)
+    if (-1 == rc) {
         return UNIFYCR_FAILURE;
+    }
+
 
     shm_reqbuf = mmap(NULL, shm_req_size, PROT_WRITE | PROT_READ,
                       MAP_SHARED, reqbuf_fd, SEEK_SET);
-    if (shm_reqbuf == NULL)
+    if (NULL == shm_reqbuf) {
         return UNIFYCR_FAILURE;
+    }
 
     return 0;
 }
 
 /**
- * get the number of delegators on the
- * same node from the first delegator
- * on the server side
- */
-static int get_del_cnt(void)
+* get the number of delegators on the
+* same node from the first delegator
+* on the server side
+*/
+static int get_del_cnt()
 {
     int cmd = COMM_SYNC_DEL;
-    int res;
-
     memcpy(cmd_buf, &cmd, sizeof(int));
-    res = __real_write(client_sockfd, cmd_buf, sizeof(cmd_buf));
 
+    int res = __real_write(client_sockfd,
+                           cmd_buf, sizeof(cmd_buf));
     if (res != 0) {
         int bytes_read = 0;
         int rc = -1;
-
         cmd_fd.events = POLLIN | POLLPRI;
         cmd_fd.revents = 0;
 
@@ -2402,8 +2388,8 @@ static int get_del_cnt(void)
                             /*remote connection is closed*/
                             return -1;
                         } else {
-                            if (*((int *)cmd_buf) != COMM_SYNC_DEL ||
-                                *((int *)cmd_buf + 1) != ACK_SUCCESS) {
+                            if (*((int *)cmd_buf) != COMM_SYNC_DEL || *((int *)cmd_buf + 1)
+                                != ACK_SUCCESS) {
                                 /*encounter delegator-side error*/
                                 return rc;
                             } else {
@@ -2428,47 +2414,53 @@ static int get_del_cnt(void)
         return -1;
     }
 
+
     return *(int *)(cmd_buf + 2 * sizeof(int));
 
 }
 
 /**
- * initialize the client-side socket
- * used to communicate with the server-side
- * delegators. Each client is serviced by
- * one delegator.
- * @param proc_id: local process id
- * @param l_num_procs_per_node: number
- * of ranks on each compute node
- * @param l_num_del_per_node: number of server-side
- * delegators on the same node
- * @return success/error code
- */
+* initialize the client-side socket
+* used to communicate with the server-side
+* delegators. Each client is serviced by
+* one delegator.
+* @param proc_id: local process id
+* @param l_num_procs_per_node: number
+* of ranks on each compute node
+* @param l_num_del_per_node: number of server-side
+* delegators on the same node
+* @return success/error code
+*/
 
 static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
                                int l_num_del_per_node)
 {
-    struct sockaddr_un serv_addr;
-    char tmp_path[GEN_STR_LEN] = {0};
-    int nprocs_per_del;
-    int len;
-    int result;
-    int flag;
     int rc = -1;
 
-    client_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (client_sockfd < 0)
-        return -1;
+    int len;
+    int result;
 
+    client_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (client_sockfd < 0) {
+        return -1;
+    }
+
+    struct sockaddr_un serv_addr;
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sun_family = AF_UNIX;
-    if (l_num_procs_per_node % l_num_del_per_node == 0)
+    char tmp_path[GEN_STR_LEN] = {0};
+
+
+    int nprocs_per_del;
+    if (l_num_procs_per_node % l_num_del_per_node == 0) {
         nprocs_per_del = l_num_procs_per_node / l_num_del_per_node;
-    else
+    } else {
         nprocs_per_del = l_num_procs_per_node / l_num_del_per_node + 1;
+    }
 
     /*which delegator I belong to*/
-    sprintf(tmp_path, "%s%d", SOCKET_PATH, proc_id / nprocs_per_del);
+    sprintf(tmp_path, "%s%d", SOCKET_PATH,
+            proc_id / nprocs_per_del);
 
     strcpy(serv_addr.sun_path, tmp_path);
     len = sizeof(serv_addr);
@@ -2480,13 +2472,14 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
         return rc;
     }
 
-    flag = fcntl(client_sockfd, F_GETFL);
+    int flag = fcntl(client_sockfd, F_GETFL);
     fcntl(client_sockfd, F_SETFL, flag | O_NONBLOCK);
     cmd_fd.fd = client_sockfd;
     cmd_fd.events = POLLIN | POLLHUP;
     cmd_fd.revents = 0;
 
     return 0;
+
 }
 
 int compare_fattr(const void *a, const void *b)
@@ -2532,57 +2525,62 @@ static int compare_name_rank_pair(const void *a, const void *b)
 }
 
 /**
- * find the local index of a given rank among all ranks
- * collocated on the same node
- * @param local_rank_lst: a list of local ranks
- * @param local_rank_cnt: number of local ranks
- * @return index of rank in local_rank_lst
- */
-static int find_rank_idx(int rank, int *local_rank_lst, int local_rank_cnt)
+* find the local index of a given rank among all ranks
+* collocated on the same node
+* @param local_rank_lst: a list of local ranks
+* @param local_rank_cnt: number of local ranks
+* @return index of rank in local_rank_lst
+*/
+static int find_rank_idx(int rank,
+                         int *local_rank_lst, int local_rank_cnt)
 {
     int i;
-
     for (i = 0; i < local_rank_cnt; i++) {
-        if (local_rank_lst[i] == rank)
+        if (local_rank_lst[i] == rank) {
             return i;
+        }
     }
 
     return -1;
+
 }
 
 
 /**
- * calculate the number of ranks per node,
- *
- * @param numTasks: number of tasks in the application
- * @return success/error code
- * @return local_rank_lst: a list of local ranks
- * @return local_rank_cnt: number of local ranks
- */
+* calculate the number of ranks per node,
+*
+* @param numTasks: number of tasks in the application
+* @return success/error code
+* @return local_rank_lst: a list of local ranks
+* @return local_rank_cnt: number of local ranks
+*/
 static int CountTasksPerNode(int rank, int numTasks)
 {
-    char hostname[UNIFYCR_MAX_FILENAME];
-    char localhost[UNIFYCR_MAX_FILENAME];
-    int resultsLen = 30;
+    char       hostname[UNIFYCR_MAX_FILENAME],
+               localhost[UNIFYCR_MAX_FILENAME];
+    int        count               = 1,
+               resultsLen          = 30,
+               i;
+
     MPI_Status status;
     int rc;
 
     rc = MPI_Get_processor_name(localhost, &resultsLen);
-    if (rc != 0)
+    if (rc != 0) {
         debug("failed to get the processor's name");
+    }
+
+
 
     if (numTasks > 0) {
         if (rank == 0) {
-            int i;
             /* a container of (rank, host) mappings*/
             name_rank_pair_t *host_set =
                 (name_rank_pair_t *)malloc(numTasks
                                            * sizeof(name_rank_pair_t));
-            /*
-             * MPI_receive all hostnames, and compare to local hostname
-             * TODO: handle the case when the length of hostname is larger
-             * than 30
-             */
+            /* MPI_receive all hostnames, and compare to local hostname */
+            /* ToDo: handle the case when the length of hostname is larger
+             * than 30*/
             for (i = 1; i < numTasks; i++) {
                 rc = MPI_Recv(hostname, UNIFYCR_MAX_FILENAME,
                               MPI_CHAR, MPI_ANY_SOURCE,
@@ -2603,14 +2601,13 @@ static int CountTasksPerNode(int rank, int numTasks)
             qsort(host_set, numTasks, sizeof(name_rank_pair_t),
                   compare_name_rank_pair);
 
-            /*
-             * rank_cnt: records the number of processes on each node
+            /* rank_cnt: records the number of processes on each node
              * rank_set: the list of ranks for each node
-             */
+             * */
             int **rank_set = (int **)malloc(numTasks * sizeof(int *));
             int *rank_cnt = (int *)malloc(numTasks * sizeof(int));
-            int cursor = 0, set_counter = 0;
 
+            int cursor = 0, set_counter = 0;
             for (i = 1; i < numTasks; i++) {
                 if (strcmp(host_set[i].hostname,
                            host_set[i - 1].hostname) == 0) {
@@ -2618,7 +2615,6 @@ static int CountTasksPerNode(int rank, int numTasks)
                 } else {
                     // find a different rank, so switch to a new set
                     int j, k = 0;
-
                     rank_set[set_counter] =
                         (int *)malloc((i - cursor) * sizeof(int));
                     rank_cnt[set_counter] = i - cursor;
@@ -2634,33 +2630,48 @@ static int CountTasksPerNode(int rank, int numTasks)
 
             }
 
-            /* fill rank_cnt and rank_set entry for the last node */
+
+            /*fill rank_cnt and rank_set entry for the last node*/
             int j = 0;
 
-            rank_set[set_counter] = malloc((i - cursor) * sizeof(int));
+            rank_set[set_counter] =
+                (int *)malloc((i - cursor) * sizeof(int));
             rank_cnt[set_counter] = numTasks - cursor;
+            /*
+            printf("cursor is %d\n", cursor); fflush(stdout);
+            */
             for (i = cursor; i <= numTasks - 1; i++) {
                 rank_set[set_counter][j] = host_set[i].rank;
                 j++;
             }
             set_counter++;
 
-            /* broadcast the rank_cnt and rank_set information to each rank */
-            int root_set_no = -1;
-
+            /*broadcast the rank_cnt and rank_set information to each
+             * rank*/
+            int root_set_no;
             for (i = 0; i < set_counter; i++) {
                 for (j = 0; j < rank_cnt[i]; j++) {
                     if (rank_set[i][j] != 0) {
-                        rc = MPI_Send(&rank_cnt[i], 1, MPI_INT, rank_set[i][j],
-                                      0, MPI_COMM_WORLD);
+                        /*
+                        printf("i is %d, j is %d\n", i, j); fflush(stdout);
+                        printf("rank:%d, 1sending to %d, rank_cnt[%d] is %d\n", rank,
+                                rank_set[i][j], i, rank_cnt[i]); fflush(stdout);
+                                */
+                        rc = MPI_Send(&rank_cnt[i], 1,
+                                      MPI_INT, rank_set[i][j], 0, MPI_COMM_WORLD);
                         if (rc != 0) {
                             debug("cannot send local rank cnt");
                             return -1;
                         }
 
+
+
                         /*send the local rank set to the corresponding rank*/
-                        rc = MPI_Send(rank_set[i], rank_cnt[i], MPI_INT,
-                                      rank_set[i][j], 0, MPI_COMM_WORLD);
+                        rc = MPI_Send(rank_set[i], rank_cnt[i],
+                                      MPI_INT, rank_set[i][j], 0, MPI_COMM_WORLD);
+                        /*
+                        printf("rank:%d, 2sending to %d, rank_cnt[%d] is %d\n", rank,
+                                rank_set[i][j], i, rank_cnt[i]); fflush(stdout);*/
                         if (rc != 0) {
                             debug("cannot send local rank list");
                             return -1;
@@ -2673,24 +2684,22 @@ static int CountTasksPerNode(int rank, int numTasks)
 
 
             /* root process set its own local rank set and rank_cnt*/
-            if (root_set_no >= 0) {
-                local_rank_lst = malloc(rank_cnt[root_set_no] * sizeof(int));
-                for (i = 0; i < rank_cnt[root_set_no]; i++)
-                    local_rank_lst[i] = rank_set[root_set_no][i];
-
-                local_rank_cnt = rank_cnt[root_set_no];
+            local_rank_lst = (int *)malloc(rank_cnt[root_set_no] * sizeof(int));
+            for (i = 0; i < rank_cnt[root_set_no]; i++) {
+                local_rank_lst[i] = rank_set[root_set_no][i];
             }
+            local_rank_cnt = rank_cnt[root_set_no];
 
-            for (i = 0; i < set_counter; i++)
+            for (i = 0; i < set_counter; i++) {
                 free(rank_set[i]);
-
+            }
             free(rank_cnt);
             free(host_set);
             free(rank_set);
+
         } else {
-            /*
-             * non-root process performs MPI_send to send hostname to root node
-             */
+            /* non-root process performs MPI_send to send
+             * hostname to root node */
             rc = MPI_Send(localhost, UNIFYCR_MAX_FILENAME,
                           MPI_CHAR, 0, 0, MPI_COMM_WORLD);
             if (rc != 0) {
@@ -2729,156 +2738,8 @@ static int CountTasksPerNode(int rank, int numTasks)
     return 0;
 }
 
-
-/* mount memfs at some prefix location */
-int unifycrfs_mount(const char prefix[], size_t size, int rank)
-{
-    char *env = getenv("UNIFYCR_USE_SINGLE_SHM");
-
-    unifycr_mount_prefix = strdup(prefix);
-    unifycr_mount_prefixlen = strlen(unifycr_mount_prefix);
-
-    if (env) {
-        int val = atoi(env);
-
-        if (val != 0)
-            unifycr_use_single_shm = 1;
-    }
-
-    if (unifycr_use_single_shm)
-        unifycr_mount_shmget_key = UNIFYCR_SUPERBLOCK_KEY + rank;
-    else
-        unifycr_mount_shmget_key = IPC_PRIVATE;
-
-    if (fs_type == UNIFYCR_LOG || fs_type == UNIFYCR_STRIPE) {
-        int rc = CountTasksPerNode(rank, size);
-
-        if (rc < 0) {
-            debug("rank:%d, cannot get the local rank list.", dbg_rank);
-            return -1;
-        }
-
-        local_rank_idx = find_rank_idx(rank,
-                                       local_rank_lst, local_rank_cnt);
-
-        /*
-         * unifycr_mount_shmget_key marks the start of
-         * the superblock shared memory of each rank
-         * each process has three types of shared memory:
-         * request memory, recv memory and superblock
-         * memory. We set unifycr_mount_shmget_key in
-         * this way to avoid different ranks conflicting
-         * on the same name in shm_open.
-         */
-        unifycr_mount_shmget_key = local_rank_idx;
-
-    }
-
-    /* initialize our library */
-    unifycr_init(rank);
-
-    if (fs_type == UNIFYCR_LOG || fs_type == UNIFYCR_STRIPE) {
-        char host_name[UNIFYCR_MAX_FILENAME] = {0};
-        int rc = gethostname(host_name, UNIFYCR_MAX_FILENAME);
-
-        if (rc != 0) {
-            debug("rank:%d, fail to get the host name.", dbg_rank);
-            return UNIFYCR_FAILURE;
-        }
-
-        /* get the number of collocated delegators*/
-        if (local_rank_idx == 0) {
-            rc = unifycr_init_socket(0, 1, 1);
-            if (rc < 0)
-                return -1;
-
-            local_del_cnt = get_del_cnt();
-            if (local_del_cnt > 0) {
-                int i;
-
-                for (i = 0; i < local_rank_cnt; i++) {
-                    if (local_rank_lst[i] != rank) {
-                        int rc = MPI_Send(&local_del_cnt, 1, MPI_INT,
-                                          local_rank_lst[i], 0,
-                                          MPI_COMM_WORLD);
-                        if (rc != MPI_SUCCESS) {
-                            debug("rank:%d, MPI_Send failed", dbg_rank);
-                            return UNIFYCR_FAILURE;
-                        }
-
-                    }
-                }
-            } else {
-                debug("rank:%d, fail to get the delegator count.", dbg_rank);
-                return UNIFYCR_FAILURE;
-            }
-
-        } else {
-            MPI_Status status;
-            int rc = MPI_Recv(&local_del_cnt, 1, MPI_INT, local_rank_lst[0],
-                              0, MPI_COMM_WORLD, &status);
-
-            if (rc != MPI_SUCCESS) {
-                debug("rank:%d, MPI_Recv failed.", dbg_rank);
-                return UNIFYCR_FAILURE;
-            }
-            if (local_del_cnt < 0 || rc < 0) {
-                debug("rank:%d, fail to initialize socket.", dbg_rank);
-                return UNIFYCR_FAILURE;
-            } else  {
-                int rc = unifycr_init_socket(local_rank_idx,
-                                             local_rank_cnt, local_del_cnt);
-                if (rc < 0) {
-                    debug("rank:%d, fail to initialize socket.", dbg_rank);
-                    return UNIFYCR_FAILURE;
-                }
-            }
-        }
-
-        /*connect to server-side delegators*/
-
-        rc = unifycr_init_req_shm(local_rank_idx, app_id);
-        if (rc < 0) {
-            debug("rank:%d, fail to init shared request memory.", dbg_rank);
-            return UNIFYCR_FAILURE;
-        }
-
-        rc = unifycr_init_recv_shm(local_rank_idx, app_id);
-        if (rc < 0) {
-            debug("rank:%d, fail to init shared receive memory.", dbg_rank);
-            return UNIFYCR_FAILURE;
-        }
-
-        rc = unifycr_sync_to_del();
-        if (rc < 0) {
-            debug("rank:%d, fail to convey information to the delegator.",
-                  dbg_rank);
-            return UNIFYCR_FAILURE;
-        }
-
-    }
-    /* add mount point as a new directory in the file list */
-    if (unifycr_get_fid_from_path(prefix) >= 0) {
-        /* we can't mount this location, because it already exists */
-        errno = EEXIST;
-        return -1;
-    } else {
-        /* claim an entry in our file list */
-        int fid = unifycr_fid_create_directory(prefix);
-
-        if (fid < 0) {
-            /* if there was an error, return it */
-            return fid;
-        }
-    }
-
-    return 0;
-}
-
-/*
- * get information about the chunk data region for external async libraries
- * to register during their init
- */
+/* get information about the chunk data region
+ * for external async libraries to register during their init */
 size_t unifycr_get_data_region(void **ptr)
 {
     *ptr = unifycr_chunks;
@@ -2891,10 +2752,8 @@ chunk_list_t *unifycr_get_chunk_list(char *path)
     return NULL;
 }
 
-/*
- * debug function to print list of chunks constituting a file and to test
- * above function
- */
+/* debug function to print list of chunks constituting a file
+ * and to test above function*/
 void unifycr_print_chunk_list(char *path)
 {
 }

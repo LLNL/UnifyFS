@@ -165,7 +165,7 @@ int unifycr_unsupported_stream(
     return rc;
 }
 
-int unifycr_stream_set_pointers(unifycr_stream_t *s)
+static int unifycr_stream_set_pointers(unifycr_stream_t *s)
 {
     /* get pointer to file descriptor structure */
     unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(s->fd);
@@ -309,7 +309,7 @@ static int unifycr_fopen(
     /* assume default permissions */
     mode_t perms = unifycr_getmode(0);
 
-    int open_rc = -1;
+    int open_rc;
     int fid;
     off_t pos;
     if (read) {
@@ -1328,6 +1328,26 @@ size_t UNIFYCR_WRAP(fwrite)(const void *ptr, size_t size, size_t nitems,
     }
 }
 
+int UNIFYCR_WRAP(fprintf)(FILE *stream, const char *format, ...)
+{
+    /* check whether we should intercept this stream */
+    if (unifycr_intercept_stream(stream)) {
+        /* delegate work to vfprintf */
+        va_list args;
+        va_start(args, format);
+        int ret = UNIFYCR_WRAP(vfprintf)(stream, format, args);
+        va_end(args);
+        return ret;
+    } else {
+        va_list args;
+        va_start(args, format);
+        MAP_OR_FAIL(vfprintf);
+        int ret = UNIFYCR_REAL(vfprintf)(stream, format, args);
+        va_end(args);
+        return ret;
+    }
+}
+
 int UNIFYCR_WRAP(vfprintf)(FILE *stream, const char *format, va_list ap)
 {
     /* check whether we should intercept this stream */
@@ -1387,22 +1407,21 @@ int UNIFYCR_WRAP(vfprintf)(FILE *stream, const char *format, va_list ap)
     }
 }
 
-int UNIFYCR_WRAP(fprintf)(FILE *stream, const char *format, ...)
+int UNIFYCR_WRAP(fscanf)(FILE *stream, const char *format, ...)
 {
-    va_list args;
-    int ret;
-
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
-        /* delegate work to vfprintf */
+        /* delegate work to vfscanf */
+        va_list args;
         va_start(args, format);
-        ret = UNIFYCR_WRAP(vfprintf)(stream, format, args);
+        int ret = UNIFYCR_WRAP(vfscanf)(stream, format, args);
         va_end(args);
         return ret;
     } else {
+        va_list args;
         va_start(args, format);
-        MAP_OR_FAIL(vfprintf);
-        ret = UNIFYCR_REAL(vfprintf)(stream, format, args);
+        MAP_OR_FAIL(vfscanf);
+        int ret = UNIFYCR_REAL(vfscanf)(stream, format, args);
         va_end(args);
         return ret;
     }
@@ -1413,40 +1432,18 @@ static int __svfscanf(unifycr_stream_t *fp, const char *fmt0, va_list ap);
 
 int UNIFYCR_WRAP(vfscanf)(FILE *stream, const char *format, va_list ap)
 {
-    va_list args;
-    int ret;
-
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
+        va_list args;
         va_copy(args, ap);
-        ret = __svfscanf((unifycr_stream_t *)stream, format, args);
+        int ret = __svfscanf((unifycr_stream_t *)stream, format, args);
         va_end(args);
         return ret;
     } else {
+        va_list args;
         va_copy(args, ap);
         MAP_OR_FAIL(vfscanf);
-        ret = UNIFYCR_REAL(vfscanf)(stream, format, args);
-        va_end(args);
-        return ret;
-    }
-}
-
-int UNIFYCR_WRAP(fscanf)(FILE *stream, const char *format, ...)
-{
-    va_list args;
-    int ret;
-
-    /* check whether we should intercept this stream */
-    if (unifycr_intercept_stream(stream)) {
-        /* delegate work to vfscanf */
-        va_start(args, format);
-        ret = UNIFYCR_WRAP(vfscanf)(stream, format, args);
-        va_end(args);
-        return ret;
-    } else {
-        va_start(args, format);
-        MAP_OR_FAIL(vfscanf);
-        ret = UNIFYCR_REAL(vfscanf)(stream, format, args);
+        int ret = UNIFYCR_REAL(vfscanf)(stream, format, args);
         va_end(args);
         return ret;
     }
@@ -1680,10 +1677,13 @@ int UNIFYCR_WRAP(fflush)(FILE *stream)
 
     /* otherwise, check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
+        /* lookup stream */
+        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+
         /* TODO: check that stream is active */
+
         /* flush output on stream */
         int rc = unifycr_stream_flush(stream);
-
         if (rc != UNIFYCR_SUCCESS) {
             /* ERROR: flush sets error indicator and errno */
             return EOF;
@@ -2927,7 +2927,7 @@ __sccl(tab, fmt)
 char *tab;
 const u_char *fmt;
 {
-    int c, n, v;
+    int c, n, v, i;
 
     /* first `clear' the whole table */
     c = *fmt++;     /* first char hat => negated scanset */

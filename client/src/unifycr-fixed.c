@@ -72,7 +72,7 @@ extern int unifycr_spillover_max_chunks;
 
 /* given a file id and logical chunk id, return pointer to meta data
  * for specified chunk, return NULL if not found */
-unifycr_chunkmeta_t *unifycr_get_chunkmeta(int fid, int cid)
+static unifycr_chunkmeta_t *unifycr_get_chunkmeta(int fid, int cid)
 {
     /* lookup file meta data for specified file id */
     unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
@@ -264,8 +264,7 @@ static int unifycr_chunk_read(
         //MAP_OR_FAIL(pread);
         off_t spill_offset = unifycr_compute_spill_offset(meta, chunk_id, chunk_offset);
         ssize_t rc = pread(unifycr_spilloverblock, buf, count, spill_offset);
-        if (rc < 0)
-            return unifycr_errno_map_to_err(rc);
+        /* TODO: check return code for errors */
     } else {
         /* unknown chunk type */
         debug("unknown chunk type in read\n");
