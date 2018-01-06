@@ -46,4 +46,3 @@ libunifycr_gotcha_la_SOURCES = \
 libunifycr_gotcha_la_CPPFLAGS = -DUNIFYCR_GOTCHA -I$(top_builddir)/client $(GOTCHA_CFLAGS)
 libunifycr_gotcha_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION) $(GOTCHA_LDFLAGS) -lgotcha -lcrypto -lrt -lpthread
 
-AM_CFLAGS = -Wall -Wno-strict-aliasing
