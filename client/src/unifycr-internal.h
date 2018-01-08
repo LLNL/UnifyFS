@@ -71,12 +71,12 @@
 
 /* TODO: move common includes to another file */
 #include "unifycr-defs.h"
-
-#ifdef UNIFYCR_DEBUG
-#define debug(fmt, args... )  printf("%s: "fmt, __func__, ##args)
-#else
-#define debug(fmt, args... )
-#endif
+#define DEBUG(fmt, ...) \
+do { \
+    if (unifycr_debug_level > 0) \
+        printf("unifycr: %s:%d: %s: " fmt "\n", \
+               __FILE__, __LINE__, __func__, ## __VA_ARGS__); \
+} while (0)
 
 /* define a macro to capture function name, file name, and line number
  * along with user-defined string */
