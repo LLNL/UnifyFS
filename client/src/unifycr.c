@@ -2759,7 +2759,7 @@ chunk_list_t *unifycr_get_chunk_list(char *path)
 }
 
 /*
- * DEBUG function to print list of chunks constituting a file and to test
+ * debug function to print list of chunks constituting a file and to test
  * above function
  */
 void unifycr_print_chunk_list(char *path)

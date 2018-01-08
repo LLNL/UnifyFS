@@ -1003,7 +1003,7 @@ int leveldb_process_range(leveldb_iterator_t *iter,\
 
 	const char *ret_key, *ret_val;
 	long tmp_key_len, tmp_val_len;
-	const char *save_next_ret_key, *save_next_ret_val;
+	const char *save_next_ret_key;
 
 	leveldb_iter_seek(iter, (char *)start_key, key_len);
 
@@ -1118,10 +1118,7 @@ int leveldb_process_range(leveldb_iterator_t *iter,\
 							out_val, out_val_len, tmp_records_cnt, \
 								tmp_out_cap);
 		} else {
-		    save_next_ret_key = ret_key;
-		    save_next_ret_val = ret_val;
-
-
+			save_next_ret_key = ret_key;
 			ret_key = leveldb_iter_key(iter, (size_t *)&tmp_key_len);
 			if (!ret_key)
 				return MDHIM_DB_ERROR;
@@ -1212,7 +1209,6 @@ int leveldb_process_range(leveldb_iterator_t *iter,\
 		}
 
 	}
-
 
 	return 0;
 }

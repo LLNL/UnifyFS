@@ -31,5 +31,6 @@ AM_CPPFLAGS = -I$(top_srcdir)/meta/src/Mlog2 \
               -I$(top_srcdir)/meta/src/uthash
 
 AM_CFLAGS = -DLEVELDB_SUPPORT $(LEVELDB_CFLAGS)
+AM_CFLAGS += -Wall
 
-CLEANFILES = 
+CLEANFILES =

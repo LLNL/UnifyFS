@@ -48,6 +48,7 @@
 #include "range_server.h"
 #include "partitioner.h"
 #include "mdhim_options.h"
+#include "ds_leveldb.h"
 #include "uthash.h"
 
 #define UNIFYCR_FID(key) *(long *)key
@@ -150,7 +151,6 @@ int send_locally_or_remote(struct mdhim_t *md, int dest, void *message) {
 		msg_req = malloc(sizeof(MPI_Request *));
 		sendbuf = malloc(sizeof(void *));
 		sizebuf = malloc(sizeof(int));
-		struct mdhim_stat *ttmp, *stat;
 		ret = send_client_response(md, dest, message, sizebuf, 
 					   sendbuf, size_req, msg_req);
 
@@ -1141,8 +1141,11 @@ int range_server_bget_op(struct mdhim_t *md, struct mdhim_bgetm_t *bgm, int sour
 		*get_key_len = bgm->key_lens[0];
 		key_lens[0] = *get_key_len;
 
-		error = mdhim_levedb_batch_next(index->mdhim_store->db_handle, keys, key_lens, values, value_lens, \
-					bgm->num_keys * bgm->num_recs, &num_records);
+		error = mdhim_levedb_batch_next(index->mdhim_store->db_handle,
+						(char **)keys, key_lens,
+						(char **)values, value_lens,
+						bgm->num_keys * bgm->num_recs,
+						&num_records);
 
 	}
 
@@ -1380,7 +1383,7 @@ int range_server_add_oreq(struct mdhim_t *md, MPI_Request *req, void *msg) {
 int range_server_clean_oreqs(struct mdhim_t *md) {
 	out_req *item;
 	out_req *t;
-	int ret;
+	int ret = MDHIM_SUCCESS;
 	int flag = 0;
 	MPI_Status status;
 
@@ -1395,6 +1398,11 @@ int range_server_clean_oreqs(struct mdhim_t *md) {
 		pthread_mutex_lock(md->mdhim_comm_lock);
 		ret = MPI_Test((MPI_Request *)item->req, &flag, &status); 
 		pthread_mutex_unlock(md->mdhim_comm_lock);
+
+		if (ret != MPI_SUCCESS) {
+			ret = MDHIM_ERROR;
+			break;
+		}
 
 		if (!flag) {
 			item = item->next;
@@ -1427,7 +1435,7 @@ int range_server_clean_oreqs(struct mdhim_t *md) {
 
 	pthread_mutex_unlock(md->mdhim_rs->out_req_mutex);
 
-	return MDHIM_SUCCESS;
+	return ret;
 }
 
 /**

@@ -61,14 +61,13 @@ void test_req_and_wait(struct mdhim_t *md, MPI_Request *req) {
 	int flag;
 	MPI_Status status;
 	int done = 0;
-	int ret;
 
 	while (!done) {
 		pthread_mutex_lock(md->mdhim_comm_lock);
-		ret = MPI_Test(req, &flag, &status);
+		(void) MPI_Test(req, &flag, &status);
 		//Unlock the mdhim_comm_lock
 		pthread_mutex_unlock(md->mdhim_comm_lock);
-	
+
 		if (flag) {
 			done = 1;
 		} else {
