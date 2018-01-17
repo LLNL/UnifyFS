@@ -3,7 +3,10 @@ dnl This file is a part of UnifyCR. Please see LICENSE for the license
 dnl information.
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([unifycr], [0.1.0], [unifycr@llnl.gov])
+AC_INIT([unifycr],
+        m4_esyscmd([git describe --always |
+                   awk '/.*/{sub(/^v/,""); printf "%s",$1; exit}']),
+        [unifycr@llnl.gov])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
