@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
 
 	char *manifest_path;
 	manifest_path = malloc(path_len);
-	sprintf(manifest_path, "%s%s", db_opts->db_path, MANIFEST_FILE_NAME);
+	sprintf(manifest_path, "%s/%s", db_opts->db_path, MANIFEST_FILE_NAME);
 	db_opts->manifest_path = manifest_path;
 	db_opts->db_name = db_name;
 	db_opts->db_type = LEVELDB;

@@ -115,7 +115,7 @@ int meta_init_store()
         return -1;
     }
 
-    sprintf(manifest_path, "%s%s", db_opts->db_path, MANIFEST_FILE_NAME);
+    sprintf(manifest_path, "%s/%s", db_opts->db_path, MANIFEST_FILE_NAME);
     db_opts->manifest_path = manifest_path;
 
     env = getenv("UNIFYCR_META_DB_NAME");
@@ -610,16 +610,16 @@ int meta_sanitize()
     char dbfilename1[GEN_STR_LEN] = {0};
     char statfilename1[GEN_STR_LEN] = {0};
     char manifestname1[GEN_STR_LEN] = {0};
-    sprintf(dbfilename, "%s%s-%d-%d", md->db_opts->db_path, md->db_opts->db_name,
-            unifycr_indexes[0]->id, md->mdhim_rank);
+    sprintf(dbfilename, "%s/%s-%d-%d", md->db_opts->db_path,
+            md->db_opts->db_name, unifycr_indexes[0]->id, md->mdhim_rank);
 
     sprintf(statfilename, "%s_stats", dbfilename);
     sprintf(manifestname, "%s%d_%d_%d", md->db_opts->manifest_path,
             unifycr_indexes[0]->type,
             unifycr_indexes[0]->id, md->mdhim_rank);
 
-    sprintf(dbfilename1, "%s%s-%d-%d", md->db_opts->db_path, md->db_opts->db_name,
-            unifycr_indexes[1]->id, md->mdhim_rank);
+    sprintf(dbfilename1, "%s/%s-%d-%d", md->db_opts->db_path,
+            md->db_opts->db_name, unifycr_indexes[1]->id, md->mdhim_rank);
 
     sprintf(statfilename1, "%s_stats", dbfilename1);
     sprintf(manifestname1, "%s%d_%d_%d", md->db_opts->manifest_path,

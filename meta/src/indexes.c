@@ -592,17 +592,20 @@ int open_db_store(struct mdhim_t *md, struct index_t *index) {
 
 	//Database filename is dependent on ranges.  This needs to be configurable and take a prefix
 	if (!md->db_opts->db_paths) {
-		sprintf(filename, "%s%s-%d-%d", md->db_opts->db_path, md->db_opts->db_name, 
-			index->id, md->mdhim_rank);
+		sprintf(filename, "%s/%s-%d-%d", md->db_opts->db_path,
+			md->db_opts->db_name, index->id, md->mdhim_rank);
 	} else {
 		path_num = index->myinfo.rangesrv_num/((double) index->num_rangesrvs/(double) md->db_opts->num_paths);
 		path_num = path_num >= md->db_opts->num_paths ? md->db_opts->num_paths - 1 : path_num;
 		if (path_num < 0) {
-			sprintf(filename, "%s%s-%d-%d", md->db_opts->db_path, md->db_opts->db_name, index->id, 
-				md->mdhim_rank);
+			sprintf(filename, "%s/%s-%d-%d", md->db_opts->db_path,
+				md->db_opts->db_name,
+				index->id, md->mdhim_rank);
 		} else {
-			sprintf(filename, "%s%s-%d-%d", md->db_opts->db_paths[path_num], 
-				md->db_opts->db_name, index->id, md->mdhim_rank);
+			sprintf(filename, "%s/%s-%d-%d",
+				md->db_opts->db_paths[path_num],
+				md->db_opts->db_name, index->id,
+				md->mdhim_rank);
 		}
 	}
 
