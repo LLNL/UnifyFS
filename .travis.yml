@@ -16,6 +16,7 @@ before_install:
   - spack load environment-modules
   - source <(spack module loads gotcha leveldb)
   - eval $(./scripts/git_log_test_env.sh)
+  - export TEST_CHECKPATCH_SKIP_FILES
 
 cache:
   directories:

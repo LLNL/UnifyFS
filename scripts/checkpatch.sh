@@ -26,6 +26,15 @@ checkpatch_ignore+=",USE_NEGATIVE_ERRNO" # We don't return negative errnos
 
 checkpatch_cmd+=" --ignore $checkpatch_ignore"
 
+#
+# Allow checked-in files to be exempted from style checking if the
+# TEST_CHECKPATCH_SKIP_FILES is set. It should be a comma separated list
+# of paths relative to the project root, e.g. scripts/checkpath.sh.
+#
+if test -n "$TEST_CHECKPATCH_SKIP_FILES"; then
+    checkpatch_cmd+=" --skip-files $TEST_CHECKPATCH_SKIP_FILES"
+fi
+
 # Suppress summary warning about white space errors.
 checkpatch_cmd+=" -q"
 
