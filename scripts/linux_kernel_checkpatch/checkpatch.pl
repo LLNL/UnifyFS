@@ -46,6 +46,8 @@ my %use_type = ();
 my @use = ();
 my %ignore_type = ();
 my @ignore = ();
+my %skip_files = ();
+my @skipfiles = ();
 my $help = 0;
 my $configuration_file = ".checkpatch.conf";
 my $max_line_length = 80;
@@ -88,6 +90,7 @@ Options:
   -f, --file                 treat FILE as regular source file
   --subjective, --strict     enable more subjective tests
   --list-types               list the possible message types
+  --skip-files FILE(,FILE2...) don't check these files
   --types TYPE(,TYPE2...)    show only these comma separated message types
   --ignore TYPE(,TYPE2...)   ignore various comma separated message types
   --show-types               show the specific message type in the output
@@ -206,6 +209,7 @@ GetOptions(
 	'strict!'	=> \$check,
 	'ignore=s'	=> \@ignore,
 	'types=s'	=> \@use,
+	'skip-files=s'	=> \@skipfiles,
 	'show-types!'	=> \$show_types,
 	'list-types!'	=> \$list_types,
 	'max-line-length=i' => \$max_line_length,
@@ -292,6 +296,7 @@ sub hash_show_words {
 }
 
 hash_save_array_words(\%ignore_type, \@ignore);
+hash_save_array_words(\%skip_files, \@skipfiles);
 hash_save_array_words(\%use_type, \@use);
 
 my $dbg_values = 0;
@@ -2416,6 +2421,10 @@ sub process {
 			} else {
 				$check = $check_orig;
 			}
+			next;
+		}
+
+		if (defined $skip_files{uc($realfile)}) {
 			next;
 		}
 
