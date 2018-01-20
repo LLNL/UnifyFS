@@ -29,6 +29,7 @@
 
 #include <mpi.h>
 #include <unistd.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
@@ -57,6 +58,63 @@ arraylist_t *thrd_list;
 int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
 int log_print_level = 5;
 
+/*
+ * Perform steps to create a daemon process:
+ *
+ *  1. Fork and exit from parent so child runs in the background
+ *  2. Set the daemon umask to 0 so file modes passed to open() and
+ *     mkdir() fully control access modes
+ *  3. Call setsid() to create a new session and detach from controlling tty
+ *  4. Change current working directory to / so daemon doesn't block
+ *     filesystem unmounts
+ *  5. close STDIN, STDOUT, and STDERR
+ *  6. Fork again to abdicate session leader position to guarantee
+ *     daemon cannot reacquire a controlling TTY
+ *
+ */
+static void daemonize(void)
+{
+    pid_t pid;
+    pid_t sid;
+    int rc;
+
+    pid = fork();
+
+    if (pid < 0) {
+        fprintf(stderr, "fork failed: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    if (pid > 0)
+        exit(0);
+
+    umask(0);
+
+    sid = setsid();
+    if (sid < 0) {
+        fprintf(stderr, "setsid failed: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    rc = chdir("/");
+    if (rc < 0) {
+        fprintf(stderr, "chdir failed: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+
+    pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "fork failed: %s\n", strerror(errno));
+        exit(1);
+    } else if (pid > 0) {
+        exit(0);
+    }
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -64,6 +122,8 @@ int main(int argc, char *argv[])
     int provided;
     char *env;
     int rc;
+
+    daemonize();
 
     rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
 
