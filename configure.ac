@@ -288,6 +288,8 @@ AC_CONFIG_FILES([Makefile
                  client/Makefile
                  client/src/Makefile
                  client/tests/Makefile
+                 t/Makefile
+                 t/lib/Makefile
                  client/unifycr.pc])
 
 UNIFYCR_VERSION=${PACKAGE_VERSION}
