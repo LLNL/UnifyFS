@@ -53,3 +53,12 @@ server/src/unifycrd
 client/unifycr-config
 client/unifycr.pc
 
+# test files
+client/tests/test_read_gotcha
+client/tests/test_read_static
+client/tests/test_write_gotcha
+client/tests/test_write_static
+t/sys/open.t
+t/test-results/
+t/unifycr_unmount.t
+t/test_run_env.sh

@@ -2451,7 +2451,7 @@ sub process {
 		if ($line =~ /^new (file )?mode.*[7531]\d{0,2}$/) {
 			my $permhere = $here . "FILE: $realfile\n";
 			if ($realfile !~ m@scripts/@ &&
-			    $realfile !~ /\.(py|pl|awk|sh)$/) {
+			    $realfile !~ /\.(py|pl|awk|sh|t)$/) {
 				ERROR("EXECUTE_PERMISSIONS",
 				      "do not set execute permissions for source files\n" . $permhere);
 			}
