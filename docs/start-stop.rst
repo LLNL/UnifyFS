@@ -37,7 +37,6 @@ Next, we can start run our application with UnifyCR in the following manner:
 
         #!/bin/bash
 
-        export UNIFYCR_USE_SPILLOVER=1
         APP_PATH=/path/to/my/app
 
         NODES=1
