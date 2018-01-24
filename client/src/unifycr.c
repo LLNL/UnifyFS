@@ -1756,14 +1756,14 @@ static int unifycr_init(int rank)
         unifycr_min_long = LONG_MIN;
 
         /* will we use spillover to store the files? */
-        unifycr_use_spillover = 0;
+        unifycr_use_spillover = 1;
 
         env = getenv("UNIFYCR_USE_SPILLOVER");
         if (env) {
             int val = atoi(env);
-            if (val != 0) {
-                unifycr_use_spillover = 1;
-            }
+            if (val != 1)
+                unifycr_use_spillover = 0;
+
         }
 
         DEBUG("are we using spillover? %d\n", unifycr_use_spillover);
