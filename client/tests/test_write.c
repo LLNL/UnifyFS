@@ -47,6 +47,7 @@
 #include <string.h>
 #include <mpi.h>
 #include <sys/time.h>
+#include <errno.h>
 
 #define GEN_STR_LEN 1024
 
@@ -97,7 +98,12 @@ int main(int argc, char *argv[]) {
 		  }
 		}
 
-	unifycr_mount("/tmp", rank, rank_num, 0, 1);
+    int mnt_success = unifycr_mount("/tmp", rank, rank_num, 0, 1);
+
+    if (mnt_success != 0 && rank == 0) {
+        printf("unifycr_mount call failed\n");
+        exit(EIO);
+    }
 
 	char *buf = malloc (tran_sz);
 	if (buf == NULL)

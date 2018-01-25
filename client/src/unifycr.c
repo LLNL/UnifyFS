@@ -1931,7 +1931,9 @@ static int unifycr_init(int rank)
         if (env) {
             strcpy(external_data_dir, env);
         } else {
-            strcpy(external_data_dir, EXTERNAL_DATA_DIR);
+            DEBUG("UNIFYCR_EXTERNAL_DATA_DIR not set to an existing writable"
+                  " path (i.e UNIFYCR_EXTERNAL_DATA_DIR=/mnt/ssd):\n");
+            return UNIFYCR_FAILURE;
         }
 
         sprintf(spillfile_prefix, "%s/spill_%d_%d.log",
@@ -1953,7 +1955,9 @@ static int unifycr_init(int rank)
         if (env) {
             strcpy(external_meta_dir, env);
         } else {
-            strcpy(external_meta_dir, EXTERNAL_META_DIR);
+            DEBUG("UNIFYCR_EXTERNAL_META_DIR not set to an existing writable"
+                  " path (i.e UNIFYCR_EXTERNAL_META_DIR=/mnt/ssd):\n");
+            return UNIFYCR_FAILURE;
         }
 
         /*ToDo: add the spillover feature for the index metadata*/
@@ -2643,7 +2647,10 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     }
 
     /* initialize our library */
-    unifycr_init(rank);
+    int ret = unifycr_init(rank);
+
+    if (ret != UNIFYCR_SUCCESS)
+        return ret;
 
     if (fs_type == UNIFYCR_LOG || fs_type == UNIFYCR_STRIPE) {
         char host_name[UNIFYCR_MAX_FILENAME] = {0};

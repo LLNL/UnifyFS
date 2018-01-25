@@ -235,9 +235,6 @@ enum flock_enum {
 #define FILE_STORAGE_FIXED_CHUNK 1
 #define FILE_STORAGE_LOGIO       2
 
-#define EXTERNAL_DATA_DIR "/l/ssd"
-#define EXTERNAL_META_DIR "/l/ssd"
-
 /* TODO: make this an enum */
 #define CHUNK_LOCATION_NULL      0
 #define CHUNK_LOCATION_MEMFS     1
