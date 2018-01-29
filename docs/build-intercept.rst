@@ -20,23 +20,33 @@ using the `Spack package manager <https://github.com/spack/spack>`_. For example
 the following commands will build and install leveldb and gotcha using Spack and
 configure your environment so UnifyCR can find the libraries and headers it needs:
 
+The instructions assume that you do not already have a module system installed
+such as LMod, Dotkit, or Environment Modules. If your system already has Dotkit
+or LMod installed then installing the environment-modules package with spack
+is unnecessary (so you can safely skip that step).
+
+If you use Dotkit then replace ``spack load`` with ``spack use``.
+
 .. code-block:: Bash
 
-	$ git clone https://github.com/spack/spack
-	$ . spack/share/spack/setup-env.sh
-	$ spack install leveldb
-	$ spack install gotcha
-	$ spack install environment-modules
-	$ spack load environment-modules
-	$ source <(spack module loads gotcha leveldb)
+    $ git clone https://github.com/spack/spack
+    $ export SPACK_ROOT=/path/to/spack
+    $ export PATH=$SPACK_ROOT/bin:$PATH
+    $ spack install leveldb
+    $ spack install gotcha
+    $ spack install environment-modules
+    $ . spack/share/spack/setup-env.sh
+    $ spack load leveldb
+    $ spack load gotcha
 
 Then to build UnifyCR:
 
 .. code-block:: Bash
 
-	$ ./configure --prefix=/path/to/install --enable-debug
-	$ make
-	$ make install
+    $ ./autogen.sh
+    $ ./configure --prefix=/path/to/install --enable-debug
+    $ make
+    $ make install
 
 **Building without Spack**
 ***************************
@@ -48,20 +58,20 @@ Then to build with UnifyCR:
 
 .. code-block:: Bash
 
-	$ ./configure --prefix=/path/to/install --with-gotcha=/path/to/gotcha --enable-debug
-	$ make
-	$ make install
+    $ ./configure --prefix=/path/to/install --with-gotcha=/path/to/gotcha --enable-debug
+    $ make
+    $ make install
 
 .. note::
 
-	You may need to add the following to your configure line if it is not in
-	your default path on a linux machine:
+    You may need to add the following to your configure line if it is not in
+    your default path on a linux machine:
 
-	``--with-numa=$PATH_TO_NUMA``
+    ``--with-numa=$PATH_TO_NUMA``
 
-	This is needed to enable NUMA-aware memory allocation on Linux machines. Set the
-	NUMA policy at runtime with ``UNIFYCR_NUMA_POLICY = local | interleaved``, or set
-	NUMA nodes explicitly with ``UNIFYCR_USE_NUMA_BANK = <node no.>``
+    This is needed to enable NUMA-aware memory allocation on Linux machines. Set the
+    NUMA policy at runtime with ``UNIFYCR_NUMA_POLICY = local | interleaved``, or set
+    NUMA nodes explicitly with ``UNIFYCR_USE_NUMA_BANK = <node no.>``
 
 ---------------------------
 I/O Interception
@@ -79,10 +89,10 @@ line. UnifyCR installs a unifycr-config script that returns those flags, e.g.,
 
 .. code-block:: Bash
 
-	$ mpicc -o test_write \
-		  `<unifycr>/bin/unifycr-config --pre-ld-flags` \
-		  test_write.c \
-		  `<unifycr>/bin/unifycr-config --post-ld-flags`
+    $ mpicc -o test_write \
+          `<unifycr>/bin/unifycr-config --pre-ld-flags` \
+          test_write.c \
+          `<unifycr>/bin/unifycr-config --post-ld-flags`
 
 Dynamically
 **************
@@ -94,6 +104,6 @@ application.
 
 .. code-block:: Bash
 
-	$ mpicc -o test_write test_write.c \
-		-I<unifycr>/include -L<unifycy>/lib -lunifycr_gotcha \
-		-L<gotcha>/lib64 -lgotcha
+    $ mpicc -o test_write test_write.c \
+        -I<unifycr>/include -L<unifycy>/lib -lunifycr_gotcha \
+        -L<gotcha>/lib64 -lgotcha
