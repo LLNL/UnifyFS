@@ -16,9 +16,7 @@ LevelDB, and GOTCHA.
 ***************************
 
 To install leveldb and gotcha and set up your build environment, we recommend
-using the `Spack package manager <https://github.com/spack/spack>`_. For example,
-the following commands will build and install leveldb and gotcha using Spack and
-configure your environment so UnifyCR can find the libraries and headers it needs:
+using the `Spack package manager <https://github.com/spack/spack>`_.
 
 The instructions assume that you do not already have a module system installed
 such as LMod, Dotkit, or Environment Modules. If your system already has Dotkit
@@ -30,11 +28,9 @@ If you use Dotkit then replace ``spack load`` with ``spack use``.
 .. code-block:: Bash
 
     $ git clone https://github.com/spack/spack
-    $ export SPACK_ROOT=/path/to/spack
-    $ export PATH=$SPACK_ROOT/bin:$PATH
-    $ spack install leveldb
-    $ spack install gotcha
-    $ spack install environment-modules
+    $ ./spack/bin/spack install leveldb
+    $ ./spack/bin/spack install gotcha
+    $ ./spack/bin/spack spack install environment-modules
     $ . spack/share/spack/setup-env.sh
     $ spack load leveldb
     $ spack load gotcha
