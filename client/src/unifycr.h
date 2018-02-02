@@ -71,6 +71,7 @@ typedef struct {
 
 int unifycr_mount(const char prefix[], int rank, size_t size,
                   int l_app_id, int subtype);
+int unifycr_unmount(void);
 int compare_fattr(const void *a, const void *b);
 
 /* mount memfs at some prefix location */
