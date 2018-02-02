@@ -44,6 +44,7 @@
 #define UNIFYCR_H
 
 #include <poll.h>
+#include <limits.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 /* TODO: namespace C */
@@ -64,7 +65,7 @@ typedef struct {
 #define MMAP_OPEN_MODE 00777
 
 typedef struct {
-    char hostname[UNIFYCR_MAX_FILENAME];
+    char hostname[HOST_NAME_MAX];
     int rank;
 } name_rank_pair_t;
 
