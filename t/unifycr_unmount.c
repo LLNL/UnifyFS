@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <mpi.h>
+#include <unifycr.h>
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
 

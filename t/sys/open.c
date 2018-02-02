@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <mpi.h>
 #include <linux/limits.h>
+#include <unifycr.h>
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
 
