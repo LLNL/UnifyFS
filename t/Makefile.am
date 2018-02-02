@@ -39,6 +39,7 @@ test_ldadd = \
 
 test_cppflags = \
 	-I$(top_srcdir) \
+	-I$(top_srcdir)/client/src \
 	-D_GNU_SOURCE \
 	$(AM_CPPFLAGS)
 
