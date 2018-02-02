@@ -25,6 +25,7 @@
 #include <aio.h>
 #include <strings.h>
 #include <errno.h>
+#include <unifycr.h>
 
 #define GEN_STR_LEN 1024
 

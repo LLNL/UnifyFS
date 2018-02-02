@@ -48,6 +48,7 @@
 #include <mpi.h>
 #include <sys/time.h>
 #include <errno.h>
+#include <unifycr.h>
 
 #define GEN_STR_LEN 1024
 
