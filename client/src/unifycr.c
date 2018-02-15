@@ -51,6 +51,13 @@
 #include <mpi.h>
 #include <openssl/md5.h>
 
+/* add margo and argobots */
+#include <abt.h>
+#include <abt-snoozer.h>
+#include <margo.h>
+#include "unifycr_client.h"
+#include "unifycr_clientcalls_rpc.h"
+
 #ifdef ENABLE_NUMA_POLICY
 #include <numa.h>
 #endif
@@ -2243,6 +2250,88 @@ static int get_del_cnt(void)
 
     return *(int *)(cmd_buf + 2 * sizeof(int));
 
+}
+
+/* unifycr_init_rpc is replacing unifycr_init_socket */
+static int unifycr_client_rpc_init(char* svr_addr_str,
+                            unifycr_client_rpc_context_t** unifycr_rpc_context)
+{
+
+    assert(!*unifycr_rpc_context);
+    *unifycr_rpc_context = malloc(sizeof(unifycr_client_rpc_context_t));
+    assert(*unifycr_rpc_context);
+
+    /* parse address string to determine the protocol */
+    char proto[12] = {0};
+    int i;
+    for(i = 0; i < 11 && svr_addr_str[i] != '\0' && svr_addr_str[i] != ':'; i++)
+        proto[i] = svr_addr_str[i];
+
+    /* initialize mercury using transport protocol */
+    (*unifycr_rpc_context)->hg_class = HG_Init(proto, HG_FALSE);
+    if (!(*unifycr_rpc_context)->hg_class) {
+        fprintf(stderr, "Error: HG_Init()\n");
+        return UNIFYCR_FAILURE;
+    }
+
+    /* store results of initialization in (*unifycr_rpc_context) */
+    (*unifycr_rpc_context)->hg_context =
+        HG_Context_create((*unifycr_rpc_context)->hg_class);
+    if (!((*unifycr_rpc_context)->hg_context)) {
+        fprintf(stderr, "Error: HG_Context_create()\n");
+        HG_Finalize((*unifycr_rpc_context)->hg_class);
+        return UNIFYCR_FAILURE;
+    }
+
+    /* initialize argobots to track mercury progress */
+    int ret = ABT_init(1, NULL);
+    if (ret != 0) {
+        fprintf(stderr, "Error: ABT_init()\n");
+        return UNIFYCR_FAILURE;
+    }
+
+    /* set primary ES to idle without polling */
+    ret = ABT_snoozer_xstream_self_set();
+    if (ret != 0) {
+        fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
+        return UNIFYCR_FAILURE;
+    }
+
+    /* retrive current pool to use for ULT creation */
+    ABT_xstream xstream;
+    ret = ABT_xstream_self(&xstream);
+    if (ret != 0) {
+        fprintf(stderr, "Error: ABT_xstream_self()\n");
+        return UNIFYCR_FAILURE;
+    }
+
+    ABT_pool pool;
+    ret = ABT_xstream_get_main_pools(xstream, 1, &pool);
+    if (ret != 0) {
+        fprintf(stderr, "Error: ABT_xstream_get_main_pools()\n");
+        return UNIFYCR_FAILURE;
+    }
+
+    /* initialize margo */
+    (*unifycr_rpc_context)->mid = margo_init(0, 0,
+                                            (*unifycr_rpc_context)->hg_context);
+    assert((*unifycr_rpc_context)->mid);
+    margo_diag_start((*unifycr_rpc_context)->mid);
+
+    /* register read rpc with mercury */
+    (*unifycr_rpc_context)->read_rpc_id = MERCURY_REGISTER(
+                                             (*unifycr_rpc_context)->mid,
+                                             "unifycr_read_rpc",
+                                             unifycr_read_in_t,
+                                             unifycr_read_out_t,
+                                             NULL);
+
+    /* resolve server address */
+    (*unifycr_rpc_context)->svr_addr = HG_ADDR_NULL;
+    ret = margo_addr_lookup((*unifycr_rpc_context)->mid, svr_addr_str,
+                            &((*unifycr_rpc_context)->svr_addr));
+
+    return UNIFYCR_SUCCESS;
 }
 
 /**
