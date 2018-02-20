@@ -440,7 +440,7 @@ int rm_process_received_msg(int app_id, int sock_id,
         memcpy(2 * sizeof(int)
                + app_config->shm_recv_bufs[client_id] + *ptr_size,
                (void *)tmp_recv_msg,
-               tmp_recv_msg->length);
+               tmp_recv_msg->length + sizeof(recv_msg_t));
 
         *ptr_tot_sz -= tmp_recv_msg->length;
         recv_cursor += tmp_recv_msg->length;
