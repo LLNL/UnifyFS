@@ -1154,6 +1154,7 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
     read_req_t match_end = *match_req;
     read_req_t tmp_req_start, tmp_req_end;
     match_end.offset += match_end.length - 1;
+    char *src = match_req->buf + sizeof(shm_meta_t);
 
     int start_pos = unifycr_locate_req(read_req, count, &match_start);
     int end_pos = unifycr_locate_req(read_req, count, &match_end);
@@ -1186,8 +1187,9 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
 
 
         int copy_offset = match_start.offset - tmp_req_start.offset;
-        memcpy(tmp_req_start.buf + copy_offset, match_req->buf,
+        memcpy(tmp_req_start.buf + copy_offset, src,
                match_req->length);
+
         return 0;
     }
 
@@ -1225,20 +1227,19 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
          * middle*/
         long copy_offset = match_start.offset - tmp_start_req_start.offset;
         long copy_length = tmp_start_req_end.offset - match_start.offset + 1;
-        memcpy(tmp_start_req_start.buf + copy_offset, match_req->buf,
-               copy_length);
+        memcpy(tmp_start_req_start.buf + copy_offset, src, copy_length);
+
 
         long cursor = copy_length;
         for (i = start_pos + 1; i < end_pos; i++) {
-            memcpy(read_req[i].buf, match_req->buf + cursor,
-                   read_req[i].length);
+            memcpy(read_req[i].buf, src + cursor, read_req[i].length);
+
             cursor += read_req[i].length;
         }
 
         copy_offset = 0;
         copy_length = match_end.offset - tmp_end_req_start.offset + 1;
-        memcpy(tmp_end_req_start.buf + copy_offset, match_req->buf,
-               copy_length);
+        memcpy(tmp_end_req_start.buf + copy_offset, src, copy_length);
 
         return 0;
     }
