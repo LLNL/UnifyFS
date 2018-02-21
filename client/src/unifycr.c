@@ -1941,7 +1941,8 @@ static int unifycr_init(int rank)
 
         /* initialize spillover store */
         if (unifycr_use_spillover) {
-            size_t spillover_size = unifycr_max_chunks * unifycr_chunk_size;
+            size_t spillover_size  = unifycr_spillover_max_chunks *
+                unifycr_chunk_size;
             unifycr_spilloverblock = unifycr_get_spillblock(spillover_size,
                                      spillfile_prefix);
 
