@@ -1561,8 +1561,8 @@ int UNIFYCR_WRAP(fsync)(int fd)
                                 return -1;
                             } else {
                                 /**/
-                                if (ack_msg[0] != COMM_META ||
-                                    ack_msg[1] != ACK_SUCCESS) {
+                                if (*((int *)cmd_buf) != COMM_META ||
+                                    *((int *)cmd_buf + 1) != ACK_SUCCESS) {
                                     return -1;
                                 } else {
 
