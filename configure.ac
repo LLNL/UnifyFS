@@ -14,6 +14,7 @@ AM_SILENT_RULES([yes])
 AM_MAINTAINER_MODE([disable])
 
 AC_PROG_CC([mpicc])
+AC_PROG_CC_STDC
 AC_PROG_AWK
 AC_PROG_CPP
 AC_PROG_INSTALL
@@ -265,6 +266,11 @@ eval unifycr_bin_path=$bindir
 prefix=$savePrefix
 exec_prefix=$saveExecprefix
 
+# autoconf<=2.69, runstatedir is not configurable.
+if test "x$runstatedir" = x; then
+        AC_SUBST([runstatedir], ['${localstatedir}/run'])
+fi
+
 CFLAGS="$old_cflags"
 LIBS="$old_libs"
 
@@ -285,7 +291,11 @@ AC_CONFIG_FILES([Makefile
                  client/Makefile
                  client/src/Makefile
                  client/tests/Makefile
-                 client/unifycr.pc])
+                 client/unifycr.pc
+                 util/Makefile
+                 util/unifycr/Makefile
+                 util/unifycr/src/Makefile
+                 extras/Makefile])
 
 UNIFYCR_VERSION=${PACKAGE_VERSION}
 AC_SUBST(UNIFYCR_VERSION)

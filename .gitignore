@@ -48,6 +48,7 @@ log
 
 # project files
 server/src/unifycrd
+util/unifycr/src/unifycr
 
 # generated package files
 client/unifycr-config
