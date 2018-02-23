@@ -23,6 +23,8 @@ checkpatch_ignore+=",CONST_STRUCT"      # Don't nag about const structs
 checkpatch_ignore+=",SPLIT_STRING"      # Allow long strings to be split
 checkpatch_ignore+=",ARRAY_SIZE"        # Don't require use of ARRAY_SIZE macro
 checkpatch_ignore+=",USE_NEGATIVE_ERRNO" # We don't return negative errnos
+checkpatch_ignore+=",NEW_TYPEDEFS"
+checkpatch_ignore+=",ENOSYS"
 
 checkpatch_cmd+=" --ignore $checkpatch_ignore"
 
