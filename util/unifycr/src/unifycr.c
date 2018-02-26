@@ -138,11 +138,13 @@ static void parse_cmd_arguments(int argc, char **argv)
     opts_cmd.transfer_in = transfer_in;
     opts_cmd.transfer_out = transfer_out;
 
+#if 1
     printf("cleanup: %d\n", opts_cmd.cleanup);
     printf("consistency: %d\n", opts_cmd.consistency);
     printf("mountpoint: %s\n", opts_cmd.mountpoint);
     printf("transfer_in: %s\n", opts_cmd.transfer_in);
     printf("transfer_out: %s\n", opts_cmd.transfer_out);
+#endif
 }
 
 int main(int argc, char **argv)

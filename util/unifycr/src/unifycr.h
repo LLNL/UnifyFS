@@ -86,6 +86,13 @@ static inline unifycr_cm_t unifycr_read_consistency(const char *str)
     return cons;
 }
 
+static inline char *unifycr_write_consistency(unifycr_cm_t con)
+{
+    static char *constr[] = { "none", "laminated", "posix" };
+
+    return constr[con];
+}
+
 /*
  * Runtime configurations are read from:
  *
@@ -149,7 +156,7 @@ typedef struct _unifycr_resource unifycr_resource_t;
 /**
  * @brief the final runtime configurations (/var/run/unifycr-run.conf).
  */
-struct _unifycr_runtime {
+struct _unifycr_runstate {
     char *mountpoint;
     char *transfer_in;
     char *transfer_out;
@@ -157,10 +164,10 @@ struct _unifycr_runtime {
     int consistency;
 
     uint32_t n_nodes;
-    char *nodes[0];
+    char **nodes;
 };
 
-typedef struct _unifycr_runtime unifycr_runtime_t;
+typedef struct _unifycr_runstate unifycr_runstate_t;
 
 /**
  * @brief
