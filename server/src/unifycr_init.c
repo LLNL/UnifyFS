@@ -443,26 +443,31 @@ static int unifycr_exit()
             (app_config_t *)arraylist_get(app_config_list, i);
 
         for (j = 0; j < MAX_NUM_CLIENTS; j++) {
-            if (tmp_app_config->shm_req_fds[j] != -1) {
+            if (tmp_app_config != NULL &&
+                tmp_app_config->shm_req_fds[j] != -1) {
                 shm_unlink(tmp_app_config->req_buf_name[j]);
             }
 
-            if (tmp_app_config->shm_recv_fds[j] != -1) {
+            if (tmp_app_config != NULL &&
+                tmp_app_config->shm_recv_fds[j] != -1) {
                 shm_unlink(tmp_app_config->recv_buf_name[j]);
 
             }
 
-            if (tmp_app_config->shm_superblock_fds[j] != -1) {
+            if (tmp_app_config != NULL &&
+                tmp_app_config->shm_superblock_fds[j] != -1) {
                 shm_unlink(tmp_app_config->super_buf_name[j]);
             }
 
-            if (tmp_app_config->spill_log_fds[j] > 0) {
+            if (tmp_app_config != NULL &&
+                tmp_app_config->spill_log_fds[j] > 0) {
                 close(tmp_app_config->spill_log_fds[j]);
                 unlink(tmp_app_config->spill_log_name[j]);
 
             }
 
-            if (tmp_app_config->spill_index_log_fds[j] > 0) {
+            if (tmp_app_config != NULL &&
+                tmp_app_config->spill_index_log_fds[j] > 0) {
                 close(tmp_app_config->spill_index_log_fds[j]);
                 unlink(tmp_app_config->spill_index_log_name[j]);
 
