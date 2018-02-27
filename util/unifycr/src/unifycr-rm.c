@@ -102,7 +102,10 @@ out:
 }
 
 /**
- * @brief get the node list from the $SLURM_JOB_NODELIST
+ * TODO: not implemented yet
+ *
+ * @brief get the node list from the $SLURM_JOB_NODELIST, which requires
+ * parsing.
  *
  * @param resource
  *
@@ -110,12 +113,17 @@ out:
  */
 static int read_resource_slurm(unifycr_resource_t *resource)
 {
-    return 0;
+    return -ENOSYS;
 }
 
 /**
- * FIXME
- * @brief get the node list from the $LSB_EXECHOST
+ * From the documentation: The list of hosts selected by LSF Batch to run the
+ * batch job. If the job is run on a single processor, the value of LSB_HOSTS
+ * is the name of the execution host. For parallel jobs, the names of all
+ * execution hosts are listed separated by spaces. The batch job file is run on
+ * the first host in the list.
+ *
+ * @brief get the node list from the $LSB_HOSTS. 
  *
  * @param resource
  *
@@ -123,6 +131,39 @@ static int read_resource_slurm(unifycr_resource_t *resource)
  */
 static int read_resource_lsf(unifycr_resource_t *resource)
 {
+    int i = 0;
+    char *node = NULL;
+    char *pos = NULL;
+    int n_nodes = 0;
+    char **nodes = NULL;
+    char *lsb_hosts = NULL;
+
+    node = getenv("LSB_HOSTS");
+    if (!node)
+        return -EINVAL;
+        
+    lsb_hosts = strdup(node);
+    pos = lsb_hosts;
+
+    for (pos = lsb_hosts; *pos; pos++)
+        if (isspace(*pos))
+            i++;
+
+    n_nodes = i + 1;
+    nodes = calloc(sizeof(char *), n_nodes);
+
+    for (i = 0, node = pos = lsb_hosts; *pos; pos++)
+        if (isspace(*pos)) {
+            *pos = '\0';
+            nodes[i++] = node;
+            node = &pos[1];
+        }
+
+    nodes[i] = node;    /* the last one, not caught by isspace() */
+
+    resource->n_nodes = n_nodes;
+    resource->nodes = nodes;
+
     return 0;
 }
 

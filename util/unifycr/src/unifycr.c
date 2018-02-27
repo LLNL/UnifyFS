@@ -53,6 +53,11 @@ static char *program = "unifycr";
  */
 static char *actions[] = { "start", "terminate" };
 
+static int unifycr_launch_daemon(void)
+{
+    return 0;
+}
+
 enum {
     OP_START        = 0,
     OP_TERMINATE,
@@ -201,7 +206,11 @@ int main(int argc, char **argv)
     ret = unifycr_write_runstate(&resource, &opts_sysconf, &opts_env,
                                  &opts_cmd);
     if (ret) {
+        fprintf(stderr, "failed to write the runstate file\n");
+        goto out;
     }
+
+    ret = unifycr_launch_daemon();
 
 #if 1
     printf("%s\n", CONFDIR);
