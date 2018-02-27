@@ -68,9 +68,9 @@ write_runstate_file(unifycr_runstate_t *runstate, const char *file)
                 unifycr_write_consistency(runstate->consistency));
 
     if (runstate->transfer_in)
-        fprintf("transfer_in = %s\n", runstate->transfer_in);
+        fprintf(fp, "transfer_in = %s\n", runstate->transfer_in);
     if (runstate->transfer_out)
-        fprintf("transfer_out = %s\n", runstate->transfer_out);
+        fprintf(fp, "transfer_out = %s\n", runstate->transfer_out);
 
     fprintf(fp, "n_nodes = %d\n", runstate->n_nodes);
     fprintf(fp, "nodes = [ ");

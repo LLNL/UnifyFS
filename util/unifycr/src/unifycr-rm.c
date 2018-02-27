@@ -42,6 +42,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <errno.h>
 
 #include "unifycr.h"
@@ -123,7 +124,11 @@ static int read_resource_slurm(unifycr_resource_t *resource)
  * execution hosts are listed separated by spaces. The batch job file is run on
  * the first host in the list.
  *
- * @brief get the node list from the $LSB_HOSTS. 
+ */
+
+/**
+ * FIXME
+ * @brief get the node list from the $LSB_HOST
  *
  * @param resource
  *
