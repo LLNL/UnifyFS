@@ -46,8 +46,6 @@
 
 #include "unifycr.h"
 
-static char *program = "unifycr";
-
 /**
  * @brief available actions.
  */
@@ -72,6 +70,7 @@ static unifycr_resource_t resource;
 static struct option const long_opts[] = {
     { "cleanup", 0, 0, 'c' },
     { "consistency", 1, 0, 'C' },
+    { "debug", 0, 0, 'd' },
     { "help", 0, 0, 'h' },
     { "mount", 1, 0, 'm' },
     { "transfer-in", 1, 0, 'i' },
@@ -79,19 +78,42 @@ static struct option const long_opts[] = {
     { 0, 0, 0, 0 },
 };
 
-static char *short_opts = "cC:hm:i:o:";
+static const char *program;
+static char *short_opts = "cC:dhm:i:o:";
+static char *usage_str =
+"\n"
+"Usage: %s <command> [options...]\n"
+"\n"
+"<command> should be one of the following:\n"
+"  start       start the unifycr server daemon\n"
+"  terminate   terminate the unifycr server daemon\n"
+"\n"
+"Available options for \"start\":\n"
+"  -C, --consistency=<model> consistency model (none, laminated, or posix)\n"
+"  -m, --mount=<path>        mount unifycr at <path>\n"
+"  -i, --transfer-in=<path>  stage in file(s) at <path>\n"
+"  -o, --transfer-out=<path> transfer file(s) to <path> on termination\n"
+"\n"
+"Available options for \"terminate\":\n"
+"  -c, --cleanup             clean up the unifycr storage on termination\n"
+"\n";
+
+static int debug;
 
 static void usage(int status)
 {
-    /*
-    if (status) {
-        fprintf(stderr, "`%s --help` for more information.\n", program);
-        exit(status);
-    }
-    */
-
-    printf("\nUsage: %s [command] [options...]\n", program);
+    printf(usage_str, program);
     exit(status);
+}
+
+static const char *basename(const char *path)
+{
+    const char *str = strrchr(path, '/');
+
+    if (str)
+        return &str[1];
+    else
+        return path;
 }
 
 static void parse_cmd_arguments(int argc, char **argv)
@@ -118,6 +140,10 @@ static void parse_cmd_arguments(int argc, char **argv)
                 usage(1);
             break;
 
+        case 'd':
+            debug = 1;
+            break;
+
         case 'm':
             mountpoint = strdup(optarg);
             break;
@@ -142,14 +168,6 @@ static void parse_cmd_arguments(int argc, char **argv)
     opts_cmd.mountpoint = mountpoint;
     opts_cmd.transfer_in = transfer_in;
     opts_cmd.transfer_out = transfer_out;
-
-#if 1
-    printf("cleanup: %d\n", opts_cmd.cleanup);
-    printf("consistency: %d\n", opts_cmd.consistency);
-    printf("mountpoint: %s\n", opts_cmd.mountpoint);
-    printf("transfer_in: %s\n", opts_cmd.transfer_in);
-    printf("transfer_out: %s\n", opts_cmd.transfer_out);
-#endif
 }
 
 int main(int argc, char **argv)
@@ -157,6 +175,8 @@ int main(int argc, char **argv)
     int i = 0;
     int ret = 0;
     char *cmd = NULL;
+
+    program = basename(argv[0]);
 
     if (argc < 2)
         usage(1);
@@ -168,15 +188,32 @@ int main(int argc, char **argv)
             action = i;
     }
 
-    if (action < 0) {
-        fprintf(stderr, "invalid command: %s\n", cmd);
+    if (action < 0)
         usage(1);
-    }
 
     parse_cmd_arguments(argc, argv);
 
+    if (debug) {
+        printf("\n## options from the command line ##\n");
+        printf("cleanup:\t%d\n", opts_cmd.cleanup);
+        printf("consistency:\t%s\n",
+               unifycr_write_consistency(opts_cmd.consistency));
+        printf("mountpoint:\t%s\n", opts_cmd.mountpoint);
+        printf("transfer_in:\t%s\n", opts_cmd.transfer_in);
+        printf("transfer_out:\t%s\n", opts_cmd.transfer_out);
+    }
+
     ret = unifycr_read_resource(&resource);
     if (ret) {
+        fprintf(stderr, "failed to detect a resource manager\n");
+        goto out;
+    }
+
+    if (debug) {
+        printf("\n## job allocation (%llu nodes) ##\n",
+               _llu(resource.n_nodes));
+        for (i = 0; i < resource.n_nodes; i++)
+            printf("%s\n", resource.nodes[i]);
     }
 
     ret = unifycr_read_env(&opts_env);
@@ -185,23 +222,24 @@ int main(int argc, char **argv)
         goto out;
     }
 
+    if (debug) {
+        printf("\n## options from the environmental variables ##\n");
+        printf("UNIFYCR_MT:\t%s\n", opts_env.unifycr_mt);
+    }
+
     ret = unifycr_read_sysconf(&opts_sysconf);
     if (ret) {
         fprintf(stderr, "failed to read config file\n");
         goto out;
     }
 
-    ret = unifycr_read_resource(&resource);
-    if (ret) {
-        fprintf(stderr, "failed to read config file\n");
-        goto out;
+    if (debug) {
+        printf("\n## options read from %s ##\n", CONFDIR "/unifycr.conf");
+        printf("runstatedir:\t%s\n", opts_sysconf.runstatedir);
+        printf("consistency:\t%s\n",
+               unifycr_write_consistency(opts_sysconf.consistency));
+        printf("mountpoint:\t%s\n", opts_sysconf.mountpoint);
     }
-
-#if 1
-    for (i = 0; i < resource.n_nodes; i++) {
-        printf("%s\n", resource.nodes[i]);
-    }
-#endif
 
     ret = unifycr_write_runstate(&resource, &opts_sysconf, &opts_env,
                                  &opts_cmd);
@@ -210,14 +248,21 @@ int main(int argc, char **argv)
         goto out;
     }
 
-    ret = unifycr_launch_daemon();
+    if (debug) {
+        int tmp;
+        char cmdbuf[1024] = { 0, };
 
-#if 1
-    printf("%s\n", CONFDIR);
-    printf("%s\n", BINDIR);
-    printf("%s\n", SBINDIR);
-    printf("%s\n", RUNDIR);
-#endif
+        printf("\n## the final runstate file %s/unifycr-runstate.conf ##\n",
+               opts_sysconf.runstatedir);
+
+        sprintf(cmdbuf, "cat %s/unifycr-runstate.conf",
+                        opts_sysconf.runstatedir);
+        tmp = system(cmdbuf);
+        if (tmp)
+            perror("system(3) failed");
+    }
+
+    ret = unifycr_launch_daemon();
 
 out:
     return ret;

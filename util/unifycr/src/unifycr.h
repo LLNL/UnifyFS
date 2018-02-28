@@ -47,7 +47,7 @@
 #include <string.h>
 
 /**
- * @brief resource managers
+ * @brief supported resource managers
  */
 typedef enum {
     UNIFYCR_RM_NONE     = 0,
@@ -57,7 +57,7 @@ typedef enum {
 } unifycr_rm_t;
 
 /**
- * @brief consistency models
+ * @brief supported consistency models
  */
 typedef enum {
     UNIFYCR_CM_INVALID    = -1,
@@ -86,11 +86,18 @@ static inline unifycr_cm_t unifycr_read_consistency(const char *str)
     return cons;
 }
 
+/**
+ * @brief return the consistency string based on the given code.
+ *
+ * @param con the consistency code (integer)
+ *
+ * @return string that describes the consistency model
+ */
 static inline char *unifycr_write_consistency(unifycr_cm_t con)
 {
     static char *constr[] = { "none", "laminated", "posix" };
 
-    return constr[con];
+    return con == UNIFYCR_CM_INVALID ? "invalid" : constr[con];
 }
 
 /*
@@ -115,11 +122,12 @@ static inline char *unifycr_write_consistency(unifycr_cm_t con)
  */
 struct _unifycr_sysconf {
     /* global configuration */
-    char *runstatedir;
+    char *runstatedir;              /* the runstate directory where runstate
+                                       file will be written */
 
     /* file system configuration */
-    unifycr_cm_t consistency;
-    char *mountpoint;
+    unifycr_cm_t consistency;       /* consistency model */
+    char *mountpoint;               /* unifycr mountpoint */
 };
 
 typedef struct _unifycr_sysconf unifycr_sysconf_t;
@@ -128,7 +136,7 @@ typedef struct _unifycr_sysconf unifycr_sysconf_t;
  * @brief options read from environmental variables
  */
 struct _unifycr_env {
-    char *unifycr_mt;
+    char *unifycr_mt;               /* unifycr mountpoint */
 };
 
 typedef struct _unifycr_env unifycr_env_t;
@@ -137,18 +145,21 @@ typedef struct _unifycr_env unifycr_env_t;
  * @brief options read from command line arguments
  */
 struct _unifycr_args {
-    int cleanup;
-    unifycr_cm_t consistency;
-    char *mountpoint;
-    char *transfer_in;
-    char *transfer_out;
+    int cleanup;                    /* cleanup on termination? (0 or 1) */
+    unifycr_cm_t consistency;       /* consistency model */
+    char *mountpoint;               /* mountpoint */
+    char *transfer_in;              /* data path to stage-in */
+    char *transfer_out;             /* data path to stage-out (drain) */
 };
 
 typedef struct _unifycr_args unifycr_args_t;
 
+/**
+ * @brief nodes allocated to the current job.
+ */
 struct _unifycr_resource {
-    uint64_t n_nodes;
-    char **nodes;
+    uint64_t n_nodes;               /* number of nodes in job allocation */
+    char **nodes;                   /* allocated node names */
 };
 
 typedef struct _unifycr_resource unifycr_resource_t;
@@ -157,59 +168,61 @@ typedef struct _unifycr_resource unifycr_resource_t;
  * @brief the final runtime configurations (/var/run/unifycr-run.conf).
  */
 struct _unifycr_runstate {
-    char *mountpoint;
-    char *transfer_in;
-    char *transfer_out;
-    int cleanup;
-    int consistency;
+    char *mountpoint;               /* mountpoint */
+    char *transfer_in;              /* data path to stage-in */
+    char *transfer_out;             /* data path to stage-out (drain) */
+    int cleanup;                    /* cleanup on termination? */
+    int consistency;                /* consistency model */
 
-    uint32_t n_nodes;
-    char **nodes;
+    uint32_t n_nodes;               /* number of nodes in job allocation */
+    char **nodes;                   /* allocdated node names */
 };
 
 typedef struct _unifycr_runstate unifycr_runstate_t;
 
 /**
- * @brief
+ * @brief detect a resource manager and find allocated nodes accordingly.
  *
- * @param resource
+ * @param resource the structure to be filled by this function
  *
- * @return
+ * @return 0 on success, negative errno otherwise
  */
 int unifycr_read_resource(unifycr_resource_t *resource);
 
 /**
- * @brief
+ * @brief reads unifycr environmental variables
  *
- * @param env
+ * @param env the structure to be filled by this function
  *
- * @return
+ * @return 0 on success, negative errno otherwise
  */
 int unifycr_read_env(unifycr_env_t *env);
 
 /**
- * @brief
+ * @brief reads system configuration file (PREFIX/etc/unifycr/unifycr.conf)
  *
- * @param sysconf
+ * @param sysconf the structure to be filled by this function
  *
- * @return
+ * @return 0 on success, negative errno otherwise
  */
 int unifycr_read_sysconf(unifycr_sysconf_t *sysconf);
 
 /**
- * @brief
+ * @brief write runstate file (@runstatedir@/unifuycr/unifycr-runstate.conf)
  *
- * @param resource
- * @param sysconf
- * @param env
- * @param cmdargs
+ * @param resource allocated node informantion read from resource manager
+ * @param sysconf options from sysconf file
+ * @param env options from environmental variables
+ * @param cmdargs options from command line arguments
  *
- * @return
+ * @return 0 on success, negative errno otherwise
  */
 int unifycr_write_runstate(unifycr_resource_t *resource,
                            unifycr_sysconf_t *sysconf,
                            unifycr_env_t *env,
                            unifycr_args_t *cmdargs);
+
+#define _llu(x)     ((unsigned long long) (x))
 
 #endif  /* __UNIFYCR_H */
 
