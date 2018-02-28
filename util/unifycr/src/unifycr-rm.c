@@ -146,7 +146,7 @@ static int read_resource_lsf(unifycr_resource_t *resource)
     node = getenv("LSB_HOSTS");
     if (!node)
         return -EINVAL;
-        
+
     lsb_hosts = strdup(node);
     pos = lsb_hosts;
 

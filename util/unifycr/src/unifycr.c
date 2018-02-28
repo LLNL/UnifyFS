@@ -127,8 +127,7 @@ static void parse_cmd_arguments(int argc, char **argv)
     char *transfer_out = NULL;
 
     while ((ch = getopt_long(argc, argv,
-                             short_opts, long_opts, &optidx)) >= 0)
-    {
+                             short_opts, long_opts, &optidx)) >= 0) {
         switch (ch) {
         case 'c':
             cleanup = 1;

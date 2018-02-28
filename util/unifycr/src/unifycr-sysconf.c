@@ -145,10 +145,10 @@ static conf_section_t conf_sections[] = {
     { 0, 0, 0 },
 };
 
-static int readconf(toml_table_t* curtab, unifycr_sysconf_t *sysconf)
+static int readconf(toml_table_t *curtab, unifycr_sysconf_t *sysconf)
 {
     int ret = 0;
-    toml_table_t* tab = NULL;
+    toml_table_t *tab = NULL;
     conf_section_t *section = NULL;
 
     for (section = conf_sections; section->title; section++) {
@@ -174,7 +174,8 @@ int unifycr_read_sysconf(unifycr_sysconf_t *sysconf)
     if (!sysconf)
         return -EINVAL;
 
-    if (NULL == (fp = fopen(sysconf_file, "r")))
+    fp = fopen(sysconf_file, "r");
+    if (NULL == fp)
         return -errno;
 
     tab = toml_parse_file(fp, errbuf, sizeof(errbuf));

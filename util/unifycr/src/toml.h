@@ -34,14 +34,14 @@ SOFTWARE.
 typedef struct toml_table_t toml_table_t;
 typedef struct toml_array_t toml_array_t;
 
-/* Parse a file. Return a table on success, or 0 otherwise. 
+/* Parse a file. Return a table on success, or 0 otherwise.
  * Caller must toml_free(the-return-value) after use.
  */
-TOML_EXTERN toml_table_t* toml_parse_file(FILE* fp, 
+TOML_EXTERN toml_table_t* toml_parse_file(FILE* fp,
 					  char* errbuf,
 					  int errbufsz);
 
-/* Parse a string containing the full config. 
+/* Parse a string containing the full config.
  * Return a table on success, or 0 otherwise.
  * Caller must toml_free(the-return-value) after use.
  */
@@ -69,7 +69,7 @@ TOML_EXTERN toml_array_t* toml_array_at(toml_array_t* arr, int idx);
 TOML_EXTERN toml_table_t* toml_table_at(toml_array_t* arr, int idx);
 
 
-/* Raw to String. Caller must call free(ret) after use. 
+/* Raw to String. Caller must call free(ret) after use.
  * Return 0 on success, -1 otherwise.
  */
 TOML_EXTERN int toml_rtos(const char* s, char** ret);
@@ -83,7 +83,7 @@ TOML_EXTERN int toml_rtoi(const char* s, int64_t* ret);
 /* Raw to Double. Return 0 on success, -1 otherwise. */
 TOML_EXTERN int toml_rtod(const char* s, double* ret);
 
-/* Timestamp types. The year, month, day, hour, minute, second, z 
+/* Timestamp types. The year, month, day, hour, minute, second, z
  * fields may be NULL if they are not relevant. e.g. In a DATE
  * type, the hour, minute, second and z fields will be NULLs.
  */
