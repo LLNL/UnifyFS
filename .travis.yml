@@ -1,13 +1,36 @@
 language: c
 sudo: required
+
 before_install:
-    # The default environment variable $CC is known to interfere with
-    # MPI projects.
-    - test -n $CC && unset CC
-    - sudo apt-get -qq update
-    - sudo apt-get install --yes -qq build-essential autoconf libtool
-    - sudo apt-get install --yes -qq libleveldb1 libleveldb-dev
-    - sudo apt-get install --yes -qq libopenmpi-dev openmpi-bin
+  # The default environment variable $CC is known to interfere with
+  # MPI projects.
+  - test -n $CC && unset CC
+  - sudo apt-get -qq update
+  - sudo apt-get install --yes -qq build-essential autoconf libtool
+  - sudo apt-get install --yes -qq libopenmpi-dev openmpi-bin
+  - (cd $HOME/spack; git describe) || git clone https://github.com/spack/spack $HOME/spack
+  - $HOME/spack/bin/spack install leveldb
+  - $HOME/spack/bin/spack install gotcha
+  - $HOME/spack/bin/spack install environment-modules
+  - . $HOME/spack/share/spack/setup-env.sh
+  - spack load environment-modules
+  - source <(spack module loads gotcha leveldb)
+  - eval $(./scripts/git_log_test_env.sh)
+  - export TEST_CHECKPATCH_SKIP_FILES
+
+cache:
+  directories:
+    - $HOME/spack
+
+# Don't update the cache just because the spack lock file changed
+before_cache:
+  - rm -f $HOME/spack/opt/spack/.spack-db/prefix_lock
+
 script:
-    - sh autogen.sh && ./configure && make
-    - make checkstyle
+  # Force git to update the shallow clone and include tags so git-describe works
+  - git fetch --unshallow --tags
+  - sh autogen.sh && ./configure && make -k && make distcheck
+  - ./scripts/checkpatch.sh || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
+
+after_failure:
+  - find . -type f -name "test-suite.log" -execdir cat {} \;

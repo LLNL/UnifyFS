@@ -46,6 +46,8 @@ my %use_type = ();
 my @use = ();
 my %ignore_type = ();
 my @ignore = ();
+my %skip_files = ();
+my @skipfiles = ();
 my $help = 0;
 my $configuration_file = ".checkpatch.conf";
 my $max_line_length = 80;
@@ -88,6 +90,7 @@ Options:
   -f, --file                 treat FILE as regular source file
   --subjective, --strict     enable more subjective tests
   --list-types               list the possible message types
+  --skip-files FILE(,FILE2...) don't check these files
   --types TYPE(,TYPE2...)    show only these comma separated message types
   --ignore TYPE(,TYPE2...)   ignore various comma separated message types
   --show-types               show the specific message type in the output
@@ -206,6 +209,7 @@ GetOptions(
 	'strict!'	=> \$check,
 	'ignore=s'	=> \@ignore,
 	'types=s'	=> \@use,
+	'skip-files=s'	=> \@skipfiles,
 	'show-types!'	=> \$show_types,
 	'list-types!'	=> \$list_types,
 	'max-line-length=i' => \$max_line_length,
@@ -292,6 +296,7 @@ sub hash_show_words {
 }
 
 hash_save_array_words(\%ignore_type, \@ignore);
+hash_save_array_words(\%skip_files, \@skipfiles);
 hash_save_array_words(\%use_type, \@use);
 
 my $dbg_values = 0;
@@ -2419,6 +2424,10 @@ sub process {
 			next;
 		}
 
+		if (defined $skip_files{uc($realfile)}) {
+			next;
+		}
+
 		$here .= "FILE: $realfile:$realline:" if ($realcnt != 0);
 
 		my $hereline = "$here\n$rawline\n";
@@ -2442,7 +2451,7 @@ sub process {
 		if ($line =~ /^new (file )?mode.*[7531]\d{0,2}$/) {
 			my $permhere = $here . "FILE: $realfile\n";
 			if ($realfile !~ m@scripts/@ &&
-			    $realfile !~ /\.(py|pl|awk|sh)$/) {
+			    $realfile !~ /\.(py|pl|awk|sh|t)$/) {
 				ERROR("EXECUTE_PERMISSIONS",
 				      "do not set execute permissions for source files\n" . $permhere);
 			}
@@ -3491,7 +3500,7 @@ sub process {
 			#print "line<$line> prevline<$prevline> indent<$indent> sindent<$sindent> check<$check> continuation<$continuation> s<$s> cond_lines<$cond_lines> stat_real<$stat_real> stat<$stat>\n";
 
 			if ($check && $s ne '' &&
-			    (($sindent % 8) != 0 ||
+			    (($sindent % 4) != 0 ||
 			     ($sindent < $indent) ||
 			     ($sindent == $indent &&
 			      ($s !~ /^\s*(?:\}|\{|else\b)/)) ||

@@ -12,7 +12,7 @@ UNIFYCR_LIB_PATH="@unifycr_lib_path@"
 UNIFYCR_LD_FLAGS="@LDFLAGS@"
 
 PRE_LD_FLAGS="-L$UNIFYCR_LIB_PATH $UNIFYCR_LD_FLAGS -lz $CP_WRAPPERS"
-POST_LD_FLAGS="-L$UNIFYCR_LIB_PATH -lunifycr-posix -lcrypto -lm"
+POST_LD_FLAGS="$UNIFYCR_LIB_PATH/libunifycr.a -lcrypto -lm -lrt -lpthread"
 
 
 usage="\

@@ -48,6 +48,7 @@
 #include "range_server.h"
 #include "partitioner.h"
 #include "mdhim_options.h"
+#include "ds_leveldb.h"
 #include "uthash.h"
 
 #define UNIFYCR_FID(key) *(long *)key
@@ -150,7 +151,6 @@ int send_locally_or_remote(struct mdhim_t *md, int dest, void *message) {
 		msg_req = malloc(sizeof(MPI_Request *));
 		sendbuf = malloc(sizeof(void *));
 		sizebuf = malloc(sizeof(int));
-		struct mdhim_stat *ttmp, *stat;
 		ret = send_client_response(md, dest, message, sizebuf, 
 					   sendbuf, size_req, msg_req);
 
@@ -795,22 +795,19 @@ int range_server_bget(struct mdhim_t *md, struct mdhim_bgetm_t *bgm, int source)
 
 	if (bgm->op == MDHIM_RANGE_BGET) {
 		values = malloc(sizeof(void *) * bgm->num_keys/2);
-		value_lens = (int32_t *)malloc(sizeof(int32_t) * bgm->num_keys/2);
+		value_lens = malloc(sizeof(int32_t) * bgm->num_keys/2);
 		memset(value_lens, 0, sizeof(int) * bgm->num_keys/2);
 
-		void **ret_keys =\
-				(void **)malloc(bgm->num_keys * sizeof(void *)/2);
-		int32_t *ret_key_lens =\
-				(int32_t *)malloc(bgm->num_keys * sizeof(int32_t));
+		void **ret_keys = malloc(bgm->num_keys * sizeof(char *)/2);
+		int32_t *ret_key_lens = malloc(bgm->num_keys * sizeof(int32_t));
 		memset(ret_key_lens, 0, sizeof(int) * bgm->num_keys/2);
 
 		int out_record_cnt = 0;
-		levedb_batch_ranges(index->mdhim_store->db_handle,\
-				bgm->keys, bgm->key_lens,\
-				&ret_keys, &ret_key_lens,\
-					&values, &value_lens,\
-						bgm->num_keys,\
-							&out_record_cnt);
+		levedb_batch_ranges(index->mdhim_store->db_handle,
+                                    (char **)bgm->keys, bgm->key_lens,
+                                    (char ***)&ret_keys, &ret_key_lens,
+                                    (char ***)&values, &value_lens,
+                                    bgm->num_keys, &out_record_cnt);
 
 		if (source != md->mdhim_rank) {
 			for (i = 0; i < bgm->num_keys; i++) {
@@ -1144,8 +1141,11 @@ int range_server_bget_op(struct mdhim_t *md, struct mdhim_bgetm_t *bgm, int sour
 		*get_key_len = bgm->key_lens[0];
 		key_lens[0] = *get_key_len;
 
-		error = mdhim_levedb_batch_next(index->mdhim_store->db_handle, keys, key_lens, values, value_lens, \
-					bgm->num_keys * bgm->num_recs, &num_records);
+		error = mdhim_levedb_batch_next(index->mdhim_store->db_handle,
+						(char **)keys, key_lens,
+						(char **)values, value_lens,
+						bgm->num_keys * bgm->num_recs,
+						&num_records);
 
 	}
 
@@ -1383,7 +1383,7 @@ int range_server_add_oreq(struct mdhim_t *md, MPI_Request *req, void *msg) {
 int range_server_clean_oreqs(struct mdhim_t *md) {
 	out_req *item;
 	out_req *t;
-	int ret;
+	int ret = MDHIM_SUCCESS;
 	int flag = 0;
 	MPI_Status status;
 
@@ -1398,6 +1398,11 @@ int range_server_clean_oreqs(struct mdhim_t *md) {
 		pthread_mutex_lock(md->mdhim_comm_lock);
 		ret = MPI_Test((MPI_Request *)item->req, &flag, &status); 
 		pthread_mutex_unlock(md->mdhim_comm_lock);
+
+		if (ret != MPI_SUCCESS) {
+			ret = MDHIM_ERROR;
+			break;
+		}
 
 		if (!flag) {
 			item = item->next;
@@ -1430,7 +1435,7 @@ int range_server_clean_oreqs(struct mdhim_t *md) {
 
 	pthread_mutex_unlock(md->mdhim_rs->out_req_mutex);
 
-	return MDHIM_SUCCESS;
+	return ret;
 }
 
 /**

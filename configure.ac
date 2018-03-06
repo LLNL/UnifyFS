@@ -3,12 +3,18 @@ dnl This file is a part of UnifyCR. Please see LICENSE for the license
 dnl information.
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([unifycr], [1.0.0], [unifycr@llnl.gov])
+AC_INIT([unifycr],
+        m4_esyscmd([git describe --always |
+                   awk '/.*/{sub(/^v/,""); printf "%s",$1; exit}']),
+        [unifycr@llnl.gov])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
-AC_CONFIG_MACRO_DIR([./client/maint/config/])
+AC_CONFIG_MACRO_DIR([m4])
 
-AM_INIT_AUTOMAKE(tar-pax)
+AM_INIT_AUTOMAKE([foreign tar-pax subdir-objects])
+AM_SILENT_RULES([yes])
+
+AM_MAINTAINER_MODE([disable])
 
 AC_PROG_CC([mpicc])
 AC_PROG_AWK
@@ -42,6 +48,8 @@ AC_CHECK_HEADERS([fcntl.h limits.h stdlib.h string.h sys/socket.h sys/time.h])
 AC_CHECK_HEADERS([unistd.h arpa/inet.h inttypes.h netdb.h netinet/in.h])
 AC_CHECK_HEADERS([stddef.h stdint.h strings.h syslog.h])
 AC_CHECK_HEADERS([inttypes.h wchar.h wctype.h])
+AC_CHECK_HEADER([openssl/md5.h], [], [AC_MSG_FAILURE([
+        *** openssl/md5.h missing, openssl-devel package required])])
 
 # Checks for library functions.
 AC_FUNC_MALLOC
@@ -144,6 +152,9 @@ PKG_CHECK_MODULES([LEVELDB], [leveldb], ,
         ],
         AC_MSG_ERROR(['leveldb is required to build unifycr.'])))
 
+# look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
+UNIFYCR_AC_GOTCHA
+
 # libc functions wrapped by unifycr
 
 CP_WRAPPERS+="-Wl,-wrap,access"
@@ -156,9 +167,7 @@ CP_WRAPPERS+=",-wrap,rename"
 CP_WRAPPERS+=",-wrap,truncate"
 CP_WRAPPERS+=",-wrap,stat"
 CP_WRAPPERS+=",-wrap,__lxstat"
-CP_WRAPPERS+=",-wrap,__lxstat64"
 CP_WRAPPERS+=",-wrap,__xstat"
-CP_WRAPPERS+=",-wrap,__xstat64"
 
 CP_WRAPPERS+=",-wrap,creat"
 CP_WRAPPERS+=",-wrap,creat64"
@@ -184,7 +193,6 @@ CP_WRAPPERS+=",-wrap,mmap64"
 CP_WRAPPERS+=",-wrap,munmap"
 CP_WRAPPERS+=",-wrap,msync"
 CP_WRAPPERS+=",-wrap,__fxstat"
-CP_WRAPPERS+=",-wrap,__fxstat64"
 CP_WRAPPERS+=",-wrap,close"
 
 # FILE* functions
@@ -279,6 +287,9 @@ AC_CONFIG_FILES([Makefile
                  server/src/Makefile
                  client/Makefile
                  client/src/Makefile
+                 client/tests/Makefile
+                 t/Makefile
+                 t/lib/Makefile
                  client/unifycr.pc])
 
 UNIFYCR_VERSION=${PACKAGE_VERSION}

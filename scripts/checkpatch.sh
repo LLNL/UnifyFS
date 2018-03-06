@@ -17,10 +17,23 @@ checkpatch_cmd=$basedir/linux_kernel_checkpatch/checkpatch.pl
 #
 checkpatch_ignore="LEADING_SPACE"       # Allow spaces for indentation
 checkpatch_ignore+=",CODE_INDENT"       # Don't require tabs for indentation
-checkpatch_ignore+=",MISSING_SIGN_OFF"  # No Signed-off-by: in commit msg
+checkpatch_ignore+=",MISSING_SIGN_OFF"  # Signed-off-by: line is optional
 checkpatch_ignore+=",FILE_PATH_CHANGES" # Don't nag about updating MAINTAINERS
+checkpatch_ignore+=",CONST_STRUCT"      # Don't nag about const structs
+checkpatch_ignore+=",SPLIT_STRING"      # Allow long strings to be split
+checkpatch_ignore+=",ARRAY_SIZE"        # Don't require use of ARRAY_SIZE macro
+checkpatch_ignore+=",USE_NEGATIVE_ERRNO" # We don't return negative errnos
 
 checkpatch_cmd+=" --ignore $checkpatch_ignore"
+
+#
+# Allow checked-in files to be exempted from style checking if the
+# TEST_CHECKPATCH_SKIP_FILES is set. It should be a comma separated list
+# of paths relative to the project root, e.g. scripts/checkpath.sh.
+#
+if test -n "$TEST_CHECKPATCH_SKIP_FILES"; then
+    checkpatch_cmd+=" --skip-files $TEST_CHECKPATCH_SKIP_FILES"
+fi
 
 # Suppress summary warning about white space errors.
 checkpatch_cmd+=" -q"
@@ -44,7 +57,7 @@ revisions=${1:-"HEAD^..HEAD"}
 if [ ! -t 0 ] ; then
     show_patch_cmd="cat"
 else
-    show_patch_cmd="git format-patch -k --stdout $revisions"
+    show_patch_cmd="git format-patch -p -k --stdout $revisions"
 fi
 
 $show_patch_cmd | $checkpatch_cmd

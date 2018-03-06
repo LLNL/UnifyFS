@@ -4,24 +4,23 @@
    contain the root `toctree` directive.
 
 ========================================
-UnifyCR: A file system for burst buffers 
+UnifyCR: A file system for burst buffers
 ========================================
 
 .. toctree::
    :maxdepth: 2
-   :caption: User Guide 
+   :caption: User Guide
 
-   overview 
-   definitions  
-   assumptions     
-   api
-   starting
-   stopping      
-   interception      
+   overview
+   definitions
+   assumptions
+   build-intercept
+   api-mount
+   start-stop
 
 .. toctree::
    :maxdepth: 2
-   :caption: Dependencies 
+   :caption: Dependencies
 
 .. toctree::
    :maxdepth: 2
