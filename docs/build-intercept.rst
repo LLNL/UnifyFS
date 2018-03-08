@@ -51,7 +51,7 @@ For users who cannot use Spack, you may fetch the latest release of
 `GOTCHA <https://github.com/LLNL/GOTCHA>`_
 
 And leveldb (if not already installed on your system):
-`leveldb https://github.com/google/leveldb/releases/tag/v1.20`_
+`leveldb <https://github.com/google/leveldb/releases/tag/v1.20>`_
 
 If you installed leveldb from source then you may have to add the pkgconfig file
 for leveldb manually. This is assuming your install of leveldb does not contain
