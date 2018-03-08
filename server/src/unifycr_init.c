@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <pthread.h>
+#include <string.h>
 #include "unifycr_metadata.h"
 #include "log.h"
 #include "unifycr_debug.h"
@@ -46,6 +47,9 @@
 #include "unifycr_service_manager.h"
 #include "unifycr_request_manager.h"
 #include "unifycr_runstate.h"
+
+#include "unifycr_server.h"
+#include "../../client/src/unifycr_clientcalls_rpc.h"
 
 int *local_rank_lst;
 int local_rank_cnt;
@@ -60,6 +64,272 @@ int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
 int log_print_level = 5;
 
 unifycr_cfg_t server_cfg;
+
+abt_io_instance_id aid = NULL;
+
+static const int IO_POOL_SIZE = 2;
+
+char* concat(const char *s1, const char *s2)
+{
+    char *result = malloc(strlen(s1)+strlen(s2)+1);//+1 for the null-terminator
+    strcpy(result, s1);
+    strcat(result, s2);
+    return result;
+}
+
+/* find_address - Resolves a name string to an address structure.
+ *
+ */
+static char* find_address(hg_class_t* hg_class,
+            hg_context_t* hg_context, const char* arg, char* addr_string)
+{
+    /* figure out what address this server is listening on */
+    hg_addr_t addr_self;
+    int ret = HG_Addr_self(hg_class, &addr_self);
+    if ( ret != HG_SUCCESS ) {
+        fprintf(stderr, "Error: HG_Addr_self()\n");
+        HG_Context_destroy(hg_context);
+        HG_Finalize(hg_class);
+        return(-1);
+    }
+    char addr_self_string[128];
+    hg_size_t addr_self_string_sz = 128;
+    ret = HG_Addr_to_string(hg_class, addr_self_string,
+                            &addr_self_string_sz, addr_self);
+    if ( ret != HG_SUCCESS ) {
+        fprintf(stderr, "Error: HG_Addr_self()\n");
+        HG_Context_destroy(hg_context);
+        HG_Finalize(hg_class);
+        return(-1);
+    }
+    HG_Addr_free(hg_class, addr_self);
+
+    printf("%s\n", addr_self_string);
+
+    //add to address string here
+    char* new_addr_string = concat(addr_string, addr_self_string);
+    //addr_string.append(addr_self_string);
+    return 0;
+}
+
+#ifdef SHARED_MEMORY_API
+/* setup_sm_target - Initializes the shared-memory target.
+ *
+ *                   Not used for FUSE deployment.
+ *
+ */
+static margo_instance_id setup_sm_target(ABT_pool& progress_pool)
+{
+    hg_class_t* hg_class = HG_Init(SMSVR_ADDR_STR, HG_TRUE);
+    if ( !hg_class ) {
+        fprintf(stderr, "Error: HG_Init() for sm_target\n");
+        assert(false);
+    }
+    hg_context_t* hg_context = HG_Context_create(hg_class);
+    if ( !hg_context ) {
+        fprintf(stderr, "Error: HG_Context_create() for sm_target\n");
+        HG_Finalize(hg_class);
+        assert(false);
+    }
+
+    /* figure out what address this server is listening on */
+    if ( find_address(hg_class, hg_context, SMSVR_ADDR_STR, "") == -1)
+        assert(false);
+
+        ABT_xstream handler_xstream;
+        ABT_pool handler_pool;
+        int ret = ABT_snoozer_xstream_create(1, &handler_pool,
+                                             &handler_xstream);
+        if ( ret != 0 ) {
+                fprintf(stderr, "Error: ABT_snoozer_xstream_create()\n");
+                assert(false);
+        }
+
+        margo_instance_id mid = margo_init_pool(progress_pool, handler_pool,
+                                            hg_context);
+        assert(mid);
+
+        MARGO_REGISTER(mid, "unifycr_read_rpc",
+                         unifycr_read_in_t, unifycr_read_out_t,
+                         unifycr_read_rpc);
+
+/*        MARGO_REGISTER(mid, "unifycr_write_rpc",
+                         unifycr_write_in_t, unifycr_write_out_t,
+                         unifycr_write_rpc);
+
+        MARGO_REGISTER(mid, "unifycr_addfile_rpc",
+                         unifycr_addfile_in_t, unifycr_addfile_out_t,
+                         unifycr_addfile_rpc);
+
+        MARGO_REGISTER(mid, "unifycr_open_rpc",
+                         unifycr_open_in_t, unifycr_open_out_t,
+                         unifycr_open_rpc);
+*/
+        return mid;
+}
+#endif
+
+/* setup_verbs_target - Initializes the inter-server target.
+ *
+ */
+static margo_instance_id setup_verbs_target(ABT_pool& progress_pool)
+{
+    hg_class_t* hg_class;
+    if ( usetcp )
+        hg_class = HG_Init(TCPSVR_ADDR_STR, HG_TRUE);
+    else
+        hg_class = HG_Init(VERBSVR_ADDR_STR, HG_TRUE);
+
+    if ( !hg_class ) {
+        fprintf(stderr, "Error: HG_Init() for verbs_target\n");
+        assert(false);
+    }
+    hg_context_t* hg_context = HG_Context_create(hg_class);
+    if ( !hg_context ) {
+        fprintf(stderr, "Error: HG_Context_create() for verbs_target\n");
+        HG_Finalize(hg_class);
+        assert(false);
+    }
+
+    /* figure out what address this server is listening on */
+    char* addr_string = "cci+";
+    if (usetcp) {
+        if ( find_address(hg_class,hg_context, TCPSVR_ADDR_STR,
+                          addr_string) == -1)
+            assert(false);
+    } else {
+        if ( find_address(hg_class,hg_context, VERBSVR_ADDR_STR,
+                          addr_string) == -1)
+            assert(false);
+    }
+    printf("finished find_address\n");
+
+    ABT_xstream handler_xstream;
+    ABT_pool handler_pool;
+    int ret = ABT_snoozer_xstream_create(1, &handler_pool, &handler_xstream);
+    if ( ret != 0 ) {
+        fprintf(stderr, "Error: ABT_snoozer_xstream_create()\n");
+        assert(false);
+    }
+    printf("finished handler create\n");
+
+    margo_instance_id mid = margo_init_pool(progress_pool, handler_pool,
+                                            hg_context);
+    printf("finished pool init\n");
+
+    printf("Starting register is verbs\n");
+    MARGO_REGISTER(mid, "unifycr_mdread_rpc",
+                     unifycr_mdread_in_t, unifycr_mdread_out_t,
+                     unifycr_mdread_rpc);
+
+    /*MARGO_REGISTER(mid, "unifycr_mdwrite_rpc",
+                     unifycr_mdwrite_in_t, unifycr_mdwrite_out_t,
+                     unifycr_mdwrite_rpc);
+
+    MARGO_REGISTER(mid, "unifycr_mdchkdir_rpc",
+                     unifycr_mdchkdir_in_t, unifycr_mdchkdir_out_t,
+                     unifycr_mdchkdir_rpc);
+
+    MARGO_REGISTER(mid, "unifycr_mdaddfile_rpc",
+                     unifycr_mdaddfile_in_t, unifycr_mdaddfile_out_t,
+                     unifycr_mdaddfile_rpc);
+
+    MARGO_REGISTER(mid, "unifycr_mdopen_rpc",
+                     unifycr_mdopen_in_t, unifycr_mdopen_out_t,
+                     unifycr_mdopen_rpc);
+
+    MARGO_REGISTER(mid, "unifycr_mdclose_rpc",
+                     unifycr_mdclose_in_t, unifycr_mdclose_out_t,
+                     unifycr_mdclose_rpc);
+
+    MARGO_REGISTER(mid, "unifycr_mdgetfilestat_rpc",
+                     unifycr_mdgetfilestat_in_t, unifycr_mdgetfilestat_out_t,
+                     unifycr_mdgetfilestat_rpc);
+
+    MARGO_REGISTER(mid, "unifycr_mdgetdircontents_rpc",
+                     unifycr_mdgetdircontents_in_t, unifycr_mdgetdircontents_out_t,
+                     unifycr_mdgetdircontents_rpc);*/
+
+    printf("Completed register in verbs\n");
+
+    server_addresses->at(my_rank).string_address = addr_string;
+    char fname[16];
+    sprintf(fname, "%d.addr", my_rank);
+
+    //TODO: Add file support for C
+    //std::ofstream myfile;
+    //myfile.open (fname);
+    //myfile << addr_string << std::endl;
+    //myfile.close();
+
+    return mid;
+}
+
+/* unifycr_server_rpc_init - Initializes the server-side RPC functionality
+ *                       for inter-server communication.
+ *
+ */
+margo_instance_id unifycr_server_rpc_init()
+{
+    //assert(unifycr_rpc_context);
+    /* set up argobots */
+    int ret = ABT_init(0, NULL);
+    if ( ret != 0 ) {
+        fprintf(stderr, "Error: ABT_init()\n");
+        assert(false);
+    }
+
+    /* set primary ES to idle without polling */
+    ret = ABT_snoozer_xstream_self_set();
+    if ( ret != 0 ) {
+        fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
+        assert(false);
+    }
+
+    ABT_xstream* io_xstreams = new ABT_xstream[IO_POOL_SIZE];
+    assert(io_xstreams);
+
+    ABT_pool io_pool;
+    ret = ABT_snoozer_xstream_create(IO_POOL_SIZE, &io_pool, io_xstreams);
+    assert(ret == 0);
+
+    aid = abt_io_init_pool(io_pool);
+    assert(aid);
+
+
+#ifdef SHARED_MEMORY_API
+    ABT_xstream progress_xstream;
+    ret = ABT_xstream_self(&progress_xstream);
+    if ( ret != 0 ) {
+        fprintf(stderr, "Error: ABT_xstream_self()\n");
+        assert(false);
+    }
+    ABT_pool progress_pool;
+
+    ret = ABT_xstream_get_main_pools(progress_xstream, 1, &progress_pool);
+    if ( ret != 0 ) {
+        fprintf(stderr, "Error: ABT_xstream_get_main_pools()\n");
+        assert(false);
+    }
+    ABT_xstream progress_xstream;
+    ABT_pool progress_pool;
+    ret = ABT_snoozer_xstream_create(1, &progress_pool, &progress_xstream);
+    if ( ret != 0 ) {
+        fprintf(stderr, "Error: ABT_snoozer_xstream_create()\n");
+        assert(false);
+    }
+    printf("completed verbs init\n");
+    setup_sm_target(progress_pool);
+#endif
+    ABT_xstream progress_xstream2;
+    ABT_pool progress_pool2;
+    ret = ABT_snoozer_xstream_create(1, &progress_pool2, &progress_xstream2);
+    if ( ret != 0 ) {
+        fprintf(stderr, "Error: ABT_snoozer_xstream_create()\n");
+        assert(false);
+    }
+    return setup_verbs_target(progress_pool2);
+}
 
 /*
  * Perform steps to create a daemon process:
