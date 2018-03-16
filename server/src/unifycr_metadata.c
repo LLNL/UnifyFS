@@ -244,11 +244,10 @@ int meta_process_attr_set(char *buf, int sock_id)
 {
     int rc = ULFS_SUCCESS;
 
-    *fattr_keys[0] = *((int *)(buf + 2 * sizeof(int)));
-
     unifycr_file_attr_t *ptr_fattr =
-        (unifycr_file_attr_t *)(buf + 3 * sizeof(int));
+        (unifycr_file_attr_t *)(buf + 2 * sizeof(int));
 
+    *fattr_keys[0] = ptr_fattr->gfid;
     fattr_vals[0]->file_attr = ptr_fattr->file_attr;
     strcpy(fattr_vals[0]->fname, ptr_fattr->filename);
 
