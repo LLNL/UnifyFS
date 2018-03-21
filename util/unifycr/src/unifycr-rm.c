@@ -44,22 +44,61 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include "unifycr.h"
 
+typedef int (*unifycr_rm_read_resource_t)(unifycr_resource_t *resource);
+
+typedef int (*unifycr_rm_launch_t)(unifycr_resource_t *resource,
+                                   unifycr_runstate_t *state);
+
+struct _ucr_resource_manager {
+    const char *type;
+
+    unifycr_rm_read_resource_t read_resource;
+    unifycr_rm_launch_t launch;
+};
+
+typedef struct _ucr_resource_manager _ucr_resource_manager_t;
+
+/*
+ * TODO: currently, we cannot launch if no resource manager is detected
+ * (UNIFYCR_RM_NONE).
+ */
+
 /**
- * @brief get the node list from the $PBS_NODEFILE
+ * @brief
  *
  * @param resource
  *
  * @return
  */
-static int read_resource_pbs(unifycr_resource_t *resource)
+static int none_read_resource(unifycr_resource_t *resource)
+{
+    return -ENOSYS;
+}
+
+static int none_launch_daemon(unifycr_resource_t *resource,
+                              unifycr_runstate_t *state)
+{
+    return -ENOSYS;
+}
+
+/**
+ * @brief get the node list from the $PBS_NODEFILE
+ *
+ * @param resource the resource record which will be filled
+ *
+ * @return 0 on success, negative errno otherwise
+ */
+static int pbs_read_resource(unifycr_resource_t *resource)
 {
     int ret = 0;
     int i = 0;
-    int n_nodes = 0;
+    uint64_t n_nodes = 0;
     FILE *fp = NULL;
+    char *num_nodes_str = NULL;
     char **nodes = NULL;
     char buf[1024] = { 0, };
     char *nodefile = getenv("PBS_NODEFILE");
@@ -67,17 +106,21 @@ static int read_resource_pbs(unifycr_resource_t *resource)
     if (!nodefile)
         return -EINVAL;
 
+    /*
+     * node names are duplicated in PBS_NODEFILE, depending on the number of
+     * available cores per node. for instance, nodeX will appear 16 times if
+     * nodeX has 16 cores. so, get the correct node number first.
+     */
+
+    num_nodes_str = getenv("PBS_NUM_NODES");
+    if (!num_nodes_str)
+        return -EINVAL;
+
+    n_nodes = (uint64_t) strtoul(num_nodes_str, NULL, 10);
+
     fp = fopen(nodefile, "r");
     if (!fp)
         return -errno;
-
-    while (fgets(buf, 1023, fp))
-        n_nodes++;
-
-    if (ferror(fp)) {
-        ret = -errno;
-        goto out;
-    }
 
     nodes = calloc(sizeof(char *), n_nodes);
     if (!nodes) {
@@ -85,11 +128,15 @@ static int read_resource_pbs(unifycr_resource_t *resource)
         goto out;
     }
 
-    rewind(fp);
-
     while (fgets(buf, 1024, fp) != NULL) {
         buf[strlen(buf) - 1] = '\0';    /* discard the newline */
-        nodes[i] = strdup(buf);
+        if (i > 0) {
+            if (!strcmp(buf, nodes[i-1]))
+                continue;
+            nodes[i] = strdup(buf);
+        } else
+            nodes[i] = strdup(buf);
+
         i++;
     }
 
@@ -103,6 +150,20 @@ out:
 }
 
 /**
+ * @brief
+ *
+ * @param resource
+ * @param state
+ *
+ * @return
+ */
+static int pbs_launch_daemon(unifycr_resource_t *resource,
+                             unifycr_runstate_t *state)
+{
+    return 0;
+}
+
+/**
  * TODO: not implemented yet
  *
  * @brief get the node list from the $SLURM_JOB_NODELIST, which requires
@@ -112,9 +173,23 @@ out:
  *
  * @return
  */
-static int read_resource_slurm(unifycr_resource_t *resource)
+static int slurm_read_resource(unifycr_resource_t *resource)
 {
     return -ENOSYS;
+}
+
+/**
+ * @brief
+ *
+ * @param resource
+ * @param state
+ *
+ * @return
+ */
+static int slurm_launch_daemon(unifycr_resource_t *resource,
+                               unifycr_runstate_t *state)
+{
+    return 0;
 }
 
 /**
@@ -130,7 +205,7 @@ static int read_resource_slurm(unifycr_resource_t *resource)
  *
  * @return
  */
-static int read_resource_lsf(unifycr_resource_t *resource)
+static int lsf_read_resource(unifycr_resource_t *resource)
 {
     int i = 0;
     char *node = NULL;
@@ -169,30 +244,73 @@ static int read_resource_lsf(unifycr_resource_t *resource)
     return 0;
 }
 
+/**
+ * @brief
+ *
+ * @param resource
+ * @param state
+ *
+ * @return
+ */
+static int lsf_launch_daemon(unifycr_resource_t *resource,
+                             unifycr_runstate_t *state)
+{
+    return 0;
+}
+
+static _ucr_resource_manager_t resource_managers[] = {
+    { "none", &none_read_resource, &none_launch_daemon },
+    { "pbs", &pbs_read_resource, &pbs_launch_daemon },
+    { "slurm", &slurm_read_resource, &slurm_launch_daemon },
+    { "lsf", &lsf_read_resource, &lsf_launch_daemon },
+};
+
 int unifycr_read_resource(unifycr_resource_t *resource)
 {
-    int ret = -1;
-    char *str = NULL;
+    char *pbs_jobid = NULL;
+    char *slurm_jobid = NULL;
+    char *lsb_jobid = NULL;
 
-    str = getenv("PBS_JOBID");
-    if (str) {
-        ret = read_resource_pbs(resource);
-        goto out;
-    }
+    pbs_jobid = getenv("PBS_JOBID");
+    slurm_jobid = getenv("SLURM_JOBID");
+    lsb_jobid = getenv("LSB_JOBID");
 
-    str = getenv("SLURM_JOBID");
-    if (str) {
-        ret = read_resource_slurm(resource);
-        goto out;
-    }
+    if (pbs_jobid)
+        resource->rm = UNIFYCR_RM_PBS;
+    else if (slurm_jobid)
+        resource->rm = UNIFYCR_RM_SLURM;
+    else if (lsb_jobid)
+        resource->rm = UNIFYCR_RM_LSF;
+    else
+        resource->rm = UNIFYCR_RM_NONE;
 
-    str = getenv("LSB_JOBID");
-    if (str) {
-        ret = read_resource_lsf(resource);
-        goto out;
-    }
+    return resource_managers[resource->rm].read_resource(resource);
+}
 
-out:
-    return ret;
+/*
+ * TODO: currently it directly uses mpirun command in any cases.  The command
+ * should be:
+ * $ mpirun -n NUMNODES -np NUMNODES unifycrd
+ */
+static char *mpirun_newargv[] = {
+    "mpirun", "-n", NULL, "-np", NULL, NULL, (char *) NULL
+};
+
+int unifycr_launch_daemon(unifycr_resource_t *resource,
+                          unifycr_runstate_t *state)
+{
+    char nbuf[16] = { 0, };
+
+    sprintf(nbuf, "%llu", (unsigned long long) resource->n_nodes);
+
+    mpirun_newargv[2] = nbuf;
+    mpirun_newargv[4] = nbuf;
+    mpirun_newargv[5] = state->unifycrd_path ?
+                        state->unifycrd_path : BINDIR "/unifycrd";
+
+    execvp(mpirun_newargv[0], mpirun_newargv);
+    perror("failed to launch unifycrd (execvp)");
+
+    return -1;
 }
 

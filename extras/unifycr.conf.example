@@ -1,8 +1,0 @@
-# unifycr.conf
-#
-
-# file system behavior
-[filesystem]
-mountpoint = "/mnt/unifycr"
-consistency = "laminated"
-

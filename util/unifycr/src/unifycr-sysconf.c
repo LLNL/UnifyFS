@@ -94,6 +94,16 @@ static int global_read(toml_table_t *tab, unifycr_sysconf_t *sysconf)
         sysconf->runstatedir = str;
     }
 
+    /* unifycrd path */
+    val = toml_raw_in(tab, "unifycrd_path");
+    if (val) {
+        ret = toml_rtos(val, &str);
+        if (ret)
+            return -errno;
+
+        sysconf->unifycrd_path = str;
+    }
+
     return 0;
 }
 
@@ -139,9 +149,116 @@ static int filesystem_read(toml_table_t *tab, unifycr_sysconf_t *sysconf)
     return 0;
 }
 
+static conf_entry_t server_entries[] = {
+    { "meta_server_ratio", 0, CONF_ENTRY_INT },
+    { "meta_db_name", 0, CONF_ENTRY_STRING },
+    { "meta_db_path", 0, CONF_ENTRY_STRING },
+    { "server_debug_log_path", 0, CONF_ENTRY_STRING },
+    { 0, 0, 0 },
+};
+
+static int server_read(toml_table_t *tab, unifycr_sysconf_t *sysconf)
+{
+    int ret = 0;
+    int64_t intval = 0;
+    const char *val = NULL;
+    char *str = NULL;
+
+    /* meta_server_ratio */
+    val = toml_raw_in(tab, "meta_server_ratio");
+    if (val) {
+        ret = toml_rtoi(val, &intval);
+        if (ret)
+            return -errno;
+
+        sysconf->meta_server_ratio = intval;
+    }
+
+    /* meta_db_name */
+    val = toml_raw_in(tab, "meta_db_name");
+    if (val) {
+        ret = toml_rtos(val, &str);
+        if (ret)
+            return -errno;
+
+        sysconf->meta_db_name = str;
+    }
+
+    /* meta_db_path */
+    val = toml_raw_in(tab, "meta_db_path");
+    if (val) {
+        ret = toml_rtos(val, &str);
+        if (ret)
+            return -errno;
+
+        sysconf->meta_db_path = str;
+    }
+
+    /* server_debug_log_path */
+    val = toml_raw_in(tab, "server_debug_log_path");
+    if (val) {
+        ret = toml_rtos(val, &str);
+        if (ret)
+            return -errno;
+
+        sysconf->server_debug_log_path = str;
+    }
+
+    return 0;
+}
+
+static conf_entry_t client_entries[] = {
+    { "chunk_mem", 0, CONF_ENTRY_INT },
+    { "external_meta_dir", 0, CONF_ENTRY_STRING },
+    { "external_string_dir", 0, CONF_ENTRY_STRING },
+    { 0, 0, 0 },
+};
+
+static int client_read(toml_table_t *tab, unifycr_sysconf_t *sysconf)
+{
+    int ret = 0;
+    int64_t intval = 0;
+    const char *val = NULL;
+    char *str = NULL;
+
+    /* chunk_mem */
+    val = toml_raw_in(tab, "chunk_mem");
+    if (val) {
+        ret = toml_rtoi(val, &intval);
+        if (ret)
+            return -errno;
+
+        sysconf->chunk_mem = intval;
+    }
+
+    /* external_meta_dir */
+    val = toml_raw_in(tab, "external_meta_dir");
+    if (val) {
+        ret = toml_rtos(val, &str);
+        if (ret)
+            return -errno;
+
+        sysconf->external_meta_dir = str;
+    }
+
+    /* external_data_dir */
+    val = toml_raw_in(tab, "external_data_dir");
+    if (val) {
+        ret = toml_rtos(val, &str);
+        if (ret)
+            return -errno;
+
+        sysconf->external_data_dir = str;
+    }
+
+    return 0;
+}
+
 static conf_section_t conf_sections[] = {
     { "global", global_entries, &global_read },
     { "filesystem", filesystem_entries, &filesystem_read },
+    { "server", server_entries, &server_read },
+    { "client", client_entries, &client_read },
     { 0, 0, 0 },
 };
 

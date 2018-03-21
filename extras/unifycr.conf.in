@@ -1,0 +1,27 @@
+# unifycr.conf
+#
+#
+
+[global]
+# by default this value is PREFIX/var/run/unifycr
+runstatedir = "/tmp/unifycr"
+unifycrd = "@prefix@/bin/unifycrd"
+
+# file system behavior
+[filesystem]
+mountpoint = "/mnt/unifycr"
+consistency = "laminated"
+
+# server daemon configurations
+[server]
+meta_server_ratio = 1
+meta_db_name = "unifycr_metadb"
+meta_db_path = "/mnt/ssd"
+server_debug_log_path = "/tmp/unifycrd_debug.log"
+
+# client intercept library configuration
+[client]
+chunk_mem = 0
+external_meta_dir = "/mnt/ssd"
+external_data_dir = "/mnt/ssd"
+

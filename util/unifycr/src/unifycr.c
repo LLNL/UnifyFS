@@ -58,16 +58,12 @@ enum {
 
 static char *actions[N_ACT] = { "start", "terminate" };
 
-static int unifycr_launch_daemon(void)
-{
-    return 0;
-}
-
 static int action = -1;
 static unifycr_args_t opts_cmd;
 static unifycr_env_t opts_env;
 static unifycr_sysconf_t opts_sysconf;
 static unifycr_resource_t resource;
+static unifycr_runstate_t runstate;
 
 static struct option const long_opts[] = {
     { "cleanup", 0, 0, 'c' },
@@ -243,7 +239,7 @@ int main(int argc, char **argv)
     }
 
     ret = unifycr_write_runstate(&resource, &opts_sysconf, &opts_env,
-                                 &opts_cmd);
+                                 &opts_cmd, &runstate);
     if (ret) {
         fprintf(stderr, "failed to write the runstate file\n");
         goto out;
@@ -269,7 +265,7 @@ int main(int argc, char **argv)
         fclose(fp);
     }
 
-    ret = unifycr_launch_daemon();
+    ret = unifycr_launch_daemon(&resource, &runstate);
 
 out:
     return ret;

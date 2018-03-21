@@ -296,6 +296,7 @@ AC_CONFIG_FILES([Makefile
                  client/tests/Makefile
                  client/unifycr.pc
                  extras/Makefile
+                 extras/unifycr.conf
                  t/Makefile
                  t/lib/Makefile
                  util/Makefile
