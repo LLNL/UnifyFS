@@ -110,19 +110,52 @@ struct _unifycr_sysconf {
 
     /* the directory where unifycr-runtime.conf will be written */
     char *runstatedir;
+    char *unifycrd_path;
 
     /* file system configuration */
     unifycr_cm_t consistency;       /* consistency model */
     char *mountpoint;               /* unifycr mountpoint */
+
+    /* server configuration */
+    uint64_t meta_server_ratio;
+    char *meta_db_name;
+    char *meta_db_path;
+    char *server_debug_log_path;
+
+    /* client intercept library configuration */
+    uint64_t chunk_mem;
+    char *external_meta_dir;
+    char *external_data_dir;
 };
 
 typedef struct _unifycr_sysconf unifycr_sysconf_t;
 
 /**
- * @brief options read from environmental variables
+ * @brief options read from environmental variables.
+ *
+ * The following env variables are supported currently:
+ *
+ * UNIFYCR_MT
+ * UNIFYCR_META_SERVER_RATIO
+ * UNIFYCR_META_DB_NAME
+ * UNIFYCR_META_DB_PATH
+ * UNIFYCR_CHUNK_MEM
+ * UNIFYCR_SERVER_DEBUG_LOG
+ *
+ * TODO: do we need to duplicate some of these parameters to sysconf file for
+ * setting some default values??
  */
 struct _unifycr_env {
-    char *unifycr_mt;               /* unifycr mountpoint */
+    char *unifycr_mt;
+    char *unifycr_meta_db_name;
+    char *unifycr_meta_db_path;
+    char *unifycr_server_debug_log;
+
+    char *unifycr_external_meta_dir;
+    char *unifycr_external_data_dir;
+
+    uint64_t unifycr_meta_server_ratio;
+    uint64_t unifycr_chunk_mem;
 };
 
 typedef struct _unifycr_env unifycr_env_t;
@@ -144,6 +177,7 @@ typedef struct _unifycr_args unifycr_args_t;
  * @brief nodes allocated to the current job.
  */
 struct _unifycr_resource {
+    unifycr_rm_t rm;                /* resource manager */
     uint64_t n_nodes;               /* number of nodes in job allocation */
     char **nodes;                   /* allocated node names */
 };
@@ -155,10 +189,18 @@ typedef struct _unifycr_resource unifycr_resource_t;
  */
 struct _unifycr_runstate {
     char *mountpoint;               /* mountpoint */
+    char *unifycrd_path;            /* unifycrd path */
     char *transfer_in;              /* data path to stage-in */
     char *transfer_out;             /* data path to stage-out (drain) */
     int cleanup;                    /* cleanup on termination? */
     int consistency;                /* consistency model */
+
+    char *meta_db_name;
+    char *meta_db_path;
+    char *server_debug_log_path;
+
+    uint64_t meta_server_ratio;
+    uint64_t chunk_mem;
 
     uint32_t n_nodes;               /* number of nodes in job allocation */
     char **nodes;                   /* allocdated node names */
@@ -174,6 +216,17 @@ typedef struct _unifycr_runstate unifycr_runstate_t;
  * @return 0 on success, negative errno otherwise
  */
 int unifycr_read_resource(unifycr_resource_t *resource);
+
+/**
+ * @brief
+ *
+ * @param resource
+ * @param state
+ *
+ * @return
+ */
+int unifycr_launch_daemon(unifycr_resource_t *resource,
+                          unifycr_runstate_t *state);
 
 /**
  * @brief reads unifycr environmental variables
@@ -200,13 +253,15 @@ int unifycr_read_sysconf(unifycr_sysconf_t *sysconf);
  * @param sysconf options from sysconf file
  * @param env options from environmental variables
  * @param cmdargs options from command line arguments
+ * @param runstate [out] this structure is filled by this function
  *
  * @return 0 on success, negative errno otherwise
  */
 int unifycr_write_runstate(unifycr_resource_t *resource,
                            unifycr_sysconf_t *sysconf,
                            unifycr_env_t *env,
-                           unifycr_args_t *cmdargs);
+                           unifycr_args_t *cmdargs,
+                           unifycr_runstate_t *runstate);
 
 #endif  /* __UNIFYCR_H */
 

@@ -52,6 +52,34 @@ int unifycr_read_env(unifycr_env_t *env)
     if (val)
         env->unifycr_mt = strdup(val);
 
+    val = getenv("UNIFYCR_META_DB_NAME");
+    if (val)
+        env->unifycr_meta_db_name = strdup(val);
+
+    val = getenv("UNIFYCR_META_DB_PATH");
+    if (val)
+        env->unifycr_meta_db_path = strdup(val);
+
+    val = getenv("UNIFYCR_SERVER_DEBUG_LOG");
+    if (val)
+        env->unifycr_server_debug_log = strdup(val);
+
+    val = getenv("UNIFYCR_META_SERVER_RATIO");
+    if (val)
+        env->unifycr_meta_server_ratio = strtoul(val, NULL, 0);
+
+    val = getenv("UNIFYCR_CHUNK_MEM");
+    if (val)
+        env->unifycr_chunk_mem = strtoul(val, NULL, 0);
+
+    val = getenv("UNIFYCR_EXTERNAL_META_DIR");
+    if (val)
+        env->unifycr_external_meta_dir = strdup(val);
+
+    val = getenv("UNIFYCR_EXTERNAL_DATA_DIR");
+    if (val)
+        env->unifycr_external_data_dir = strdup(val);
+
     return 0;
 }
 
