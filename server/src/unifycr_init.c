@@ -133,7 +133,7 @@ static margo_instance_id setup_sm_target(ABT_pool& progress_pool)
     }
 
     /* figure out what address this server is listening on */
-    if ( find_address(hg_class, hg_context, SMSVR_ADDR_STR, "") == -1)
+    if (find_address(hg_class, hg_context, SMSVR_ADDR_STR, "") == -1)
         assert(false);
 
         ABT_xstream handler_xstream;
@@ -165,13 +165,14 @@ static margo_instance_id setup_sm_target(ABT_pool& progress_pool)
                          unifycr_open_in_t, unifycr_open_out_t,
                          unifycr_open_rpc);
 */
-        return mid;
+    return mid;
 }
 #endif
 
 /* setup_verbs_target - Initializes the inter-server target.
  *
  */
+#if 0
 static margo_instance_id setup_verbs_target(ABT_pool& progress_pool)
 {
     hg_class_t* hg_class;
@@ -218,9 +219,9 @@ static margo_instance_id setup_verbs_target(ABT_pool& progress_pool)
     printf("finished pool init\n");
 
     printf("Starting register is verbs\n");
-    MARGO_REGISTER(mid, "unifycr_mdread_rpc",
-                     unifycr_mdread_in_t, unifycr_mdread_out_t,
-                     unifycr_mdread_rpc);
+    //MARGO_REGISTER(mid, "unifycr_mdread_rpc",
+    //                 unifycr_mdread_in_t, unifycr_mdread_out_t,
+    //                 unifycr_mdread_rpc);
 
     /*MARGO_REGISTER(mid, "unifycr_mdwrite_rpc",
                      unifycr_mdwrite_in_t, unifycr_mdwrite_out_t,
@@ -264,7 +265,7 @@ static margo_instance_id setup_verbs_target(ABT_pool& progress_pool)
 
     return mid;
 }
-
+#endif
 /* unifycr_server_rpc_init - Initializes the server-side RPC functionality
  *                       for inter-server communication.
  *
@@ -318,17 +319,17 @@ margo_instance_id unifycr_server_rpc_init()
         fprintf(stderr, "Error: ABT_snoozer_xstream_create()\n");
         assert(false);
     }
-    printf("completed verbs init\n");
-    setup_sm_target(progress_pool);
+    printf("before shared memory init\n");
+    return setup_sm_target(progress_pool);
 #endif
-    ABT_xstream progress_xstream2;
+    /*ABT_xstream progress_xstream2;
     ABT_pool progress_pool2;
     ret = ABT_snoozer_xstream_create(1, &progress_pool2, &progress_xstream2);
     if ( ret != 0 ) {
         fprintf(stderr, "Error: ABT_snoozer_xstream_create()\n");
         assert(false);
     }
-    return setup_verbs_target(progress_pool2);
+    return setup_verbs_target(progress_pool2);*/
 }
 
 /*
