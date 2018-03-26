@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <pthread.h>
+#include <string.h>
 #include "unifycr_metadata.h"
 #include "log.h"
 #include "unifycr_debug.h"
@@ -54,8 +55,62 @@ arraylist_t *app_config_list;
 pthread_t data_thrd;
 arraylist_t *thrd_list;
 
+/* store runstate configuration */
+typedef struct {
+    char *mountpoint;
+    char *cleanup;
+    char *consistency;
+    char *n_nodes;
+    char *nodes;
+} runtime_config;
+
 int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
 int log_print_level = 5;
+
+/* read the runstate configuration file */
+void read_runstate_config_file(runtime_config *p_rconfig)
+{
+    char *key;
+    char *val;
+    char *search = "=";
+
+    /* TODO: need to read from RUNDIR var here to avoid hardcoding path here */
+    /* TODO: add RUNDIR to top level Makefile.am to use variable */
+    static const char filename[] = "/tmp/unifycr/unifycr-runstate.conf";
+    FILE *file = fopen(filename, "r");
+
+    if (file != NULL) {
+
+        /* maximum line size */
+        char line[256];
+
+        /* read a line */
+        while (fgets(line, sizeof(line), file) != NULL) {
+            /* key will point to the part before the = on current line. */
+            key = strtok(line, search);
+
+            /* val will point to the part after the = on current line. */
+            val = strtok(NULL, search);
+
+            if (strcmp(key, "mountpoint"))
+                p_rconfig->mountpoint = strdup(val);
+            else if (strcmp(key, "cleanup"))
+                p_rconfig->cleanup = strdup(val);
+            else if (strcmp(key, "consistency"))
+                p_rconfig->consistency = strdup(val);
+            else if (strcmp(key, "n_nodes"))
+                p_rconfig->n_nodes = strdup(val);
+            /* TODO: probably have to do further parsing of the nodes
+             * string (i.e [node 1, node 2]) into an array
+             */
+            else if (strcmp(key, "nodes"))
+                p_rconfig->nodes = strdup(val);
+            else
+                printf("%s doesn't exist\n", key);
+       }
+       fclose(file);
+    }
+}
 
 int main(int argc, char *argv[])
 {
@@ -64,6 +119,12 @@ int main(int argc, char *argv[])
     int provided;
     char *env;
     int rc;
+
+    /* allocate memory for runstate struct */
+    runtime_config *p_rconfig = malloc(sizeof(runtime_config));
+
+    /* read the runstate configuration */
+    read_runstate_config_file(p_rconfig);
 
     rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
 
@@ -180,6 +241,14 @@ int main(int argc, char *argv[])
         }
 
     }
+
+    /* free runstate struct and strings */
+    free(p_rconfig->mountpoint);
+    free(p_rconfig->cleanup);
+    free(p_rconfig->consistency);
+    free(p_rconfig->n_nodes);
+    free(p_rconfig->nodes);
+    free(p_rconfig);
 
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
