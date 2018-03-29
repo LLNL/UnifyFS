@@ -16,6 +16,7 @@ UnifyCR: A file system for burst buffers
    assumptions
    build-intercept
    api-mount
+   configuration
    start-stop
 
 .. toctree::
