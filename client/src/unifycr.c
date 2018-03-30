@@ -1091,19 +1091,21 @@ static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,
     int meta_cnt = *(ptr_f_meta_log->ptr_num_entries), i;
     unifycr_fattr_t *meta_entry = ptr_f_meta_log->meta_entry;
 
-    for (i = 0; i < meta_cnt - 1; i++) {
-        if (meta_entry[i].fid > ins_fattr->fid) {
+    /* TODO: Improve the search time */
+    for (i = meta_cnt - 1; i >= 0; i--) {
+        if (meta_entry[i].fid <= ins_fattr->fid) {
+            /* sort in acsending order */
             break;
         }
     }
+    int ins_pos = i + 1;
 
-    if (i == meta_cnt) {
+    if (ins_pos == meta_cnt) {
         meta_entry[meta_cnt] = *ins_fattr;
         (*ptr_f_meta_log->ptr_num_entries)++;
         return 0;
     }
 
-    int ins_pos = i;
     for (i = meta_cnt - 1; i >= ins_pos; i--) {
         meta_entry[i + 1] = meta_entry[i];
     }
