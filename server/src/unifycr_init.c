@@ -31,10 +31,12 @@
 #include <unistd.h>
 #include <errno.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <pthread.h>
 #include <string.h>
+#include <assert.h>
 #include "unifycr_metadata.h"
 #include "log.h"
 #include "unifycr_debug.h"
@@ -69,6 +71,7 @@ abt_io_instance_id aid = NULL;
 
 static const int IO_POOL_SIZE = 2;
 
+/* not needed
 char* concat(const char *s1, const char *s2)
 {
     char *result = malloc(strlen(s1)+strlen(s2)+1);//+1 for the null-terminator
@@ -76,12 +79,13 @@ char* concat(const char *s1, const char *s2)
     strcat(result, s2);
     return result;
 }
+*/
 
 /* find_address - Resolves a name string to an address structure.
  *
  */
-static char* find_address(hg_class_t* hg_class,
-            hg_context_t* hg_context, const char* arg, char* addr_string)
+static int find_address(hg_class_t* hg_class,
+           hg_context_t* hg_context, const char* arg, char* addr_string)
 {
     /* figure out what address this server is listening on */
     hg_addr_t addr_self;
@@ -107,18 +111,17 @@ static char* find_address(hg_class_t* hg_class,
     printf("%s\n", addr_self_string);
 
     //add to address string here
-    char* new_addr_string = concat(addr_string, addr_self_string);
+    strcat(addr_string, addr_self_string);
     //addr_string.append(addr_self_string);
     return 0;
 }
 
-#ifdef SHARED_MEMORY_API
 /* setup_sm_target - Initializes the shared-memory target.
  *
  *                   Not used for FUSE deployment.
  *
  */
-static margo_instance_id setup_sm_target(ABT_pool& progress_pool)
+static margo_instance_id setup_sm_target(ABT_pool* progress_pool)
 {
     hg_class_t* hg_class = HG_Init(SMSVR_ADDR_STR, HG_TRUE);
     if ( !hg_class ) {
@@ -145,7 +148,7 @@ static margo_instance_id setup_sm_target(ABT_pool& progress_pool)
                 assert(false);
         }
 
-        margo_instance_id mid = margo_init_pool(progress_pool, handler_pool,
+        margo_instance_id mid = margo_init_pool(*progress_pool, handler_pool,
                                             hg_context);
         assert(mid);
 
@@ -167,7 +170,6 @@ static margo_instance_id setup_sm_target(ABT_pool& progress_pool)
 */
     return mid;
 }
-#endif
 
 /* setup_verbs_target - Initializes the inter-server target.
  *
@@ -286,8 +288,9 @@ margo_instance_id unifycr_server_rpc_init()
         fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
         assert(false);
     }
+/*
 
-    ABT_xstream* io_xstreams = new ABT_xstream[IO_POOL_SIZE];
+    ABT_xstream* io_xstreams = (ABT_xstream*)malloc(sizeof(ABT_xstream) * IO_POOL_SIZE);
     assert(io_xstreams);
 
     ABT_pool io_pool;
@@ -298,7 +301,6 @@ margo_instance_id unifycr_server_rpc_init()
     assert(aid);
 
 
-#ifdef SHARED_MEMORY_API
     ABT_xstream progress_xstream;
     ret = ABT_xstream_self(&progress_xstream);
     if ( ret != 0 ) {
@@ -312,6 +314,7 @@ margo_instance_id unifycr_server_rpc_init()
         fprintf(stderr, "Error: ABT_xstream_get_main_pools()\n");
         assert(false);
     }
+*/
     ABT_xstream progress_xstream;
     ABT_pool progress_pool;
     ret = ABT_snoozer_xstream_create(1, &progress_pool, &progress_xstream);
@@ -319,17 +322,17 @@ margo_instance_id unifycr_server_rpc_init()
         fprintf(stderr, "Error: ABT_snoozer_xstream_create()\n");
         assert(false);
     }
-    printf("before shared memory init\n");
-    return setup_sm_target(progress_pool);
-#endif
-    /*ABT_xstream progress_xstream2;
+    return setup_sm_target(&progress_pool);
+#ifdef VERBS_TARGET
+    ABT_xstream progress_xstream2;
     ABT_pool progress_pool2;
     ret = ABT_snoozer_xstream_create(1, &progress_pool2, &progress_xstream2);
     if ( ret != 0 ) {
         fprintf(stderr, "Error: ABT_snoozer_xstream_create()\n");
         assert(false);
     }
-    return setup_verbs_target(progress_pool2);*/
+    return setup_verbs_target(progress_pool2);
+#endif
 }
 
 /*

@@ -18,11 +18,11 @@
 #include <margo.h>
 #include <abt-io.h>
 
-struct ServerRpcContext
+typedef struct ServerRpcContext
 {
     margo_instance_id mid;
-    hg_context_t* hg_context = NULL;
-    hg_class_t* hg_class = NULL;
+    hg_context_t* hg_context;
+    hg_class_t* hg_class ;
     hg_id_t read_rpc_id;
     //hg_id_t write_rpc_id;
     //hg_id_t chkdir_rpc_id;
@@ -32,7 +32,7 @@ struct ServerRpcContext
     //hg_id_t getfilestat_rpc_id;
     //hg_id_t getdircontents_rpc_id;
     //hg_id_t readtransfer_rpc_id;
-};
+} ServerRpcContext_t;
 
 static const char* SMSVR_ADDR_STR   = "cci+sm";
 static const char* VERBSVR_ADDR_STR = "cci+verbs";
@@ -45,15 +45,15 @@ extern uint16_t my_rank;
 
 extern abt_io_instance_id aid;
 
-struct ServerAddress
+typedef struct ServerAddress
 {
     char* string_address;
     hg_addr_t svr_addr;
-};
+} ServerAddress_t;
 
 extern char** server_addresses;
 
-extern ServerRpcContext* unifycr_rpc_context;
+extern ServerRpcContext_t* unifycr_rpc_context;
 
 margo_instance_id unifycr_server_rpc_init();
 
