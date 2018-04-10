@@ -152,9 +152,9 @@ static margo_instance_id setup_sm_target(ABT_pool* progress_pool)
                                             hg_context);
         assert(mid);
 
-        MARGO_REGISTER(mid, "unifycr_read_rpc",
-                         unifycr_read_in_t, unifycr_read_out_t,
-                         unifycr_read_rpc);
+        MARGO_REGISTER(mid, "unifycr_mount_rpc",
+                         unifycr_mount_in_t, unifycr_mount_out_t,
+                         unifycr_mount_rpc);
 
 /*        MARGO_REGISTER(mid, "unifycr_write_rpc",
                          unifycr_write_in_t, unifycr_write_out_t,

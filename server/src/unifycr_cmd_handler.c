@@ -33,6 +33,9 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <string.h>
+#include <mercury.h>
+#include <margo.h>
+#include <assert.h>
 #include "log.h"
 #include "unifycr_global.h"
 #include "unifycr_meta.h"
@@ -43,6 +46,9 @@
 #include "unifycr_sock.h"
 #include "unifycr_metadata.h"
 #include "unifycr_client_context.h"
+
+#include "../../client/src/unifycr_clientcalls_rpc.h"
+
 
 /**
 * handle client-side requests, including init, open, fsync,
@@ -214,6 +220,107 @@ int pack_ack_msg(char *ptr_cmd, int cmd, int rc, void *val,
     }
     return ret_sz;
 }
+
+static void unifycr_mount_rpc(hg_handle_t handle)
+{   
+    unifycr_mount_in_t in;
+    int ret = HG_Get_input(handle, &in);
+    assert(ret == HG_SUCCESS);
+    
+    unifycr_mount_out_t out;
+    const struct hg_info* hgi = margo_get_info(handle);
+    assert(hgi);
+    margo_instance_id mid = margo_hg_info_get_instance(hgi);
+	out.ret = 0;
+    app_config_t *tmp_config;
+	int rc;
+    if (arraylist_get(app_config_list, in.app_id) == NULL) {
+    	tmp_config = (app_config_t *)malloc(sizeof(app_config_t));
+        tmp_config->num_procs_per_node = in.num_procs_per_node;
+        tmp_config->req_buf_sz = in.req_buf_sz;
+        tmp_config->recv_buf_sz = in.recv_buf_sz;
+        tmp_config->superblock_sz = in.superblock_sz;
+
+        tmp_config->meta_offset = in.meta_offset;
+        tmp_config->meta_size = in.meta_size;
+
+        tmp_config->fmeta_offset = in.fmeta_offset;
+        tmp_config->fmeta_size = in.fmeta_size;
+
+        tmp_config->data_offset = in.data_offset;
+        tmp_config->data_size = in.data_size;
+        strcpy(tmp_config->external_spill_dir, in.external_spill_dir);
+
+        int i;
+        for (i = 0; i < MAX_NUM_CLIENTS; i++) {
+            tmp_config->client_ranks[i] = -1;
+            tmp_config->shm_recv_bufs[i] = NULL;
+            tmp_config->shm_req_bufs[i] = NULL;
+            tmp_config->shm_superblocks[i] = NULL;
+            tmp_config->shm_superblock_fds[i] = -1;
+            tmp_config->shm_recv_fds[i] = -1;
+            tmp_config->shm_req_fds[i] = -1;
+            tmp_config->spill_log_fds[i] = -1;
+            tmp_config->spill_index_log_fds[i] = -1;
+        }
+
+        rc = arraylist_insert(app_config_list, in.app_id, tmp_config);
+        if (rc != 0) {
+            out.ret = rc;
+        }
+    } else {
+        tmp_config = (app_config_t *)arraylist_get(app_config_list,
+                     in.app_id);
+    }
+   	thrd_ctrl_t* thrd_ctrl = NULL;
+	if ( out.ret == 0 ) {
+    	/* The following code attach a delegator thread
+     	* to this new connection */
+    	thrd_ctrl = (thrd_ctrl_t *)malloc(sizeof(thrd_ctrl_t));
+    	memset(thrd_ctrl, 0, sizeof(thrd_ctrl_t));
+
+    	thrd_ctrl->exit_flag = 0;
+    	cli_signature_t *cli_signature =
+        	(cli_signature_t *)malloc(sizeof(cli_signature_t));
+    	cli_signature->app_id = in.app_id;
+    	// cli_signature->sock_id = sock_id;
+    	rc = pthread_mutex_init(&(thrd_ctrl->thrd_lock), NULL);
+    	if (rc != 0) {
+        	out.ret = ULFS_ERROR_THRDINIT;
+    	}
+	}
+
+	if ( out.ret == 0 ) {
+    	rc = pthread_cond_init(&(thrd_ctrl->thrd_cond), NULL);
+    	if (rc != 0) {
+        	out.ret = ULFS_ERROR_THRDINIT;
+    	}
+	}
+
+	if ( out.ret == 0 ) {
+    	thrd_ctrl->del_req_set =
+       	 (msg_meta_t *)malloc(sizeof(msg_meta_t));
+    	if (!thrd_ctrl->del_req_set) {
+       	    out.ret =  ULFS_ERROR_NOMEM;
+    	}
+	}
+    memset(thrd_ctrl->del_req_set,
+           0, sizeof(msg_meta_t));
+
+    thrd_ctrl->del_req_stat =
+        (del_req_stat_t *)malloc(sizeof(del_req_stat_t));
+    
+    margo_free_input(handle, &in);
+    
+    hg_return_t hret = margo_respond(mid, handle, &out);
+
+    assert(hret == HG_SUCCESS);
+
+    margo_destroy(mid, handle);
+}
+DEFINE_MARGO_RPC_HANDLER(unifycr_mount_rpc)
+
+
 /**
 * receive and store the client-side information,
 * then attach to the client-side shared buffers.

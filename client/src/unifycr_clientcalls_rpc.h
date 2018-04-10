@@ -11,13 +11,22 @@
 #include <mercury.h>
 #include <mercury_proc_string.h>
 
-
-    MERCURY_GEN_PROC(unifycr_read_out_t, ((int32_t)(ret)))
-    MERCURY_GEN_PROC(unifycr_read_in_t,
-        ((uint64_t)(fid))\
-        ((uint64_t)(offset))\
-        ((uint32_t)(bulk_size))\
-        ((hg_bulk_t)(bulk_handle)))
-    DECLARE_MARGO_RPC_HANDLER(unifycr_read_rpc)
+    MERCURY_GEN_PROC(unifycr_mount_out_t, ((int32_t)(ret)))
+    MERCURY_GEN_PROC(unifycr_mount_in_t,
+        ((uint32_t)(app_id))\
+        ((uint32_t)(local_rank_idx))\
+        ((uint32_t)(dbg_rank))\
+        ((uint32_t)(num_procs_per_node))\
+        ((uint32_t)(req_buf_sz))\
+        ((uint32_t)(recv_buf_sz))\
+        ((uint64_t)(superblock_sz))\
+        ((uint64_t)(meta_offset))\
+        ((uint64_t)(meta_size))\
+        ((uint64_t)(fmeta_offset))\
+        ((uint64_t)(fmeta_size))\
+        ((uint64_t)(data_offset))\
+        ((uint64_t)(data_size))\
+        ((hg_const_string_t)(external_spill_dir)))
+    DECLARE_MARGO_RPC_HANDLER(unifycr_mount_rpc)
 
 #endif
