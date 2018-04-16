@@ -228,9 +228,9 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     assert(ret == HG_SUCCESS);
     
     unifycr_mount_out_t out;
-    const struct hg_info* hgi = margo_get_info(handle);
-    assert(hgi);
-    margo_instance_id mid = margo_hg_info_get_instance(hgi);
+    //const struct hg_info* hgi = margo_get_info(handle);
+    //assert(hgi);
+    //margo_instance_id mid = margo_hg_info_get_instance(hgi);
 	out.ret = 0;
     app_config_t *tmp_config;
 	int rc;
@@ -312,11 +312,11 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     
     margo_free_input(handle, &in);
     
-    hg_return_t hret = margo_respond(mid, handle, &out);
+    hg_return_t hret = margo_respond(handle, &out);
 
     assert(hret == HG_SUCCESS);
 
-    margo_destroy(mid, handle);
+    margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(unifycr_mount_rpc)
 
