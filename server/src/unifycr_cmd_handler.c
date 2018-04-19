@@ -47,9 +47,6 @@
 #include "unifycr_metadata.h"
 #include "unifycr_client_context.h"
 
-#include "../../client/src/unifycr_clientcalls_rpc.h"
-
-
 /**
 * handle client-side requests, including init, open, fsync,
 * read, close, stat and unmount
@@ -134,10 +131,8 @@ int delegator_handle_command(char *ptr_cmd, int sock_id)
         if (type == 1) {
             /*get file attribute*/
             unifycr_file_attr_t attr_val;
-
-            fattr_key_t _fattr_key = *((int *)(ptr_cmd + 2 * sizeof(int)));
-
-            rc = meta_process_attr_get(&_fattr_key, &attr_val);
+            //rc = meta_process_attr_get(ptr_cmd,
+             //                          sock_id, &attr_val);
 
             ptr_ack = sock_get_ack_buf(sock_id);
             ret_sz = pack_ack_msg(ptr_ack, cmd, rc,
@@ -148,7 +143,7 @@ int delegator_handle_command(char *ptr_cmd, int sock_id)
 
         if (type == 2) {
             /*set file attribute*/
-            rc = meta_process_attr_set(ptr_cmd, sock_id);
+            //rc = meta_process_attr_set(ptr_cmd, sock_id);
 
             ptr_ack = sock_get_ack_buf(sock_id);
             ret_sz = pack_ack_msg(ptr_ack, cmd, rc, NULL, 0);
@@ -222,20 +217,20 @@ int pack_ack_msg(char *ptr_cmd, int cmd, int rc, void *val,
 }
 
 static void unifycr_mount_rpc(hg_handle_t handle)
-{   
+{
     unifycr_mount_in_t in;
     int ret = HG_Get_input(handle, &in);
     assert(ret == HG_SUCCESS);
-    
+
     unifycr_mount_out_t out;
     //const struct hg_info* hgi = margo_get_info(handle);
     //assert(hgi);
     //margo_instance_id mid = margo_hg_info_get_instance(hgi);
-	out.ret = 0;
+    out.ret = 0;
     app_config_t *tmp_config;
-	int rc;
+    int rc;
     if (arraylist_get(app_config_list, in.app_id) == NULL) {
-    	tmp_config = (app_config_t *)malloc(sizeof(app_config_t));
+        tmp_config = (app_config_t *)malloc(sizeof(app_config_t));
         tmp_config->num_procs_per_node = in.num_procs_per_node;
         tmp_config->req_buf_sz = in.req_buf_sz;
         tmp_config->recv_buf_sz = in.recv_buf_sz;
@@ -272,46 +267,46 @@ static void unifycr_mount_rpc(hg_handle_t handle)
         tmp_config = (app_config_t *)arraylist_get(app_config_list,
                      in.app_id);
     }
-   	thrd_ctrl_t* thrd_ctrl = NULL;
-	if ( out.ret == 0 ) {
-    	/* The following code attach a delegator thread
-     	* to this new connection */
-    	thrd_ctrl = (thrd_ctrl_t *)malloc(sizeof(thrd_ctrl_t));
-    	memset(thrd_ctrl, 0, sizeof(thrd_ctrl_t));
+    thrd_ctrl_t* thrd_ctrl = NULL;
+    if ( out.ret == 0 ) {
+        /* The following code attach a delegator thread
+        * to this new connection */
+        thrd_ctrl = (thrd_ctrl_t *)malloc(sizeof(thrd_ctrl_t));
+        memset(thrd_ctrl, 0, sizeof(thrd_ctrl_t));
 
-    	thrd_ctrl->exit_flag = 0;
-    	cli_signature_t *cli_signature =
-        	(cli_signature_t *)malloc(sizeof(cli_signature_t));
-    	cli_signature->app_id = in.app_id;
-    	// cli_signature->sock_id = sock_id;
-    	rc = pthread_mutex_init(&(thrd_ctrl->thrd_lock), NULL);
-    	if (rc != 0) {
-        	out.ret = ULFS_ERROR_THRDINIT;
-    	}
-	}
+        thrd_ctrl->exit_flag = 0;
+        cli_signature_t *cli_signature =
+            (cli_signature_t *)malloc(sizeof(cli_signature_t));
+        cli_signature->app_id = in.app_id;
+        // cli_signature->sock_id = sock_id;
+        rc = pthread_mutex_init(&(thrd_ctrl->thrd_lock), NULL);
+        if (rc != 0) {
+            out.ret = ULFS_ERROR_THRDINIT;
+        }
+    }
 
-	if ( out.ret == 0 ) {
-    	rc = pthread_cond_init(&(thrd_ctrl->thrd_cond), NULL);
-    	if (rc != 0) {
-        	out.ret = ULFS_ERROR_THRDINIT;
-    	}
-	}
+    if ( out.ret == 0 ) {
+        rc = pthread_cond_init(&(thrd_ctrl->thrd_cond), NULL);
+        if (rc != 0) {
+            out.ret = ULFS_ERROR_THRDINIT;
+        }
+    }
 
-	if ( out.ret == 0 ) {
-    	thrd_ctrl->del_req_set =
-       	 (msg_meta_t *)malloc(sizeof(msg_meta_t));
-    	if (!thrd_ctrl->del_req_set) {
-       	    out.ret =  ULFS_ERROR_NOMEM;
-    	}
-	}
+    if ( out.ret == 0 ) {
+        thrd_ctrl->del_req_set =
+         (msg_meta_t *)malloc(sizeof(msg_meta_t));
+        if (!thrd_ctrl->del_req_set) {
+            out.ret =  ULFS_ERROR_NOMEM;
+        }
+    }
     memset(thrd_ctrl->del_req_set,
            0, sizeof(msg_meta_t));
 
     thrd_ctrl->del_req_stat =
         (del_req_stat_t *)malloc(sizeof(del_req_stat_t));
-    
+
     margo_free_input(handle, &in);
-    
+
     hg_return_t hret = margo_respond(handle, &out);
 
     assert(hret == HG_SUCCESS);
@@ -320,7 +315,53 @@ static void unifycr_mount_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(unifycr_mount_rpc)
 
+static void unifycr_metaget_rpc(hg_handle_t handle)
+{
+    unifycr_metaget_in_t in;
+    int ret = HG_Get_input(handle, &in);
+    assert(ret == HG_SUCCESS);
 
+    unifycr_metaget_out_t out;
+    out.ret = 0;
+
+    unifycr_file_attr_t attr_val;
+    ret = meta_process_attr_get(in, &attr_val);
+    out.attr_val = attr_val;
+    out.ret = ret;
+
+    margo_free_input(handle, &in);
+
+    hg_return_t hret = margo_respond(handle, &out);
+
+    assert(hret == HG_SUCCESS);
+
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(unifycr_metaget_rpc)
+
+static void unifycr_metaset_rpc(hg_handle_t handle)
+{
+    unifycr_metaset_in_t in;
+    int ret = HG_Get_input(handle, &in);
+    assert(ret == HG_SUCCESS);
+
+    unifycr_metaset_out_t out;
+    out.ret = 0;
+
+    ret = meta_process_attr_set(in);
+    out.ret = ret;
+
+    margo_free_input(handle, &in);
+
+    hg_return_t hret = margo_respond(handle, &out);
+
+    assert(hret == HG_SUCCESS);
+
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)
+
+/**
 /**
 * receive and store the client-side information,
 * then attach to the client-side shared buffers.

@@ -26,7 +26,6 @@
  * For details, see https://github.com/llnl/burstfs
  * Please read https://github.com/llnl/burstfs/LICNSE for full license text.
  */
-
 #include "mdhim.h"
 #include "indexes.h"
 #include "log.h"
@@ -204,22 +203,25 @@ int meta_init_indices()
 * the delegator
 * @return success/error code
 */
-int meta_process_attr_set(char *buf, int sock_id)
+int meta_process_attr_set(unifycr_metaset_in_t in)
 {
     int rc = ULFS_SUCCESS;
 
-    unifycr_file_attr_t *ptr_fattr =
-        (unifycr_file_attr_t *)(buf + 1 * sizeof(int));
+    fattr_key_t fattr_keys_local;
+    fattr_val_t* fattr_vals_local;
 
-    *fattr_keys[0] = ptr_fattr->gfid;
-    fattr_vals[0]->file_attr = ptr_fattr->file_attr;
-    strcpy(fattr_vals[0]->fname, ptr_fattr->filename);
+    fattr_keys_local = in.gid;
+
+//TODO: need to pass in.file_attr (a struct??)..
+//I'm commenting out to compile
+    //fattr_vals_local->file_attr = in.file_attr;
+    strcpy(fattr_vals_local->fname, in.filename);
 
     /*  LOG(LOG_DBG, "rank:%d, setting fattr key:%d, value:%s\n",
-                glb_rank, *fattr_keys[0], fattr_vals[0]->fname); */
+                glb_rank, *fattr_keys, fattr_vals_local->fname); */
     md->primary_index = unifycr_indexes[1];
-    brm = mdhimPut(md, fattr_keys[0], sizeof(fattr_key_t),
-                   fattr_vals[0], sizeof(fattr_val_t),
+    brm = mdhimPut(md, fattr_keys_local, sizeof(fattr_key_t),
+                   fattr_vals_local, sizeof(fattr_val_t),
                    NULL, NULL);
     if (!brm || brm->error)
         rc = (int)UNIFYCR_ERROR_MDHIM;
@@ -238,26 +240,27 @@ int meta_process_attr_set(char *buf, int sock_id)
 * @return success/error code
 */
 
-int meta_process_attr_get(fattr_key_t *_fattr_key,
+int meta_process_attr_get(unifycr_metaget_in_t in,
                           unifycr_file_attr_t *ptr_attr_val)
 {
-    //*fattr_keys[0] = *((int *)(buf + 2 * sizeof(int)));
+    fattr_key_t fattr_keys_local;
+    fattr_keys_local = in.fid;
     fattr_val_t *tmp_ptr_attr;
 
     int rc;
 
     md->primary_index = unifycr_indexes[1];
-    bgrm = mdhimGet(md, md->primary_index, _fattr_key,
+    bgrm = mdhimGet(md, md->primary_index, fattr_keys_local,
                     sizeof(fattr_key_t), MDHIM_GET_EQ);
 
     if (!bgrm || bgrm->error)
         rc = (int)UNIFYCR_ERROR_MDHIM;
     else {
         tmp_ptr_attr = (fattr_val_t *)bgrm->values[0];
-        ptr_attr_val->gfid = *_fattr_key;
+        ptr_attr_val->gfid = fattr_keys_local;
 
         /*  LOG(LOG_DBG, "rank:%d, getting fattr key:%d\n",
-                    glb_rank, *fattr_keys[0]); */
+                    glb_rank, *fattr_keys_local); */
         ptr_attr_val->file_attr = tmp_ptr_attr->file_attr;
         strcpy(ptr_attr_val->filename, tmp_ptr_attr->fname);
 

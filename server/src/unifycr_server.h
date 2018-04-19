@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include <mercury.h>
 #include <abt.h>
 #include <abt-snoozer.h>
 #include <margo.h>
@@ -24,6 +25,7 @@ typedef struct ServerRpcContext
     hg_context_t* hg_context;
     hg_class_t* hg_class ;
     hg_id_t read_rpc_id;
+    hg_id_t mount_rpc_id;
     //hg_id_t write_rpc_id;
     //hg_id_t chkdir_rpc_id;
     //hg_id_t addfile_rpc_id;

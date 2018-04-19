@@ -6,6 +6,8 @@
  * Declarations for the RPC shared-memory interfaces to the UCR server.
  ********************************************************************************/
 
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <margo.h>
 #include <mercury.h>
@@ -29,4 +31,35 @@
         ((hg_const_string_t)(external_spill_dir)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_mount_rpc)
 
+    MERCURY_GEN_PROC(unifycr_metaset_out_t, ((uint32_t)(ret)))
+    MERCURY_GEN_PROC(unifycr_metaset_in_t,
+        ((int)(fid))\
+        ((int)(gid))\
+        ((hg_const_string_t)(filename)))
+    //TODO: need to pass this struct in? get compile errors this way
+        //((struct stat)(file_attr))
+    DECLARE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)
+
+    MERCURY_GEN_PROC(unifycr_metaget_out_t,
+                     ((unifycr_file_attr_t)(attr_val)) ((uint32_t)(ret)))
+    MERCURY_GEN_PROC(unifycr_metaget_in_t,
+        ((int)(fid)))
+    DECLARE_MARGO_RPC_HANDLER(unifycr_metaget_rpc)
+
+/*
+    MERCURY_GEN_PROC(unifycr_metaset_out_rpc_t, ((int32_t)(ret)))
+    MERCURY_GEN_PROC(unifycr_metaset_in_t,
+        ((hg_const_string_t)(external_spill_dir)))
+    DECLARE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)
+
+    MERCURY_GEN_PROC(unifycr_fsync_out_rpc_t, ((int32_t)(ret)))
+    MERCURY_GEN_PROC(unifycr_fsync_in_t,
+        ((hg_const_string_t)(external_spill_dir)))
+    DECLARE_MARGO_RPC_HANDLER(unifycr_fsync_rpc)
+
+    MERCURY_GEN_PROC(unifycr_unmount_out_rpc_t, ((int32_t)(ret)))
+    MERCURY_GEN_PROC(unifycr_unmount_in_t,
+        ((hg_const_string_t)(external_spill_dir)))
+    DECLARE_MARGO_RPC_HANDLER(unifycr_unmount_rpc)
+*/
 #endif

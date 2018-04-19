@@ -17,3 +17,10 @@ static void unifycr_read_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(unifycr_read_rpc)
 
+static void unifycr_read_rpc(hg_handle_t handle)
+{
+    //implement read rpc here
+}
+DEFINE_MARGO_RPC_HANDLER(unifycr_read_rpc)
+
+

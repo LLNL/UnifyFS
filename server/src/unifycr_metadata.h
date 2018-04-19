@@ -41,6 +41,7 @@
 #include "unifycr_meta.h"
 #include "unifycr_global.h"
 
+#include "../../client/src/unifycr_clientcalls_rpc.h"
 
 #define MANIFEST_FILE_NAME "mdhim_manifest_"
 
@@ -78,11 +79,8 @@ int meta_init_indices();
 int meta_free_indices();
 void print_fsync_indices(unifycr_key_t **unifycr_keys,
                          unifycr_val_t **unifycr_vals, long num_entries);
-int meta_process_attr_set(char *ptr_cmd, int sock_id);
-
-//int meta_process_attr_get(char *buf, int sock_id,
-//                          unifycr_file_attr_t *ptr_attr_val);
-int meta_process_attr_get(fattr_key_t *_fattr_key,
+int meta_process_attr_set(unifycr_metaset_in_t in);
+int meta_process_attr_get(unifycr_metaget_in_t in,
                           unifycr_file_attr_t *ptr_attr_val);
 
 #endif

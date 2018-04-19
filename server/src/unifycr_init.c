@@ -51,7 +51,6 @@
 #include "unifycr_runstate.h"
 
 #include "unifycr_server.h"
-#include "../../client/src/unifycr_clientcalls_rpc.h"
 
 int *local_rank_lst;
 int local_rank_cnt;
@@ -155,6 +154,13 @@ static margo_instance_id setup_sm_target(ABT_pool* progress_pool)
         MARGO_REGISTER(mid, "unifycr_mount_rpc",
                          unifycr_mount_in_t, unifycr_mount_out_t,
                          unifycr_mount_rpc);
+        MARGO_REGISTER(mid, "unifycr_metaget_rpc",
+                         unifycr_metaget_in_t, unifycr_metaget_out_t,
+                         unifycr_metaget_rpc);
+
+        MARGO_REGISTER(mid, "unifycr_metaset_rpc",
+                         unifycr_metaget_in_t, unifycr_metaget_out_t,
+                         unifycr_metaget_rpc);
 
 /*        MARGO_REGISTER(mid, "unifycr_write_rpc",
                          unifycr_write_in_t, unifycr_write_out_t,

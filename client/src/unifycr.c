@@ -2313,18 +2313,23 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
     }
 
     /* initialize margo */
-    (*unifycr_rpc_context)->mid = margo_init(0, 0,
-                                            (*unifycr_rpc_context)->hg_context);
+    (*unifycr_rpc_context)->mid = margo_init(svr_addr_str, MARGO_CLIENT_MODE, 
+                                             0, 0);
     assert((*unifycr_rpc_context)->mid);
     margo_diag_start((*unifycr_rpc_context)->mid);
 
     /* register read rpc with mercury */
-    (*unifycr_rpc_context)->read_rpc_id = MERCURY_REGISTER(
+    /*(*unifycr_rpc_context)->read_rpc_id = MERCURY_REGISTER(
                                              (*unifycr_rpc_context)->mid,
-                                             "unifycr_read_rpc",
-                                             unifycr_read_in_t,
-                                             unifycr_read_out_t,
-                                             NULL);
+                                             "unifycr_mount_rpc",
+                                             unifycr_mount_in_t,
+                                             unifycr_mount_out_t,
+                                             NULL);*/
+    (*unifycr_rpc_context)->read_rpc_id = MARGO_REGISTER((*unifycr_rpc_context)->mid,
+                                                         "unifycr_mount_rpc",
+                                                         unifycr_mount_in_t,
+                                                         unifycr_mount_out_t,
+                                                         unifycr_mount_rpc);
 
     /* resolve server address */
     (*unifycr_rpc_context)->svr_addr = HG_ADDR_NULL;
