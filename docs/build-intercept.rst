@@ -4,6 +4,16 @@ Build & I/O Interception
 
 In this section, we describe how to build UnifyCR with I/O interception.
 
+.. note::
+
+    The current version of UnifyCR adopts the mdhim key-value store, which strictly
+    requires:
+
+    "An MPI distribution that supports MPI_THREAD_MULTIPLE and per-object locking of
+    critical sections (this excludes OpenMPI up to version 3.0.1, the current version as of this writing)"
+
+    as specified in the project `github <https://github.com/mdhim/mdhim-tng>`_
+
 ---------------------------
 How to build UnifyCR
 ---------------------------
