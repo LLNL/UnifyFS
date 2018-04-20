@@ -40,10 +40,12 @@
         //((struct stat)(file_attr))
     DECLARE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)
 
+    /*MERCURY_GEN_PROC(unifycr_metaget_out_t,
+                     ((unifycr_file_attr_t)(attr_val)) ((uint32_t)(ret)))*/
     MERCURY_GEN_PROC(unifycr_metaget_out_t,
-                     ((unifycr_file_attr_t)(attr_val)) ((uint32_t)(ret)))
+                     ((uint32_t)(ret)))
     MERCURY_GEN_PROC(unifycr_metaget_in_t,
-        ((int)(fid)))
+        ((uint32_t)(fid)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_metaget_rpc)
 
 /*

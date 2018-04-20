@@ -154,6 +154,7 @@ static margo_instance_id setup_sm_target(ABT_pool* progress_pool)
         MARGO_REGISTER(mid, "unifycr_mount_rpc",
                          unifycr_mount_in_t, unifycr_mount_out_t,
                          unifycr_mount_rpc);
+
         MARGO_REGISTER(mid, "unifycr_metaget_rpc",
                          unifycr_metaget_in_t, unifycr_metaget_out_t,
                          unifycr_metaget_rpc);

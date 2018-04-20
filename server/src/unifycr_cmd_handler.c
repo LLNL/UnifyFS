@@ -326,7 +326,7 @@ static void unifycr_metaget_rpc(hg_handle_t handle)
 
     unifycr_file_attr_t attr_val;
     ret = meta_process_attr_get(in, &attr_val);
-    out.attr_val = attr_val;
+    //out.attr_val = attr_val;
     out.ret = ret;
 
     margo_free_input(handle, &in);
@@ -337,6 +337,7 @@ static void unifycr_metaget_rpc(hg_handle_t handle)
 
     margo_destroy(handle);
 }
+
 DEFINE_MARGO_RPC_HANDLER(unifycr_metaget_rpc)
 
 static void unifycr_metaset_rpc(hg_handle_t handle)
