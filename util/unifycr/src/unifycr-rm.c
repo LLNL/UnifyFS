@@ -293,19 +293,37 @@ int unifycr_read_resource(unifycr_resource_t *resource)
  * $ mpirun -n NUMNODES -np NUMNODES unifycrd
  */
 static char *mpirun_newargv[] = {
-    "mpirun", "-n", NULL, "-np", NULL, NULL, (char *) NULL
+    "mpirun", "-n", NULL, "-ppn", "1", "-hosts", NULL, NULL, (char *) NULL
 };
 
 int unifycr_launch_daemon(unifycr_resource_t *resource,
                           unifycr_runstate_t *state)
 {
     char nbuf[16] = { 0, };
+    char *hostlist = NULL;
+    char *ptr = NULL;
+    size_t i = 0;
+    size_t len = 1;
 
     sprintf(nbuf, "%llu", (unsigned long long) resource->n_nodes);
 
+    for (i = 0; i < resource->n_nodes; i++)
+        len += strlen(resource->nodes[i]) + 1;
+
+    hostlist = calloc(len, 1);
+    if (!hostlist)
+        return -errno;
+    ptr = hostlist;
+
+    for (i = 0; i < resource->n_nodes; i++)
+        ptr += sprintf(ptr, "%s,", resource->nodes[i]);
+
+    ptr = strrchr(hostlist, ',');
+    *ptr = '\0';
+
     mpirun_newargv[2] = nbuf;
-    mpirun_newargv[4] = nbuf;
-    mpirun_newargv[5] = state->unifycrd_path ?
+    mpirun_newargv[6] = hostlist;
+    mpirun_newargv[7] = state->unifycrd_path ?
                         state->unifycrd_path : BINDIR "/unifycrd";
 
     execvp(mpirun_newargv[0], mpirun_newargv);

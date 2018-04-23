@@ -117,6 +117,8 @@ static int create_runstatedir(const char *path)
         *ch = '/';
     }
 
+    ret = 0;
+
 out:
     free(buf);
 
