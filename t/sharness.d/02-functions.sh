@@ -72,7 +72,7 @@ unifycrd_start_daemon()
        ! mkdir $UNIFYCR_META_DB_PATH; then
             return 1
     fi
-    ( $UNIFYCRD < /dev/null > /dev/null 2>&1 & )
+    $UNIFYCRD
 }
 
 # Kill UnifyCR daemon.
