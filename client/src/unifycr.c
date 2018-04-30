@@ -1979,64 +1979,83 @@ int unifycr_unmount(void)
     return UNIFYCR_SUCCESS;
 }
 
+/* invokes the mount rpc function by calling unifycr_sync_to_del */
+static uint32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t** unifycr_rpc_context)
+{
+    hg_handle_t handle;
+    unifycr_mount_in_t in;
+    unifycr_mount_out_t out;
+    hg_return_t hret;
+
+    printf("invoking the mount rpc function in client\n");
+
+
+    //fill in input struct
+    hret = margo_create((*unifycr_rpc_context)->mid,
+                            (*unifycr_rpc_context)->svr_addr,
+                            (*unifycr_rpc_context)->unifycr_mount_rpc_id, &handle);
+    assert(hret == HG_SUCCESS);
+
+    //fill in input struct by calling unifycr_sync_to_del
+    unifycr_sync_to_del(in);
+
+    hret = margo_forward(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* decode response */
+    hret = margo_get_output(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    printf("Got response ret: %d\n", out.ret);
+
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+    return out.ret;
+}
+
 /**
  * Transfer the client-side context information to the corresponding
  * delegator on the server side.
  */
-
-/*
- * This function sends the client configuration with the delegator on the
- * server side. The corresponding server side function is sync_with_client
- * in unifycr_cmd_handler.c
- */
-static int unifycr_sync_to_del(void)
+static int unifycr_sync_to_del(unifycr_mount_in_t in)
 {
-    // the client side context information
-    unifycr_client_context_t client_ctx;
-    off_t offset;
-    int cmd = COMM_MOUNT;
+    //int cmd = COMM_MOUNT;
+    int num_procs_per_node = local_rank_cnt;
+    int req_buf_sz = shm_req_size;
+    int recv_buf_sz = shm_recv_size;
+    long superblock_sz = glb_superblock_size;
+    long meta_offset = (void *)unifycr_indices.ptr_num_entries -
+        unifycr_superblock;
+    long meta_size = unifycr_max_index_entries * sizeof(unifycr_index_t);
+    long fmeta_offset = (void *)unifycr_fattrs.ptr_num_entries -
+        unifycr_superblock;
+    long fmeta_size = unifycr_max_fattr_entries * sizeof(unifycr_fattr_t);
+    long data_offset = (void *)unifycr_chunks - unifycr_superblock;
+    long data_size = (long)unifycr_max_chunks * unifycr_chunk_size;
+    char external_spill_dir[UNIFYCR_MAX_FILENAME] = {0};
 
-
-    client_ctx.app_id = app_id;
-    client_ctx.local_rank_index = local_rank_idx;
-    client_ctx.dbg_rank = dbg_rank;
-    client_ctx.num_procs_per_node = local_rank_cnt;
-    client_ctx.req_buf_sz = shm_req_size;
-    client_ctx.recv_buf_sz = shm_recv_size;
-    client_ctx.superblock_sz = glb_superblock_size;
-    client_ctx.meta_offset = (void *)unifycr_indices.ptr_num_entries -
-        unifycr_superblock; // TODO: have a function to set this
-    client_ctx.meta_size = unifycr_max_index_entries * sizeof(unifycr_index_t);
-    client_ctx.fmeta_offset = (void *)unifycr_fattrs.ptr_num_entries -
-        unifycr_superblock;  // TODO: have a function to set this
-    client_ctx.fmeta_size = unifycr_max_fattr_entries *
-                            sizeof(unifycr_file_attr_t);
-    client_ctx.data_offset = (void *)unifycr_chunks - unifycr_superblock;
-    client_ctx.data_size = (long)unifycr_max_chunks * unifycr_chunk_size;
-    /*
-     * TODO: determian if a pointer to the string will be fine, since it will
-     * be copied
-     */
-    strcpy(client_ctx.external_spill_dir, external_data_dir);
+    strcpy(external_spill_dir, external_data_dir);
 
     /*
-     * Copy the client-side information to the command
-     * buffer, then send to the delegator. The delegator
-     * will attach to the client-side shared memory and open
-     * the spill log file based on this information.
+     * Copy the client-side information to the
+     * input struct
      */
+    in.app_id             = app_id;
+    in.local_rank_idx     = local_rank_idx;
+    in.dbg_rank           = dbg_rank;
+    in.num_procs_per_node = num_procs_per_node;
+    in.req_buf_sz         = req_buf_sz;
+    in.recv_buf_sz        = recv_buf_sz;
+    in.superblock_sz      = superblock_sz;
+    in.meta_offset        = meta_offset;
+    in.meta_size          = meta_size;
+    in.fmeta_offset       = fmeta_offset;
+    in.fmeta_size         = fmeta_size;
+    in.data_offset        = data_offset;
+    in.data_size          = data_size;
+    in.external_spill_dir = external_spill_dir;
 
-    offset = 0;
-    /*
-     * TODO: might want to allocate this (probably from a memory pool)
-     */
-    memset(cmd_buf, 0, sizeof(cmd_buf));
-    *(int *)cmd_buf = cmd;
-    offset += sizeof(cmd);
-
-    // pack the client context into the command buffer
-    unifycr_pack_client_context(client_ctx, cmd_buf, &offset);
-
+#if 0
     int res = __real_write(client_sockfd,
                            cmd_buf, sizeof(cmd_buf));
     if (res != 0) {
@@ -2087,7 +2106,7 @@ static int unifycr_sync_to_del(void)
         /*write error*/
         return -1;
     }
-
+#endif
     return 0;
 }
 
@@ -2257,7 +2276,7 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
                             unifycr_client_rpc_context_t** unifycr_rpc_context)
 {
 
-    assert(!*unifycr_rpc_context);
+    //assert(!*unifycr_rpc_context);
     *unifycr_rpc_context = malloc(sizeof(unifycr_client_rpc_context_t));
     assert(*unifycr_rpc_context);
 
@@ -2267,6 +2286,7 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
     for(i = 0; i < 11 && svr_addr_str[i] != '\0' && svr_addr_str[i] != ':'; i++)
         proto[i] = svr_addr_str[i];
 
+#if 0
     /* initialize mercury using transport protocol */
     (*unifycr_rpc_context)->hg_class = HG_Init(proto, HG_FALSE);
     if (!(*unifycr_rpc_context)->hg_class) {
@@ -2289,17 +2309,24 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
         fprintf(stderr, "Error: ABT_init()\n");
         return UNIFYCR_FAILURE;
     }
+#endif
+    /* initialize margo */
+    (*unifycr_rpc_context)->mid = margo_init(proto, MARGO_CLIENT_MODE,
+                                             0, 0);
+    assert((*unifycr_rpc_context)->mid);
+    margo_diag_start((*unifycr_rpc_context)->mid);
 
+#if 0
     /* set primary ES to idle without polling */
     ret = ABT_snoozer_xstream_self_set();
     if (ret != 0) {
         fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
         return UNIFYCR_FAILURE;
     }
-
+#endif
     /* retrive current pool to use for ULT creation */
     ABT_xstream xstream;
-    ret = ABT_xstream_self(&xstream);
+    int ret = ABT_xstream_self(&xstream);
     if (ret != 0) {
         fprintf(stderr, "Error: ABT_xstream_self()\n");
         return UNIFYCR_FAILURE;
@@ -2312,28 +2339,26 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
         return UNIFYCR_FAILURE;
     }
 
-    /* initialize margo */
-    (*unifycr_rpc_context)->mid = margo_init(svr_addr_str, MARGO_CLIENT_MODE,
-                                             0, 0);
-    assert((*unifycr_rpc_context)->mid);
-    margo_diag_start((*unifycr_rpc_context)->mid);
-
     /* register read rpc with mercury */
     /*(*unifycr_rpc_context)->read_rpc_id = MARGO_REGISTER((*unifycr_rpc_context)->mid,
                                                          "unifycr_mount_rpc",
                                                          unifycr_mount_in_t,
                                                          unifycr_mount_out_t,
                                                          unifycr_mount_rpc);*/
-    MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_mount_rpc",
-                  unifycr_mount_in_t, unifycr_mount_out_t, unifycr_mount_rpc);
+    (*unifycr_rpc_context)->unifycr_mount_rpc_id   =
+        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_mount_rpc",
+                       unifycr_mount_in_t,
+                       unifycr_mount_out_t, NULL);
 
-    MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_metaget_rpc",
-                   unifycr_metaget_in_t, unifycr_metaget_out_t,
-                   unifycr_metaget_rpc);
+    (*unifycr_rpc_context)->unifycr_metaget_rpc_id =
+        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_metaget_rpc",
+                       unifycr_metaget_in_t, unifycr_metaget_out_t,
+                       NULL);
 
-    MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_metaset_rpc",
-                  unifycr_metaget_in_t, unifycr_metaget_out_t,
-                  unifycr_metaget_rpc);
+    (*unifycr_rpc_context)->unifycr_metaset_rpc_id =
+        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_metaset_rpc",
+                       unifycr_metaget_in_t, unifycr_metaget_out_t,
+                       NULL);
 
     /* resolve server address */
     (*unifycr_rpc_context)->svr_addr = HG_ADDR_NULL;
@@ -2704,10 +2729,45 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     unifycr_mount_shmget_key = local_rank_idx;
 
     /* initialize our library */
-    rc = unifycr_init(rank);
-    if (rc != UNIFYCR_SUCCESS)
-        return rc;
+    int ret = unifycr_init(rank);
+    if (ret != UNIFYCR_SUCCESS)
+        return ret;
 
+    if (fs_type == UNIFYCR_LOG || fs_type == UNIFYCR_STRIPE) {
+        char host_name[UNIFYCR_MAX_FILENAME] = {0};
+        int rc = gethostname(host_name, UNIFYCR_MAX_FILENAME);
+
+        if (rc != 0) {
+            DEBUG("rank:%d, fail to get the host name.", dbg_rank);
+            return UNIFYCR_FAILURE;
+        }
+    }
+
+    FILE *fp;
+    char addr_string[50];
+    fp = fopen("/dev/shm/svr_id","r");
+    fscanf(fp, "%s", addr_string);
+    fclose(fp);
+
+    unifycr_client_rpc_context_t* unifycr_rpc_context = NULL;
+    unifycr_client_rpc_init(addr_string, &unifycr_rpc_context);
+
+    //TODO: call client rpc function here (which calls unifycr_sync_to_del
+    unifycr_client_mount_rpc_invoke(&unifycr_rpc_context);
+
+    /*
+    hg_handle_t handle;
+    int hret = margo_create((*unifycr_rpc_context)->mid,
+                            (*unifycr_rpc_context)->svr_addr,
+                            (*unifycr_rpc_context)->unifycr_mount_rpc_id, &handle);
+    assert(hret == HG_SUCCESS);
+    hret = margo_forward(handle, NULL);
+    assert(hret == HG_SUCCESS);
+    //margo_destroy(handle);
+    //margo_addr_free((*unifycr_rpc_context)->mid, (*unifycr_rpc_context)->svr_addr);*/
+
+#if 0
+    //unifycr_client_rpc_init
     /* get the number of collocated delegators*/
     if (local_rank_idx == 0) {
         rc = unifycr_init_socket(0, 1, 1);
@@ -2775,7 +2835,7 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
                 dbg_rank);
         return UNIFYCR_FAILURE;
     }
-
+#endif
     /* add mount point as a new directory in the file list */
     if (unifycr_get_fid_from_path(prefix) >= 0) {
         /* we can't mount this location, because it already exists */
