@@ -40,7 +40,7 @@ If you use Dotkit then replace ``spack load`` with ``spack use``.
     $ git clone https://github.com/spack/spack
     $ ./spack/bin/spack install leveldb
     $ ./spack/bin/spack install gotcha
-    $ ./spack/bin/spack spack install environment-modules
+    $ ./spack/bin/spack install environment-modules
     $ . spack/share/spack/setup-env.sh
     $ spack load leveldb
     $ spack load gotcha
