@@ -76,7 +76,6 @@ fi
 AC_SUBST(CFLAGS)
 
 CHECK_NUMA
-CHECK_ARCH
 
 AC_ARG_WITH(pkgconfigdir,
             [  --with-pkgconfigdir=DIR      pkgconfig file in DIR @<:@LIBDIR/pkgconfig@:>@],
