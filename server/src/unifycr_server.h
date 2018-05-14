@@ -25,7 +25,9 @@ typedef struct ServerRpcContext
     hg_context_t* hg_context;
     hg_class_t* hg_class ;
     hg_id_t read_rpc_id;
-    hg_id_t mount_rpc_id;
+    hg_id_t unifycr_mount_rpc_id;
+    hg_id_t unifycr_metaget_rpc_id;
+    hg_id_t unifycr_metaset_rpc_id;
     //hg_id_t write_rpc_id;
     //hg_id_t chkdir_rpc_id;
     //hg_id_t addfile_rpc_id;
@@ -36,7 +38,7 @@ typedef struct ServerRpcContext
     //hg_id_t readtransfer_rpc_id;
 } ServerRpcContext_t;
 
-static const char* SMSVR_ADDR_STR   = "cci+sm";
+static const char* SMSVR_ADDR_STR   = "na+sm://";
 static const char* VERBSVR_ADDR_STR = "cci+verbs";
 static const char* TCPSVR_ADDR_STR  = "cci+tcp";
 
