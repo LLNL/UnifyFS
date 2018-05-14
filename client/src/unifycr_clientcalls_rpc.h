@@ -31,37 +31,42 @@
         ((hg_const_string_t)(external_spill_dir)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_mount_rpc)
 
+
     MERCURY_GEN_PROC(unifycr_metaset_out_t, ((uint32_t)(ret)))
     MERCURY_GEN_PROC(unifycr_metaset_in_t,
-        ((int)(fid))\
-        ((int)(gid))\
+        ((int32_t)(fid))\
+        ((int32_t)(gid))\
         ((hg_const_string_t)(filename)))
-    //TODO: need to pass this struct in? get compile errors this way
-        //((struct stat)(file_attr))
     DECLARE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)
 
     /*MERCURY_GEN_PROC(unifycr_metaget_out_t,
                      ((unifycr_file_attr_t)(attr_val)) ((uint32_t)(ret)))*/
     MERCURY_GEN_PROC(unifycr_metaget_out_t,
-                     ((uint32_t)(ret)))
+                     ((int64_t)(st_size))\
+                     ((uint32_t)(ret))\
+        		   	 ((hg_const_string_t)(filename)))
     MERCURY_GEN_PROC(unifycr_metaget_in_t,
-        ((uint32_t)(fid)))
+        ((int32_t)(fid)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_metaget_rpc)
 
-/*
-    MERCURY_GEN_PROC(unifycr_metaset_out_rpc_t, ((int32_t)(ret)))
-    MERCURY_GEN_PROC(unifycr_metaset_in_t,
-        ((hg_const_string_t)(external_spill_dir)))
-    DECLARE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)
 
     MERCURY_GEN_PROC(unifycr_fsync_out_rpc_t, ((int32_t)(ret)))
     MERCURY_GEN_PROC(unifycr_fsync_in_t,
-        ((hg_const_string_t)(external_spill_dir)))
+        ((int32_t)(fid))\
+        ((int32_t)(gid)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_fsync_rpc)
+
+    MERCURY_GEN_PROC(unifycr_read_out_rpc_t, ((int32_t)(ret)))
+    MERCURY_GEN_PROC(unifycr_read_in_t,
+        ((int32_t)(fid))\
+        ((int32_t)(gid)))
+        ((int32_t)(read_count)))
+    DECLARE_MARGO_RPC_HANDLER(unifycr_read_rpc)
+
 
     MERCURY_GEN_PROC(unifycr_unmount_out_rpc_t, ((int32_t)(ret)))
     MERCURY_GEN_PROC(unifycr_unmount_in_t,
         ((hg_const_string_t)(external_spill_dir)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_unmount_rpc)
-*/
+
 #endif
