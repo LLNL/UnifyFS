@@ -4,8 +4,6 @@ unifycrd_SOURCES = arraylist.c \
                    arraylist.h \
                    unifycr_cmd_handler.c \
                    unifycr_cmd_handler.h \
-                   unifycr_const.c \
-                   unifycr_const.h \
                    unifycr_debug.c \
                    unifycr_debug.h \
                    unifycr_init.c \
@@ -24,11 +22,13 @@ unifycrd_SOURCES = arraylist.c \
 
 unifycrd_LDFLAGS = -static
 
-unifycrd_LDADD = $(top_builddir)/meta/src/libmdhim.a \
+unifycrd_LDADD = $(top_builddir)/common/src/libunifycr_common.la \
+                 $(top_builddir)/meta/src/libmdhim.a \
                  $(LEVELDB_LIBS) \
                  -lpthread -lm -lstdc++ -lrt
 
-AM_CPPFLAGS = -I$(top_srcdir)/meta/src \
+AM_CPPFLAGS = -I$(top_srcdir)/common/src \
+              -I$(top_srcdir)/meta/src \
               -I$(top_srcdir)/meta/src/uthash \
               -I$(top_srcdir)/meta/src/Mlog2
 

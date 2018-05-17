@@ -29,6 +29,7 @@
 
 #ifndef UNIFYCR_METADATA_H
 #define UNIFYCR_METADATA_H
+
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -39,11 +40,8 @@
 #include "unifycr_const.h"
 #include "unifycr_global.h"
 
-#define DEF_META_PATH "/l/ssd/"
+
 #define MANIFEST_FILE_NAME "mdhim_manifest_"
-#define DEF_DB_NAME "unifycr_db"
-#define DEF_SERVER_RATIO 1
-#define DEF_RANGE_SZ 1048576
 
 typedef struct {
     unsigned long fid;
@@ -75,7 +73,7 @@ extern arraylist_t *ulfs_vals;
 extern arraylist_t *ulfs_metas;
 
 int meta_sanitize();
-int meta_init_store();
+int meta_init_store(unifycr_cfg_t *cfg);
 void print_bget_indices(int app_id, int cli_id,
                         send_msg_t *index_set, int tot_num);
 int meta_process_fsync(int sock_id);

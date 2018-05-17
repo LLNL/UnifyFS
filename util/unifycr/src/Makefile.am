@@ -1,21 +1,15 @@
 bin_PROGRAMS = unifycr
 
 unifycr_SOURCES = unifycr.c \
-                  unifycr-cons.c \
-                  unifycr-env.c \
-                  unifycr-rm.c \
-                  unifycr-sysconf.c \
-                  unifycr-runstate.c \
-                  toml.c
+                  unifycr-rm.c
 
-noinst_HEADERS = unifycr.h toml.h
+noinst_HEADERS = unifycr.h
 
-#unifycr_LDADD =
+unifycr_LDADD = $(top_builddir)/common/src/libunifycr_common.la
 
-AM_CPPFLAGS = -DCONFDIR=\"$(sysconfdir)/unifycr\" \
+AM_CPPFLAGS = -I$(top_srcdir)/common/src \
               -DBINDIR=\"$(bindir)\" \
-              -DSBINDIR=\"$(sbindir)\" \
-              -DRUNDIR=\"$(runstatedir)/unifycr\"
+              -DSBINDIR=\"$(sbindir)\"
 
 AM_CFLAGS = -Wall
 

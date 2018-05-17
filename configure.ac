@@ -287,6 +287,8 @@ AC_OUTPUT(client/unifycr-config)
 AC_OUTPUT(client/unifycr-runtime-config.h)
 
 AC_CONFIG_FILES([Makefile
+                 common/Makefile
+                 common/src/Makefile
                  meta/Makefile
                  meta/src/Makefile
                  server/Makefile

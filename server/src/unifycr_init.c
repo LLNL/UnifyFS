@@ -58,6 +58,8 @@ arraylist_t *thrd_list;
 int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
 int log_print_level = 5;
 
+unifycr_cfg_t server_cfg;
+
 /*
  * Perform steps to create a daemon process:
  *
@@ -110,9 +112,8 @@ static void daemonize(void)
     if (pid < 0) {
         fprintf(stderr, "fork failed: %s\n", strerror(errno));
         exit(1);
-    } else if (pid > 0) {
+    } else if (pid > 0)
         exit(0);
-    }
 }
 
 int main(int argc, char *argv[])
@@ -122,6 +123,10 @@ int main(int argc, char *argv[])
     int provided;
     char *env;
     int rc;
+
+    rc = unifycr_config_init(&server_cfg, argc, argv);
+    if (rc != 0)
+        exit(1);
 
     daemonize();
 
@@ -145,38 +150,39 @@ int main(int argc, char *argv[])
     local_rank_idx = find_rank_idx(glb_rank, local_rank_lst,
                                    local_rank_cnt);
 
-    env = getenv("UNIFYCR_SERVER_DEBUG_LOG");
-    if (env)
-        sprintf(dbg_fname, "%s-%d", env, glb_rank);
-    else
-        sprintf(dbg_fname, "%s-%d.log", DBG_FNAME, glb_rank);
-
+    sprintf(dbg_fname, "%s/%s.%d",
+            server_cfg.log_dir, server_cfg.log_file, glb_rank);
     rc = dbg_open(dbg_fname);
     if (rc != ULFS_SUCCESS)
-        LOG(LOG_ERR, "%s", ULFS_str_errno(rc));
+        LOG(LOG_ERR, "%s",
+            unifycr_error_enum_description((unifycr_error_e)rc));
 
     app_config_list = arraylist_create();
     if (app_config_list == NULL) {
-        LOG(LOG_ERR, "%s", ULFS_str_errno(ULFS_ERROR_NOMEM));
+        LOG(LOG_ERR, "%s",
+            unifycr_error_enum_description(UNIFYCR_ERROR_NOMEM));
         exit(1);
     }
 
     thrd_list = arraylist_create();
     if (thrd_list == NULL) {
-        LOG(LOG_ERR, "%s", ULFS_str_errno(ULFS_ERROR_NOMEM));
+        LOG(LOG_ERR, "%s",
+            unifycr_error_enum_description(UNIFYCR_ERROR_NOMEM));
         exit(1);
     }
 
     rc = sock_init_server(local_rank_idx);
     if (rc != 0) {
-        LOG(LOG_ERR, "%s", ULFS_str_errno(ULFS_ERROR_SOCKET));
+        LOG(LOG_ERR, "%s",
+            unifycr_error_enum_description(UNIFYCR_ERROR_SOCKET));
         exit(1);
     }
 
     /*launch the service manager*/
     rc = pthread_create(&data_thrd, NULL, sm_service_reads, NULL);
     if (rc != 0) {
-        LOG(LOG_ERR, "%s", ULFS_str_errno(ULFS_ERROR_THRDINIT));
+        LOG(LOG_ERR, "%s",
+            unifycr_error_enum_description(UNIFYCR_ERROR_THRDINIT));
         exit(1);
     }
 
@@ -188,19 +194,19 @@ int main(int argc, char *argv[])
         int ret = sock_handle_error(rc);
         if (ret != 0) {
             LOG(LOG_ERR, "%s",
-                ULFS_str_errno(ret));
+                unifycr_error_enum_description((unifycr_error_e)ret));
             exit(1);
         }
     } else {
         int sock_id = sock_get_id();
-        if (sock_id != 0) {
+        if (sock_id != 0)
             exit(1);
-        }
     }
 
-    rc = meta_init_store();
+    rc = meta_init_store(&server_cfg);
     if (rc != 0) {
-        LOG(LOG_ERR, "%s", ULFS_str_errno(ULFS_ERROR_MDINIT));
+        LOG(LOG_ERR, "%s",
+            unifycr_error_enum_description(UNIFYCR_ERROR_MDINIT));
         exit(1);
     }
 
@@ -221,7 +227,7 @@ int main(int argc, char *argv[])
             int ret = sock_handle_error(rc);
             if (ret != 0) {
                 LOG(LOG_ERR, "%s",
-                    ULFS_str_errno(ret));
+                    unifycr_error_enum_description((unifycr_error_e)ret));
                 exit(1);
             }
 
@@ -230,11 +236,12 @@ int main(int argc, char *argv[])
             /*sock_id is 0 if it is a listening socket*/
             if (sock_id != 0) {
                 char *cmd = sock_get_cmd_buf(sock_id);
-                int cmd_rc = delegator_handle_command(cmd, sock_id);
-                if (cmd_rc != ULFS_SUCCESS) {
+                int ret = delegator_handle_command(cmd, sock_id);
+
+                if (ret != ULFS_SUCCESS) {
                     LOG(LOG_ERR, "%s",
-                        ULFS_str_errno(cmd_rc));
-                    return cmd_rc;
+                        unifycr_error_enum_description((unifycr_error_e)ret));
+                    return ret;
                 }
             }
         }
@@ -263,9 +270,8 @@ static int CountTasksPerNode(int rank, int numTasks)
     int rc;
 
     rc = MPI_Get_processor_name(localhost, &resultsLen);
-    if (rc != 0) {
+    if (rc != 0)
         return -1;
-    }
 
     int i;
     if (numTasks > 0) {
@@ -281,9 +287,8 @@ static int CountTasksPerNode(int rank, int numTasks)
                               MPI_ANY_TAG,
                               MPI_COMM_WORLD, &status);
 
-                if (rc != 0) {
+                if (rc != 0)
                     return -1;
-                }
                 strcpy(host_set[i].hostname, hostname);
                 host_set[i].rank = status.MPI_SOURCE;
             }
@@ -303,16 +308,15 @@ static int CountTasksPerNode(int rank, int numTasks)
             int cursor = 0, set_counter = 0;
             for (i = 1; i < numTasks; i++) {
                 if (strcmp(host_set[i].hostname,
-                           host_set[i - 1].hostname) == 0) {
-                    /*do nothing*/
-                } else {
+                           host_set[i - 1].hostname) == 0)
+                    ; /*do nothing*/
+                else {
                     // find a different rank, so switch to a new set
                     int j, k = 0;
                     rank_set[set_counter] =
                         (int *)malloc((i - cursor) * sizeof(int));
                     rank_cnt[set_counter] = i - cursor;
                     for (j = cursor; j <= i - 1; j++) {
-
                         rank_set[set_counter][k] =  host_set[j].rank;
                         k++;
                     }
@@ -320,7 +324,6 @@ static int CountTasksPerNode(int rank, int numTasks)
                     set_counter++;
                     cursor = i;
                 }
-
             }
 
 
@@ -344,21 +347,16 @@ static int CountTasksPerNode(int rank, int numTasks)
                     if (rank_set[i][j] != 0) {
                         rc = MPI_Send(&rank_cnt[i], 1,
                                       MPI_INT, rank_set[i][j], 0, MPI_COMM_WORLD);
-                        if (rc != 0) {
+                        if (rc != 0)
                             return -1;
-                        }
-
-
 
                         /*send the local rank set to the corresponding rank*/
                         rc = MPI_Send(rank_set[i], rank_cnt[i],
                                       MPI_INT, rank_set[i][j], 0, MPI_COMM_WORLD);
-                        if (rc != 0) {
+                        if (rc != 0)
                             return -1;
-                        }
-                    } else {
+                    } else
                         root_set_no = i;
-                    }
                 }
             }
 
@@ -371,9 +369,8 @@ static int CountTasksPerNode(int rank, int numTasks)
                 local_rank_cnt = rank_cnt[root_set_no];
             }
 
-            for (i = 0; i < set_counter; i++) {
+            for (i = 0; i < set_counter; i++)
                 free(rank_set[i]);
-            }
             free(rank_cnt);
             free(host_set);
             free(rank_set);
@@ -382,15 +379,13 @@ static int CountTasksPerNode(int rank, int numTasks)
             /* non-root process performs MPI_send to send
              * hostname to root node */
             rc = MPI_Send(localhost, ULFS_MAX_FILENAME, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
-            if (rc != 0) {
+            if (rc != 0)
                 return -1;
-            }
             /*receive the local rank count */
             rc = MPI_Recv(&local_rank_cnt, 1, MPI_INT, 0,
                           0, MPI_COMM_WORLD, &status);
-            if (rc != 0) {
+            if (rc != 0)
                 return -1;
-            }
 
             /* receive the the local rank list */
             local_rank_lst = (int *)malloc(local_rank_cnt * sizeof(int));
@@ -407,9 +402,8 @@ static int CountTasksPerNode(int rank, int numTasks)
               compare_int);
 
         // scatter ranks out
-    } else {
+    } else
         return -1;
-    }
 
     return 0;
 }
@@ -419,9 +413,8 @@ static int find_rank_idx(int my_rank,
 {
     int i;
     for (i = 0; i < local_rank_cnt; i++) {
-        if (local_rank_lst[i] == my_rank) {
+        if (local_rank_lst[i] == my_rank)
             return i;
-        }
     }
 
     return -1;
