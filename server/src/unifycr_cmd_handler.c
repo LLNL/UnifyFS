@@ -55,6 +55,7 @@
 * @param sock_id: position in poll_set
 * @return success/error code
 */
+#if 0
 int delegator_handle_command(char *ptr_cmd, int sock_id)
 {
 
@@ -189,6 +190,7 @@ int delegator_handle_command(char *ptr_cmd, int sock_id)
     }
     return rc;
 }
+#endif
 
 /**
 * pack the message to be returned to the client.
@@ -228,7 +230,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     //margo_instance_id mid = margo_hg_info_get_instance(hgi);
     out.ret = 0;
     app_config_t *tmp_config;
-    int rc;
+    int rc = 0;
     if (arraylist_get(app_config_list, in.app_id) == NULL) {
         tmp_config = (app_config_t *)malloc(sizeof(app_config_t));
         tmp_config->num_procs_per_node = in.num_procs_per_node;
@@ -268,6 +270,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
                      in.app_id);
     }
     thrd_ctrl_t* thrd_ctrl = NULL;
+    cli_signature_t* cli_signature = NULL;
     if ( out.ret == 0 ) {
         /* The following code attach a delegator thread
         * to this new connection */
@@ -275,8 +278,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
         memset(thrd_ctrl, 0, sizeof(thrd_ctrl_t));
 
         thrd_ctrl->exit_flag = 0;
-        cli_signature_t *cli_signature =
-            (cli_signature_t *)malloc(sizeof(cli_signature_t));
+        cli_signature = (cli_signature_t *)malloc(sizeof(cli_signature_t));
         cli_signature->app_id = in.app_id;
         // cli_signature->sock_id = sock_id;
         rc = pthread_mutex_init(&(thrd_ctrl->thrd_lock), NULL);
@@ -293,17 +295,63 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     }
 
     if ( out.ret == 0 ) {
-        thrd_ctrl->del_req_set =
-         (msg_meta_t *)malloc(sizeof(msg_meta_t));
+        thrd_ctrl->del_req_set = (msg_meta_t *)malloc(sizeof(msg_meta_t));
         if (!thrd_ctrl->del_req_set) {
             out.ret =  ULFS_ERROR_NOMEM;
         }
     }
-    memset(thrd_ctrl->del_req_set,
-           0, sizeof(msg_meta_t));
+	
+	if (out.ret == 0 ) {
+    	memset(thrd_ctrl->del_req_set, 0, sizeof(msg_meta_t));
 
-    thrd_ctrl->del_req_stat =
-        (del_req_stat_t *)malloc(sizeof(del_req_stat_t));
+    	thrd_ctrl->del_req_stat =
+        	(del_req_stat_t *)malloc(sizeof(del_req_stat_t));
+
+		if (!thrd_ctrl->del_req_stat->req_stat) 
+       		out.ret = ULFS_ERROR_NOMEM;
+    }
+	
+	if (out.ret == 0 ) {
+		memset(thrd_ctrl->del_req_stat, 0, sizeof(del_req_stat_t));
+
+    	thrd_ctrl->del_req_stat->req_stat =
+       	 (per_del_stat_t *)malloc(sizeof(per_del_stat_t) * glb_size);
+    	if (!thrd_ctrl->del_req_stat->req_stat)
+        	out.ret = ULFS_ERROR_NOMEM;
+   	}
+
+	if ( out.ret == 0 ) {
+		memset(thrd_ctrl->del_req_stat->req_stat,
+           0, sizeof(per_del_stat_t) * glb_size);
+		rc = arraylist_add(thrd_list, thrd_ctrl);
+    	if (rc != 0) 
+			out.ret = rc;
+    }
+
+	if ( out.ret == 0 ) {
+    	tmp_config->thrd_idxs[sock_get_id()] = arraylist_size(thrd_list) - 1;
+    	tmp_config->client_ranks[sock_get_id()] = local_rank_idx;
+    	tmp_config->dbg_ranks[sock_get_id()] = 0; /*add debug rank*/
+
+	    rc = attach_to_shm(tmp_config, in.app_id, in.local_rank_idx);
+   		if (rc != ULFS_SUCCESS)
+        	out.ret = rc;
+    }
+
+	if ( out.ret == 0 ) {
+    	rc = open_log_file(tmp_config, in.app_id, local_rank_idx);
+    	if (rc < 0) 
+       		 out.ret = rc;
+    }
+
+	if ( out.ret == 0 ) {
+		thrd_ctrl->has_waiting_delegator = 0;
+    	thrd_ctrl->has_waiting_dispatcher = 0;
+    	rc = pthread_create(&(thrd_ctrl->thrd), NULL, rm_delegate_request_thread,
+                        	cli_signature);
+    	if (rc != 0) 
+       		out.ret = ULFS_ERROR_THRDINIT;
+    }
 
     margo_free_input(handle, &in);
 
@@ -322,11 +370,11 @@ static void unifycr_metaget_rpc(hg_handle_t handle)
     assert(ret == HG_SUCCESS);
 
     unifycr_metaget_out_t out;
-    out.ret = 0;
 
     unifycr_file_attr_t attr_val;
-    ret = meta_process_attr_get(in, &attr_val);
-    //out.attr_val = attr_val;
+    ret = meta_process_attr_get(in.gid, &attr_val);
+	out.st_size = attr_val.file_attr.st_size;
+    out.filename = attr_val.filename;
     out.ret = ret;
 
     margo_free_input(handle, &in);
@@ -337,7 +385,6 @@ static void unifycr_metaget_rpc(hg_handle_t handle)
 
     margo_destroy(handle);
 }
-
 DEFINE_MARGO_RPC_HANDLER(unifycr_metaget_rpc)
 
 static void unifycr_metaset_rpc(hg_handle_t handle)
@@ -347,10 +394,8 @@ static void unifycr_metaset_rpc(hg_handle_t handle)
     assert(ret == HG_SUCCESS);
 
     unifycr_metaset_out_t out;
-    out.ret = 0;
 
-    ret = meta_process_attr_set(in);
-    out.ret = ret;
+    out.ret = meta_process_attr_set(in.gid, in.filename);
 
     margo_free_input(handle, &in);
 
@@ -362,7 +407,23 @@ static void unifycr_metaset_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)
 
-/**
+static void unifycr_fsync_rpc(hg_handle_t handle)
+{
+    unifycr_fsync_in_t in;
+    int ret = HG_Get_input(handle, &in);
+    assert(ret == HG_SUCCESS);
+
+    unifycr_fsync_out_t out;
+    out.ret = meta_process_fsync(in.app_id, in.local_rank_idx, in.gid);
+
+    hg_return_t hret = margo_respond(handle, &out);
+
+    assert(hret == HG_SUCCESS);
+
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(unifycr_fsync_rpc)
+
 /**
 * receive and store the client-side information,
 * then attach to the client-side shared buffers.
@@ -371,6 +432,7 @@ DEFINE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)
 * @param sock_id: position in poll_set
 * @return success/error code
 */
+#if 0
 int sync_with_client(char *cmd_buf, int sock_id)
 {
     unifycr_client_context_t client_ctx;
@@ -511,7 +573,7 @@ int sync_with_client(char *cmd_buf, int sock_id)
 
     return rc;
 }
-
+#endif
 /**
 * attach to the client-side shared memory
 * @param app_config: application information
@@ -519,12 +581,12 @@ int sync_with_client(char *cmd_buf, int sock_id)
 * @param sock_id: position in poll_set in unifycr_sock.h
 * @return success/error code
 */
-int attach_to_shm(app_config_t *app_config, int app_id, int sock_id)
+int attach_to_shm(app_config_t *app_config, int app_id, int client_side_id)
 {
     int ret = 0;
     char shm_name[GEN_STR_LEN] = {0};
 
-    int client_side_id = app_config->client_ranks[sock_id];
+    // int client_side_id = app_config->client_ranks[sock_id];
 
     /* attach shared superblock,
      * a superblock is created by each
@@ -620,13 +682,12 @@ int attach_to_shm(app_config_t *app_config, int app_id, int sock_id)
 * @return success/error code
 */
 int open_log_file(app_config_t *app_config,
-                  int app_id, int sock_id)
+                  int app_id, int client_side_id)
 {
-    int client_side_id = app_config->client_ranks[sock_id];
     char path[UNIFYCR_MAX_FILENAME] = {0};
-
     snprintf(path, sizeof(path), "%s/spill_%d_%d.log",
             app_config->external_spill_dir, app_id, client_side_id);
+
     app_config->spill_log_fds[client_side_id] = open(path, O_RDONLY, 0666);
     /*  LOG(LOG_DBG, "openning log file %s, client_side_id:%d\n",
                 path, client_side_id);

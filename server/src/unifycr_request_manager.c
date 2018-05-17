@@ -59,7 +59,7 @@ int rm_read_remote_data(int sock_id, int req_num)
     app_config_t *app_config =
         (app_config_t *)arraylist_get(app_config_list, app_id);
 
-    int client_id = app_config->client_ranks[sock_id];
+  int client_id = app_config->client_ranks[sock_id];
     int dbg_rank = app_config->dbg_ranks[sock_id];
 
     int thrd_id = app_config->thrd_idxs[sock_id];
