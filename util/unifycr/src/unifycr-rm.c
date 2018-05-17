@@ -30,7 +30,7 @@
 /*
  *
  * Copyright (c) 2014, Los Alamos National Laboratory
- *	All rights reserved.
+ *  All rights reserved.
  *
  */
 
@@ -51,7 +51,7 @@
 typedef int (*unifycr_rm_read_resource_t)(unifycr_resource_t *resource);
 
 typedef int (*unifycr_rm_launch_t)(unifycr_resource_t *resource,
-                                   unifycr_runstate_t *state);
+                                   unifycr_args_t *args);
 
 struct _ucr_resource_manager {
     const char *type;
@@ -64,7 +64,7 @@ typedef struct _ucr_resource_manager _ucr_resource_manager_t;
 
 /*
  * TODO: currently, we cannot launch if no resource manager is detected
- * (UNIFYCR_RM_NONE).
+ * (UNIFYCR_RM_INVALID).
  */
 
 /**
@@ -80,7 +80,7 @@ static int none_read_resource(unifycr_resource_t *resource)
 }
 
 static int none_launch_daemon(unifycr_resource_t *resource,
-                              unifycr_runstate_t *state)
+                              unifycr_args_t *args)
 {
     return -ENOSYS;
 }
@@ -103,7 +103,7 @@ static int pbs_read_resource(unifycr_resource_t *resource)
     char buf[1024] = { 0, };
     char *nodefile = getenv("PBS_NODEFILE");
 
-    if (!nodefile)
+    if (nodefile == NULL)
         return -EINVAL;
 
     /*
@@ -113,7 +113,7 @@ static int pbs_read_resource(unifycr_resource_t *resource)
      */
 
     num_nodes_str = getenv("PBS_NUM_NODES");
-    if (!num_nodes_str)
+    if (num_nodes_str == NULL)
         return -EINVAL;
 
     n_nodes = (uint64_t) strtoul(num_nodes_str, NULL, 10);
@@ -131,12 +131,11 @@ static int pbs_read_resource(unifycr_resource_t *resource)
     while (fgets(buf, 1024, fp) != NULL) {
         buf[strlen(buf) - 1] = '\0';    /* discard the newline */
         if (i > 0) {
-            if (!strcmp(buf, nodes[i-1]))
+            if (strcmp(buf, nodes[i - 1]) == 0)
                 continue;
             nodes[i] = strdup(buf);
         } else
             nodes[i] = strdup(buf);
-
         i++;
     }
 
@@ -153,12 +152,12 @@ out:
  * @brief
  *
  * @param resource
- * @param state
+ * @param args
  *
  * @return
  */
 static int pbs_launch_daemon(unifycr_resource_t *resource,
-                             unifycr_runstate_t *state)
+                             unifycr_args_t *args)
 {
     return 0;
 }
@@ -182,12 +181,12 @@ static int slurm_read_resource(unifycr_resource_t *resource)
  * @brief
  *
  * @param resource
- * @param state
+ * @param args
  *
  * @return
  */
 static int slurm_launch_daemon(unifycr_resource_t *resource,
-                               unifycr_runstate_t *state)
+                               unifycr_args_t *args)
 {
     return 0;
 }
@@ -215,7 +214,7 @@ static int lsf_read_resource(unifycr_resource_t *resource)
     char *lsb_hosts = NULL;
 
     node = getenv("LSB_HOSTS");
-    if (!node)
+    if (node == NULL)
         return -EINVAL;
 
     lsb_hosts = strdup(node);
@@ -248,12 +247,12 @@ static int lsf_read_resource(unifycr_resource_t *resource)
  * @brief
  *
  * @param resource
- * @param state
+ * @param args
  *
  * @return
  */
 static int lsf_launch_daemon(unifycr_resource_t *resource,
-                             unifycr_runstate_t *state)
+                             unifycr_args_t *args)
 {
     return 0;
 }
@@ -267,22 +266,17 @@ static _ucr_resource_manager_t resource_managers[] = {
 
 int unifycr_read_resource(unifycr_resource_t *resource)
 {
-    char *pbs_jobid = NULL;
-    char *slurm_jobid = NULL;
-    char *lsb_jobid = NULL;
-
-    pbs_jobid = getenv("PBS_JOBID");
-    slurm_jobid = getenv("SLURM_JOBID");
-    lsb_jobid = getenv("LSB_JOBID");
-
-    if (pbs_jobid)
+    if (getenv("PBS_JOBID") != NULL)
         resource->rm = UNIFYCR_RM_PBS;
-    else if (slurm_jobid)
+    else if (getenv("SLURM_JOBID") != NULL)
         resource->rm = UNIFYCR_RM_SLURM;
-    else if (lsb_jobid)
-        resource->rm = UNIFYCR_RM_LSF;
-    else
-        resource->rm = UNIFYCR_RM_NONE;
+    else if (getenv("LSB_JOBID") != NULL) {
+        if (getenv("CSM_ALLOCATION_ID") != NULL)
+            resource->rm = UNIFYCR_RM_LSF_CSM;
+        else
+            resource->rm = UNIFYCR_RM_LSF;
+    } else
+        resource->rm = UNIFYCR_RM_INVALID;
 
     return resource_managers[resource->rm].read_resource(resource);
 }
@@ -297,7 +291,7 @@ static char *mpirun_newargv[] = {
 };
 
 int unifycr_launch_daemon(unifycr_resource_t *resource,
-                          unifycr_runstate_t *state)
+                          unifycr_args_t *args)
 {
     char nbuf[16] = { 0, };
 
@@ -305,12 +299,11 @@ int unifycr_launch_daemon(unifycr_resource_t *resource,
 
     mpirun_newargv[2] = nbuf;
     mpirun_newargv[4] = nbuf;
-    mpirun_newargv[5] = state->unifycrd_path ?
-                        state->unifycrd_path : BINDIR "/unifycrd";
+    mpirun_newargv[5] = args->server_path ?
+                        args->server_path : BINDIR "/unifycrd";
 
     execvp(mpirun_newargv[0], mpirun_newargv);
     perror("failed to launch unifycrd (execvp)");
 
     return -1;
 }
-

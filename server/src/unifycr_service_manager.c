@@ -79,7 +79,7 @@ void *sm_service_reads(void *ctx)
 
     rc = sm_init_socket();
     if (rc < 0) {
-        sm_rc = ULFS_ERROR_SOCKET;
+        sm_rc = (int)UNIFYCR_ERROR_SOCKET;
         return (void *)&sm_rc;
     }
 
@@ -107,19 +107,19 @@ void *sm_service_reads(void *ctx)
 
     pended_reads = arraylist_create();
     if (pended_reads == NULL) {
-        sm_rc = ULFS_ERROR_NOMEM;
+        sm_rc = (int)UNIFYCR_ERROR_NOMEM;
         return (void *)&sm_rc;
     }
 
     pended_sends = arraylist_create();
     if (pended_sends == NULL) {
-        sm_rc = ULFS_ERROR_NOMEM;
+        sm_rc = (int)UNIFYCR_ERROR_NOMEM;
         return (void *)&sm_rc;
     }
 
     send_buf_lst = arraylist_create();
     if (send_buf_lst == NULL) {
-        sm_rc = ULFS_ERROR_NOMEM;
+        sm_rc = (int)UNIFYCR_ERROR_NOMEM;
         return (void *)&sm_rc;
     }
 
@@ -147,7 +147,7 @@ void *sm_service_reads(void *ctx)
         return_code = MPI_Test(&request,
                                &irecv_flag, &status);
         if (return_code != MPI_SUCCESS) {
-            sm_rc = ULFS_ERROR_RECV;
+            sm_rc = (int)UNIFYCR_ERROR_RECV;
             return (void *)&sm_rc;
         }
 
@@ -208,7 +208,7 @@ void *sm_service_reads(void *ctx)
 
             return_code = MPI_Test(&request, &irecv_flag, &status);
             if (return_code != MPI_SUCCESS) {
-                sm_rc = ULFS_ERROR_RECV;
+                sm_rc = (int)UNIFYCR_ERROR_RECV;
                 return (void *)&sm_rc;
             }
 
@@ -386,7 +386,7 @@ int sm_read_send_pipe(task_set_t *read_task_set,
                 int rc = pread(tmp_fd, mem_buf + buf_cursor, sz_from_ssd,
                                0);
                 if (rc < 0) {
-                    return ULFS_ERROR_READ;
+                    return (int)UNIFYCR_ERROR_READ;
                 }
 
                 buf_cursor += rc;
@@ -412,7 +412,7 @@ int sm_read_send_pipe(task_set_t *read_task_set,
 
                 int rc = aio_read(&ptr->read_cb);
                 if (rc < 0) {
-                    return ULFS_ERROR_READ;
+                    return (int)UNIFYCR_ERROR_READ;
                 }
                 burst_data_sz += read_task_set->read_tasks[i].size;
                 buf_cursor += read_task_set->read_tasks[i].size;
@@ -523,7 +523,7 @@ int sm_wait_until_digested(task_set_t *read_task_set,
                 ret_code = MPI_Test(&ptr_ack_stat->req,
                                     &ptr_flags[i], &ptr_ack_stat->stat);
                 if (ret_code != MPI_SUCCESS) {
-                    return ULFS_ERROR_RECV;
+                    return (int)UNIFYCR_ERROR_RECV;
                 }
 
                 if (ptr_flags[i] != 0) {
@@ -785,7 +785,7 @@ int ins_to_ack_lst(rank_ack_task_t *rank_ack_task,
             /*start_cursor records the starting ack for the next send*/
             ptr_ack_meta->start_cursor += num_to_ack;
             if (rc < 0) {
-                return ULFS_ERROR_SEND;
+                return (int)UNIFYCR_ERROR_SEND;
             }
         } else {
             ptr_ack_meta->src_sz += ptr_ack->length;
@@ -809,7 +809,7 @@ int insert_ack_meta(rank_ack_task_t *rank_ack_task,
         rank_ack_task->ack_metas[rank_ack_task->num].thrd_id = thrd_id;
         rank_ack_task->ack_metas[rank_ack_task->num].src_cli_rank = src_cli_rank;
         if (rank_ack_task->ack_metas[rank_ack_task->num].ack_list == NULL) {
-            return ULFS_ERROR_NOMEM;
+            return (int)UNIFYCR_ERROR_NOMEM;
         }
 
         rank_ack_task->ack_metas[rank_ack_task->num].src_sz
@@ -832,7 +832,7 @@ int insert_ack_meta(rank_ack_task_t *rank_ack_task,
     rank_ack_task->ack_metas[pos].src_cli_rank = src_cli_rank;
 
     if (rank_ack_task->ack_metas[pos].ack_list == NULL) {
-        return ULFS_ERROR_NOMEM;
+        return (int)UNIFYCR_ERROR_NOMEM;
     }
 
     rank_ack_task->ack_metas[pos].src_sz = ptr_ack->length;
@@ -964,7 +964,7 @@ int sm_decode_msg(char *recv_msg_buf)
         service_msgs.msg = (send_msg_t *)realloc(service_msgs.msg,
                            2 * (num_of_msg + service_msgs.num) * sizeof(send_msg_t));
         if (service_msgs.msg == NULL) {
-            return ULFS_ERROR_NOMEM;
+            return (int)UNIFYCR_ERROR_NOMEM;
         }
 
         service_msgs.cap = 2 * (num_of_msg + service_msgs.num);
@@ -972,7 +972,7 @@ int sm_decode_msg(char *recv_msg_buf)
         read_task_set.read_tasks = (read_task_t *)realloc(read_task_set.read_tasks,
                                    2 * (num_of_msg + service_msgs.num) * sizeof(read_task_t));
         if (read_task_set.read_tasks == NULL) {
-            return ULFS_ERROR_NOMEM;
+            return (int)UNIFYCR_ERROR_NOMEM;
         }
 
         read_task_set.cap = 2 * (num_of_msg + service_msgs.num);

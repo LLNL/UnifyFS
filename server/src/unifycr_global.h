@@ -29,9 +29,10 @@
 
 #ifndef UNIFYCR_GLOBAL_H
 #define UNIFYCR_GLOBAL_H
+
 #include <pthread.h>
 #include <stdlib.h>
-#include "unifycr_const.h"
+#include "unifycr_configurator.h"
 #include "arraylist.h"
 
 typedef enum {
@@ -159,13 +160,17 @@ typedef struct {
     char filename[ULFS_MAX_FILENAME];
     struct stat file_attr;
 } unifycr_file_attr_t;
+
 extern arraylist_t *app_config_list;
 extern arraylist_t *thrd_list;
+
 int invert_sock_ids[MAX_NUM_CLIENTS];
+
 extern pthread_t data_thrd;
 extern int glb_rank, glb_size;
 extern int local_rank_idx;
 extern int *local_rank_lst;
 extern int local_rank_cnt;
 extern long max_recs_per_slice;
+
 #endif

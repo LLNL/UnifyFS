@@ -310,7 +310,7 @@ int rm_receive_remote_message(int app_id,
                     return_code = MPI_Test(&recv_req[i],
                                            &irecv_flag[i], &status);
                     if (return_code != MPI_SUCCESS) {
-                        return ULFS_ERROR_RM_RECV;
+                        return (int)UNIFYCR_ERROR_RM_RECV;
                     }
 
                     if (irecv_flag[i] != 0) {
@@ -463,7 +463,7 @@ int rm_init(int size)
     req_dels_stat.stat =
             (delegator_stat_t *)malloc(sizeof(delegator_stat_t));
     if (!req_dels_stat.stat)
-        return ULFS_ERROR_RM_INIT;
+        return (int)UNIFYCR_ERROR_RM_INIT;
         */
     return ULFS_SUCCESS;
 }

@@ -141,7 +141,7 @@ int sock_notify_cli(int sock_id, int cmd)
                    ack_buf[sock_id], sizeof(ack_buf[sock_id]));
 
     if (rc < 0) {
-        return ULFS_ERROR_WRITE;
+        return (int)UNIFYCR_ERROR_WRITE;
     }
     return ULFS_SUCCESS;
 }
@@ -158,7 +158,7 @@ int sock_wait_cli_cmd()
     sock_reset();
     rc = poll(poll_set, num_fds, -1);
     if (rc <= 0) {
-        return ULFS_ERROR_TIMEOUT;
+        return (int)UNIFYCR_ERROR_TIMEOUT;
     } else {
         for (i = 0; i < num_fds; i++) {
             if (poll_set[i].fd != -1 && poll_set[i].revents != 0) {
@@ -171,7 +171,7 @@ int sock_wait_cli_cmd()
                                                (socklen_t *)&client_len);
                     rc = sock_add(client_sockfd);
                     if (rc < 0) {
-                        return ULFS_SOCKETFD_EXCEED;
+                        return (int)UNIFYCR_ERROR_SOCKET_FD_EXCEED;
                     } else {
                         cur_sock_id = i;
                         return ULFS_SUCCESS;
@@ -182,21 +182,21 @@ int sock_wait_cli_cmd()
                     if (bytes_read == 0) {
                         sock_remove(i);
                         detached_sock_id = i;
-                        return ULFS_SOCK_DISCONNECT;
+                        return (int)UNIFYCR_ERROR_SOCK_DISCONNECT;
                     }
                     cur_sock_id = i;
                     return ULFS_SUCCESS;
                 } else {
                     if (i == 0) {
-                        return ULFS_SOCK_LISTEN;
+                        return (int)UNIFYCR_ERROR_SOCK_LISTEN;
                     } else {
                         detached_sock_id = i;
                         if (i != 0 && poll_set[i].revents == POLLHUP) {
                             sock_remove(i);
-                            return ULFS_SOCK_DISCONNECT;
+                            return (int)UNIFYCR_ERROR_SOCK_DISCONNECT;
                         } else {
                             sock_remove(i);
-                            return ULFS_SOCK_OTHER;
+                            return (int)UNIFYCR_ERROR_SOCK_OTHER;
 
                         }
                     }
@@ -214,7 +214,7 @@ int sock_ack_cli(int sock_id, int ret_sz)
     int rc = write(poll_set[sock_id].fd,
                    ack_buf[sock_id], ret_sz);
     if (rc < 0) {
-        return ULFS_SOCK_OTHER;
+        return (int)UNIFYCR_ERROR_SOCK_OTHER;
     }
     return ULFS_SUCCESS;
 }
