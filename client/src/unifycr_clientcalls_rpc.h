@@ -53,11 +53,14 @@
     MERCURY_GEN_PROC(unifycr_fsync_out_t, ((int32_t)(ret)))
     MERCURY_GEN_PROC(unifycr_fsync_in_t,
         ((uint32_t)(app_id))\
+        ((uint32_t)(local_rank_idx))\
         ((int32_t)(gid)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_fsync_rpc)
 
     MERCURY_GEN_PROC(unifycr_read_out_t, ((int32_t)(ret)))
     MERCURY_GEN_PROC(unifycr_read_in_t,
+        ((uint32_t)(app_id))\
+        ((uint32_t)(local_rank_idx))\
         ((int32_t)(gid))\
         ((int32_t)(read_count)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_read_rpc)
