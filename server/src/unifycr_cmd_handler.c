@@ -372,7 +372,7 @@ static void unifycr_metaget_rpc(hg_handle_t handle)
     unifycr_metaget_out_t out;
 
     unifycr_file_attr_t attr_val;
-    ret = meta_process_attr_get(in.gid, &attr_val);
+    ret = meta_process_attr_get(in.gfid, &attr_val);
 	out.st_size = attr_val.file_attr.st_size;
     out.filename = attr_val.filename;
     out.ret = ret;
@@ -395,7 +395,7 @@ static void unifycr_metaset_rpc(hg_handle_t handle)
 
     unifycr_metaset_out_t out;
 
-    out.ret = meta_process_attr_set(in.gid, in.filename);
+    out.ret = meta_process_attr_set(in.gfid, in.filename);
 
     margo_free_input(handle, &in);
 
@@ -414,7 +414,7 @@ static void unifycr_fsync_rpc(hg_handle_t handle)
     assert(ret == HG_SUCCESS);
 
     unifycr_fsync_out_t out;
-    out.ret = meta_process_fsync(in.app_id, in.local_rank_idx, in.gid);
+    out.ret = meta_process_fsync(in.app_id, in.local_rank_idx, in.gfid);
 
     hg_return_t hret = margo_respond(handle, &out);
 

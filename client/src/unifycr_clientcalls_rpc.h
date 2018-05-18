@@ -34,7 +34,7 @@
 
     MERCURY_GEN_PROC(unifycr_metaset_out_t, ((uint32_t)(ret)))
     MERCURY_GEN_PROC(unifycr_metaset_in_t,
-        ((int32_t)(gid))\
+        ((int32_t)(gfid))\
         ((hg_const_string_t)(filename)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)
 
@@ -45,7 +45,7 @@
                      ((uint32_t)(ret))\
         		   	 ((hg_const_string_t)(filename)))
     MERCURY_GEN_PROC(unifycr_metaget_in_t,
-        ((int32_t)(gid)))
+        ((int32_t)(gfid)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_metaget_rpc)
 
 
@@ -53,14 +53,14 @@
     MERCURY_GEN_PROC(unifycr_fsync_in_t,
         ((uint32_t)(app_id))\
         ((uint32_t)(local_rank_idx))\
-        ((int32_t)(gid)))
+        ((int32_t)(gfid)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_fsync_rpc)
 
     MERCURY_GEN_PROC(unifycr_read_out_t, ((int32_t)(ret)))
     MERCURY_GEN_PROC(unifycr_read_in_t,
         ((uint32_t)(app_id))\
         ((uint32_t)(local_rank_idx))\
-        ((int32_t)(gid))\
+        ((int32_t)(gfid))\
         ((int32_t)(read_count)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_read_rpc)
 

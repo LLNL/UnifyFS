@@ -204,7 +204,7 @@ int meta_init_indices()
 * the delegator
 * @return success/error code
 */
-int meta_process_attr_set(int gid, const char* filename)
+int meta_process_attr_set(int gfid, const char* filename)
 {
     int rc = ULFS_SUCCESS;
 
@@ -216,7 +216,7 @@ int meta_process_attr_set(int gid, const char* filename)
     /*  LOG(LOG_DBG, "rank:%d, setting fattr key:%d, value:%s\n",
                 glb_rank, *fattr_keys, fattr_vals_local->fname); */
     md->primary_index = unifycr_indexes[1];
-    brm = mdhimPut(md, &gid, sizeof(fattr_key_t),
+    brm = mdhimPut(md, &gfid, sizeof(fattr_key_t),
                    &fattr_vals_local, sizeof(fattr_val_t),
                    NULL, NULL);
     if (!brm || brm->error)
@@ -231,15 +231,14 @@ int meta_process_attr_set(int gid, const char* filename)
 
 
 /* get the file attribute from the key-value store
-* @param buf: a buffer that stores the gid
-* @param sock_id: the connection id in poll_set of the delegator
+* @param gfid: the global file ID
 * @return success/error code
 */
 
-int meta_process_attr_get(int gid, unifycr_file_attr_t* ptr_attr_val)
+int meta_process_attr_get(int gfid, unifycr_file_attr_t* ptr_attr_val)
 {
     fattr_key_t fattr_keys_local;
-    fattr_keys_local = gid;
+    fattr_keys_local = gfid;
     fattr_val_t *tmp_ptr_attr;
 
     int rc;
@@ -272,7 +271,7 @@ int meta_process_attr_get(int gid, unifycr_file_attr_t* ptr_attr_val)
 * @return success/error code
 */
 
-int meta_process_fsync(int app_id, int client_side_id, int gid)
+int meta_process_fsync(int app_id, int client_side_id, int gfid)
 {
     int ret = 0;
 
@@ -297,7 +296,7 @@ int meta_process_fsync(int app_id, int client_side_id, int gid)
 	int used_entries = 0;
     int i;
     for (i = 0; i < num_entries; i++) {
-		if ( meta_payload[i].fid == gid ) {
+		if ( meta_payload[i].fid == gfid ) {
         	unifycr_keys[used_entries]->fid = meta_payload[i].fid;
         	unifycr_keys[used_entries]->offset = meta_payload[i].file_pos;
         	unifycr_vals[used_entries]->addr = meta_payload[i].mem_pos;
@@ -352,7 +351,7 @@ int meta_process_fsync(int app_id, int client_side_id, int gid)
 
 	used_entries = 0;
     for (i = 0; i < num_entries; i++) {
-		if ( attr_payload[i].gfid == gid ) {
+		if ( attr_payload[i].gfid == gfid ) {
         	*fattr_keys[used_entries] = attr_payload[i].gfid;
         	fattr_vals[used_entries]->file_attr = attr_payload[i].file_attr;
         	strcpy(fattr_vals[used_entries]->fname, attr_payload[i].filename);
