@@ -26,6 +26,7 @@
  * For details, see https://github.com/llnl/burstfs
  * Please read https://github.com/llnl/burstfs/LICNSE for full license text.
  */
+#include <assert.h>
 #include "mdhim.h"
 #include "indexes.h"
 #include "log.h"
@@ -235,10 +236,10 @@ int meta_process_attr_set(int gid, const char* filename)
 * @return success/error code
 */
 
-int meta_process_attr_get(int fid, unifycr_file_attr_t* ptr_attr_val)
+int meta_process_attr_get(int gid, unifycr_file_attr_t* ptr_attr_val)
 {
     fattr_key_t fattr_keys_local;
-    fattr_keys_local = fid;
+    fattr_keys_local = gid;
     fattr_val_t *tmp_ptr_attr;
 
     int rc;
@@ -297,17 +298,17 @@ int meta_process_fsync(int app_id, int client_side_id, int gid)
     int i;
     for (i = 0; i < num_entries; i++) {
 		if ( meta_payload[i].fid == gid ) {
-        	unifycr_keys[i]->fid = meta_payload[i].fid;
-        	unifycr_keys[i]->offset = meta_payload[i].file_pos;
-        	unifycr_vals[i]->addr = meta_payload[i].mem_pos;
-        	unifycr_vals[i]->len = meta_payload[i].length;
-        	unifycr_vals[i]->delegator_id = glb_rank;
+        	unifycr_keys[used_entries]->fid = meta_payload[i].fid;
+        	unifycr_keys[used_entries]->offset = meta_payload[i].file_pos;
+        	unifycr_vals[used_entries]->addr = meta_payload[i].mem_pos;
+        	unifycr_vals[used_entries]->len = meta_payload[i].length;
+        	unifycr_vals[used_entries]->delegator_id = glb_rank;
         	memcpy((char *) & (unifycr_vals[i]->app_rank_id), &app_id, sizeof(int));
         	memcpy((char *) & (unifycr_vals[i]->app_rank_id) + sizeof(int),
                	&client_side_id, sizeof(int));
 	
-        	unifycr_key_lens[i] = sizeof(unifycr_key_t);
-        	unifycr_val_lens[i] = sizeof(unifycr_val_t);
+        	unifycr_key_lens[used_entries] = sizeof(unifycr_key_t);
+        	unifycr_val_lens[used_entries] = sizeof(unifycr_val_t);
 			used_entries++;
 		}
     }
@@ -349,17 +350,23 @@ int meta_process_fsync(int app_id, int client_side_id, int gid)
                                 + app_config->fmeta_offset + page_sz);
 
 
+	used_entries = 0;
     for (i = 0; i < num_entries; i++) {
-        *fattr_keys[i] = attr_payload[i].gfid;
-        fattr_vals[i]->file_attr = attr_payload[i].file_attr;
-        strcpy(fattr_vals[i]->fname, attr_payload[i].filename);
-
-        fattr_key_lens[i] = sizeof(fattr_key_t);
-        fattr_val_lens[i] = sizeof(fattr_val_t);
+		if ( attr_payload[i].gfid == gid ) {
+        	*fattr_keys[used_entries] = attr_payload[i].gfid;
+        	fattr_vals[used_entries]->file_attr = attr_payload[i].file_attr;
+        	strcpy(fattr_vals[used_entries]->fname, attr_payload[i].filename);
+	
+        	fattr_key_lens[used_entries] = sizeof(fattr_key_t);
+        	fattr_val_lens[used_entries] = sizeof(fattr_val_t);
+			used_entries++;
+		}
     }
+	assert(used_entries == 1);
 
+	// should be changed to mdhimPut once assertion is validated
     brm = mdhimBPut(md, (void **)(&fattr_keys[0]), fattr_key_lens,
-                    (void **)(&fattr_vals[0]), fattr_val_lens, num_entries,
+                    (void **)(&fattr_vals[0]), fattr_val_lens, used_entries,
                     NULL, NULL);
     brmp = brm;
     if (!brmp || brmp->error) {

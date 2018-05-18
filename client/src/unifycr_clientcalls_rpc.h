@@ -34,7 +34,6 @@
 
     MERCURY_GEN_PROC(unifycr_metaset_out_t, ((uint32_t)(ret)))
     MERCURY_GEN_PROC(unifycr_metaset_in_t,
-        ((int32_t)(fid))\
         ((int32_t)(gid))\
         ((hg_const_string_t)(filename)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)
