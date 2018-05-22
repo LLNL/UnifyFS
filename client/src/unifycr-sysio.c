@@ -325,28 +325,81 @@ int UNIFYCR_WRAP(remove)(const char *path)
 
 int UNIFYCR_WRAP(stat)(const char *path, struct stat *buf)
 {
+    int ret = 0;
+
     DEBUG("stat was called for %s....\n", path);
     if (unifycr_intercept_path(path)) {
+        if (!buf) {
+            errno = EFAULT;
+            return -1;
+        }
+
         int fid = unifycr_get_fid_from_path(path);
         if (fid < 0) {
             errno = ENOENT;
             return -1;
         }
 
-        unifycr_fid_stat(fid, buf);
+        ret = unifycr_fid_stat(fid, buf);
+        if (ret < 0)
+            errno = ENOENT;
 
-        return 0;
+        return ret;
     } else {
         MAP_OR_FAIL(stat);
-        int ret = UNIFYCR_REAL(stat)(path, buf);
+        ret = UNIFYCR_REAL(stat)(path, buf);
         return ret;
     }
 }
 
+int UNIFYCR_WRAP(fstat)(int fd, struct stat *buf)
+{
+    int ret = 0;
+
+    DEBUG("fstat was called for fd: %d....\n", fd);
+
+    if (!buf) {
+        errno = EFAULT;
+        return -1;
+    }
+
+    /* get the file id for this file descriptor */
+    int fid = unifycr_get_fid_from_fd(fd);
+
+    if (fid < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
+    ret = unifycr_fid_stat(fid, buf);
+    if (ret < 0)
+        errno = EBADF;
+
+    return ret;
+}
+
+/*
+ * NOTE on __xstat(2), __lxstat(2), and __fxstat(2)
+ * The additional parameter vers shall be 3 or the behavior of these functions
+ * is undefined. (ISO POSIX(2003))
+ */
+
 int UNIFYCR_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 {
+    int ret = 0;
+
     DEBUG("xstat was called for %s....\n", path);
     if (unifycr_intercept_path(path)) {
+        if (vers != 3) {
+            errno = EINVAL;
+            return -1;
+        }
+
+        if (!buf) {
+            errno = EFAULT;
+            return -1;
+        }
+
         /* get file id for path */
         int fid = unifycr_get_fid_from_path(path);
         if (fid < 0) {
@@ -356,30 +409,89 @@ int UNIFYCR_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
         }
 
         /* get meta data for this file */
-        unifycr_fid_stat(fid, buf);
+        ret = unifycr_fid_stat(fid, buf);
+        if (ret < 0)
+            errno = ENOENT;
 
-        return 0;
+        return ret;
     } else {
         MAP_OR_FAIL(__xstat);
-        int ret = UNIFYCR_REAL(__xstat)(vers, path, buf);
+        ret = UNIFYCR_REAL(__xstat)(vers, path, buf);
         return ret;
     }
 }
 
 int UNIFYCR_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
 {
-    /* check whether we should intercept this path */
+    int ret = 0;
+
+    DEBUG("lxstat was called for %s....\n", path);
     if (unifycr_intercept_path(path)) {
-        /* ERROR: fn not yet supported */
-        fprintf(stderr, "Function not yet supported @ %s:%d\n", __FILE__, __LINE__);
-        errno = ENOENT;
-        return -1;
+        if (vers != 3) {
+            errno = EINVAL;
+            return -1;
+        }
+
+        if (!buf) {
+            errno = EFAULT;
+            return -1;
+        }
+
+        /* get file id for path */
+        int fid = unifycr_get_fid_from_path(path);
+
+        if (fid < 0) {
+            /* file doesn't exist */
+            errno = ENOENT;
+            return -1;
+        }
+
+        /* get meta data for this file */
+        ret = unifycr_fid_stat(fid, buf);
+        if (ret < 0)
+            errno = ENOENT;
+
+        return ret;
     } else {
         MAP_OR_FAIL(__lxstat);
-        int ret = UNIFYCR_REAL(__lxstat)(vers, path, buf);
+        ret = UNIFYCR_REAL(__lxstat)(vers, path, buf);
         return ret;
     }
 }
+
+int UNIFYCR_WRAP(__fxstat)(int vers, int fd, struct stat *buf)
+{
+    int ret = 0;
+
+    /* check whether we should intercept this file descriptor */
+    if (unifycr_intercept_fd(&fd)) {
+        if (vers != 3) {
+            errno = EINVAL;
+            return -1;
+        }
+
+        if (!buf) {
+            errno = EFAULT;
+            return -1;
+        }
+
+        int fid = unifycr_get_fid_from_fd(fd);
+
+        if (fid < 0)
+            return UNIFYCR_ERR_BADF;
+
+        ret = unifycr_fid_stat(fid, buf);
+        if (ret < 0)
+            errno = ENOENT;
+
+        return ret;
+    } else {
+        MAP_OR_FAIL(__fxstat);
+        ret = UNIFYCR_REAL(__fxstat)(vers, fd, buf);
+        return ret;
+    }
+}
+
 
 /* ---------------------------------------
  * POSIX wrappers: file descriptors
@@ -706,12 +818,19 @@ off_t UNIFYCR_WRAP(lseek)(int fd, off_t offset, int whence)
 
 off64_t UNIFYCR_WRAP(lseek64)(int fd, off64_t offset, int whence)
 {
+    int tmpfd = fd;
+
     /* check whether we should intercept this file descriptor */
-    if (unifycr_intercept_fd(&fd)) {
-        /* ERROR: fn not yet supported */
-        fprintf(stderr, "Function not yet supported @ %s:%d\n", __FILE__, __LINE__);
-        errno = EBADF;
-        return (off64_t) (-1);
+    if (unifycr_intercept_fd(&tmpfd)) {
+        if (sizeof(off_t) == sizeof(off64_t))
+            return (off64_t) UNIFYCR_WRAP(lseek) (fd, (off_t) offset, whence);
+        else {
+            /* ERROR: fn not yet supported */
+            fprintf(stderr, "Function not yet supported @ %s:%d\n",
+                    __FILE__, __LINE__);
+            errno = EBADF;
+            return (off64_t) (-1);
+        }
     } else {
         MAP_OR_FAIL(lseek64);
         off64_t ret = UNIFYCR_REAL(lseek64)(fd, offset, whence);
@@ -1761,21 +1880,6 @@ void *UNIFYCR_WRAP(mmap64)(void *addr, size_t length, int prot, int flags,
     } else {
         MAP_OR_FAIL(mmap64);
         void *ret = UNIFYCR_REAL(mmap64)(addr, length, prot, flags, fd, offset);
-        return ret;
-    }
-}
-
-int UNIFYCR_WRAP(__fxstat)(int vers, int fd, struct stat *buf)
-{
-    /* check whether we should intercept this file descriptor */
-    if (unifycr_intercept_fd(&fd)) {
-        /* ERROR: fn not yet supported */
-        fprintf(stderr, "Function not yet supported @ %s:%d\n", __FILE__, __LINE__);
-        errno = EBADF;
-        return -1;
-    } else {
-        MAP_OR_FAIL(__fxstat);
-        int ret = UNIFYCR_REAL(__fxstat)(vers, fd, buf);
         return ret;
     }
 }
