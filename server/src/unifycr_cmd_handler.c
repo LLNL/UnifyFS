@@ -330,7 +330,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
 
 	if ( out.ret == 0 ) {
     	tmp_config->thrd_idxs[sock_get_id()] = arraylist_size(thrd_list) - 1;
-    	tmp_config->client_ranks[sock_get_id()] = local_rank_idx;
+    	tmp_config->client_ranks[sock_get_id()] = in.local_rank_idx;
     	tmp_config->dbg_ranks[sock_get_id()] = 0; /*add debug rank*/
 
 	    rc = attach_to_shm(tmp_config, in.app_id, in.local_rank_idx);
@@ -339,7 +339,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     }
 
 	if ( out.ret == 0 ) {
-    	rc = open_log_file(tmp_config, in.app_id, local_rank_idx);
+    	rc = open_log_file(tmp_config, in.app_id, in.local_rank_idx);
     	if (rc < 0) 
        		 out.ret = rc;
     }
@@ -423,6 +423,26 @@ static void unifycr_fsync_rpc(hg_handle_t handle)
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(unifycr_fsync_rpc)
+
+static void unifycr_read_rpc(hg_handle_t handle)
+{
+    unifycr_read_in_t in;
+    int ret = HG_Get_input(handle, &in);
+    assert(ret == HG_SUCCESS);
+
+    unifycr_read_out_t out;
+
+    out.ret = rm_read_remote_data(in.app_id, in.local_rank_idx, in.gfid, in.read_count);
+
+    margo_free_input(handle, &in);
+
+    hg_return_t hret = margo_respond(handle, &out);
+
+    assert(hret == HG_SUCCESS);
+
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(unifycr_read_rpc)
 
 /**
 * receive and store the client-side information,

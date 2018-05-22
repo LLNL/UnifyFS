@@ -50,25 +50,25 @@ struct timespec shm_wait_tm;
 * @param req_num: number of read requests
 * @return success/error code
 */
-int rm_read_remote_data(int sock_id, int req_num)
+int rm_read_remote_data(int app_id, int client_id, int gfid, int req_num)
 {
 
     int rc;
 
-    int app_id = invert_sock_ids[sock_id];
+    //int app_id = invert_sock_ids[sock_id];
     app_config_t *app_config =
         (app_config_t *)arraylist_get(app_config_list, app_id);
 
-  int client_id = app_config->client_ranks[sock_id];
-    int dbg_rank = app_config->dbg_ranks[sock_id];
+  	//int client_id = app_config->client_ranks[sock_id];
+    //int dbg_rank = app_config->dbg_ranks[sock_id];
 
-    int thrd_id = app_config->thrd_idxs[sock_id];
+    int thrd_id = app_config->thrd_idxs[sock_get_id()];
     thrd_ctrl_t *thrd_ctrl = (thrd_ctrl_t *)arraylist_get(thrd_list, thrd_id);
 
     pthread_mutex_lock(&thrd_ctrl->thrd_lock);
 
     /* get the locations of all the read requests from the key-value store*/
-    rc = meta_batch_get(app_id, client_id, thrd_id, dbg_rank,
+    rc = meta_batch_get(app_id, client_id, thrd_id, 0,
                         app_config->shm_req_bufs[client_id], req_num,
                         thrd_ctrl->del_req_set);
 
