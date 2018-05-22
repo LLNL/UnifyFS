@@ -51,13 +51,6 @@
 #include <mpi.h>
 #include <openssl/md5.h>
 
-/* add margo and argobots */
-#include <abt.h>
-#include <abt-snoozer.h>
-#include <margo.h>
-#include "unifycr_client.h"
-#include "unifycr_clientcalls_rpc.h"
-
 #ifdef ENABLE_NUMA_POLICY
 #include <numa.h>
 #endif
@@ -67,6 +60,11 @@
 #include "gotcha/gotcha.h"
 #include "gotcha_map_unifycr_list.h"
 #endif
+
+#include "unifycr_client.c"
+
+/* global rpc context (probably should find a better spot for this) */
+unifycr_client_rpc_context_t* unifycr_rpc_context = NULL;
 
 static int unifycr_fpos_enabled   = 1;  /* whether we can use fgetpos/fsetpos */
 
@@ -1151,6 +1149,84 @@ int unifycr_fid_truncate(int fid, off_t length)
         off_t gap_size = length - size;
         int zero_rc = unifycr_fid_write_zero(fid, size, gap_size);
         if (zero_rc != UNIFYCR_SUCCESS) {
+            return UNIFYCR_ERR_IO;
+        }
+    }
+
+    /* set the new size */
+    meta->size = length;
+
+    return UNIFYCR_SUCCESS;
+}
+
+/*
+ * hash a path to gfid
+ * @param path: file path
+ * return: error code, gfid
+ * */
+static int unifycr_get_global_fid(const char *path, int *gfid)
+{
+    MD5_CTX ctx;
+
+    unsigned char md[16];
+    memset(md, 0, 16);
+
+    MD5_Init(&ctx);
+    MD5_Update(&ctx, path, strlen(path));
+    MD5_Final(md, &ctx);
+
+    *gfid = *((int *)md);
+    return UNIFYCR_SUCCESS;
+}
+
+/*
+ * send global file metadata to the delegator,
+ * which puts it to the key-value store
+ * @param gfid: global file id
+ * @return: error code
+ * */
+static int set_global_file_meta(unifycr_metaset_in_t* in,
+                                unifycr_fattr_t* f_meta)
+{
+    in->gfid      = f_meta->gfid;
+    in->filename = f_meta->filename;
+
+    return UNIFYCR_SUCCESS;
+}
+
+/*
+ * get global file metadata from the delegator,
+ * which retrieves the data from key-value store
+ * @param gfid: global file id
+ * @return: error code
+ * @return: file_meta that point to the structure of
+ * the retrieved metadata
+ * */
+static int get_global_file_meta(unifycr_metaget_in_t* in, unifycr_fattr_t **file_meta)
+{
+    *file_meta = (unifycr_fattr_t *)malloc(sizeof(unifycr_fattr_t));
+    in->gfid     = (*file_meta)->gfid;
+    return UNIFYCR_SUCCESS;
+}
+
+/*
+ * insert file attribute to attributed share memory buffer
+ * */
+static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,
+                         unifycr_fattr_t *ins_fattr)
+{
+    int meta_cnt = *(ptr_f_meta_log->ptr_num_entries), i;
+    unifycr_fattr_t *meta_entry = ptr_f_meta_log->meta_entry;
+
+    for (i = 0; i < meta_cnt - 1; i++) {
+        if (meta_entry[i].fid > ins_fattr->fid) {
+            break;
+        }
+
+        /* write zero values to new bytes */
+        off_t gap_size = length - size;
+        int zero_rc = unifycr_fid_write_zero(fid, size, gap_size);
+        if (zero_rc != UNIFYCR_SUCCESS) {
             return (int)UNIFYCR_ERROR_IO;
         }
     }
@@ -1194,9 +1270,27 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
 
     DEBUG("unifycr_get_fid_from_path() gave %d (gfid = %d)\n", fid, gfid);
 
+<<<<<<< 9d75bf2fb6c48567ae3815c7ced6a41a4cc44e05
     found_global =
         (unifycr_get_global_file_meta(gfid, &gfattr) == UNIFYCR_SUCCESS);
     found_local = (fid >= 0);
+=======
+            unifycr_fattr_t *ptr_meta = NULL;
+            rc = unifycr_client_metaget_rpc_invoke(&unifycr_rpc_context,
+                                                   &ptr_meta);
+
+            if (ptr_meta == NULL) {
+                fid = -1;
+            } else {
+                /* other process has created this file, but its
+                 * attribute is not cached locally,
+                 * allocate a file id slot for this existing file */
+                fid = unifycr_fid_create_file(path);
+                if (fid < 0) {
+                    DEBUG("Failed to create new file %s\n", path);
+                    return UNIFYCR_ERR_NFILE;
+                }
+>>>>>>> organize client invocations and add client rpc implementations
 
     /* possibly, the file still exists in our local cache but globally
      * unlinked. Invalidate the entry
@@ -1223,9 +1317,18 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
          */
         unifycr_filemeta_t *meta = NULL;
 
+<<<<<<< 9d75bf2fb6c48567ae3815c7ced6a41a4cc44e05
         fid = unifycr_fid_create_file(path);
         if (fid < 0) {
             DEBUG("failed to create a new file %s\n", path);
+=======
+                unifycr_client_metaset_rpc_invoke(&unifycr_rpc_context,
+                                                  new_fmeta);
+
+                ins_file_meta(&unifycr_fattrs,
+                              new_fmeta);
+                free(new_fmeta);
+>>>>>>> organize client invocations and add client rpc implementations
 
             /* FIXME: UNIFYCR_ERROR_NFILE or UNIFYCR_ERROR_IO ? */
             return (int) UNIFYCR_ERROR_IO;
@@ -1979,40 +2082,6 @@ int unifycr_unmount(void)
     return UNIFYCR_SUCCESS;
 }
 
-/* invokes the mount rpc function by calling unifycr_sync_to_del */
-static uint32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t** unifycr_rpc_context)
-{
-    hg_handle_t handle;
-    unifycr_mount_in_t in;
-    unifycr_mount_out_t out;
-    hg_return_t hret;
-
-    printf("invoking the mount rpc function in client\n");
-
-
-    //fill in input struct
-    hret = margo_create((*unifycr_rpc_context)->mid,
-                            (*unifycr_rpc_context)->svr_addr,
-                            (*unifycr_rpc_context)->unifycr_mount_rpc_id, &handle);
-    assert(hret == HG_SUCCESS);
-
-    //fill in input struct by calling unifycr_sync_to_del
-    unifycr_sync_to_del(&in);
-
-    hret = margo_forward(handle, &in);
-    assert(hret == HG_SUCCESS);
-
-    /* decode response */
-    hret = margo_get_output(handle, &out);
-    assert(hret == HG_SUCCESS);
-
-    printf("Got response ret: %d\n", out.ret);
-
-    margo_free_output(handle, &out);
-    margo_destroy(handle);
-    return out.ret;
-}
-
 /**
  * Transfer the client-side context information to the corresponding
  * delegator on the server side.
@@ -2305,7 +2374,12 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
 
     (*unifycr_rpc_context)->unifycr_metaset_rpc_id =
         MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_metaset_rpc",
-                       unifycr_metaget_in_t, unifycr_metaget_out_t,
+                       unifycr_metaset_in_t, unifycr_metaset_out_t,
+                       NULL);
+
+    (*unifycr_rpc_context)->unifycr_fsync_rpc_id =
+        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_fsync_rpc",
+                       unifycr_fsync_in_t, unifycr_fsync_out_t,
                        NULL);
 
     /* resolve server address */
@@ -2697,7 +2771,6 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     fscanf(fp, "%s", addr_string);
     fclose(fp);
 
-    unifycr_client_rpc_context_t* unifycr_rpc_context = NULL;
     unifycr_client_rpc_init(addr_string, &unifycr_rpc_context);
 
     //TODO: call client rpc function here (which calls unifycr_sync_to_del

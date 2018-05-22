@@ -10,6 +10,7 @@
 
 #include <unistd.h>
 #include <margo.h>
+#include "unifycr-internal.h"
 
  typedef struct ClientRpcContext
  {
@@ -21,12 +22,30 @@
     hg_id_t unifycr_mount_rpc_id;
     hg_id_t unifycr_metaget_rpc_id;
     hg_id_t unifycr_metaset_rpc_id;
+    hg_id_t unifycr_fsync_rpc_id;
  } unifycr_client_rpc_context_t;
 
-static int unifycr_client_rpc_init(char* svr_addr_str,
-                             unifycr_client_rpc_context_t** unifycr_rpc_context);
+/* global rpc context (probably should find a better spot for this) */
+extern unifycr_client_rpc_context_t* unifycr_rpc_context;
 
+int unifycr_client_rpc_init(char* svr_addr_str,
+                             unifycr_client_rpc_context_t**
+                             unifycr_rpc_context);
 
-static uint32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t** unifycr_rpc_context);
+uint32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t**
+                                                unifycr_rpc_context);
 
+uint32_t unifycr_client_metaset_rpc_invoke(unifycr_client_rpc_context_t**
+                                                  unifycr_rpc_context,
+                                                  unifycr_fattr_t* f_meta);
+
+uint32_t unifycr_client_metaget_rpc_invoke(unifycr_client_rpc_context_t**
+                                                  unifycr_rpc_context,
+                                                  unifycr_fattr_t** file_meta);
+
+uint32_t unifycr_client_fsync_rpc_invoke(unifycr_client_rpc_context_t**
+                                                  unifycr_rpc_context,
+                                                  uint32_t app_id,
+                                                  uint32_t local_rank_idx,
+                                                  uint32_t gfid);
 #endif

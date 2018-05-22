@@ -43,7 +43,7 @@
     MERCURY_GEN_PROC(unifycr_metaget_out_t,
                      ((int64_t)(st_size))\
                      ((uint32_t)(ret))\
-        		   	 ((hg_const_string_t)(filename)))
+                     ((hg_const_string_t)(filename)))
     MERCURY_GEN_PROC(unifycr_metaget_in_t,
         ((int32_t)(gfid)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_metaget_rpc)
