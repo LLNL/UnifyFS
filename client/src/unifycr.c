@@ -78,16 +78,6 @@
 
 #include "unifycr-internal.h"
 
-#ifdef MACHINE_BGQ
-/* BG/Q to get personality and persistent memory */
-#include <sys/mman.h>
-#include <hwi/include/common/uci.h>
-#include <firmware/include/personality.h>
-#include <spi/include/kernel/memory.h>
-#include "mpi.h"
-#include <mpix.h>
-#endif /* MACHINE_BGQ */
-
 #ifdef UNIFYCR_GOTCHA
 #include "gotcha/gotcha_types.h"
 #include "gotcha/gotcha.h"
@@ -1574,61 +1564,6 @@ static void *unifycr_superblock_shmget(size_t size, key_t key)
     return scr_shmblock;
 }
 
-#ifdef MACHINE_BGQ
-static void *unifycr_superblock_bgq(size_t size, const char *name)
-{
-    /* BGQ allocates memory in units of 1MB */
-    unsigned long block_size = 1024 * 1024;
-
-    /* round request up to integer number of blocks */
-    unsigned long num_blocks = (unsigned long)size / block_size;
-    if (block_size * num_blocks < size) {
-        num_blocks++;
-    }
-    unsigned long size_1MB = num_blocks * block_size;
-
-    /* open file in persistent memory */
-    int fd = persist_open((char *)name, O_RDWR, 0600);
-    if (fd < 0) {
-        perror("unable to open persistent memory file");
-        return NULL;
-    }
-
-    /* truncate file to correct size */
-    int rc = ftruncate(fd, (off_t)size_1MB);
-    if (rc < 0) {
-        perror("ftruncate of persistent memory region failed");
-        close(fd);
-        return NULL;
-    }
-
-    /* mmap file */
-    void *shmptr = mmap(NULL, (size_t)size_1MB, PROT_READ | PROT_WRITE, MAP_SHARED,
-                        fd, 0);
-    if (shmptr == MAP_FAILED) {
-        perror("mmap of shared memory region failed");
-        close(fd);
-        return NULL;
-    }
-
-    /* close persistent memory file */
-    close(fd);
-
-    /* init our global variables to point to spots in superblock */
-    unifycr_init_pointers(shmptr);
-
-    /* initialize data structures within block if we haven't already */
-    uint32_t *header = (uint32_t *) shmptr;
-    uint32_t magic = *header;
-    if (magic != 0xdeadbeef) {
-        unifycr_init_structures();
-        *header = 0xdeadbeef;
-    }
-
-    return shmptr;
-}
-#endif /* MACHINE_BGQ */
-
 /* converts string like 10mb to unsigned long long integer value of 10*1024*1024 */
 static int unifycr_abtoull(char *str, unsigned long long *val)
 {
@@ -1915,14 +1850,8 @@ static int unifycr_init(int rank)
 
         /* get a superblock of persistent memory and initialize our
          * global variables for this block */
-#ifdef MACHINE_BGQ
-        char bgqname[100];
-        snprintf(bgqname, sizeof(bgqname), "memory_rank_%d", rank);
-        unifycr_superblock = unifycr_superblock_bgq(superblock_size, bgqname);
-#else /* MACHINE_BGQ */
         unifycr_superblock = unifycr_superblock_shmget(superblock_size,
                              unifycr_mount_shmget_key);
-#endif /* MACHINE_BGQ */
         if (unifycr_superblock == NULL) {
             DEBUG("unifycr_superblock_shmget() failed\n");
             return UNIFYCR_FAILURE;
