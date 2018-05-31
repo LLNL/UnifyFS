@@ -10,6 +10,36 @@
 #include "unifycr_client.h"
 #include "unifycr_clientcalls_rpc.h"
 
+/*
+ * send global file metadata to the delegator,
+ * which puts it to the key-value store
+ * @param gfid: global file id
+ * @return: error code
+ * */
+int set_global_file_meta(unifycr_metaset_in_t* in,
+                                unifycr_fattr_t* f_meta)
+{
+    in->gfid      = f_meta->gfid;
+    in->filename = f_meta->filename;
+
+    return UNIFYCR_SUCCESS;
+}
+
+/*
+ * get global file metadata from the delegator,
+ * which retrieves the data from key-value store
+ * @param gfid: global file id
+ * @return: error code
+ * @return: file_meta that point to the structure of
+ * the retrieved metadata
+ * */
+int get_global_file_meta(unifycr_metaget_in_t* in, unifycr_fattr_t **file_meta)
+{
+    *file_meta = (unifycr_fattr_t *)malloc(sizeof(unifycr_fattr_t));
+    in->gfid     = (*file_meta)->gfid;
+    return UNIFYCR_SUCCESS;
+}
+
 /* invokes the mount rpc function by calling unifycr_sync_to_del */
 uint32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t** unifycr_rpc_context)
 {

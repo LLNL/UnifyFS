@@ -1430,89 +1430,9 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
                                &tmp_read_req_set, unifycr_key_slice_range,
                                &read_req_set);
 
-
-    shm_meta_t *tmp_sh_meta;
-
-    int cmd = COMM_READ;
-
-    memset(cmd_buf, 0, sizeof(cmd_buf));
-    memcpy(cmd_buf, &cmd, sizeof(int));
-    memcpy(cmd_buf + sizeof(int), &(read_req_set.count), sizeof(int));
-
-    *((int *)shm_recvbuf) = 0;
-    *((int *)shm_recvbuf + 1) = 0;
-
-    for (i = 0; i < read_req_set.count; i++) {
-        tot_sz += read_req_set.read_reqs[i].length;
-
-        tmp_sh_meta = (shm_meta_t *)(shm_reqbuf + i * sizeof(shm_meta_t));
-        tmp_sh_meta->src_fid = read_req_set.read_reqs[i].fid;
-        tmp_sh_meta->offset = read_req_set.read_reqs[i].offset;
-        tmp_sh_meta->length = read_req_set.read_reqs[i].length;
-
-        memcpy(shm_reqbuf + i * sizeof(shm_meta_t),
-               tmp_sh_meta, sizeof(shm_meta_t));
-    }
-    __real_write(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
-
-    /*
-     * ToDo: Exception handling when some of the requests
-     * are missed
-     * */
-    while (tot_sz > 0) {
-        cmd_fd.events = POLLIN | POLLPRI;
-        cmd_fd.revents = 0;
-
-        rc = poll(&cmd_fd, 1, -1);
-        if (rc == 0) {
-            /*time out event*/
-        } else if (rc > 0) {
-            read_req_t tmp_read_req;
-            shm_meta_t *tmp_req;
-
-            if (cmd_fd.revents != 0) {
-                if (cmd_fd.revents == POLLIN) {
-                    int sh_cursor = 0;
-
-                    (void) __real_read(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
-                    ptr_size = (int *)shm_recvbuf;
-                    num = *((int *)shm_recvbuf + 1); /*The first int spared out for size*/
-                    ptr_num = (int *)((char *)shm_recvbuf + sizeof(int));
-
-                    int j;
-                    for (j = 0; j < num; j++) {
-                        tmp_req = (shm_meta_t *)(shm_recvbuf
-                                                 + 2 * sizeof(int) + sh_cursor);
-
-                        sh_cursor += sizeof(shm_meta_t);
-                        *ptr_size -= sizeof(shm_meta_t);
-
-                        tmp_read_req.fid = tmp_req->src_fid;
-                        tmp_read_req.offset = tmp_req->offset;
-                        tmp_read_req.length = tmp_req->length;
-                        tmp_read_req.buf = shm_recvbuf + 2 * sizeof(int) + sh_cursor;
-
-                        rc = unifycr_match_received_ack(read_req,
-                                                        count, &tmp_read_req);
-                        if (rc == 0) {
-                            sh_cursor += tmp_req->length;
-                            tot_sz -= tmp_req->length;
-                            *ptr_size -= tmp_req->length;
-                            (*ptr_num)--;
-                        } else {
-                            rc = -1;
-                            return rc;
-                        }
-                    }
-                } else {
-
-                }
-            }
-
-        } else {
-
-        }
-    }
+    /* invoke read rpc here */
+    unifycr_client_read_rpc_invoke(&unifycr_rpc_context, app_id, local_rank_idx,
+                                   ptr_meta_entry->gfid, read_req_set.count);
 
     return rc;
 }

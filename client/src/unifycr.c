@@ -1180,36 +1180,6 @@ static int unifycr_get_global_fid(const char *path, int *gfid)
 }
 
 /*
- * send global file metadata to the delegator,
- * which puts it to the key-value store
- * @param gfid: global file id
- * @return: error code
- * */
-static int set_global_file_meta(unifycr_metaset_in_t* in,
-                                unifycr_fattr_t* f_meta)
-{
-    in->gfid      = f_meta->gfid;
-    in->filename = f_meta->filename;
-
-    return UNIFYCR_SUCCESS;
-}
-
-/*
- * get global file metadata from the delegator,
- * which retrieves the data from key-value store
- * @param gfid: global file id
- * @return: error code
- * @return: file_meta that point to the structure of
- * the retrieved metadata
- * */
-static int get_global_file_meta(unifycr_metaget_in_t* in, unifycr_fattr_t **file_meta)
-{
-    *file_meta = (unifycr_fattr_t *)malloc(sizeof(unifycr_fattr_t));
-    in->gfid     = (*file_meta)->gfid;
-    return UNIFYCR_SUCCESS;
-}
-
-/*
  * insert file attribute to attributed share memory buffer
  * */
 static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,
@@ -2086,7 +2056,7 @@ int unifycr_unmount(void)
  * Transfer the client-side context information to the corresponding
  * delegator on the server side.
  */
-static int unifycr_sync_to_del(unifycr_mount_in_t* in)
+int unifycr_sync_to_del(unifycr_mount_in_t* in)
 {
     //int cmd = COMM_MOUNT;
     int num_procs_per_node = local_rank_cnt;
