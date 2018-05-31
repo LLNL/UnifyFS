@@ -209,7 +209,7 @@ int meta_process_attr_set(int gfid, const char* filename)
     int rc = ULFS_SUCCESS;
 
     fattr_val_t fattr_vals_local;
-	memset(&fattr_vals_local, 0, sizeof(fattr_val_t));
+    memset(&fattr_vals_local, 0, sizeof(fattr_val_t));
 
     strcpy(fattr_vals_local.fname, filename);
 
@@ -293,23 +293,23 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
 
     md->primary_index = unifycr_indexes[0];
 
-	int used_entries = 0;
+    int used_entries = 0;
     int i;
     for (i = 0; i < num_entries; i++) {
-		if ( meta_payload[i].fid == gfid ) {
-        	unifycr_keys[used_entries]->fid = meta_payload[i].fid;
-        	unifycr_keys[used_entries]->offset = meta_payload[i].file_pos;
-        	unifycr_vals[used_entries]->addr = meta_payload[i].mem_pos;
-        	unifycr_vals[used_entries]->len = meta_payload[i].length;
-        	unifycr_vals[used_entries]->delegator_id = glb_rank;
-        	memcpy((char *) & (unifycr_vals[i]->app_rank_id), &app_id, sizeof(int));
-        	memcpy((char *) & (unifycr_vals[i]->app_rank_id) + sizeof(int),
-               	&client_side_id, sizeof(int));
-	
-        	unifycr_key_lens[used_entries] = sizeof(unifycr_key_t);
-        	unifycr_val_lens[used_entries] = sizeof(unifycr_val_t);
-			used_entries++;
-		}
+        if ( meta_payload[i].fid == gfid ) {
+            unifycr_keys[used_entries]->fid = meta_payload[i].fid;
+            unifycr_keys[used_entries]->offset = meta_payload[i].file_pos;
+            unifycr_vals[used_entries]->addr = meta_payload[i].mem_pos;
+            unifycr_vals[used_entries]->len = meta_payload[i].length;
+            unifycr_vals[used_entries]->delegator_id = glb_rank;
+            memcpy((char *) & (unifycr_vals[i]->app_rank_id), &app_id, sizeof(int));
+            memcpy((char *) & (unifycr_vals[i]->app_rank_id) + sizeof(int),
+                &client_side_id, sizeof(int));
+    
+            unifycr_key_lens[used_entries] = sizeof(unifycr_key_t);
+            unifycr_val_lens[used_entries] = sizeof(unifycr_val_t);
+            used_entries++;
+        }
     }
 
     // print_fsync_indices(unifycr_keys, unifycr_vals, num_entries);
@@ -349,21 +349,21 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
                                 + app_config->fmeta_offset + page_sz);
 
 
-	used_entries = 0;
+    used_entries = 0;
     for (i = 0; i < num_entries; i++) {
-		if ( attr_payload[i].gfid == gfid ) {
-        	*fattr_keys[used_entries] = attr_payload[i].gfid;
-        	fattr_vals[used_entries]->file_attr = attr_payload[i].file_attr;
-        	strcpy(fattr_vals[used_entries]->fname, attr_payload[i].filename);
-	
-        	fattr_key_lens[used_entries] = sizeof(fattr_key_t);
-        	fattr_val_lens[used_entries] = sizeof(fattr_val_t);
-			used_entries++;
-		}
+        if ( attr_payload[i].gfid == gfid ) {
+            *fattr_keys[used_entries] = attr_payload[i].gfid;
+            fattr_vals[used_entries]->file_attr = attr_payload[i].file_attr;
+            strcpy(fattr_vals[used_entries]->fname, attr_payload[i].filename);
+    
+            fattr_key_lens[used_entries] = sizeof(fattr_key_t);
+            fattr_val_lens[used_entries] = sizeof(fattr_val_t);
+            used_entries++;
+        }
     }
-	assert(used_entries == 1);
+    assert(used_entries == 1);
 
-	// should be changed to mdhimPut once assertion is validated
+    // should be changed to mdhimPut once assertion is validated
     brm = mdhimBPut(md, (void **)(&fattr_keys[0]), fattr_key_lens,
                     (void **)(&fattr_vals[0]), fattr_val_lens, used_entries,
                     NULL, NULL);

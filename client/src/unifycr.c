@@ -2357,11 +2357,12 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
     }
 
     /* register read rpc with mercury */
-    /*(*unifycr_rpc_context)->read_rpc_id = MARGO_REGISTER((*unifycr_rpc_context)->mid,
-                                                         "unifycr_mount_rpc",
-                                                         unifycr_mount_in_t,
-                                                         unifycr_mount_out_t,
-                                                         unifycr_mount_rpc);*/
+    (*unifycr_rpc_context)->unifycr_read_rpc_id =
+        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_read_rpc",
+                       unifycr_read_in_t,
+                       unifycr_read_out_t,
+                       NULL);
+
     (*unifycr_rpc_context)->unifycr_mount_rpc_id   =
         MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_mount_rpc",
                        unifycr_mount_in_t,

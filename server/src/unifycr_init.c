@@ -205,6 +205,14 @@ static margo_instance_id setup_sm_target()
                      unifycr_mount_in_t, unifycr_mount_out_t,
                      unifycr_mount_rpc);
 
+    MARGO_REGISTER(mid, "unifycr_fsync_rpc",
+                     unifycr_fsync_in_t, unifycr_fsync_out_t,
+                     unifycr_fsync_rpc);
+
+    MARGO_REGISTER(mid, "unifycr_read_rpc",
+                     unifycr_read_in_t, unifycr_read_out_t,
+                     unifycr_read_rpc);
+
     MARGO_REGISTER(mid, "unifycr_metaget_rpc",
                      unifycr_metaget_in_t, unifycr_metaget_out_t,
                      unifycr_metaget_rpc);

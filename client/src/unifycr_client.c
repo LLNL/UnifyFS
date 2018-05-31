@@ -155,3 +155,46 @@ uint32_t unifycr_client_fsync_rpc_invoke(unifycr_client_rpc_context_t**
     return out.ret;
 }
 
+/* invokes the client read rpc function */
+uint32_t unifycr_client_read_rpc_invoke(unifycr_client_rpc_context_t**
+                                                unifycr_rpc_context,
+                                                uint32_t app_id,
+                                                uint32_t local_rank_idx,
+                                                uint32_t gfid,
+                                                uint32_t read_count)
+{
+    hg_handle_t handle;
+    unifycr_read_in_t in;
+    unifycr_read_out_t out;
+    hg_return_t hret;
+
+    printf("invoking the read rpc function in client\n");
+
+    /* fill in input struct */
+    hret = margo_create((*unifycr_rpc_context)->mid,
+                            (*unifycr_rpc_context)->svr_addr,
+                            (*unifycr_rpc_context)->unifycr_read_rpc_id,
+                            &handle);
+    assert(hret == HG_SUCCESS);
+
+    /* fill in input struct */
+    in.app_id         = app_id;
+    in.local_rank_idx = local_rank_idx;
+    in.gfid           = gfid;
+    in.read_count     = read_count;
+
+    hret = margo_forward(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* decode response */
+    hret = margo_get_output(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    printf("Got response ret: %d\n", out.ret);
+
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+    return out.ret;
+}
+
+

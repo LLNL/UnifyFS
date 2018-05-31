@@ -24,7 +24,8 @@ typedef struct ServerRpcContext
     margo_instance_id mid;
     hg_context_t* hg_context;
     hg_class_t* hg_class ;
-    hg_id_t read_rpc_id;
+    hg_id_t unifycr_read_rpc_id;
+    hg_id_t unifycr_fsync_rpc_id;
     hg_id_t unifycr_mount_rpc_id;
     hg_id_t unifycr_metaget_rpc_id;
     hg_id_t unifycr_metaset_rpc_id;
