@@ -101,8 +101,7 @@ int main(int argc, char *argv[]) {
     struct aiocb **cb_list = (struct aiocb **)malloc (num_reqs * \
       sizeof (struct aiocb *)); /*list of read requests in lio_listio*/
 
-	unifycr_mount("/tmp", rank, rank_num,\
-	  		1, 1);
+	unifycr_mount("/tmp", rank, rank_num, 1);
 
 	if (pat == 1) {
 		sprintf(tmpfname, "%s%d", fname, rank);

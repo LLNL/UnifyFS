@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
 		  }
 		}
 
-	unifycr_mount("/tmp", rank, rank_num, 0, 1);
+	unifycr_mount("/tmp", rank, rank_num, 0);
 
 	char *buf = malloc (tran_sz);
 	if (buf == NULL)
