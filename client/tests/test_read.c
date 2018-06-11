@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
     struct aiocb **cb_list = (struct aiocb **)malloc (num_reqs * \
       sizeof (struct aiocb *)); /*list of read requests in lio_listio*/
 
-    int mnt_success = unifycr_mount("/tmp", rank, rank_num, 1, 1);
+    int mnt_success = unifycr_mount("/tmp", rank, rank_num, 1);
 
     if (mnt_success != 0 && rank == 0) {
         printf("unifycr mount call failed\n");
