@@ -1407,6 +1407,7 @@ static int unifycr_get_spillblock(size_t size, const char *path)
             /* spillover block exists; attach and return */
             spillblock_fd = __real_open(path, O_RDWR);
         } else {
+            DEBUG("Failed to open spill file: %s: %s\n", path, strerror(errno));
             perror("open() in unifycr_get_spillblock() failed");
             return -1;
         }
@@ -1569,15 +1570,15 @@ static int unifycr_abtoull(char *str, unsigned long long *val)
 {
     /* check that we have a string */
     if (str == NULL) {
-        DEBUG("scr_abtoull: Can't convert NULL string to bytes @ %s:%d",
-              __FILE__, __LINE__);
+        DEBUG("%s: Can't convert NULL string to bytes @ %s:%d",
+              __func__, __FILE__, __LINE__);
         return UNIFYCR_FAILURE;
     }
 
     /* check that we have a value to write to */
     if (val == NULL) {
-        DEBUG("scr_abtoull: NULL address to store value @ %s:%d",
-              __FILE__, __LINE__);
+        DEBUG("%s: NULL address to store value @ %s:%d",
+              __func__, __FILE__, __LINE__);
         return UNIFYCR_FAILURE;
     }
 
@@ -1586,8 +1587,8 @@ static int unifycr_abtoull(char *str, unsigned long long *val)
     char *next = NULL;
     double num = strtod(str, &next);
     if (errno != 0) {
-        DEBUG("scr_abtoull: Invalid double: %s @ %s:%d",
-              str, __FILE__, __LINE__);
+        DEBUG("%s: Invalid double: %s @ %s:%d",
+              __func__, str, __FILE__, __LINE__);
         return UNIFYCR_FAILURE;
     }
 
@@ -1608,8 +1609,8 @@ static int unifycr_abtoull(char *str, unsigned long long *val)
             units = 1024 * 1024 * 1024;
             break;
         default:
-            DEBUG("scr_abtoull: Unexpected byte string %s @ %s:%d",
-                  str, __FILE__, __LINE__);
+            DEBUG("%s: Unexpected byte string %s @ %s:%d",
+                  __func__, str, __FILE__, __LINE__);
             return UNIFYCR_FAILURE;
         }
 
@@ -1622,16 +1623,16 @@ static int unifycr_abtoull(char *str, unsigned long long *val)
 
         /* check that we've hit the end of the string */
         if (*next != 0) {
-            DEBUG("scr_abtoull: Unexpected byte string: %s @ %s:%d",
-                  str, __FILE__, __LINE__);
+            DEBUG("%s: Unexpected byte string: %s @ %s:%d",
+                  __func__, str, __FILE__, __LINE__);
             return UNIFYCR_FAILURE;
         }
     }
 
     /* check that we got a positive value */
     if (num < 0) {
-        DEBUG("scr_abtoull: Byte string must be positive: %s @ %s:%d",
-              str, __FILE__, __LINE__);
+        DEBUG("%s: Byte string must be positive: %s @ %s:%d",
+              __func__, str, __FILE__, __LINE__);
         return UNIFYCR_FAILURE;
     }
 
@@ -1641,16 +1642,103 @@ static int unifycr_abtoull(char *str, unsigned long long *val)
     return UNIFYCR_SUCCESS;
 }
 
+/* if named parameter is set, return pointer in value,
+ * returns 1 if set, 0 otherwise
+ */
+static int unifycr_param_get(
+    const char *name,
+    char **pvalue)
+{
+    char *value = getenv(name);
+
+    if (value != NULL) {
+        *pvalue = value;
+        return 1;
+    }
+    return 0;
+}
+
+/* if named parameter is set, return pointer in value and return 1,
+ * otherwise, return pointer to defval and return 0
+ */
+static int unifycr_param_get_str(
+    const char *name,
+    const char *defval,
+    char **pvalue)
+{
+    if (unifycr_param_get(name, pvalue)) {
+        return 1;
+    } else {
+        *pvalue = (char *) defval;
+        return 0;
+    }
+}
+
+/* if named parameter is set, return integer value in pvalue and return 1,
+ * otherwise, return defval in pvalue and return 0
+ */
+static int unifycr_param_get_int(
+    const char *name,
+    int defval,
+    int *pvalue)
+{
+    char *value;
+
+    if (unifycr_param_get(name, &value)) {
+        *pvalue = atoi(value);
+        return 1;
+    } else {
+        *pvalue = defval;
+        return 0;
+    }
+}
+
+/* if named parameter is set, return integer value in pvalue and return 1,
+ * otherwise, return defval in pvalue and return 0
+ */
+static int unifycr_param_get_long(
+    const char *name,
+    long defval,
+    long *pvalue)
+{
+    char *value;
+
+    if (unifycr_param_get(name, &value)) {
+        *pvalue = atol(value);
+        return 1;
+    } else {
+        *pvalue = defval;
+        return 0;
+    }
+}
+
+/* if named parameter is set, parse string as byte representation,
+ * return integer value in pvalue and return 1,
+ * otherwise, return defval in pvalue and return 0
+ */
+static int unifycr_param_get_bytes(
+    const char *name,
+    unsigned long long defval,
+    unsigned long long *pvalue)
+{
+    char *value;
+
+    if (unifycr_param_get(name, &value)) {
+        unifycr_abtoull(value, pvalue);
+        return 1;
+    } else {
+        *pvalue = defval;
+        return 0;
+    }
+}
+
 static int unifycr_init(int rank)
 {
-    if (! unifycr_initialized) {
-
-        /* unifycr debug level default is zero */
-        unifycr_debug_level = 0;
-
-        /* set debug level to UNIFYCR_DEBUG env variable if it is set */
-        if (getenv("UNIFYCR_DEBUG"))
-            unifycr_debug_level = atoi(getenv("UNIFYCR_DEBUG"));
+    if (!unifycr_initialized) {
+        /* unifycr debug level default is zero
+         * set debug level to UNIFYCR_DEBUG env variable if it is set
+         */
+        unifycr_param_get_int("UNIFYCR_DEBUG", 0, &unifycr_debug_level);
 
 #ifdef UNIFYCR_GOTCHA
         enum gotcha_error_t result;
@@ -1695,39 +1783,25 @@ static int unifycr_init(int rank)
         /* will we use spillover to store the files? */
         unifycr_use_spillover = 1;
 
-        env = getenv("UNIFYCR_USE_SPILLOVER");
-        if (env) {
-            int val = atoi(env);
-            if (val != 1)
-                unifycr_use_spillover = 0;
-
-        }
-
+        /* determine whether to use spillover to store files */
+        unifycr_param_get_int("UNIFYCR_USE_SPILLOVER", 1,
+            &unifycr_use_spillover);
+        if (unifycr_use_spillover != 1)
+            unifycr_use_spillover = 0;
         DEBUG("are we using spillover? %d\n", unifycr_use_spillover);
 
         /* determine max number of files to store in file system */
-        unifycr_max_files = UNIFYCR_MAX_FILES;
-        env = getenv("UNIFYCR_MAX_FILES");
-        if (env) {
-            int val = atoi(env);
-            unifycr_max_files = val;
-        }
+        unifycr_param_get_int("UNIFYCR_MAX_FILES", UNIFYCR_MAX_FILES,
+            &unifycr_max_files);
 
         /* determine number of bits for chunk size */
-        unifycr_chunk_bits = UNIFYCR_CHUNK_BITS;
-        env = getenv("UNIFYCR_CHUNK_BITS");
-        if (env) {
-            int val = atoi(env);
-            unifycr_chunk_bits = val;
-        }
+        unifycr_param_get_int("UNIFYCR_CHUNK_BITS", UNIFYCR_CHUNK_BITS,
+            &unifycr_chunk_bits);
 
         /* determine maximum number of bytes of memory for chunk storage */
-        unifycr_chunk_mem = UNIFYCR_CHUNK_MEM;
-        env = getenv("UNIFYCR_CHUNK_MEM");
-        if (env) {
-            unifycr_abtoull(env, &bytes);
-            unifycr_chunk_mem = (size_t) bytes;
-        }
+        unifycr_param_get_bytes("UNIFYCR_CHUNK_MEM", UNIFYCR_CHUNK_MEM,
+            &bytes);
+        unifycr_chunk_mem = (size_t) bytes;
 
         /* set chunk size, set chunk offset mask, and set total number
          * of chunks */
@@ -1736,60 +1810,42 @@ static int unifycr_init(int rank)
         unifycr_max_chunks = unifycr_chunk_mem >> unifycr_chunk_bits;
 
         /* determine maximum number of bytes of spillover for chunk storage */
-        unifycr_spillover_size = UNIFYCR_SPILLOVER_SIZE;
-        env = getenv("UNIFYCR_SPILLOVER_SIZE");
-        if (env) {
-            unifycr_abtoull(env, &bytes);
-            unifycr_spillover_size = (size_t) bytes;
-        }
+        unifycr_param_get_bytes(
+            "UNIFYCR_SPILLOVER_SIZE", UNIFYCR_SPILLOVER_SIZE, &bytes);
+        unifycr_spillover_size = (size_t) bytes;
 
         /* set number of chunks in spillover device */
         unifycr_spillover_max_chunks = unifycr_spillover_size >> unifycr_chunk_bits;
 
         if (fs_type == UNIFYCR_LOG) {
-            unifycr_index_buf_size = UNIFYCR_INDEX_BUF_SIZE;
-            env = getenv("UNIFYCR_INDEX_BUF_SIZE");
-            if (env) {
-                unifycr_abtoull(env, &bytes);
-                unifycr_index_buf_size = (size_t) bytes;
-            }
+            unifycr_param_get_bytes(
+                "UNIFYCR_INDEX_BUF_SIZE", UNIFYCR_INDEX_BUF_SIZE, &bytes);
+            unifycr_index_buf_size = (size_t) bytes;
+
             unifycr_max_index_entries =
                 unifycr_index_buf_size / sizeof(unifycr_index_t);
 
-            unifycr_fattr_buf_size = UNIFYCR_FATTR_BUF_SIZE;
-            env = getenv("UNIFYCR_ATTR_BUF_SIZE");
-            if (env) {
-                unifycr_abtoull(env, &bytes);
-                unifycr_fattr_buf_size = (size_t) bytes;
-            }
+            unifycr_param_get_bytes(
+                "UNIFYCR_ATTR_BUF_SIZE", UNIFYCR_FATTR_BUF_SIZE, &bytes);
+            unifycr_fattr_buf_size = (size_t) bytes;
+
             unifycr_max_fattr_entries =
                 unifycr_fattr_buf_size / sizeof(unifycr_fattr_t);
-
         }
-
-
-
 
 #ifdef ENABLE_NUMA_POLICY
-        env = getenv("UNIFYCR_NUMA_POLICY");
-        if (env) {
-            sprintf(unifycr_numa_policy, env);
-            DEBUG("NUMA policy used: %s\n", unifycr_numa_policy);
-        } else {
-            sprintf(unifycr_numa_policy, "default");
-        }
+        unifycr_param_get_str("UNIFYCR_NUMA_POLICY", "default", &env);
+        snprintf(unifycr_numa_policy, sizeof(unifycr_numa_policy), "%s", env);
+        DEBUG("NUMA policy used: %s\n", unifycr_numa_policy);
 
-        env = getenv("UNIFYCR_USE_NUMA_BANK");
-        if (env) {
-            int val = atoi(env);
-            if (val >= 0) {
-                unifycr_numa_bank = val;
-            } else {
+        if (unifycr_param_get_int("UNIFYCR_USE_NUMA_BANK", -1,
+            &unifycr_numa_bank)) {
+            /* if the user gave us a negative value, print a usage warning */
+            if (unifycr_numa_bank < 0) {
                 fprintf(stderr, "Incorrect NUMA bank specified in UNIFYCR_USE_NUMA_BANK."
                         "Proceeding with default allocation policy!\n");
             }
         }
-
 #endif
 
         /* record the max fd for the system */
@@ -1858,14 +1914,12 @@ static int unifycr_init(int rank)
         }
         char spillfile_prefix[100];
 
-        env = getenv("UNIFYCR_EXTERNAL_DATA_DIR");
-        if (env) {
-            strcpy(external_data_dir, env);
-        } else {
+        if (unifycr_param_get_str("UNIFYCR_EXTERNAL_DATA_DIR", "", &env) == 0) {
             DEBUG("UNIFYCR_EXTERNAL_DATA_DIR not set to an existing writable"
                   " path (i.e UNIFYCR_EXTERNAL_DATA_DIR=/mnt/ssd):\n");
             return UNIFYCR_FAILURE;
         }
+        snprintf(external_data_dir, sizeof(external_data_dir), "%s", env);
 
         sprintf(spillfile_prefix, "%s/spill_%d_%d.log",
                 external_data_dir, app_id, local_rank_idx);
@@ -1883,14 +1937,12 @@ static int unifycr_init(int rank)
             }
         }
 
-        env = getenv("UNIFYCR_EXTERNAL_META_DIR");
-        if (env) {
-            strcpy(external_meta_dir, env);
-        } else {
+        if (unifycr_param_get_str("UNIFYCR_EXTERNAL_META_DIR", "", &env) == 0) {
             DEBUG("UNIFYCR_EXTERNAL_META_DIR not set to an existing writable"
                   " path (i.e UNIFYCR_EXTERNAL_META_DIR=/mnt/ssd):\n");
             return UNIFYCR_FAILURE;
         }
+        snprintf(external_meta_dir, sizeof(external_meta_dir), "%s", env);
 
         /*ToDo: add the spillover feature for the index metadata*/
         sprintf(spillfile_prefix, "%s/spill_index_%d_%d.log",
@@ -2107,12 +2159,10 @@ static int unifycr_sync_to_del(void)
  */
 static int unifycr_init_recv_shm(int local_rank_idx, int app_id)
 {
-    char *env = getenv("SHM_RECV_SIZE");
     char shm_name[GEN_STR_LEN] = {0};
     int rc = -1;
 
-    if (env)
-        shm_recv_size = atol(env);
+    unifycr_param_get_long("SHM_RECV_SIZE", shm_recv_size, &shm_recv_size);
 
     sprintf(shm_name, "%d-recv-%d", app_id, local_rank_idx);
 
@@ -2146,13 +2196,11 @@ static int unifycr_init_recv_shm(int local_rank_idx, int app_id)
  */
 static int unifycr_init_req_shm(int local_rank_idx, int app_id)
 {
-    char *env = getenv("SHM_REQ_SIZE");
     char shm_name[GEN_STR_LEN] = {0};
     int rc = -1;
 
     /* initialize request buffer size*/
-    if (env)
-        shm_req_size = atol(env);
+    unifycr_param_get_long("SHM_REQ_SIZE", shm_req_size, &shm_req_size);
 
     sprintf(shm_name, "%d-req-%d", app_id, local_rank_idx);
     reqbuf_fd = shm_open(shm_name, MMAP_OPEN_FLAG, MMAP_OPEN_MODE);
@@ -2537,17 +2585,13 @@ static int CountTasksPerNode(int rank, int numTasks)
 /* mount memfs at some prefix location */
 int unifycrfs_mount(const char prefix[], size_t size, int rank)
 {
-    char *env = getenv("UNIFYCR_USE_SINGLE_SHM");
-
     unifycr_mount_prefix = strdup(prefix);
     unifycr_mount_prefixlen = strlen(unifycr_mount_prefix);
 
-    if (env) {
-        int val = atoi(env);
-
-        if (val != 0)
-            unifycr_use_single_shm = 1;
-    }
+    unifycr_param_get_int("UNIFYCR_USE_SINGLE_SHM",
+        unifycr_use_single_shm, &unifycr_use_single_shm);
+    if (unifycr_use_single_shm != 0)
+        unifycr_use_single_shm = 1;
 
     if (unifycr_use_single_shm)
         unifycr_mount_shmget_key = UNIFYCR_SUPERBLOCK_KEY + rank;
