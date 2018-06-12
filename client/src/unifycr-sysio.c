@@ -40,6 +40,7 @@
  * Please also read this file LICENSE.CRUISE
  */
 
+#define _LARGEFILE64_SOURCE
 #include "unifycr-runtime-config.h"
 #include <stdio.h>
 #include <unistd.h>
@@ -757,9 +758,12 @@ int UNIFYCR_WRAP(open64)(const char *path, int flags, ...)
 
     /* check whether we should intercept this path */
     if (unifycr_intercept_path(path)) {
-        /* ERROR: fn not yet supported */
-        fprintf(stderr, "Function not yet supported @ %s:%d\n", __FILE__, __LINE__);
-        return -1;
+        /* Call open wrapper with LARGEFILE flag set*/
+        if (flags & O_CREAT) {
+            ret = UNIFYCR_REAL(open)(path, flags | O_LARGEFILE, mode);
+        } else {
+            ret = UNIFYCR_REAL(open)(path, flags | O_LARGEFILE);
+        }
     } else {
         MAP_OR_FAIL(open64);
         if (flags & O_CREAT) {
