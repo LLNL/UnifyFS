@@ -15,12 +15,11 @@ filesystem. For instance, to use UnifyCR on all path prefixes that begin with
 
 .. code-block:: C
 
-        unifycr_mount('/tmp', rank, rank_num, 0, UNIFYCR_LOG);
+        unifycr_mount('/tmp', rank, rank_num, 0);
 
 Where /tmp is the path prefix you want UnifyCR to intercept. The rank and rank 
 number is the rank you are currently on, and the number of tasks you have 
-running in your job. The zero corresponds to the app id, and the subtype 
-describes which filesystem subtype you want UnifyCR to use. 
+running in your job. Lastly, the zero corresponds to the app id.
 
 ---------------------------
 Unmounting 
