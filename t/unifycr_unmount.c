@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
     /*
      * Verify unifycr_mount succeeds.
      */
-    rc = unifycr_mount(unifycr_root, rank, rank_num, 0, 1);
+    rc = unifycr_mount(unifycr_root, rank, rank_num, 0);
     ok(rc == 0, "unifycr_mount at %s (rc=%d)", unifycr_root, rc);
 
     rc = unifycr_unmount();

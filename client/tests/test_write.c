@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
 		  }
 		}
 
-    int mnt_success = unifycr_mount("/tmp", rank, rank_num, 0, 1);
+    int mnt_success = unifycr_mount("/tmp", rank, rank_num, 0);
 
     if (mnt_success != 0 && rank == 0) {
         printf("unifycr_mount call failed\n");

@@ -235,6 +235,7 @@ int UNIFYCR_WRAP(truncate)(const char *path, off_t length)
     if (unifycr_intercept_path(path)) {
         /* lookup the fd for the path */
         int fid = unifycr_get_fid_from_path(path);
+
         if (fid < 0) {
             /* ERROR: file does not exist */
             DEBUG("Couldn't find entry for %s in UNIFYCR\n", path);
@@ -383,6 +384,9 @@ int UNIFYCR_WRAP(fstat)(int fd, struct stat *buf)
  * NOTE on __xstat(2), __lxstat(2), and __fxstat(2)
  * The additional parameter vers shall be 3 or the behavior of these functions
  * is undefined. (ISO POSIX(2003))
+ *
+ * from /sys/stat.h, it seems that we need to test if vers being _STAT_VER,
+ * instead of using the absolute value 3.
  */
 
 int UNIFYCR_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
@@ -391,7 +395,7 @@ int UNIFYCR_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 
     DEBUG("xstat was called for %s....\n", path);
     if (unifycr_intercept_path(path)) {
-        if (vers != 3) {
+        if (vers != _STAT_VER) {
             errno = EINVAL;
             return -1;
         }
@@ -428,11 +432,10 @@ int UNIFYCR_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
 
     DEBUG("lxstat was called for %s....\n", path);
     if (unifycr_intercept_path(path)) {
-        if (vers != 3) {
+        if (vers != _STAT_VER) {
             errno = EINVAL;
             return -1;
         }
-
         if (!buf) {
             errno = EFAULT;
             return -1;
@@ -464,15 +467,22 @@ int UNIFYCR_WRAP(__fxstat)(int vers, int fd, struct stat *buf)
 {
     int ret = 0;
 
+    DEBUG("fxstat was called for fd %d....\n", fd);
+
     /* check whether we should intercept this file descriptor */
     if (unifycr_intercept_fd(&fd)) {
-        if (vers != 3) {
+        if (vers != _STAT_VER) {
             errno = EINVAL;
             return -1;
         }
 
+        if (fd < 0) {
+            errno = EBADF;
+            return -1;
+        }
+
         if (!buf) {
-            errno = EFAULT;
+            errno = EINVAL;
             return -1;
         }
 
@@ -904,27 +914,20 @@ ssize_t UNIFYCR_WRAP(read)(int fd, void *buf, size_t count)
         /* read data from file */
         size_t retcount;
 
-        if (fs_type != UNIFYCR_LOG) {
-            int read_rc = unifycr_fd_read(fd, filedesc->pos, buf, count, &retcount);
-            if (read_rc != UNIFYCR_SUCCESS) {
-                errno = unifycr_err_map_to_errno(read_rc);
-                return (ssize_t) (-1);
-            }
+        read_req_t tmp_req;
 
-        } else {
-            read_req_t tmp_req;
-            tmp_req.buf = buf;
-            tmp_req.fid = fd + unifycr_fd_limit;
-            tmp_req.length = count;
-            tmp_req.offset = filedesc->pos;
+        tmp_req.buf = buf;
+        tmp_req.fid = fd + unifycr_fd_limit;
+        tmp_req.length = count;
+        tmp_req.offset = filedesc->pos;
 
-            int ret = unifycr_fd_logreadlist(&tmp_req, 1);
-            if (!ret) {
-                retcount = 0;
-            } else {
-                retcount = count;
-            }
-        }
+        int ret = unifycr_fd_logreadlist(&tmp_req, 1);
+
+        if (!ret)
+            retcount = 0;
+        else
+            retcount = count;
+
         /* update position */
         filedesc->pos += (off_t) retcount;
         /* return number of bytes read */
@@ -941,6 +944,8 @@ ssize_t UNIFYCR_WRAP(write)(int fd, const void *buf, size_t count)
 {
     ssize_t ret;
 
+    DEBUG("write was called for fd %d....\n", fd);
+
     /* check whether we should intercept this file descriptor */
     if (unifycr_intercept_fd(&fd)) {
         /* get pointer to file descriptor structure */
@@ -951,24 +956,17 @@ ssize_t UNIFYCR_WRAP(write)(int fd, const void *buf, size_t count)
             return (ssize_t) (-1);
         }
 
-        if (fs_type != UNIFYCR_LOG) {
-            /* write data to file */
-            int write_rc = unifycr_fd_write(fd, filedesc->pos, buf, count);
-            if (write_rc != UNIFYCR_SUCCESS) {
-                errno = unifycr_err_map_to_errno(write_rc);
-                return (ssize_t) (-1);
-            }
-            ret = count;
-        } else {
-            fd += unifycr_fd_limit;
-            ret = pwrite(fd, buf, count, filedesc->pos);
-            /* pwrite() will set errno on error for us */
-            if (ret < 0)
-                return -1;
+        /* write data to file */
+        int write_rc = unifycr_fd_write(fd, filedesc->pos, buf, count);
+
+        if (write_rc != UNIFYCR_SUCCESS) {
+            errno = unifycr_err_map_to_errno(write_rc);
+            return (ssize_t) (-1);
         }
+        ret = count;
+
         /* update file position */
         filedesc->pos += ret;
-
     } else {
         MAP_OR_FAIL(write);
         ret = UNIFYCR_REAL(write)(fd, buf, count);
@@ -1517,26 +1515,20 @@ ssize_t UNIFYCR_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
         }
 
         size_t retcount;
-        if (fs_type != UNIFYCR_LOG) {
-            int read_rc = unifycr_fd_read(fd, offset, buf, count, &retcount);
-            if (read_rc != UNIFYCR_SUCCESS) {
-                errno = unifycr_err_map_to_errno(read_rc);
-                return (ssize_t) (-1);
-            }
-        } else {
-            read_req_t tmp_req;
-            tmp_req.buf = buf;
-            tmp_req.fid = fd + unifycr_fd_limit;
-            tmp_req.length = count;
-            tmp_req.offset = offset;
-            int read_rc =  unifycr_fd_logreadlist(&tmp_req, 1);
+        read_req_t tmp_req;
 
-            if (read_rc == 0) {
-                return count;
-            } else {
-                return 0;
-            }
-        }
+        tmp_req.buf = buf;
+        tmp_req.fid = fd + unifycr_fd_limit;
+        tmp_req.length = count;
+        tmp_req.offset = offset;
+
+        int read_rc =  unifycr_fd_logreadlist(&tmp_req, 1);
+
+        if (read_rc == 0)
+            return count;
+        else
+            return 0;
+
         /* return number of bytes read */
         return (ssize_t) retcount;
     } else {
@@ -1658,72 +1650,52 @@ int UNIFYCR_WRAP(fsync)(int fd)
             }
         }
 
-        if (fs_type == UNIFYCR_LOG) {
-            /*put indices to key-value store*/
-            int cmd = COMM_META;
-            memcpy(cmd_buf, &cmd, sizeof(int));
-            int flag = 3;
-            memcpy(cmd_buf + sizeof(int), &flag, sizeof(int));
-            int res = __real_write(client_sockfd, cmd_buf, sizeof(cmd_buf));
+        /*put indices to key-value store*/
+        int cmd = COMM_META;
+        int flag = 3;
+        int res = -1;
 
-            if (res != 0) {
-                int rc;
-                cmd_fd.events = POLLIN | POLLPRI;
-                cmd_fd.revents = 0;
+        memcpy(cmd_buf, &cmd, sizeof(int));
+        memcpy(cmd_buf + sizeof(int), &flag, sizeof(int));
 
-                rc = poll(&cmd_fd, 1, -1);
-                if (rc == 0) {
-                    /*time out event*/
-                } else if (rc > 0) {
-                    if (cmd_fd.revents != 0) {
-                        if (cmd_fd.revents == POLLIN) {
-                            int bytes_read = 0;
-                            bytes_read = __real_read(client_sockfd,
-                                                     cmd_buf, sizeof(cmd_buf));
-                            if (bytes_read == 0) {
+        res = __real_write(client_sockfd, cmd_buf, sizeof(cmd_buf));
+
+        if (res != 0) {
+            int rc;
+
+            cmd_fd.events = POLLIN | POLLPRI;
+            cmd_fd.revents = 0;
+
+            rc = poll(&cmd_fd, 1, -1);
+            if (rc == 0) {
+                /*time out event*/
+            } else if (rc > 0) {
+                if (cmd_fd.revents != 0) {
+                    if (cmd_fd.revents == POLLIN) {
+                        int bytes_read = 0;
+
+                        bytes_read = __real_read(client_sockfd,
+                                cmd_buf, sizeof(cmd_buf));
+                        if (bytes_read == 0) {
+                            return -1;
+                        } else {
+                            /**/
+                            if (*((int *)cmd_buf) != COMM_META ||
+                                    *((int *)cmd_buf + 1) != ACK_SUCCESS) {
                                 return -1;
                             } else {
-                                /**/
-                                if (*((int *)cmd_buf) != COMM_META ||
-                                    *((int *)cmd_buf + 1) != ACK_SUCCESS) {
-                                    return -1;
-                                } else {
 
-                                }
                             }
-                        } else {
-                            return -1;
                         }
+                    } else {
+                        return -1;
                     }
-
-                } else {
-                    return -1;
                 }
+
+            } else {
+                return -1;
             }
-            /* TODO: if using spill over we may have some fsyncing to do */
-
-            /* nothing to do in our case */
-            return 0;
-        } else {
-            MAP_OR_FAIL(fsync);
-            int ret = UNIFYCR_REAL(fsync)(fd);
-            return ret;
         }
-    }
-
-
-
-
-    /* check whether we should intercept this file descriptor */
-    if (unifycr_intercept_fd(&fd)) {
-        /* get the file id for this file descriptor */
-        int fid = unifycr_get_fid_from_fd(fd);
-        if (fid < 0) {
-            /* ERROR: invalid file descriptor */
-            errno = EBADF;
-            return -1;
-        }
-
         /* TODO: if using spill over we may have some fsyncing to do */
 
         /* nothing to do in our case */

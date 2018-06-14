@@ -310,12 +310,6 @@ typedef struct {
     int count;
 } index_set_t;
 
-typedef enum {
-    UNIFYCRFS,
-    UNIFYCR_LOG,
-    UNIFYCR_STRIPE,
-} fs_type_t;
-
 typedef struct {
     read_req_t read_reqs[UNIFYCR_MAX_READ_CNT];
     int count;
@@ -335,7 +329,6 @@ extern long shm_req_size;
 extern long shm_recv_size;
 extern char *shm_recvbuf;
 extern char *shm_reqbuf;
-extern fs_type_t fs_type;
 extern char cmd_buf[GEN_STR_LEN];
 extern char ack_msg[3];
 extern unifycr_fattr_buf_t unifycr_fattrs;
