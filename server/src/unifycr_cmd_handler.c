@@ -35,6 +35,7 @@
 #include <string.h>
 #include "log.h"
 #include "unifycr_global.h"
+#include "unifycr_meta.h"
 #include "unifycr_cmd_handler.h"
 #include "unifycr_request_manager.h"
 #include "unifycr_setup.h"

@@ -30,6 +30,7 @@
 #include "mdhim.h"
 #include "indexes.h"
 #include "log.h"
+#include "unifycr_meta.h"
 #include "unifycr_metadata.h"
 #include "arraylist.h"
 #include "unifycr_const.h"
