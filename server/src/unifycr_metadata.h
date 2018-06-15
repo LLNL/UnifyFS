@@ -38,6 +38,7 @@
 #include "indexes.h"
 #include "arraylist.h"
 #include "unifycr_const.h"
+#include "unifycr_meta.h"
 #include "unifycr_global.h"
 
 
@@ -54,13 +55,6 @@ typedef struct {
     unsigned long addr;
     unsigned long app_rank_id; /*include both app and rank id*/
 } unifycr_val_t;
-
-typedef struct {
-    off_t file_pos;
-    off_t mem_pos;
-    size_t length;
-    int fid;
-} unifycr_index_t;
 
 typedef struct {
     int fid;

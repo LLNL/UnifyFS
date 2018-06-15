@@ -17,7 +17,8 @@ libunifycr_common_la_SOURCES = \
   unifycr_configurator.h \
   unifycr_configurator.c \
   unifycr_runstate.h \
-  unifycr_runstate.c
+  unifycr_runstate.c \
+  unifycr_meta.h
 
 libunifycr_common_la_CPPFLAGS = -I$(top_builddir)/client
 libunifycr_common_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION)

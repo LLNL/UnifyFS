@@ -62,6 +62,7 @@
 #include <aio.h>
 #define __USE_GNU
 #include <pthread.h>
+#include "unifycr_meta.h"
 #include "unifycr-sysio.h"
 #include "unifycr-internal.h"
 
@@ -1393,15 +1394,15 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
      * */
 
     /*convert local fid to global fid*/
-    unifycr_fattr_t tmp_meta_entry;
-    unifycr_fattr_t *ptr_meta_entry;
+    unifycr_file_attr_t tmp_meta_entry;
+    unifycr_file_attr_t *ptr_meta_entry;
     for (i = 0; i < count; i++) {
         read_req[i].fid -= unifycr_fd_limit;
         tmp_meta_entry.fid = read_req[i].fid;
 
-        ptr_meta_entry = (unifycr_fattr_t *)bsearch(&tmp_meta_entry,
+        ptr_meta_entry = (unifycr_file_attr_t *)bsearch(&tmp_meta_entry,
                          unifycr_fattrs.meta_entry, *unifycr_fattrs.ptr_num_entries,
-                         sizeof(unifycr_fattr_t), compare_fattr);
+                         sizeof(unifycr_file_attr_t), compare_fattr);
         if (ptr_meta_entry != NULL) {
             read_req[i].fid = ptr_meta_entry->gfid;
         }

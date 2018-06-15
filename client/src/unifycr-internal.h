@@ -65,7 +65,9 @@
 #include "utlist.h"
 #include "uthash.h"
 
+
 #include "unifycr_configurator.h"
+#include "unifycr_meta.h"
 
 /* -------------------------------
  * Defines and types
@@ -269,27 +271,15 @@ typedef struct {
 } shm_meta_t; /*metadata format in the shared memory*/
 
 typedef struct {
-    off_t file_pos;
-    off_t mem_pos;
-    size_t length;
-    int fid;
-} unifycr_index_t;
-
-typedef struct {
     off_t *ptr_num_entries;
     unifycr_index_t *index_entry;
 } unifycr_index_buf_t;
 
-typedef struct {
-    int fid;
-    int gfid;
-    char filename[UNIFYCR_MAX_FILENAME];
-    struct stat file_attr;
-} unifycr_fattr_t;
+
 
 typedef struct {
     off_t *ptr_num_entries;
-    unifycr_fattr_t *meta_entry;
+    unifycr_file_attr_t *meta_entry;
 } unifycr_fattr_buf_t;
 
 typedef struct {

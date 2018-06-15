@@ -78,6 +78,7 @@
 #include <sys/shm.h>
 #include <sched.h>
 
+#include "unifycr_meta.h"
 #include "unifycr-internal.h"
 #include "unifycr_runstate.h"
 
@@ -942,7 +943,7 @@ static int unifycr_get_global_fid(const char *path, int *gfid)
  * @param gfid: global file id
  * @return: error code
  * */
-static int set_global_file_meta(unifycr_fattr_t *f_meta)
+static int set_global_file_meta(unifycr_file_attr_t *f_meta)
 {
     int cmd = COMM_META;
     int flag = 2;
@@ -951,7 +952,7 @@ static int set_global_file_meta(unifycr_fattr_t *f_meta)
     memcpy(cmd_buf, &cmd, sizeof(int));
     memcpy(cmd_buf + sizeof(int), &flag, sizeof(int));
     memcpy(cmd_buf + sizeof(int) + sizeof(int),
-           f_meta, sizeof(unifycr_fattr_t));
+           f_meta, sizeof(unifycr_file_attr_t));
 
     int rc = __real_write(client_sockfd, cmd_buf, sizeof(cmd_buf));
     if (rc != 0) {
@@ -1011,7 +1012,7 @@ static int set_global_file_meta(unifycr_fattr_t *f_meta)
  * @return: file_meta that point to the structure of
  * the retrieved metadata
  * */
-static int get_global_file_meta(int gfid, unifycr_fattr_t **file_meta)
+static int get_global_file_meta(int gfid, unifycr_file_attr_t **file_meta)
 {
     /* format value length, payload 1, payload 2*/
     int cmd = COMM_META;
@@ -1071,8 +1072,8 @@ static int get_global_file_meta(int gfid, unifycr_fattr_t **file_meta)
         return -1;
     }
 
-    *file_meta = (unifycr_fattr_t *)malloc(sizeof(unifycr_fattr_t));
-    memcpy(*file_meta, cmd_buf + 2 * sizeof(int), sizeof(unifycr_fattr_t));
+    *file_meta = (unifycr_file_attr_t *)malloc(sizeof(unifycr_file_attr_t));
+    memcpy(*file_meta, cmd_buf + 2 * sizeof(int), sizeof(unifycr_file_attr_t));
     return UNIFYCR_SUCCESS;
 }
 /*
@@ -1080,10 +1081,10 @@ static int get_global_file_meta(int gfid, unifycr_fattr_t **file_meta)
  * */
 
 static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,
-                         unifycr_fattr_t *ins_fattr)
+                         unifycr_file_attr_t *ins_fattr)
 {
     int meta_cnt = *(ptr_f_meta_log->ptr_num_entries), i;
-    unifycr_fattr_t *meta_entry = ptr_f_meta_log->meta_entry;
+    unifycr_file_attr_t *meta_entry = ptr_f_meta_log->meta_entry;
 
     /* TODO: Improve the search time */
     for (i = meta_cnt - 1; i >= 0; i--) {
@@ -1139,7 +1140,7 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
 
         gfid = abs(gfid);
 
-        unifycr_fattr_t *ptr_meta = NULL;
+        unifycr_file_attr_t *ptr_meta = NULL;
 
         rc = get_global_file_meta(gfid, &ptr_meta);
         if (ptr_meta == NULL)
@@ -1200,8 +1201,8 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
             }
 
             /*create a file and send its attribute to key-value store*/
-            unifycr_fattr_t *new_fmeta =
-                (unifycr_fattr_t *)malloc(sizeof(unifycr_fattr_t));
+            unifycr_file_attr_t *new_fmeta =
+                (unifycr_file_attr_t *)malloc(sizeof(unifycr_file_attr_t));
             strcpy(new_fmeta->filename, path);
             new_fmeta->fid = fid;
             new_fmeta->gfid = gfid;
@@ -1352,7 +1353,7 @@ static void *unifycr_init_pointers(void *superblock)
     ptr += unifycr_max_index_entries * sizeof(unifycr_index_t);
     unifycr_fattrs.ptr_num_entries = (off_t *)ptr;
     ptr += unifycr_page_size;
-    unifycr_fattrs.meta_entry = (unifycr_fattr_t *)ptr;
+    unifycr_fattrs.meta_entry = (unifycr_file_attr_t *)ptr;
 
     return ptr;
 }
@@ -1674,7 +1675,7 @@ static int unifycr_init(int rank)
                 unifycr_fattr_buf_size = (size_t)l;
         }
         unifycr_max_fattr_entries =
-            unifycr_fattr_buf_size / sizeof(unifycr_fattr_t);
+            unifycr_fattr_buf_size / sizeof(unifycr_file_attr_t);
 
 #ifdef ENABLE_NUMA_POLICY
         env = getenv("UNIFYCR_NUMA_POLICY");
@@ -1749,11 +1750,11 @@ static int unifycr_init(int rank)
         }
 
         /* index region size */
-        sb_size += unifycr_max_index_entries * sizeof(unifycr_index_t) +
+        sb_size += unifycr_max_index_entries * sizeof(unifycr_file_attr_t) +
                    unifycr_page_size;
 
         /* attribute region size */
-        sb_size += unifycr_max_fattr_entries * sizeof(unifycr_fattr_t) +
+        sb_size += unifycr_max_fattr_entries * sizeof(unifycr_file_attr_t) +
                    unifycr_page_size;
 
         glb_superblock_size = sb_size;
@@ -1931,7 +1932,7 @@ static int unifycr_sync_to_del(void)
     long meta_size = unifycr_max_index_entries * sizeof(unifycr_index_t);
     long fmeta_offset = (void *)unifycr_fattrs.ptr_num_entries -
         unifycr_superblock;
-    long fmeta_size = unifycr_max_fattr_entries * sizeof(unifycr_fattr_t);
+    long fmeta_size = unifycr_max_fattr_entries * sizeof(unifycr_file_attr_t);
     long data_offset = (void *)unifycr_chunks - unifycr_superblock;
     long data_size = (long)unifycr_max_chunks * unifycr_chunk_size;
     char external_spill_dir[UNIFYCR_MAX_FILENAME] = {0};
@@ -2252,8 +2253,8 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
 
 int compare_fattr(const void *a, const void *b)
 {
-    const unifycr_fattr_t *ptr_a = a;
-    const unifycr_fattr_t *ptr_b = b;
+    const unifycr_file_attr_t *ptr_a = a;
+    const unifycr_file_attr_t *ptr_b = b;
 
     if (ptr_a->fid > ptr_b->fid)
         return 1;

@@ -62,6 +62,7 @@
 #include <pthread.h>
 
 #include "unifycr-internal.h"
+#include "unifycr_meta.h"
 
 extern int dbgrank;
 extern unifycr_index_buf_t unifycr_indices;
@@ -375,13 +376,14 @@ static int unifycr_logio_chunk_write(
         cur_idx.length = count;
 
         /* find the corresponding file attr entry and update attr*/
-        unifycr_fattr_t tmp_meta_entry;
+        unifycr_file_attr_t tmp_meta_entry;
         tmp_meta_entry.fid = fid;
-        unifycr_fattr_t *ptr_meta_entry
-            = (unifycr_fattr_t *)bsearch(&tmp_meta_entry,
+        unifycr_file_attr_t *ptr_meta_entry
+            = (unifycr_file_attr_t *)bsearch(&tmp_meta_entry,
                                          unifycr_fattrs.meta_entry,
                                          *unifycr_fattrs.ptr_num_entries,
-                                         sizeof(unifycr_fattr_t), compare_fattr);
+                                         sizeof(unifycr_file_attr_t),
+					 compare_fattr);
         if (ptr_meta_entry !=  NULL) {
             ptr_meta_entry->file_attr.st_size = pos + count;
         }
@@ -455,12 +457,14 @@ static int unifycr_logio_chunk_write(
         cur_idx.length = count;
 
         /* find the corresponding file attr entry and update attr*/
-        unifycr_fattr_t tmp_meta_entry;
+        unifycr_file_attr_t tmp_meta_entry;
         tmp_meta_entry.fid = fid;
-        unifycr_fattr_t *ptr_meta_entry
-            = (unifycr_fattr_t *)bsearch(&tmp_meta_entry,
-                                         unifycr_fattrs.meta_entry, *unifycr_fattrs.ptr_num_entries,
-                                         sizeof(unifycr_fattr_t), compare_fattr);
+        unifycr_file_attr_t *ptr_meta_entry
+            = (unifycr_file_attr_t *)bsearch(&tmp_meta_entry,
+                                         unifycr_fattrs.meta_entry,
+					 *unifycr_fattrs.ptr_num_entries,
+                                         sizeof(unifycr_file_attr_t),
+					 compare_fattr);
         if (ptr_meta_entry !=  NULL) {
             ptr_meta_entry->file_attr.st_size = pos + count;
         }
