@@ -40,6 +40,7 @@
 #include <unistd.h>
 
 #include "ini.h"
+#include "tinyexpr.h"
 #include "unifycr_configurator.h"
 
 #define UNIFYCR_CFG_MAX_MSG 1024
@@ -269,12 +270,12 @@ int unifycr_config_set_defaults(unifycr_cfg_t *cfg)
 
 #define UNIFYCR_CFG(sec, key, typ, dv, desc, vfn)       \
     val = stringify(dv);                                \
-    if (val != NULL)                                    \
+    if (0 != strcmp(val, "NULLSTRING"))                 \
         cfg->sec##_##key = strdup(val);
 
 #define UNIFYCR_CFG_CLI(sec, key, typ, dv, desc, vfn, opt, use) \
     val = stringify(dv);                                        \
-    if (val != NULL)                                            \
+    if (0 != strcmp(val, "NULLSTRING"))                         \
         cfg->sec##_##key = strdup(val);
 
 #define UNIFYCR_CFG_MULTI(sec, key, typ, desc, vfn, me)                 \
@@ -659,9 +660,9 @@ int validate_value(const char *section,
     else if (strcmp(typ, "BOOL") == 0)
         return configurator_bool_check(section, key, val, NULL);
     else if (strcmp(typ, "INT") == 0)
-        return configurator_int_check(section, key, val, NULL);
+        return configurator_int_check(section, key, val, new_val);
     else if (strcmp(typ, "FLOAT") == 0)
-        return configurator_int_check(section, key, val, NULL);
+        return configurator_int_check(section, key, val, new_val);
 
     return 0;
 }
@@ -686,7 +687,7 @@ int unifycr_config_validate(unifycr_cfg_t *cfg)
     } else if (new_val != NULL) {                                       \
         if (cfg->sec##_##key != NULL)                                   \
             free(cfg->sec##_##key);                                     \
-        cfg->sec##_##key = strdup(new_val);                             \
+        cfg->sec##_##key = new_val;                                     \
         new_val = NULL;                                                 \
     }
 
@@ -699,7 +700,7 @@ int unifycr_config_validate(unifycr_cfg_t *cfg)
     } else if (new_val != NULL) {                                       \
         if (cfg->sec##_##key != NULL)                                   \
             free(cfg->sec##_##key);                                     \
-        cfg->sec##_##key = strdup(new_val);                             \
+        cfg->sec##_##key = new_val;                                     \
         new_val = NULL;                                                 \
     }
 
@@ -713,7 +714,7 @@ int unifycr_config_validate(unifycr_cfg_t *cfg)
         } else if (new_val != NULL) {                                   \
             if (cfg->sec##_##key[u] != NULL)                            \
                 free(cfg->sec##_##key[u]);                              \
-            cfg->sec##_##key[u] = strdup(new_val);                      \
+            cfg->sec##_##key[u] = new_val;                              \
             new_val = NULL;                                             \
         }                                                               \
     }
@@ -728,7 +729,7 @@ int unifycr_config_validate(unifycr_cfg_t *cfg)
         } else if (new_val != NULL) {                                   \
             if (cfg->sec##_##key[u] != NULL)                            \
                 free(cfg->sec##_##key[u]);                              \
-            cfg->sec##_##key[u] = strdup(new_val);                      \
+            cfg->sec##_##key[u] = new_val;                              \
             new_val = NULL;                                             \
         }                                                               \
     }
@@ -740,6 +741,28 @@ int unifycr_config_validate(unifycr_cfg_t *cfg)
 #undef UNIFYCR_CFG_MULTI_CLI
 
     return rc;
+}
+
+int contains_expression(const char *val)
+{
+    static char expr_chars[8] = {'(', ')', '+', '-', '*', '/', '%', '^'};
+    size_t s;
+    char c;
+    char *match;
+    for (s=0; s < sizeof(expr_chars); s++) {
+        c = expr_chars[s];
+        match = strchr(val, c);
+        if (match != NULL) {
+            if (((c == '+') || (c == '-')) && (match > val)) {
+                // check for exponent notation
+                c = *(--match);
+                if ((c == 'e') || (c == 'E'))
+                   return 0; // tinyexpr can't handle exponent notation
+            }
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int configurator_bool_val(const char *val,
@@ -798,17 +821,38 @@ int configurator_float_val(const char *val,
                            double *d)
 {
     int err;
-    double check;
+    double check, teval;
     char *end = NULL;
 
     if ((val == NULL) || (d == NULL))
         return EINVAL;
 
-    errno = 0;
-    check = strtod(val, &end);
-    err = errno;
-    if ((err == ERANGE) || (end == val) || (*end != 0))
-        return EINVAL;
+    if (contains_expression(val)) {
+        err = 0;
+        teval = te_interp(val, &err);
+        if (err == 0)
+            check = teval;
+        else
+            return EINVAL;
+    }
+    else {
+        errno = 0;
+        check = strtod(val, &end);
+        err = errno;
+        if ((err == ERANGE) || (end == val))
+            return EINVAL;
+        else if (*end != 0) {
+            switch (*end) {
+            case 'f':
+            case 'l':
+            case 'F':
+            case 'L':
+                break;
+            default:
+                return EINVAL;
+            }
+        }
+    }
 
     *d = check;
     return 0;
@@ -819,29 +863,64 @@ int configurator_float_check(const char *s,
                              const char *val,
                              char **o)
 {
+    int rc;
+    size_t len;
     double d;
+    char *newval = NULL;
 
     if (val == NULL) // unset is OK
         return 0;
 
-    return configurator_float_val(val, &d);
+    rc = configurator_float_val(val, &d);
+    if ((o != NULL) && (rc == 0) && contains_expression(val)) {
+        // update config setting to evaluated value
+        len = strlen(val) + 1; // evaluated value should be shorter
+        newval = (char*) calloc(len, sizeof(char));
+        if (newval != NULL) {
+            snprintf(newval, len, "%.6le", d);
+            *o = newval;
+        }
+    }
+    return rc;
 }
 
 int configurator_int_val(const char *val,
                          long *l)
 {
     long check;
+    double teval;
     int err;
     char *end = NULL;
 
     if ((val == NULL) || (l == NULL))
         return EINVAL;
 
-    errno = 0;
-    check = strtol(val, &end, 0);
-    err = errno;
-    if ((err == ERANGE) || (end == val) || (*end != 0))
-        return EINVAL;
+    if (contains_expression(val)) {
+        err = 0;
+        teval = te_interp(val, &err);
+        if(err == 0)
+            check = (long)teval;
+        else
+            return EINVAL;
+    }
+    else {
+        errno = 0;
+        check = strtol(val, &end, 0);
+        err = errno;
+        if ((err == ERANGE) || (end == val))
+            return EINVAL;
+        else if (*end != 0) {
+            switch (*end) {
+            case 'l':
+            case 'u':
+            case 'L':
+            case 'U':
+                break;
+            default:
+                return EINVAL;
+            }
+        }
+    }
 
     *l = check;
     return 0;
@@ -852,12 +931,25 @@ int configurator_int_check(const char *s,
                            const char *val,
                            char **o)
 {
+    int rc;
+    size_t len;
     long l;
+    char *newval = NULL;
 
-    if (val == NULL) // unset is OK
+    if( NULL == val ) // unset is OK
         return 0;
 
-    return configurator_int_val(val, &l);
+    rc = configurator_int_val(val, &l);
+    if ((o != NULL) && (rc == 0) && contains_expression(val)) {
+        // update config setting to evaluated value
+        len = strlen(val) + 1; // evaluated value should be shorter
+        newval = (char*) calloc(len, sizeof(char));
+        if (newval != NULL) {
+            snprintf(newval, len, "%ld", l);
+            *o = newval;
+        }
+    }
+    return rc;
 }
 
 int configurator_file_check(const char *s,
