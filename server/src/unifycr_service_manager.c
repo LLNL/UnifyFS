@@ -1012,24 +1012,22 @@ int sm_exit()
 int sm_init_socket()
 {
     int rc = -1;
-
     int len;
     int result;
+    struct sockaddr_un serv_addr;
+    char tmp_path[UNIFYCR_MAX_FILENAME] = {0};
 
     sm_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sm_sockfd  < 0) {
         return -1;
     }
 
-    struct sockaddr_un serv_addr;
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sun_family = AF_UNIX;
-    char tmp_path[GEN_STR_LEN] = {0};
-
 
     /*which delegator I belong to*/
-    sprintf(tmp_path, "%s%d", DEF_SOCK_PATH,
-            local_rank_idx);
+    snprintf(tmp_path, sizeof(tmp_path), "%s%d",
+             DEF_SOCK_PATH, local_rank_idx);
 
     strcpy(serv_addr.sun_path, tmp_path);
     len = sizeof(serv_addr);
@@ -1042,9 +1040,7 @@ int sm_init_socket()
         return rc;
     }
 
-
     return 0;
-
 }
 
 void print_service_msgs(service_msgs_t *service_msgs)

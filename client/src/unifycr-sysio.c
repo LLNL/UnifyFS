@@ -489,7 +489,7 @@ int UNIFYCR_WRAP(__fxstat)(int vers, int fd, struct stat *buf)
         int fid = unifycr_get_fid_from_fd(fd);
 
         if (fid < 0)
-            return UNIFYCR_ERR_BADF;
+            return UNIFYCR_ERROR_BADF;
 
         ret = unifycr_fid_stat(fid, buf);
         if (ret < 0)
@@ -518,25 +518,25 @@ int unifycr_fd_read(int fd, off_t pos, void *buf, size_t count,
     /* get the file id for this file descriptor */
     int fid = unifycr_get_fid_from_fd(fd);
     if (fid < 0) {
-        return UNIFYCR_ERR_BADF;
+        return UNIFYCR_ERROR_BADF;
     }
 
     /* it's an error to read from a directory */
     if (unifycr_fid_is_dir(fid)) {
         /* TODO: note that read/pread can return this, but not fread */
-        return UNIFYCR_ERR_ISDIR;
+        return UNIFYCR_ERROR_ISDIR;
     }
 
     /* check that file descriptor is open for read */
     unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
     if (! filedesc->read) {
-        return UNIFYCR_ERR_BADF;
+        return UNIFYCR_ERROR_BADF;
     }
 
     /* TODO: is it safe to assume that off_t is bigger than size_t? */
     /* check that we don't overflow the file length */
     if (unifycr_would_overflow_offt(pos, (off_t) count)) {
-        return UNIFYCR_ERR_OVERFLOW;
+        return UNIFYCR_ERROR_OVERFLOW;
     }
 
     /* TODO: check that file is open for reading */
@@ -577,25 +577,25 @@ int unifycr_fd_write(int fd, off_t pos, const void *buf, size_t count)
     /* get the file id for this file descriptor */
     int fid = unifycr_get_fid_from_fd(fd);
     if (fid < 0) {
-        return UNIFYCR_ERR_BADF;
+        return UNIFYCR_ERROR_BADF;
     }
 
     /* it's an error to write to a directory */
     if (unifycr_fid_is_dir(fid)) {
-        return UNIFYCR_ERR_INVAL;
+        return UNIFYCR_ERROR_INVAL;
     }
 
     /* check that file descriptor is open for write */
     unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
     if (! filedesc->write) {
-        return UNIFYCR_ERR_BADF;
+        return UNIFYCR_ERROR_BADF;
     }
 
     /* TODO: is it safe to assume that off_t is bigger than size_t? */
     /* check that our write won't overflow the length */
     if (unifycr_would_overflow_offt(pos, (off_t) count)) {
         /* TODO: want to return EFBIG here for streams */
-        return UNIFYCR_ERR_OVERFLOW;
+        return UNIFYCR_ERROR_OVERFLOW;
     }
 
     /* TODO: check that file is open for writing */
@@ -630,7 +630,7 @@ int unifycr_fd_write(int fd, off_t pos, const void *buf, size_t count)
             return extend_rc;
         }
     } else {
-        return UNIFYCR_ERR_IO;
+        return UNIFYCR_ERROR_IO;
     }
 
     /* finally write specified data to file */
@@ -1418,6 +1418,8 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
     shm_meta_t *tmp_sh_meta;
 
     int cmd = COMM_READ;
+
+    memset(cmd_buf, 0, sizeof(cmd_buf));
     memcpy(cmd_buf, &cmd, sizeof(int));
     memcpy(cmd_buf + sizeof(int), &(read_req_set.count), sizeof(int));
 
@@ -1655,6 +1657,7 @@ int UNIFYCR_WRAP(fsync)(int fd)
         int flag = 3;
         int res = -1;
 
+        memset(cmd_buf, 0, sizeof(cmd_buf));
         memcpy(cmd_buf, &cmd, sizeof(int));
         memcpy(cmd_buf + sizeof(int), &flag, sizeof(int));
 

@@ -44,47 +44,60 @@
  * @param item short description
  */
 #define UNIFYCR_ERROR_ENUMERATOR                                        \
+    ENUMITEM(ACCEPT, "Failed to accept RDMA connection.")               \
+    ENUMITEM(ADDR, "Failed to parse IP address and port.")              \
+    ENUMITEM(APPCONFIG, "Failed to initialize application config.")     \
+    ENUMITEM(ARRAY_BOUNDS, "Array access out of bounds.")               \
+    ENUMITEM(BADF, "Bad file descriptor.")                              \
+    ENUMITEM(CHANNEL, "Error creating completion channel.")             \
+    ENUMITEM(CONNECT, "Error in RDMA connect or disconnect.")           \
+    ENUMITEM(CONTEXT, "Wrong connection context.")                      \
+    ENUMITEM(CQ, "Error creating or polling completion queue.")         \
     ENUMITEM(DBG, "Failed to open/close debug file.")                   \
-    ENUMITEM(MDHIM, "Error in operating MDHIM.")                        \
+    ENUMITEM(EVENT_UNKNOWN, "Unknown event detected.")                  \
+    ENUMITEM(EXIST, "File or directory exists.")                        \
+    ENUMITEM(EXIT, "Error - remote peer exited.")                       \
+    ENUMITEM(FAILURE, "General failure.")                               \
+    ENUMITEM(FBIG, "File too large.")                                   \
+    ENUMITEM(FILE, "File operation error.")                             \
     ENUMITEM(GENERAL, "General system call error.")                     \
+    ENUMITEM(INVAL, "Invalid argument.")                                \
+    ENUMITEM(IO, "Generic I/O error.")                                  \
+    ENUMITEM(ISDIR, "Invalid operation for directory.")                 \
+    ENUMITEM(MDHIM, "MDHIM operation error.")                           \
+    ENUMITEM(MDINIT, "MDHIM initialization error.")                     \
+    ENUMITEM(NAMETOOLONG, "Filename is too long.")                      \
+    ENUMITEM(NFILE, "Too many open files.")                             \
+    ENUMITEM(NOENT, "No such file or directory.")                       \
     ENUMITEM(NOENV, "Environment variable is not defined.")             \
     ENUMITEM(NOMEM, "Error in memory allocation/free.")                 \
-    ENUMITEM(TIMEOUT, "Error - timed out.")                             \
-    ENUMITEM(EXIT, "Error - remote peer exited.")                       \
+    ENUMITEM(NOSPC, "No space left on device.")                         \
+    ENUMITEM(NOTDIR, "Not a directory.")                                \
+    ENUMITEM(OVERFLOW, "Value too large for data type.")                \
+    ENUMITEM(PD, "Error creating PD.")                                  \
+    ENUMITEM(PIPE, "Pipe error.")                                       \
     ENUMITEM(POLL, "Error on poll.")                                    \
-    ENUMITEM(SHMEM, "Error on shared memory attach.")                   \
-    ENUMITEM(MDINIT, "Init MDHIM error.")                               \
-    ENUMITEM(THRDINIT, "Thread initialization failure.")                \
-    ENUMITEM(FILE, "File operation error.")                             \
-    ENUMITEM(SOCKET, "Error creating/open socket.")                     \
-    ENUMITEM(SOCKET_FD_EXCEED, "Number of connections exceeds the max value.") \
-    ENUMITEM(SOCK_DISCONNECT, "Remote peer disconnected.")              \
-    ENUMITEM(SOCK_CMD, "Unknown exception on the remote peer.")         \
-    ENUMITEM(SOCK_LISTEN, "Exception on listening socket.")             \
-    ENUMITEM(SOCK_OTHER, "Unknown socket error.")                       \
+    ENUMITEM(POSTRECV, "Failed to post receive operation.")             \
+    ENUMITEM(POSTSEND, "Failed to post send operation.")                \
+    ENUMITEM(QP, "Error creating or destroying QP.")                    \
+    ENUMITEM(READ, "Read error.")                                       \
+    ENUMITEM(RECV, "Receive error.")                                    \
+    ENUMITEM(REGMEM, "Memory [de]registration failure.")                \
     ENUMITEM(RM_INIT, "Failed to init request manager.")                \
     ENUMITEM(RM_RECV, "Fail to receive data in request manager.")       \
-    ENUMITEM(ADDR, "Failed to parse IP address and port.")              \
     ENUMITEM(ROUTE, "Failed to resolve route.")                         \
-    ENUMITEM(EVENT_UNKNOWN, "Unknown event detected.")                  \
-    ENUMITEM(CONTEXT, "Wrong connection context.")                      \
-    ENUMITEM(QP, "Error creating or destroying QP.")                    \
-    ENUMITEM(REGMEM, "Memory [de]registration failure.")                \
-    ENUMITEM(POSTRECV, "Failed to post receive operation.")             \
-    ENUMITEM(PD, "Error creating PD.")                                  \
-    ENUMITEM(CHANNEL, "Error creating completion channel.")             \
-    ENUMITEM(CQ, "Error creating or polling completion queue.")         \
-    ENUMITEM(CONNECT, "Error in RDMA connect or disconnect.")           \
-    ENUMITEM(POSTSEND, "Failed to post send operation.")                \
-    ENUMITEM(ACCEPT, "Failed to accept RDMA connection.")               \
-    ENUMITEM(WC, "Write completion with error.")                        \
-    ENUMITEM(APPCONFIG, "Failed to initialize application configuration.") \
-    ENUMITEM(ARRAY_EXCEED, "Array access out of bounds.")               \
-    ENUMITEM(READ, "Read error.")                                       \
-    ENUMITEM(WRITE, "Write error.")                                     \
     ENUMITEM(SEND, "Send error.")                                       \
-    ENUMITEM(RECV, "Receive error.")                                    \
-    ENUMITEM(PIPE, "Pipe error.")                                       \
+    ENUMITEM(SHMEM, "Error on shared memory attach.")                   \
+    ENUMITEM(SOCKET, "Error creating/open socket.")                     \
+    ENUMITEM(SOCKET_FD_EXCEED, "Exceeded max number of connections.")   \
+    ENUMITEM(SOCK_CMD, "Unknown exception on the remote peer.")         \
+    ENUMITEM(SOCK_DISCONNECT, "Remote peer disconnected.")              \
+    ENUMITEM(SOCK_LISTEN, "Exception on listening socket.")             \
+    ENUMITEM(SOCK_OTHER, "Unknown socket error.")                       \
+    ENUMITEM(THRDINIT, "Thread initialization failure.")                \
+    ENUMITEM(TIMEOUT, "Error - timed out.")                             \
+    ENUMITEM(WC, "Write completion with error.")                        \
+    ENUMITEM(WRITE, "Write error.")                                     \
 
 
 #ifdef __cplusplus
@@ -95,7 +108,8 @@ extern "C" {
  * @brief supported consistency models
  */
 typedef enum {
-    UNIFYCR_ERROR_INVALID = -1,
+    UNIFYCR_INVALID_ERROR = -2,
+    UNIFYCR_FAILURE = -1,
     UNIFYCR_SUCCESS = 0,
 #define ENUMITEM(name, desc)                    \
         UNIFYCR_ERROR_ ## name,

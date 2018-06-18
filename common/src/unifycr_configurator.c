@@ -71,7 +71,7 @@ int unifycr_config_init(unifycr_cfg_t *cfg,
     syscfg = cfg->unifycr_configfile;
     rc = configurator_file_check(NULL, NULL, syscfg, NULL);
     if (rc == 0) {
-        rc = unifycr_config_process_file(cfg, syscfg);
+        rc = unifycr_config_process_ini_file(cfg, syscfg);
         if (rc)
             return rc;
     }
@@ -91,7 +91,7 @@ int unifycr_config_init(unifycr_cfg_t *cfg,
 
     // read config file passed on command-line (does not override cli args)
     if (cfg->unifycr_configfile != NULL) {
-        rc = unifycr_config_process_file(cfg, cfg->unifycr_configfile);
+        rc = unifycr_config_process_ini_file(cfg, cfg->unifycr_configfile);
         if (rc)
             return rc;
     }
@@ -595,8 +595,8 @@ int inih_config_handler(void *user,
 }
 
 // update config struct based on config file, using inih
-int unifycr_config_process_file(unifycr_cfg_t *cfg,
-                                const char *file)
+int unifycr_config_process_ini_file(unifycr_cfg_t *cfg,
+                                    const char *file)
 {
     int rc, inih_rc;
     char errmsg[UNIFYCR_CFG_MAX_MSG];
@@ -662,7 +662,7 @@ int validate_value(const char *section,
     else if (strcmp(typ, "INT") == 0)
         return configurator_int_check(section, key, val, new_val);
     else if (strcmp(typ, "FLOAT") == 0)
-        return configurator_int_check(section, key, val, new_val);
+        return configurator_float_check(section, key, val, new_val);
 
     return 0;
 }
