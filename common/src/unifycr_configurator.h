@@ -31,9 +31,11 @@
 
 // need bool, NULL, FILE*
 #ifdef __cplusplus
+# include <climits>
 # include <cstddef>
 # include <cstdio>
 #else
+# include <limits.h>
 # include <stdbool.h>
 # include <stddef.h>
 # include <stdio.h>
@@ -57,6 +59,7 @@
 #define LOGDIR TMPDIR
 #endif
 
+// NOTE: NULLSTRING is a sentinel token meaning "no default string value"
 
 /* UNIFYCR_CONFIGS is the list of configuration settings, and should contain
    one macro definition per setting */
@@ -118,9 +121,12 @@ int unifycr_config_fini(unifycr_cfg_t *cfg);
 
 
 /* print configuration to specified file (or stderr if fp==NULL) */
-
 void unifycr_config_print(unifycr_cfg_t *cfg,
                           FILE *fp);
+
+/* print configuration in .INI format to specified file (or stderr) */
+void unifycr_config_print_ini(unifycr_cfg_t *cfg,
+                              FILE *inifp);
 
 /* used internally, but may be useful externally */
 

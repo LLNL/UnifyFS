@@ -1,6 +1,6 @@
 /* inih -- simple .INI file parser
 
-inih is released under the New BSD license (see inih-LICENSE.txt).
+inih is released under the New BSD license (see LICENSE.inih).
 
 Go to the project home page for more info:
 
