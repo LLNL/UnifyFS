@@ -86,39 +86,34 @@ static int none_launch_daemon(unifycr_resource_t *resource,
 }
 
 /**
- * @brief get the node list from the $PBS_NODEFILE
+ * @brief parse the hostfile for lsf and SLURM
  *
  * @param resource the resource record which will be filled
+ * @param hostfile which will be parsed
+ * @param number of nodes allocated by resource manager
  *
  * @return 0 on success, negative errno otherwise
  */
-static int pbs_read_resource(unifycr_resource_t *resource)
+static int parse_hostfile(unifycr_resource_t *resource,
+                         char *hostfile,
+                         uint64_t n_nodes)
 {
     int ret = 0;
     int i = 0;
-    uint64_t n_nodes = 0;
     FILE *fp = NULL;
-    char *num_nodes_str = NULL;
     char **nodes = NULL;
     char buf[1024] = { 0, };
-    char *nodefile = getenv("PBS_NODEFILE");
 
-    if (nodefile == NULL)
+    if (hostfile == NULL)
         return -EINVAL;
 
     /*
-     * node names are duplicated in PBS_NODEFILE, depending on the number of
+     * node names may be duplicated in hostfile, depending on the number of
      * available cores per node. for instance, nodeX will appear 16 times if
      * nodeX has 16 cores. so, get the correct node number first.
      */
 
-    num_nodes_str = getenv("PBS_NUM_NODES");
-    if (num_nodes_str == NULL)
-        return -EINVAL;
-
-    n_nodes = (uint64_t) strtoul(num_nodes_str, NULL, 10);
-
-    fp = fopen(nodefile, "r");
+    fp = fopen(hostfile, "r");
     if (!fp)
         return -errno;
 
@@ -149,6 +144,34 @@ out:
 }
 
 /**
+ * @brief get the node list from the $PBS_NODEFILE
+ *
+ * @param resource the resource record which will be filled
+ *
+ * @return 0 on success, negative errno otherwise
+ */
+static int pbs_read_resource(unifycr_resource_t *resource)
+{
+    int ret = 0;
+    uint64_t n_nodes = 0;
+    char *num_nodes_str = NULL;
+    char *nodefile = getenv("PBS_NODEFILE");
+
+    if (nodefile == NULL)
+        return -EINVAL;
+
+    num_nodes_str = getenv("PBS_NUM_NODES");
+    if (num_nodes_str == NULL)
+        return -EINVAL;
+
+    n_nodes = (uint64_t) strtoul(num_nodes_str, NULL, 10);
+
+    ret = parse_hostfile(resource, nodefile, n_nodes);
+
+    return ret;
+}
+
+/**
  * @brief
  *
  * @param resource
@@ -163,18 +186,33 @@ static int pbs_launch_daemon(unifycr_resource_t *resource,
 }
 
 /**
- * TODO: not implemented yet
  *
- * @brief get the node list from the $SLURM_JOB_NODELIST, which requires
- * parsing.
+ * @brief get the node list from writing hostfile to
+ * /tmp/hostfile with scontrol
  *
  * @param resource
  *
- * @return
+ * @return 0 on success, negative errno otherwise
  */
 static int slurm_read_resource(unifycr_resource_t *resource)
 {
-    return -ENOSYS;
+    int ret = 0;
+    uint64_t n_nodes = 0;
+    char *num_nodes_str = NULL;
+    char *hostfile = "/tmp/hostfile";
+
+    /* write SLURM hostnames to /tmp/hostfile for parsing */
+    system("scontrol show hostnames > /tmp/hostfile");
+
+    num_nodes_str = getenv("SLURM_NNODES");
+    if (num_nodes_str == NULL)
+        return -EINVAL;
+
+    n_nodes = (uint64_t) strtoul(num_nodes_str, NULL, 10);
+
+    ret = parse_hostfile(resource, hostfile, n_nodes);
+
+    return ret;
 }
 
 /**
@@ -198,7 +236,9 @@ static int slurm_launch_daemon(unifycr_resource_t *resource,
  * execution hosts are listed separated by spaces. The batch job file is run on
  * the first host in the list.
  *
- * @brief get the node list from the $LSB_HOSTS.
+ * @brief get the nod list from the $LSB_HOSTS.
+ * n hosts are listed separated by spaces. The batch job file is run on
+ *
  *
  * @param resource
  *
@@ -290,6 +330,10 @@ static char *mpirun_newargv[] = {
     "mpirun", "-n", NULL, "-np", NULL, NULL, (char *) NULL
 };
 
+static char *srun_newargv[] = {
+    "srun", "-N", NULL, "-n", NULL, NULL, (char *) NULL
+};
+
 int unifycr_launch_daemon(unifycr_resource_t *resource,
                           unifycr_args_t *args)
 {
@@ -297,13 +341,22 @@ int unifycr_launch_daemon(unifycr_resource_t *resource,
 
     sprintf(nbuf, "%llu", (unsigned long long) resource->n_nodes);
 
-    mpirun_newargv[2] = nbuf;
-    mpirun_newargv[4] = nbuf;
-    mpirun_newargv[5] = args->server_path ?
+    if (resource->rm == UNIFYCR_RM_SLURM) {
+        srun_newargv[2] = nbuf;
+        srun_newargv[4] = nbuf;
+        srun_newargv[5] = args->server_path ?
                         args->server_path : BINDIR "/unifycrd";
 
-    execvp(mpirun_newargv[0], mpirun_newargv);
-    perror("failed to launch unifycrd (execvp)");
+        execvp(srun_newargv[0], srun_newargv);
+        perror("failed to launch unifycrd (execvp)");
+    } else {
+        mpirun_newargv[2] = nbuf;
+        mpirun_newargv[4] = nbuf;
+        mpirun_newargv[5] = args->server_path ?
+                        args->server_path : BINDIR "/unifycrd";
 
+        execvp(mpirun_newargv[0], mpirun_newargv);
+        perror("failed to launch unifycrd (execvp)");
+    }
     return -1;
 }
