@@ -46,6 +46,7 @@
 #include "unifycr_sock.h"
 #include "unifycr_metadata.h"
 #include "unifycr_client_context.h"
+#include "../../client/src/unifycr_clientcalls_rpc.h"
 
 /**
 * handle client-side requests, including init, open, fsync,
@@ -223,6 +224,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     unifycr_mount_in_t in;
     int ret = HG_Get_input(handle, &in);
     assert(ret == HG_SUCCESS);
+	printf("mount called\n");
 
     unifycr_mount_out_t out;
     //const struct hg_info* hgi = margo_get_info(handle);
@@ -246,6 +248,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
 
         tmp_config->data_offset = in.data_offset;
         tmp_config->data_size = in.data_size;
+		printf("external spill dir: [%s]\n", in.external_spill_dir);
         strcpy(tmp_config->external_spill_dir, in.external_spill_dir);
 
         int i;
@@ -300,6 +303,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
             out.ret =  ULFS_ERROR_NOMEM;
         }
     }
+	printf("1st out.ret = %d\n", out.ret);
 	
 	if (out.ret == 0 ) {
     	memset(thrd_ctrl->del_req_set, 0, sizeof(msg_meta_t));
@@ -307,9 +311,10 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     	thrd_ctrl->del_req_stat =
         	(del_req_stat_t *)malloc(sizeof(del_req_stat_t));
 
-		if (!thrd_ctrl->del_req_stat->req_stat) 
+		if (!thrd_ctrl->del_req_stat) 
        		out.ret = ULFS_ERROR_NOMEM;
     }
+	printf("2nd out.ret = %d\n", out.ret);
 	
 	if (out.ret == 0 ) {
 		memset(thrd_ctrl->del_req_stat, 0, sizeof(del_req_stat_t));
@@ -319,6 +324,8 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     	if (!thrd_ctrl->del_req_stat->req_stat)
         	out.ret = ULFS_ERROR_NOMEM;
    	}
+
+	printf("3rd out.ret = %d\n", out.ret);
 
 	if ( out.ret == 0 ) {
 		memset(thrd_ctrl->del_req_stat->req_stat,
@@ -352,7 +359,9 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     	if (rc != 0) 
        		out.ret = ULFS_ERROR_THRDINIT;
     }
-
+	printf("out.ret = %d\n", out.ret);
+	if (out.ret == 0)
+		out.max_recs_per_slice = max_recs_per_slice;
     margo_free_input(handle, &in);
 
     hg_return_t hret = margo_respond(handle, &out);
@@ -369,12 +378,14 @@ static void unifycr_metaget_rpc(hg_handle_t handle)
     int ret = HG_Get_input(handle, &in);
     assert(ret == HG_SUCCESS);
 
+	printf("getting attribute for %d\n", in.gfid);
     unifycr_metaget_out_t out;
 
     unifycr_file_attr_t attr_val;
     ret = meta_process_attr_get(in.gfid, &attr_val);
 	out.st_size = attr_val.file_attr.st_size;
     out.filename = attr_val.filename;
+	printf("filename: %s\n", out.filename);
     out.ret = ret;
 
     margo_free_input(handle, &in);
@@ -395,6 +406,7 @@ static void unifycr_metaset_rpc(hg_handle_t handle)
 
     unifycr_metaset_out_t out;
 
+	printf("Setting attribute for %d\n", in.gfid);
     out.ret = meta_process_attr_set(in.gfid, in.filename);
 
     margo_free_input(handle, &in);
@@ -709,9 +721,8 @@ int open_log_file(app_config_t *app_config,
             app_config->external_spill_dir, app_id, client_side_id);
 
     app_config->spill_log_fds[client_side_id] = open(path, O_RDONLY, 0666);
-    /*  LOG(LOG_DBG, "openning log file %s, client_side_id:%d\n",
+    printf("openning log file %s, client_side_id:%d\n",
                 path, client_side_id);
-    */
     strcpy(app_config->spill_log_name[client_side_id], path);
     if (app_config->spill_log_fds[client_side_id] < 0) {
         printf("rank:%d, openning file %s failure\n", glb_rank, path);

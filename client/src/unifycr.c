@@ -1207,6 +1207,162 @@ static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,
     return UNIFYCR_SUCCESS;
 }
 
+#if 0
+/* opens a new file id with specified path, access flags, and permissions,
+ * fills outfid with file id and outpos with position for current file pointer,
+ * returns UNIFYCR error code */
+int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
+                     off_t *outpos)
+{
+    /* check that path is short enough */
+    size_t pathlen = strlen(path) + 1;
+    if (pathlen > UNIFYCR_MAX_FILENAME) {
+        return UNIFYCR_ERR_NAMETOOLONG;
+    }
+
+    /* assume that we'll place the file pointer at the start of the file */
+    off_t pos = 0;
+
+    /* check whether this file already exists */
+    int fid = unifycr_get_fid_from_path(path);
+    DEBUG("unifycr_get_fid_from_path() gave %d\n", fid);
+
+    int gfid = -1, rc = 0;
+    if (fs_type == UNIFYCR_LOG) {
+        if (fid < 0) {
+            rc = unifycr_get_global_fid(path, &gfid);
+            if (rc != UNIFYCR_SUCCESS) {
+                DEBUG("Failed to generate fid for file %s\n", path);
+                return UNIFYCR_ERR_IO;
+            }
+
+            gfid = abs(gfid);
+
+            unifycr_fattr_t *ptr_meta = NULL;
+            rc = unifycr_client_metaget_rpc_invoke(&unifycr_rpc_context,
+                                                   &ptr_meta, fid, gfid);
+
+            if (ptr_meta == NULL) {
+                fid = -1;
+            } else {
+                /* other process has created this file, but its
+                 * attribute is not cached locally,
+                 * allocate a file id slot for this existing file */
+                fid = unifycr_fid_create_file(path);
+                if (fid < 0) {
+                    DEBUG("Failed to create new file %s\n", path);
+                    return UNIFYCR_ERR_NFILE;
+                }
+
+                /* initialize the storage for the file */
+                int store_rc = unifycr_fid_store_alloc(fid);
+                if (store_rc != UNIFYCR_SUCCESS) {
+                    DEBUG("Failed to create storage for file %s\n", path);
+                    return UNIFYCR_ERR_IO;
+                }
+                /* initialize the global metadata
+                 * */
+                unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
+                meta->real_size = ptr_meta->file_attr.st_size;
+                ptr_meta->fid = fid;
+                ptr_meta->gfid = gfid;
+
+                ins_file_meta(&unifycr_fattrs,
+                              ptr_meta);
+                free(ptr_meta);
+            }
+        } else {
+
+        }
+    }
+
+    if (fid < 0) {
+        /* file does not exist */
+        /* create file if O_CREAT is set */
+        if (flags & O_CREAT) {
+            DEBUG("Couldn't find entry for %s in UNIFYCR\n", path);
+            DEBUG("unifycr_superblock = %p; free_fid_stack = %p;"
+                  "free_chunk_stack = %p; unifycr_filelist = %p;"
+                  "chunks = %p\n", unifycr_superblock, free_fid_stack,
+                  free_chunk_stack, unifycr_filelist, unifycr_chunks);
+
+            /* allocate a file id slot for this new file */
+            fid = unifycr_fid_create_file(path);
+            if (fid < 0) {
+                DEBUG("Failed to create new file %s\n", path);
+                return UNIFYCR_ERR_NFILE;
+            }
+
+            /* initialize the storage for the file */
+            int store_rc = unifycr_fid_store_alloc(fid);
+            if (store_rc != UNIFYCR_SUCCESS) {
+                DEBUG("Failed to create storage for file %s\n", path);
+                return UNIFYCR_ERR_IO;
+            }
+
+            if (fs_type == UNIFYCR_LOG) {
+                /*create a file and send its attribute to key-value store*/
+                unifycr_fattr_t *new_fmeta =
+                    (unifycr_fattr_t *)malloc(sizeof(unifycr_fattr_t));
+                strcpy(new_fmeta->filename, path);
+                new_fmeta->fid = fid;
+                new_fmeta->gfid = gfid;
+
+                unifycr_client_metaset_rpc_invoke(&unifycr_rpc_context,
+                                                  new_fmeta);
+
+                ins_file_meta(&unifycr_fattrs,
+                              new_fmeta);
+				printf("meta inserted\n");
+                free(new_fmeta);
+            }
+        } else {
+            /* ERROR: trying to open a file that does not exist without O_CREATE */
+            DEBUG("Couldn't find entry for %s in UNIFYCR\n", path);
+            return UNIFYCR_ERR_NOENT;
+        }
+    } else {
+        /* file already exists */
+
+        /* if O_CREAT and O_EXCL are set, this is an error */
+        if ((flags & O_CREAT) && (flags & O_EXCL)) {
+            /* ERROR: trying to open a file that exists with O_CREATE and O_EXCL */
+            return UNIFYCR_ERR_EXIST;
+        }
+
+        /* if O_DIRECTORY is set and fid is not a directory, error */
+        if ((flags & O_DIRECTORY) && !unifycr_fid_is_dir(fid)) {
+            return UNIFYCR_ERR_NOTDIR;
+        }
+
+        /* if O_DIRECTORY is not set and fid is a directory, error */
+        if (!(flags & O_DIRECTORY) && unifycr_fid_is_dir(fid)) {
+            return UNIFYCR_ERR_NOTDIR;
+        }
+
+        /* if O_TRUNC is set with RDWR or WRONLY, need to truncate file */
+        if ((flags & O_TRUNC) && (flags & (O_RDWR | O_WRONLY))) {
+            unifycr_fid_truncate(fid, 0);
+        }
+
+        /* if O_APPEND is set, we need to place file pointer at end of file */
+        if (flags & O_APPEND) {
+            unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
+            pos = meta->size;
+        }
+    }
+
+    /* TODO: allocate a free file descriptor and associate it with fid */
+    /* set in_use flag and file pointer */
+    *outfid = fid;
+    *outpos = pos;
+    DEBUG("UNIFYCR_open generated fd %d for file %s\n", fid, path);
+
+    /* don't conflict with active system fds that range from 0 - (fd_limit) */
+    return UNIFYCR_SUCCESS;
+}
+#endif
+
 /* opens a new file id with specified path, access flags, and permissions,
  * fills outfid with file id and outpos with position for current file pointer,
  * returns UNIFYCR error code
@@ -1240,27 +1396,9 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
 
     DEBUG("unifycr_get_fid_from_path() gave %d (gfid = %d)\n", fid, gfid);
 
-<<<<<<< 9d75bf2fb6c48567ae3815c7ced6a41a4cc44e05
     found_global =
         (unifycr_get_global_file_meta(gfid, &gfattr) == UNIFYCR_SUCCESS);
     found_local = (fid >= 0);
-=======
-            unifycr_fattr_t *ptr_meta = NULL;
-            rc = unifycr_client_metaget_rpc_invoke(&unifycr_rpc_context,
-                                                   &ptr_meta);
-
-            if (ptr_meta == NULL) {
-                fid = -1;
-            } else {
-                /* other process has created this file, but its
-                 * attribute is not cached locally,
-                 * allocate a file id slot for this existing file */
-                fid = unifycr_fid_create_file(path);
-                if (fid < 0) {
-                    DEBUG("Failed to create new file %s\n", path);
-                    return UNIFYCR_ERR_NFILE;
-                }
->>>>>>> organize client invocations and add client rpc implementations
 
     /* possibly, the file still exists in our local cache but globally
      * unlinked. Invalidate the entry
@@ -1287,18 +1425,9 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
          */
         unifycr_filemeta_t *meta = NULL;
 
-<<<<<<< 9d75bf2fb6c48567ae3815c7ced6a41a4cc44e05
         fid = unifycr_fid_create_file(path);
         if (fid < 0) {
             DEBUG("failed to create a new file %s\n", path);
-=======
-                unifycr_client_metaset_rpc_invoke(&unifycr_rpc_context,
-                                                  new_fmeta);
-
-                ins_file_meta(&unifycr_fattrs,
-                              new_fmeta);
-                free(new_fmeta);
->>>>>>> organize client invocations and add client rpc implementations
 
             /* FIXME: UNIFYCR_ERROR_NFILE or UNIFYCR_ERROR_IO ? */
             return (int) UNIFYCR_ERROR_IO;
@@ -1940,7 +2069,7 @@ static int unifycr_init(int rank)
                 unifycr_get_spillblock(unifycr_index_buf_size,
                                        spillfile_prefix);
             if (unifycr_spillmetablock < 0) {
-                DEBUG("unifycr_get_spillmetablock failed!\n");
+               DEBUG("unifycr_get_spillmetablock failed!\n");
                 return UNIFYCR_FAILURE;
             }
         }
@@ -1969,6 +2098,7 @@ static int unifycr_init(int rank)
 int unifycr_mount(const char prefix[], int rank, size_t size,
                   int l_app_id, int subtype)
 {
+	//printf("in outer mount\n");
     switch (subtype) {
     case UNIFYCRFS:
         fs_type = UNIFYCRFS;
@@ -2071,9 +2201,10 @@ int unifycr_sync_to_del(unifycr_mount_in_t* in)
     long fmeta_size = unifycr_max_fattr_entries * sizeof(unifycr_fattr_t);
     long data_offset = (void *)unifycr_chunks - unifycr_superblock;
     long data_size = (long)unifycr_max_chunks * unifycr_chunk_size;
-    char external_spill_dir[UNIFYCR_MAX_FILENAME] = {0};
-
+    char* external_spill_dir = malloc(UNIFYCR_MAX_FILENAME);
+	//printf("external_data_dir in sync_to_del: [%s]\n", external_data_dir);
     strcpy(external_spill_dir, external_data_dir);
+	//printf("external_spill_dir in sync_to_del: [%s]\n", external_spill_dir);
 
     /*
      * Copy the client-side information to the
@@ -2310,7 +2441,6 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
         fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
         return UNIFYCR_FAILURE;
     }
-#endif
     /* retrive current pool to use for ULT creation */
     ABT_xstream xstream;
     int ret = ABT_xstream_self(&xstream);
@@ -2326,6 +2456,7 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
         return UNIFYCR_FAILURE;
     }
 
+#endif
     /* register read rpc with mercury */
     (*unifycr_rpc_context)->unifycr_read_rpc_id =
         MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_read_rpc",
@@ -2355,7 +2486,7 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
 
     /* resolve server address */
     (*unifycr_rpc_context)->svr_addr = HG_ADDR_NULL;
-    ret = margo_addr_lookup((*unifycr_rpc_context)->mid, svr_addr_str,
+    int ret = margo_addr_lookup((*unifycr_rpc_context)->mid, svr_addr_str,
                             &((*unifycr_rpc_context)->svr_addr));
 
     return UNIFYCR_SUCCESS;
@@ -2389,8 +2520,10 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
 #endif
 
     client_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (client_sockfd < 0)
+    if (client_sockfd < 0) {
+		printf("socket create failed\n");
         return -1;
+	}
 
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sun_family = AF_UNIX;
@@ -2426,6 +2559,7 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
     /* exit with error if connection is not successful */
     if (result == -1) {
         rc = -1;
+		printf("socket connect failed\n");
         return rc;
     }
 
@@ -2731,7 +2865,7 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
         int rc = gethostname(host_name, UNIFYCR_MAX_FILENAME);
 
         if (rc != 0) {
-            DEBUG("rank:%d, fail to get the host name.", dbg_rank);
+            printf("rank:%d, fail to get the host name.", dbg_rank);
             return UNIFYCR_FAILURE;
         }
     }
@@ -2740,17 +2874,19 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     char addr_string[50];
     fp = fopen("/dev/shm/svr_id","r");
     fscanf(fp, "%s", addr_string);
+	printf("rpc address: %s\n", addr_string);
     fclose(fp);
 
     unifycr_client_rpc_init(addr_string, &unifycr_rpc_context);
 
     //TODO: call client rpc function here (which calls unifycr_sync_to_del
+    printf("calling mount\n");
     unifycr_client_mount_rpc_invoke(&unifycr_rpc_context);
 
     int rc = unifycr_init_socket(local_rank_idx, local_rank_cnt,
                                 local_del_cnt);
     if (rc < 0) {
-        DEBUG("rank:%d, fail to initialize socket.", dbg_rank);
+        printf("rank:%d, fail to initialize socket, rc == %d.", dbg_rank, rc);
         return UNIFYCR_FAILURE;
     }
 
@@ -2758,6 +2894,7 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     /* add mount point as a new directory in the file list */
     if (unifycr_get_fid_from_path(prefix) >= 0) {
         /* we can't mount this location, because it already exists */
+		printf("we can't mount this location, because it already exists\n");
         errno = EEXIST;
         return -1;
     } else {

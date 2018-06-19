@@ -13,7 +13,9 @@
 #include <mercury.h>
 #include <mercury_proc_string.h>
 
-    MERCURY_GEN_PROC(unifycr_mount_out_t, ((int32_t)(ret)))
+    MERCURY_GEN_PROC(unifycr_mount_out_t,
+        ((int64_t)(max_recs_per_slice))\
+        ((int32_t)(ret)))
     MERCURY_GEN_PROC(unifycr_mount_in_t,
         ((uint32_t)(app_id))\
         ((uint32_t)(local_rank_idx))\
@@ -34,6 +36,7 @@
 
     MERCURY_GEN_PROC(unifycr_metaset_out_t, ((uint32_t)(ret)))
     MERCURY_GEN_PROC(unifycr_metaset_in_t,
+        ((int32_t)(fid))\
         ((int32_t)(gfid))\
         ((hg_const_string_t)(filename)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)

@@ -213,8 +213,8 @@ int meta_process_attr_set(int gfid, const char* filename)
 
     strcpy(fattr_vals_local.fname, filename);
 
-    /*  LOG(LOG_DBG, "rank:%d, setting fattr key:%d, value:%s\n",
-                glb_rank, *fattr_keys, fattr_vals_local->fname); */
+    printf("Setting Attribute -- rank:%d, setting fattr key:%d, value:%s\n",
+                glb_rank, gfid, fattr_vals_local.fname);
     md->primary_index = unifycr_indexes[1];
     brm = mdhimPut(md, &gfid, sizeof(fattr_key_t),
                    &fattr_vals_local, sizeof(fattr_val_t),
@@ -237,8 +237,7 @@ int meta_process_attr_set(int gfid, const char* filename)
 
 int meta_process_attr_get(int gfid, unifycr_file_attr_t* ptr_attr_val)
 {
-    fattr_key_t fattr_keys_local;
-    fattr_keys_local = gfid;
+    fattr_key_t fattr_keys_local = gfid;
     fattr_val_t *tmp_ptr_attr;
 
     int rc;
@@ -253,8 +252,8 @@ int meta_process_attr_get(int gfid, unifycr_file_attr_t* ptr_attr_val)
         tmp_ptr_attr = (fattr_val_t *)bgrm->values[0];
         ptr_attr_val->gfid = fattr_keys_local;
 
-        /*  LOG(LOG_DBG, "rank:%d, getting fattr key:%d\n",
-                    glb_rank, *fattr_keys_local); */
+        printf("getting File Attribute: rank:%d, getting fattr key:%d\n",
+                    glb_rank, fattr_keys_local); 
         ptr_attr_val->file_attr = tmp_ptr_attr->file_attr;
         strcpy(ptr_attr_val->filename, tmp_ptr_attr->fname);
 

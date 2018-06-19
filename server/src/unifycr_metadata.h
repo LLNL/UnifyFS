@@ -42,7 +42,6 @@
 #include "unifycr_global.h"
 
 #include "../../client/src/unifycr_clientcalls_rpc.h"
-
 #define MANIFEST_FILE_NAME "mdhim_manifest_"
 
 typedef struct {
