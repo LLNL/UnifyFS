@@ -24,10 +24,14 @@ static int set_global_file_meta(unifycr_metaset_in_t* in,
     return UNIFYCR_SUCCESS;
 }
 
-static int get_global_file_meta(unifycr_metaget_in_t* in, unifycr_fattr_t **file_meta)
+static int get_global_file_meta(int fid, int gfid, unifycr_metaget_out_t* out , unifycr_fattr_t **file_meta)
 {
-    *file_meta = (unifycr_fattr_t *)malloc(sizeof(unifycr_fattr_t));
-    in->gfid     = (*file_meta)->gfid;
+    *file_meta = (unifycr_fattr_t *)calloc(1, sizeof(unifycr_fattr_t));
+    (*file_meta)->fid = fid;
+    (*file_meta)->gfid = gfid;
+	strcpy( (*file_meta)->filename, out->filename);
+	(*file_meta)->file_attr.st_size = out->st_size;
+	
     return UNIFYCR_SUCCESS;
 }
 
@@ -102,7 +106,7 @@ uint32_t unifycr_client_metaset_rpc_invoke(unifycr_client_rpc_context_t**
 /* invokes the client metaget rpc function by calling get_global_file_meta */
 uint32_t unifycr_client_metaget_rpc_invoke(unifycr_client_rpc_context_t**
                                                 unifycr_rpc_context,
-                                                unifycr_fattr_t** file_meta, int gfid)
+                                                unifycr_fattr_t** file_meta, int fid, int gfid)
 {
     hg_handle_t handle;
     unifycr_metaget_in_t in;
@@ -128,8 +132,8 @@ uint32_t unifycr_client_metaget_rpc_invoke(unifycr_client_rpc_context_t**
 
     printf("Got metaget  response ret: %d\n", out.ret);
 	if (out.ret == ACK_SUCCESS)
-    	/* fill in input struct by calling unifycr_sync_to_del */
-    	get_global_file_meta(&in, file_meta);
+    	/* fill in results  */
+    	get_global_file_meta(fid, gfid, &out, file_meta);
 
     margo_free_output(handle, &out);
     margo_destroy(handle);
