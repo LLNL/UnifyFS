@@ -2484,6 +2484,12 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
                        unifycr_fsync_in_t, unifycr_fsync_out_t,
                        NULL);
 
+	(*unifycr_rpc_context)->unifycr_read_rpc_id =
+        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_read_rpc",
+                       unifycr_read_in_t,
+                       unifycr_read_out_t,
+                       NULL);
+
     /* resolve server address */
     (*unifycr_rpc_context)->svr_addr = HG_ADDR_NULL;
     int ret = margo_addr_lookup((*unifycr_rpc_context)->mid, svr_addr_str,
