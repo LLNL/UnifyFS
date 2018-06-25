@@ -154,6 +154,7 @@ int pack_ack_msg(char *ptr_cmd, int cmd, int rc, void *val,
 {
     int ret_sz = 0;
 
+    memset(ptr_cmd, 0, CMD_BUF_SIZE);
     memcpy(ptr_cmd, &cmd, sizeof(int));
     ret_sz += sizeof(int);
     memcpy(ptr_cmd + sizeof(int), &rc, sizeof(int));
@@ -215,7 +216,7 @@ int sync_with_client(char *cmd_buf, int sock_id)
                             superblock_sz, num_procs_per_node, req_buf_sz, data_size); */
         tmp_config = (app_config_t *)malloc(sizeof(app_config_t));
         memcpy(tmp_config->external_spill_dir,
-               cmd_buf + cursor, MAX_PATH_LEN);
+               cmd_buf + cursor, UNIFYCR_MAX_FILENAME);
 
         /*don't forget to free*/
         tmp_config->num_procs_per_node = num_procs_per_node;
@@ -439,8 +440,9 @@ int open_log_file(app_config_t *app_config,
                   int app_id, int sock_id)
 {
     int client_side_id = app_config->client_ranks[sock_id];
-    char path[GEN_STR_LEN] = {0};
-    sprintf(path, "%s/spill_%d_%d.log",
+    char path[UNIFYCR_MAX_FILENAME] = {0};
+
+    snprintf(path, sizeof(path), "%s/spill_%d_%d.log",
             app_config->external_spill_dir, app_id, client_side_id);
     app_config->spill_log_fds[client_side_id] = open(path, O_RDONLY, 0666);
     /*  LOG(LOG_DBG, "openning log file %s, client_side_id:%d\n",
@@ -453,7 +455,7 @@ int open_log_file(app_config_t *app_config,
         return (int)UNIFYCR_ERROR_FILE;
     }
 
-    sprintf(path, "%s/spill_index_%d_%d.log",
+    snprintf(path, sizeof(path), "%s/spill_index_%d_%d.log",
             app_config->external_spill_dir, app_id, client_side_id);
     app_config->spill_index_log_fds[client_side_id] =
         open(path, O_RDONLY, 0666);

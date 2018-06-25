@@ -55,5 +55,13 @@ if process_is_not_running unifycrd 5; then
     exit 1
 fi
 
+#
+# Make sure unifycrd successfully generated client runstate file
+#
+if ! test -f $UNIFYCR_META_DB_PATH/unifycr-runstate.conf ; then
+    echo not ok 1 - unifycrd running
+    exit 1
+fi
+
 echo ok 1 - unifycrd running
 exit 0

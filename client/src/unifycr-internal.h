@@ -65,12 +65,14 @@
 #include "utlist.h"
 #include "uthash.h"
 
+#include "unifycr_configurator.h"
+
 /* -------------------------------
  * Defines and types
  * ------------------------------- */
 
-/* TODO: move common includes to another file */
-#include "unifycr-defs.h"
+extern int unifycr_debug_level;
+
 #define DEBUG(fmt, ...) \
 do { \
     if (unifycr_debug_level > 0) \
@@ -167,21 +169,6 @@ do { \
 
 #endif
 
-#define UNIFYCR_SUCCESS     0
-#define UNIFYCR_FAILURE    -1
-#define UNIFYCR_ERR_NOSPC  -2
-#define UNIFYCR_ERR_IO     -3
-#define UNIFYCR_ERR_NAMETOOLONG -4
-#define UNIFYCR_ERR_NOENT  -5
-#define UNIFYCR_ERR_EXIST  -6
-#define UNIFYCR_ERR_NOTDIR -7
-#define UNIFYCR_ERR_NFILE  -8
-#define UNIFYCR_ERR_INVAL  -9
-#define UNIFYCR_ERR_OVERFLOW -10
-#define UNIFYCR_ERR_FBIG   -11
-#define UNIFYCR_ERR_BADF   -12
-#define UNIFYCR_ERR_ISDIR  -13
-#define UNIFYCR_ERR_NOMEM  -14
 
 #ifndef HAVE_OFF64_T
 typedef int64_t off64_t;
@@ -329,7 +316,7 @@ extern long shm_req_size;
 extern long shm_recv_size;
 extern char *shm_recvbuf;
 extern char *shm_reqbuf;
-extern char cmd_buf[GEN_STR_LEN];
+extern char cmd_buf[CMD_BUF_SIZE];
 extern char ack_msg[3];
 extern unifycr_fattr_buf_t unifycr_fattrs;
 
@@ -548,4 +535,5 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
                                read_req_t *match_req);
 int unifycr_locate_req(read_req_t *read_req, int count,
                        read_req_t *match_req);
+
 #endif /* UNIFYCR_INTERNAL_H */

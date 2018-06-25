@@ -173,7 +173,7 @@ int unifycr_stream_set_pointers(unifycr_stream_t *s)
         /* ERROR: invalid file descriptor */
         s->err = 1;
         errno = EBADF;
-        return UNIFYCR_ERR_BADF;
+        return UNIFYCR_ERROR_BADF;
     }
 
     /* if we have anything on the push back buffer, that must be
@@ -210,7 +210,8 @@ int unifycr_stream_set_pointers(unifycr_stream_t *s)
 
 /* given a mode like "r", "wb+", or "a+" return flags read, write,
  * append, and plus to indicate which were set,
- * returns UNIFYCR_ERR_INVAL if invalid character is found */
+ * returns UNIFYCR_ERROR_INVAL if invalid character is found
+ */
 static int unifycr_fopen_parse_mode(
     const char *mode,
     int *read,
@@ -226,13 +227,13 @@ static int unifycr_fopen_parse_mode(
 
     /* ensure that user specifed an input mode */
     if (mode == NULL) {
-        return UNIFYCR_ERR_INVAL;
+        return UNIFYCR_ERROR_INVAL;
     }
 
     /* get number of characters in mode */
     size_t len = strlen(mode);
     if (len <= 0 || len > 3) {
-        return UNIFYCR_ERR_INVAL;
+        return UNIFYCR_ERROR_INVAL;
     }
 
     /* first character must either be r, w, or a */
@@ -248,7 +249,7 @@ static int unifycr_fopen_parse_mode(
         *append = 1;
         break;
     default:
-        return UNIFYCR_ERR_INVAL;
+        return UNIFYCR_ERROR_INVAL;
     }
 
     /* optional second character may either be + or b */
@@ -263,7 +264,7 @@ static int unifycr_fopen_parse_mode(
                 char third = mode[2];
                 if (third != 'b') {
                     /* third character something other than + or b */
-                    return UNIFYCR_ERR_INVAL;
+                    return UNIFYCR_ERROR_INVAL;
                 }
             }
         } else if (second == 'b') {
@@ -274,12 +275,12 @@ static int unifycr_fopen_parse_mode(
                     *plus = 1;
                 } else {
                     /* third character something other than + or b */
-                    return UNIFYCR_ERR_INVAL;
+                    return UNIFYCR_ERROR_INVAL;
                 }
             }
         } else {
             /* second character something other than + or b */
-            return UNIFYCR_ERR_INVAL;
+            return UNIFYCR_ERROR_INVAL;
         }
     }
 
@@ -314,7 +315,8 @@ static int unifycr_fopen(
     off_t pos;
     if (read) {
         /* read shall fail if file does not already exist, unifycr_fid_open
-         * returns UNIFYCR_ERR_NOENT if file does not exist w/o O_CREAT */
+         * returns UNIFYCR_ERROR_NOENT if file does not exist w/o O_CREAT
+         */
         if (plus) {
             /* r+ ==> open file for update (reading and writing) */
             open_rc = unifycr_fid_open(path, O_RDWR, perms, &fid, &pos);
@@ -325,26 +327,25 @@ static int unifycr_fopen(
     } else if (write) {
         if (plus) {
             /* w+ ==> truncate to zero length or create file for update
-             * (read/write) */
-            open_rc = unifycr_fid_open(path, O_RDWR | O_CREAT | O_TRUNC, perms, &fid, &pos);
+             * (read/write)
+             */
+            open_rc = unifycr_fid_open(path, O_RDWR | O_CREAT | O_TRUNC,
+                                       perms, &fid, &pos);
         } else {
-            /* w  ==> truncate to zero length or create file for
-             * writing */
-            open_rc = unifycr_fid_open(path, O_WRONLY | O_CREAT | O_TRUNC, perms, &fid,
-                                       &pos);
+            /* w  ==> truncate to zero length or create file for writing */
+            open_rc = unifycr_fid_open(path, O_WRONLY | O_CREAT | O_TRUNC,
+                                       perms, &fid, &pos);
         }
     } else if (append) {
         /* force all writes to end of file when append is set */
         if (plus) {
-            /* a+ ==> append, open or create file for update, at end
-             * of file */
-            open_rc = unifycr_fid_open(path, O_RDWR | O_CREAT | O_APPEND, perms, &fid,
-                                       &pos);
+            /* a+ ==> append, open or create file for update, at end of file */
+            open_rc = unifycr_fid_open(path, O_RDWR | O_CREAT | O_APPEND,
+                                       perms, &fid, &pos);
         } else {
-            /* a  ==> append, open or create file for writing, at end
-             * of file */
-            open_rc = unifycr_fid_open(path, O_WRONLY | O_CREAT | O_APPEND, perms, &fid,
-                                       &pos);
+            /* a ==> append, open or create file for writing, at end of file */
+            open_rc = unifycr_fid_open(path, O_WRONLY | O_CREAT | O_APPEND,
+                                       perms, &fid, &pos);
         }
     }
 
@@ -416,19 +417,19 @@ static int unifycr_setvbuf(
     /* check whether we've already associated a buffer */
     if (s->buf != NULL) {
         /* ERROR: stream already has buffer */
-        return UNIFYCR_ERR_BADF;
+        return UNIFYCR_ERROR_BADF;
     }
 
     /* check that the type argument is valid */
     if (type != _IOFBF && type != _IOLBF && type != _IONBF) {
         /* ERROR: invalid type argument */
-        return UNIFYCR_ERR_INVAL;
+        return UNIFYCR_ERROR_INVAL;
     }
 
     /* check that size is valid */
     if (size <= 0) {
         /* ERROR: invalid size argument */
-        return UNIFYCR_ERR_INVAL;
+        return UNIFYCR_ERROR_INVAL;
     }
 
     /* associate buffer with stream */
@@ -437,7 +438,7 @@ static int unifycr_setvbuf(
         s->buf = malloc(size);
         if (s->buf == NULL) {
             /* ERROR: no memory */
-            return UNIFYCR_ERR_NOMEM;
+            return UNIFYCR_ERROR_NOMEM;
         }
         /* remember that we need to free the buffer at the end */
         s->buffree = 1;
@@ -507,14 +508,14 @@ static int unifycr_stream_read(
         /* ERROR: invalid file descriptor */
         s->err = 1;
         errno = EBADF;
-        return UNIFYCR_ERR_BADF;
+        return UNIFYCR_ERROR_BADF;
     }
 
     /* bail with error if stream not open for reading */
     if (! filedesc->read) {
         s->err = 1;
         errno = EBADF;
-        return UNIFYCR_ERR_BADF;
+        return UNIFYCR_ERROR_BADF;
     }
 
     /* associate buffer with stream if we need to */
@@ -543,7 +544,7 @@ static int unifycr_stream_read(
     if (unifycr_would_overflow_offt(current, (off_t) count)) {
         s->err = 1;
         errno = EOVERFLOW;
-        return UNIFYCR_ERR_OVERFLOW;
+        return UNIFYCR_ERROR_OVERFLOW;
     }
 
     /* take bytes from push back buffer if they exist */
@@ -665,14 +666,14 @@ static int unifycr_stream_write(
         /* ERROR: invalid file descriptor */
         s->err = 1;
         errno = EBADF;
-        return UNIFYCR_ERR_BADF;
+        return UNIFYCR_ERROR_BADF;
     }
 
     /* bail with error if stream not open for writing */
     if (! filedesc->write) {
         s->err = 1;
         errno = EBADF;
-        return UNIFYCR_ERR_BADF;
+        return UNIFYCR_ERROR_BADF;
     }
 
     /* TODO: Don't know what to do with push back bytes if write
@@ -686,7 +687,7 @@ static int unifycr_stream_write(
         if (fid < 0) {
             s->err = 1;
             errno = EBADF;
-            return UNIFYCR_ERR_BADF;
+            return UNIFYCR_ERROR_BADF;
         }
         current = unifycr_fid_size(fid);
 
@@ -710,7 +711,7 @@ static int unifycr_stream_write(
     if (unifycr_would_overflow_offt(current, (off_t) count)) {
         s->err = 1;
         errno = EFBIG;
-        return UNIFYCR_ERR_FBIG;
+        return UNIFYCR_ERROR_FBIG;
     }
 
     /* associate buffer with stream if we need to */
@@ -782,7 +783,7 @@ static int unifycr_stream_write(
                 /* ERROR: write error, set error indicator and errno */
                 s->err = 1;
                 errno = ENOMEM;
-                return UNIFYCR_ERR_NOMEM;
+                return UNIFYCR_ERROR_NOMEM;
             }
         } else {
             /* fully buffered, write until we hit the buffer limit */
@@ -2775,6 +2776,7 @@ literal:
         /*
          * Do the conversion.
          */
+        nr = 0;
         switch (c) {
 
         case CT_CHAR:
@@ -2787,9 +2789,8 @@ literal:
                                            __LINE__, "%s", fmt0);
             } else {
                 nr = convert_char(fp, GETARG(char *), width);
-            }
-            if (nr < 0) {
-                goto input_failure;
+                if (nr < 0)
+                    goto input_failure;
             }
             break;
 
@@ -2804,12 +2805,11 @@ literal:
             } else {
                 nr = convert_ccl(fp, GETARG(char *), width,
                                  ccltab);
-            }
-            if (nr <= 0) {
-                if (nr < 0) {
-                    goto input_failure;
-                } else { /* nr == 0 */
-                    goto match_failure;
+                if (nr <= 0) {
+                    if (nr < 0)
+                        goto input_failure;
+                    else /* nr == 0 */
+                        goto match_failure;
                 }
             }
             break;
@@ -2824,9 +2824,8 @@ literal:
                                            __LINE__, "%s", fmt0);
             } else {
                 nr = convert_string(fp, GETARG(char *), width);
-            }
-            if (nr < 0) {
-                goto input_failure;
+                if (nr < 0)
+                    goto input_failure;
             }
             break;
 
