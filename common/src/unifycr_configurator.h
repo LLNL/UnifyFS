@@ -68,20 +68,26 @@
     UNIFYCR_CFG_CLI(unifycr, consistency, STRING, LAMINATED, "consistency model", NULL, 'c', "specify consistency model (NONE | LAMINATED | POSIX)") \
     UNIFYCR_CFG_CLI(unifycr, debug, BOOL, off, "enable debug output", NULL, 'd', "on|off") \
     UNIFYCR_CFG_CLI(unifycr, mountpoint, STRING, /unifycr, "mountpoint directory", NULL, 'm', "specify full path to desired mountpoint") \
-    UNIFYCR_CFG(client, max_files, INT, 0, "client max file count", NULL) \
-    UNIFYCR_CFG(client, chunk_mem, INT, 0, "shared memory receive segment size", NULL) \
+    UNIFYCR_CFG(client, max_files, INT, UNIFYCR_MAX_FILES, "client max file count", NULL) \
     UNIFYCR_CFG_CLI(log, verbosity, INT, 0, "log verbosity level", NULL, 'v', "specify logging verbosity level") \
     UNIFYCR_CFG_CLI(log, file, STRING, unifycrd.log, "log file name", NULL, 'l', "specify log file name") \
     UNIFYCR_CFG_CLI(log, dir, STRING, LOGDIR, "log file directory", configurator_directory_check, 'L', "specify full path to directory to contain log file") \
+    UNIFYCR_CFG(logfs, index_buf_size, INT, UNIFYCR_INDEX_BUF_SIZE, "log file system index buffer size", NULL) \
+    UNIFYCR_CFG(logfs, attr_buf_size, INT, UNIFYCR_FATTR_BUF_SIZE, "log file system file attributes buffer size", NULL) \
     UNIFYCR_CFG(meta, db_name, STRING, META_DEFAULT_DB_NAME, "metadata database name", NULL) \
     UNIFYCR_CFG(meta, db_path, STRING, META_DEFAULT_DB_PATH, "metadata database path", NULL) \
     UNIFYCR_CFG(meta, server_ratio, INT, META_DEFAULT_SERVER_RATIO, "metadata server ratio", NULL) \
-    UNIFYCR_CFG(meta, range_size, INT, META_DEFAULT_RANGE_SZ, "metadata server ratio", NULL) \
+    UNIFYCR_CFG(meta, range_size, INT, META_DEFAULT_RANGE_SZ, "metadata range size", NULL) \
     UNIFYCR_CFG_CLI(runstate, dir, STRING, RUNDIR/unifycr, "runstate file directory", configurator_directory_check, 'R', "specify full path to directory to contain runstate file") \
-    UNIFYCR_CFG(shmem, single, BOOL, off, "use single shared memory segment", NULL) \
-    UNIFYCR_CFG(shmem, recv_size, INT, 0, "shared memory receive segment size", NULL) \
-    UNIFYCR_CFG(shmem, req_size, INT, 0, "shared memory request segment size", NULL) \
-
+    UNIFYCR_CFG(shmem, chunk_bits, INT, UNIFYCR_CHUNK_BITS, "shared memory data chunk size in bits (i.e., size=2^bits)", NULL) \
+    UNIFYCR_CFG(shmem, chunk_mem, INT, UNIFYCR_CHUNK_MEM, "shared memory segment size for data chunks", NULL) \
+    UNIFYCR_CFG(shmem, recv_size, INT, UNIFYCR_SHMEM_RECV_SIZE, "shared memory segment size in bytes for receiving data from delegators", NULL) \
+    UNIFYCR_CFG(shmem, req_size, INT, UNIFYCR_SHMEM_REQ_SIZE, "shared memory segment size in bytes for sending requests to delegators", NULL) \
+    UNIFYCR_CFG(shmem, single, BOOL, off, "use single shared memory region for all clients", NULL) \
+    UNIFYCR_CFG(spillover, enabled, BOOL, on, "use local device for data chunk spillover", NULL) \
+    UNIFYCR_CFG(spillover, data_dir, STRING, NULLSTRING, "spillover data directory", configurator_directory_check) \
+    UNIFYCR_CFG(spillover, meta_dir, STRING, NULLSTRING, "spillover metadata directory", configurator_directory_check) \
+    UNIFYCR_CFG(spillover, size, INT, UNIFYCR_SPILLOVER_SIZE, "spillover max data size in bytes", NULL) \
 
 #ifdef __cplusplus
 extern "C" {
@@ -142,8 +148,8 @@ int unifycr_config_process_cli_args(unifycr_cfg_t *cfg,
 
 int unifycr_config_process_environ(unifycr_cfg_t *cfg);
 
-int unifycr_config_process_file(unifycr_cfg_t *cfg,
-                                const char *file);
+int unifycr_config_process_ini_file(unifycr_cfg_t *cfg,
+                                    const char *file);
 
 
 int unifycr_config_validate(unifycr_cfg_t *cfg);

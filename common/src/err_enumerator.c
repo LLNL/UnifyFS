@@ -49,6 +49,8 @@ UNIFYCR_ERROR_ENUMERATOR
 const char *unifycr_error_enum_str(unifycr_error_e e)
 {
     switch (e) {
+    case UNIFYCR_FAILURE:
+        return "UNIFYCR_FAILURE";
     case UNIFYCR_SUCCESS:
         return "UNIFYCR_SUCCESS";
 #define ENUMITEM(name, desc)                              \
@@ -72,6 +74,8 @@ UNIFYCR_ERROR_ENUMERATOR
 const char *unifycr_error_enum_description(unifycr_error_e e)
 {
     switch (e) {
+    case UNIFYCR_FAILURE:
+        return "Failure";
     case UNIFYCR_SUCCESS:
         return "Success";
 #define ENUMITEM(name, desc)                              \
@@ -95,14 +99,14 @@ unifycr_error_e unifycr_error_enum_from_str(const char *s)
     UNIFYCR_ERROR_ENUMERATOR;
 #undef ENUMITEM
 
-    return UNIFYCR_ERROR_INVALID;
+    return UNIFYCR_INVALID_ERROR;
 }
 
 /* validity check */
 
 int check_valid_unifycr_error_enum(unifycr_error_e e)
 {
-    return ((e > UNIFYCR_ERROR_INVALID) &&
+    return ((e > UNIFYCR_INVALID_ERROR) &&
             (e < UNIFYCR_ERROR_MAX) &&
             (unifycr_error_enum_str(e) != NULL));
 }

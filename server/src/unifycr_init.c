@@ -45,6 +45,7 @@
 #include "unifycr_cmd_handler.h"
 #include "unifycr_service_manager.h"
 #include "unifycr_request_manager.h"
+#include "unifycr_runstate.h"
 
 int *local_rank_lst;
 int local_rank_cnt;
@@ -118,17 +119,19 @@ static void daemonize(void)
 
 int main(int argc, char *argv[])
 {
-
-    char dbg_fname[GEN_STR_LEN] = {0};
     int provided;
-    char *env;
     int rc;
+    char dbg_fname[UNIFYCR_MAX_FILENAME] = {0};
 
     rc = unifycr_config_init(&server_cfg, argc, argv);
     if (rc != 0)
         exit(1);
 
     daemonize();
+
+    rc = unifycr_write_runstate(&server_cfg);
+    if (rc != (int)UNIFYCR_SUCCESS)
+        exit(1);
 
     rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
 
@@ -150,7 +153,7 @@ int main(int argc, char *argv[])
     local_rank_idx = find_rank_idx(glb_rank, local_rank_lst,
                                    local_rank_cnt);
 
-    sprintf(dbg_fname, "%s/%s.%d",
+    snprintf(dbg_fname, sizeof(dbg_fname), "%s/%s.%d",
             server_cfg.log_dir, server_cfg.log_file, glb_rank);
     rc = dbg_open(dbg_fname);
     if (rc != ULFS_SUCCESS)
@@ -250,6 +253,9 @@ int main(int argc, char *argv[])
 
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
+
+    rc = unifycr_clean_runstate(&server_cfg);
+
     return 0;
 }
 
@@ -262,9 +268,9 @@ int main(int argc, char *argv[])
 */
 static int CountTasksPerNode(int rank, int numTasks)
 {
-    char       localhost[ULFS_MAX_FILENAME];
-    char       hostname[ULFS_MAX_FILENAME];
-    int        resultsLen = ULFS_MAX_FILENAME;
+    char       localhost[HOST_NAME_MAX];
+    char       hostname[HOST_NAME_MAX];
+    int        resultsLen = HOST_NAME_MAX;
 
     MPI_Status status;
     int rc;
@@ -282,7 +288,7 @@ static int CountTasksPerNode(int rank, int numTasks)
                                            * sizeof(name_rank_pair_t));
             /* MPI_receive all hostnames, and compare to local hostname */
             for (i = 1; i < numTasks; i++) {
-                rc = MPI_Recv(hostname, ULFS_MAX_FILENAME,
+                rc = MPI_Recv(hostname, HOST_NAME_MAX,
                               MPI_CHAR, MPI_ANY_SOURCE,
                               MPI_ANY_TAG,
                               MPI_COMM_WORLD, &status);
@@ -345,14 +351,14 @@ static int CountTasksPerNode(int rank, int numTasks)
             for (i = 0; i < set_counter; i++) {
                 for (j = 0; j < rank_cnt[i]; j++) {
                     if (rank_set[i][j] != 0) {
-                        rc = MPI_Send(&rank_cnt[i], 1,
-                                      MPI_INT, rank_set[i][j], 0, MPI_COMM_WORLD);
+                        rc = MPI_Send(&rank_cnt[i], 1, MPI_INT,
+                                      rank_set[i][j], 0, MPI_COMM_WORLD);
                         if (rc != 0)
                             return -1;
 
                         /*send the local rank set to the corresponding rank*/
-                        rc = MPI_Send(rank_set[i], rank_cnt[i],
-                                      MPI_INT, rank_set[i][j], 0, MPI_COMM_WORLD);
+                        rc = MPI_Send(rank_set[i], rank_cnt[i], MPI_INT,
+                                      rank_set[i][j], 0, MPI_COMM_WORLD);
                         if (rc != 0)
                             return -1;
                     } else
@@ -378,7 +384,8 @@ static int CountTasksPerNode(int rank, int numTasks)
         } else {
             /* non-root process performs MPI_send to send
              * hostname to root node */
-            rc = MPI_Send(localhost, ULFS_MAX_FILENAME, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+            rc = MPI_Send(localhost, HOST_NAME_MAX, MPI_CHAR,
+                          0, 0, MPI_COMM_WORLD);
             if (rc != 0)
                 return -1;
             /*receive the local rank count */

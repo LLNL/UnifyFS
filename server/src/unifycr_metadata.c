@@ -560,13 +560,13 @@ int meta_sanitize()
 
     meta_free_indices();
 
-    char dbfilename[GEN_STR_LEN] = {0};
-    char statfilename[GEN_STR_LEN] = {0};
-    char manifestname[GEN_STR_LEN] = {0};
+    char dbfilename[UNIFYCR_MAX_FILENAME] = {0};
+    char statfilename[UNIFYCR_MAX_FILENAME] = {0};
+    char manifestname[UNIFYCR_MAX_FILENAME] = {0};
 
-    char dbfilename1[GEN_STR_LEN] = {0};
-    char statfilename1[GEN_STR_LEN] = {0};
-    char manifestname1[GEN_STR_LEN] = {0};
+    char dbfilename1[UNIFYCR_MAX_FILENAME] = {0};
+    char statfilename1[UNIFYCR_MAX_FILENAME] = {0};
+    char manifestname1[UNIFYCR_MAX_FILENAME] = {0};
     sprintf(dbfilename, "%s/%s-%d-%d", md->db_opts->db_path,
             md->db_opts->db_name, unifycr_indexes[0]->id, md->mdhim_rank);
 

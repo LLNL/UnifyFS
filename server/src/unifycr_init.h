@@ -37,7 +37,7 @@
  * each application launched by srun.
  * */
 typedef struct {
-    char hostname[ULFS_MAX_FILENAME];
+    char hostname[HOST_NAME_MAX];
     int rank;
 } name_rank_pair_t;
 

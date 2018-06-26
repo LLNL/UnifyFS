@@ -22,9 +22,9 @@ export UNIFYCR_TEST_RUN_SCRIPT=$UNIFYCR_BUILD_DIR/t/test_run_env.sh
 #
 # Find MPI job launcher.
 #
-if test -n "$(which srun)"; then
+if test -n "$(which srun 2>/dev/null)"; then
     JOB_RUN_COMMAND="srun -n1 -N1"
-elif test -n "$(which mpirun)"; then
+elif test -n "$(which mpirun 2>/dev/null)"; then
     JOB_RUN_COMMAND="mpirun -wd $UNIFYCR_BUILD_DIR -np 1"
 fi
 
