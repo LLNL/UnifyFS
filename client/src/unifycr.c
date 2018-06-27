@@ -98,6 +98,9 @@ static int unifycr_fpos_enabled   = 1;  /* whether we can use fgetpos/fsetpos */
 
 unifycr_cfg_t client_cfg;
 
+client_cfg.spillover_meta_dir = "/l/ssd";
+client_cfg.spillover_data_dir = "/l/ssd";
+
 //fs_type_t fs_type = UNIFYCRFS;
 unifycr_index_buf_t unifycr_indices;
 unifycr_fattr_buf_t unifycr_fattrs;
