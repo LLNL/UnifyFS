@@ -40,6 +40,8 @@
  * Please also read this file LICENSE.CRUISE
  */
 
+#include <config.h>
+
 #define _GNU_SOURCE
 #include <sched.h>
 #include "unifycr-runtime-config.h"
@@ -1438,9 +1440,17 @@ static void *unifycr_superblock_shmget(size_t size, key_t key)
     if (superblock_fd == -1)
         return NULL;
 
+#ifdef HAVE_POSIX_FALLOCATE
+    ret = posix_fallocate(superblock_fd, 0, size);
+    if (ret) {
+        errno = ret;
+        return NULL;
+    }
+#else
     ret = ftruncate(superblock_fd, size);
     if (ret == -1)
         return NULL;
+#endif
 
     scr_shmblock = mmap(NULL, size, PROT_WRITE | PROT_READ, MAP_SHARED,
                         superblock_fd, 0);
@@ -2043,9 +2053,17 @@ static int unifycr_init_recv_shm(int local_rank_idx, int app_id)
     if (rc == -1)
         return UNIFYCR_FAILURE;
 
+#ifdef HAVE_POSIX_FALLOCATE
+    rc = posix_fallocate(recvbuf_fd, 0, shm_recv_size);
+    if (rc) {
+        errno = rc;
+        return UNIFYCR_FAILURE;
+    }
+#else
     rc = ftruncate(recvbuf_fd, shm_recv_size);
     if (rc == -1)
         return UNIFYCR_FAILURE;
+#endif
 
     shm_recvbuf = mmap(NULL, shm_recv_size, PROT_WRITE | PROT_READ,
                        MAP_SHARED, recvbuf_fd, 0);
@@ -2088,9 +2106,18 @@ static int unifycr_init_req_shm(int local_rank_idx, int app_id)
     if (rc == -1)
         return UNIFYCR_FAILURE;
 
+#ifdef HAVE_POSIX_FALLOCATE
+    rc = posix_fallocate(reqbuf_fd, 0, shm_req_size);
+    if (rc) {
+        errno = rc;
+        return UNIFYCR_FAILURE;
+    }
+#else
     rc = ftruncate(reqbuf_fd, shm_req_size);
     if (rc == -1)
         return UNIFYCR_FAILURE;
+#endif
+
 
     shm_reqbuf = mmap(NULL, shm_req_size, PROT_WRITE | PROT_READ,
                       MAP_SHARED, reqbuf_fd, 0);
