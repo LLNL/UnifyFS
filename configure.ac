@@ -52,6 +52,11 @@ AC_CHECK_HEADERS([inttypes.h wchar.h wctype.h])
 AC_CHECK_HEADER([openssl/md5.h], [], [AC_MSG_FAILURE([
         *** openssl/md5.h missing, openssl-devel package required])])
 
+AC_CHECK_HEADERS([pmix.h],
+                 [AM_CONDITIONAL([USE_PMIX], [true])],
+                 [AM_CONDITIONAL([USE_PMIX], [false])])
+
+
 # Checks for library functions.
 AC_FUNC_MALLOC
 AC_FUNC_MMAP

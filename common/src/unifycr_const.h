@@ -31,7 +31,7 @@
 #define UNIFYCR_CONST_H
 
 #include <fcntl.h>
-#include <limits.h>
+#include <limits.h> // provides HOST_NAME_MAX
 
 /* ********************** ERROR CODES ************************ */
 #include "err_enumerator.h"

@@ -76,6 +76,7 @@
     ENUMITEM(OVERFLOW, "Value too large for data type.")                \
     ENUMITEM(PD, "Error creating PD.")                                  \
     ENUMITEM(PIPE, "Pipe error.")                                       \
+    ENUMITEM(PMIX, "PMIx error.")                                       \
     ENUMITEM(POLL, "Error on poll.")                                    \
     ENUMITEM(POSTRECV, "Failed to post receive operation.")             \
     ENUMITEM(POSTSEND, "Failed to post send operation.")                \

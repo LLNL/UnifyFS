@@ -1,48 +1,69 @@
-#include "unifycr_runstate.h"
+#include <config.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#include "unifycr_runstate.h"
+#include "unifycr_pmix.h"
+
+const char *runstate_file = "unifycr-runstate.conf";
 
 int unifycr_read_runstate(unifycr_cfg_t *cfg,
                           const char *runstate_path)
 {
-    int rc;
+    int rc = (int)UNIFYCR_SUCCESS;
+    int have_path = 0;
     char runstate_fname[UNIFYCR_MAX_FILENAME] = {0};
+#ifdef HAVE_PMIX_H
+    char *pmix_path = NULL;
+#endif
 
     if (cfg == NULL) {
         fprintf(stderr, "%s() - invalid args\n", __func__);
         return (int)UNIFYCR_ERROR_INVAL;
     }
 
-    // TO-DO: check PMIx for runstate file path
-
     if (runstate_path == NULL) {
-        if (cfg->runstate_dir == NULL) {
-            fprintf(stderr,
-                    "%s() - bad runstate dir config setting\n", __func__);
-            return (int)UNIFYCR_ERROR_APPCONFIG;
+
+#ifdef HAVE_PMIX_H
+        // lookup runstate file path in PMIx
+        if (unifycr_pmix_lookup(pmix_key_runstate, 0, &pmix_path) == 0) {
+            have_path = 1;
+            snprintf(runstate_fname, sizeof(runstate_fname),
+                     "%s", pmix_path);
+            free(pmix_path);
         }
-        snprintf(runstate_fname, sizeof(runstate_fname),
-                 "%s/unifycr-runstate.conf", cfg->runstate_dir);
+#endif
+
+        if (!have_path) {
+            if (cfg->runstate_dir == NULL) {
+                fprintf(stderr,
+                        "%s() - bad runstate dir config setting\n", __func__);
+                return (int)UNIFYCR_ERROR_APPCONFIG;
+            }
+            snprintf(runstate_fname, sizeof(runstate_fname),
+                     "%s/%s", cfg->runstate_dir, runstate_file);
+        }
     } else {
         snprintf(runstate_fname, sizeof(runstate_fname),
                  "%s", runstate_path);
     }
 
-    rc = unifycr_config_process_ini_file(cfg, runstate_fname);
-    if (rc != 0) {
+    if (unifycr_config_process_ini_file(cfg, runstate_fname) != 0) {
         fprintf(stderr,
                 "%s() - failed to process runstate file %s\n",
                 __func__, runstate_fname);
-        return (int)UNIFYCR_ERROR_APPCONFIG;
+        rc = (int)UNIFYCR_ERROR_APPCONFIG;
     }
 
-    return (int)UNIFYCR_SUCCESS;
+    return rc;
 }
 
 int unifycr_write_runstate(unifycr_cfg_t *cfg)
 {
-    FILE *runstate_file = NULL;
+    int rc = (int)UNIFYCR_SUCCESS;
+    FILE *runstate_fp = NULL;
     char runstate_fname[UNIFYCR_MAX_FILENAME] = {0};
 
     if (cfg == NULL) {
@@ -50,31 +71,35 @@ int unifycr_write_runstate(unifycr_cfg_t *cfg)
         return (int)UNIFYCR_ERROR_INVAL;
     }
 
-    // eventually, should include server pid in file name
-    /* sprintf(runstate_fname, "%s/unifycr-runstate.conf.%d",
-     *         cfg->runstate_dir, (int)getpid());
-     */
     snprintf(runstate_fname, sizeof(runstate_fname),
-             "%s/unifycr-runstate.conf", cfg->runstate_dir);
+             "%s/%s", cfg->runstate_dir, runstate_file);
 
-    runstate_file = fopen(runstate_fname, "w");
-    if (runstate_file == NULL) {
+    runstate_fp = fopen(runstate_fname, "w");
+    if (runstate_fp == NULL) {
         fprintf(stderr,
                 "%s() - failed to create file %s - %s\n",
                 __func__, runstate_fname, strerror(errno));
-        return (int)UNIFYCR_ERROR_FILE;
+        rc = (int)UNIFYCR_ERROR_FILE;
+    } else {
+        unifycr_config_print_ini(cfg, runstate_fp);
+        fclose(runstate_fp);
+
+#ifdef HAVE_PMIX_H
+        // publish runstate file path to PMIx
+        if (unifycr_pmix_publish(pmix_key_runstate, runstate_fname) != 0) {
+            fprintf(stderr, "%s() - failed to publish %s k-v pair\n",
+                    __func__, pmix_key_runstate);
+            rc = (int)UNIFYCR_ERROR_PMIX;
+        }
+#endif
     }
-    unifycr_config_print_ini(cfg, runstate_file);
-    fclose(runstate_file);
 
-    // TO-DO: publish runstate file path to PMIx
-
-    return (int)UNIFYCR_SUCCESS;
+    return rc;
 }
 
 int unifycr_clean_runstate(unifycr_cfg_t *cfg)
 {
-    int rc;
+    int rc = (int)UNIFYCR_SUCCESS;
     char runstate_fname[UNIFYCR_MAX_FILENAME] = {0};
 
     if (cfg == NULL) {
@@ -82,22 +107,16 @@ int unifycr_clean_runstate(unifycr_cfg_t *cfg)
         return (int)UNIFYCR_ERROR_INVAL;
     }
 
-    // eventually, should include server pid in file name
-    /* sprintf(runstate_fname, "%s/unifycr-runstate.conf.%d",
-     *         cfg->runstate_dir, (int)getpid());
-     */
     snprintf(runstate_fname, sizeof(runstate_fname),
-             "%s/unifycr-runstate.conf", cfg->runstate_dir);
-
-    // TO-DO: remove runstate file path to PMIx
+             "%s/%s", cfg->runstate_dir, runstate_file);
 
     rc = unlink(runstate_fname);
     if (rc != 0) {
         fprintf(stderr,
                 "%s() - failed to remove file %s - %s\n",
                 __func__, runstate_fname, strerror(errno));
-        return (int)UNIFYCR_ERROR_FILE;
+        rc = (int)UNIFYCR_ERROR_FILE;
     }
 
-    return (int)UNIFYCR_SUCCESS;
+    return rc;
 }

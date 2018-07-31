@@ -41,30 +41,14 @@
  */
 
 #define _LARGEFILE64_SOURCE
-#include "unifycr-runtime-config.h"
-#include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/resource.h>
-#include <fcntl.h>
-#include <stdarg.h>
-#include <string.h>
-#include <time.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <sys/uio.h>
-#include <sys/mman.h>
-#include <search.h>
-#include <assert.h>
-#include <libgen.h>
-#include <limits.h>
-#include <aio.h>
-#define __USE_GNU
-#include <pthread.h>
+#include "unifycr-internal.h"
 #include "unifycr_meta.h"
 #include "unifycr-sysio.h"
-#include "unifycr-internal.h"
+
+#include <aio.h>
+
+#define _GNU_SOURCE
+#include <pthread.h>
 
 /* -------------------
  * define external variables

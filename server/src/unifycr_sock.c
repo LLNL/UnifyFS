@@ -27,29 +27,36 @@
  * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
+#include <config.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <sys/socket.h>
-#include <sys/un.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include "unifycr_global.h"
-#include "unifycr_sock.h"
+
 #include "arraylist.h"
-#include "unifycr_setup.h"
+#include "log.h"
 #include "unifycr_const.h"
+#include "unifycr_global.h"
+#include "unifycr_pmix.h"
+#include "unifycr_setup.h"
+#include "unifycr_sock.h"
 
+int server_rank_idx;
 int server_sockfd;
-int num_fds = 0;
-
-int thrd_pipe_fd[2] = {0};
-
-struct pollfd poll_set[MAX_NUM_CLIENTS];
 struct sockaddr_un server_address;
+
+//int thrd_pipe_fd[2] = {0};
+
+int num_fds; // = 0, number of fds currrently in poll_set
+struct pollfd poll_set[MAX_NUM_CLIENTS];
+
 char cmd_buf[MAX_NUM_CLIENTS][CMD_BUF_SIZE];
 char ack_buf[MAX_NUM_CLIENTS][CMD_BUF_SIZE];
 int ack_msg[3] = {0};
+
 int detached_sock_id = -1;
 int cur_sock_id = -1;
 
@@ -60,18 +67,19 @@ int cur_sock_id = -1;
 int sock_init_server(int local_rank_idx)
 {
     int rc;
-    char tmp_str[UNIFYCR_MAX_FILENAME];
+    char sock_path[UNIFYCR_MAX_FILENAME];
 
-    snprintf(tmp_str, sizeof(tmp_str), "%s%d",
-             DEF_SOCK_PATH, local_rank_idx);
+    server_rank_idx = local_rank_idx;
+    snprintf(sock_path, sizeof(sock_path), "%s%d",
+             SOCKET_PATH, server_rank_idx);
 
     server_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
 
     memset(&server_address, 0, sizeof(server_address));
     server_address.sun_family = AF_UNIX;
-    strcpy(server_address.sun_path, tmp_str);
+    strcpy(server_address.sun_path, sock_path);
     int server_len = sizeof(server_address);
-    unlink(tmp_str);
+    unlink(sock_path);
 
     rc = bind(server_sockfd, (struct sockaddr *)&server_address,
               (socklen_t)server_len);
@@ -85,6 +93,7 @@ int sock_init_server(int local_rank_idx)
         close(server_sockfd);
         return -1;
     }
+    LOG(LOG_DBG, "domain socket path is %s", sock_path);
 
     int flag = fcntl(server_sockfd, F_GETFL);
     fcntl(server_sockfd, F_SETFL, flag | O_NONBLOCK);
@@ -93,9 +102,12 @@ int sock_init_server(int local_rank_idx)
     poll_set[0].revents = 0;
     num_fds++;
 
+#ifdef HAVE_PMIX_H
+    // publish domain socket path
+    unifycr_pmix_publish(pmix_key_unifycrd_socket, sock_path);
+#endif
+
     return 0;
-
-
 }
 
 int sock_add(int fd)
@@ -117,7 +129,7 @@ void sock_reset()
     int i;
 
     for (i = 0; i < num_fds; i++) {
-        poll_set[i].events = POLLIN | POLLPRI;
+        poll_set[i].events = POLLIN | POLLHUP;
         poll_set[i].revents = 0;
     }
 }
@@ -162,7 +174,7 @@ int sock_wait_cli_cmd()
     sock_reset();
     rc = poll(poll_set, num_fds, -1);
     if (rc <= 0) {
-        return (int)UNIFYCR_ERROR_TIMEOUT;
+        return (int)UNIFYCR_ERROR_POLL;
     } else {
         for (i = 0; i < num_fds; i++) {
             if (poll_set[i].fd != -1 && poll_set[i].revents != 0) {
@@ -260,7 +272,7 @@ int sock_sanitize()
     }
 
     snprintf(tmp_str, sizeof(tmp_str), "%s%d",
-             DEF_SOCK_PATH, local_rank_idx);
+             SOCKET_PATH, server_rank_idx);
     unlink(tmp_str);
     return 0;
 }
