@@ -41,45 +41,11 @@
  */
 
 #include <config.h>
-
-#define _GNU_SOURCE
-#include <sched.h>
-#include "unifycr-runtime-config.h"
-
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/resource.h>
-#include <fcntl.h>
-#include <stdarg.h>
-#include <string.h>
-#include <time.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <sys/uio.h>
-#include <sys/mman.h>
-#include <search.h>
-#include <assert.h>
-#include <libgen.h>
-#include <limits.h>
-#include <pthread.h>
 #include <mpi.h>
 #include <openssl/md5.h>
-//#define __USE_GNU
 
-
-#ifdef ENABLE_NUMA_POLICY
-#include <numa.h>
-#endif
-
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <sched.h>
-
-#include "unifycr_meta.h"
 #include "unifycr-internal.h"
+#include "unifycr_pmix.h"
 #include "unifycr_runstate.h"
 
 #ifdef UNIFYCR_GOTCHA
@@ -88,10 +54,13 @@
 #include "gotcha_map_unifycr_list.h"
 #endif
 
-
-#ifndef HAVE_OFF64_T
-typedef int64_t off64_t;
+#ifdef ENABLE_NUMA_POLICY
+#include <numa.h>
 #endif
+
+#define _GNU_SOURCE
+#include <pthread.h>
+#include <sched.h>
 
 static int unifycr_fpos_enabled   = 1;  /* whether we can use fgetpos/fsetpos */
 
@@ -2209,13 +2178,16 @@ static int get_del_cnt(void)
 static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
                                int l_num_del_per_node)
 {
-    struct sockaddr_un serv_addr;
-    char tmp_path[UNIFYCR_MAX_FILENAME] = {0};
+    int rc = -1;
     int nprocs_per_del;
     int len;
     int result;
     int flag;
-    int rc = -1;
+    struct sockaddr_un serv_addr;
+    char tmp_path[UNIFYCR_MAX_FILENAME] = {0};
+#ifdef HAVE_PMIX_H
+    char *pmix_path = NULL;
+#endif
 
     client_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (client_sockfd < 0)
@@ -2223,14 +2195,30 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
 
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sun_family = AF_UNIX;
-    if (l_num_procs_per_node % l_num_del_per_node == 0)
-        nprocs_per_del = l_num_procs_per_node / l_num_del_per_node;
-    else
-        nprocs_per_del = l_num_procs_per_node / l_num_del_per_node + 1;
 
-    /*which delegator I belong to*/
-    snprintf(tmp_path, sizeof(tmp_path), "%s%d",
-             SOCKET_PATH, proc_id / nprocs_per_del);
+    if ((proc_id == 0) &&
+        (l_num_procs_per_node == 1) &&
+        (l_num_del_per_node == 1)) {
+        // use zero-index domain socket path
+        snprintf(tmp_path, sizeof(tmp_path), "%s0",
+                 SOCKET_PATH);
+
+#ifdef HAVE_PMIX_H
+        // lookup domain socket path in PMIx
+        if (unifycr_pmix_lookup(pmix_key_unifycrd_socket, 0, &pmix_path) == 0) {
+            memset(tmp_path, 0, sizeof(tmp_path));
+            snprintf(tmp_path, sizeof(tmp_path), "%s", pmix_path);
+            free(pmix_path);
+        }
+#endif
+    } else {
+        /* calculate delegator assignment */
+        nprocs_per_del = l_num_procs_per_node / l_num_del_per_node;
+        if ((l_num_procs_per_node % l_num_del_per_node) != 0)
+            nprocs_per_del++;
+        snprintf(tmp_path, sizeof(tmp_path), "%s%d",
+                 SOCKET_PATH, proc_id / nprocs_per_del);
+    }
 
     strcpy(serv_addr.sun_path, tmp_path);
     len = sizeof(serv_addr);
@@ -2551,8 +2539,8 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
             for (i = 0; i < local_rank_cnt; i++) {
                 if (local_rank_lst[i] != rank) {
                     rc = MPI_Send(&local_del_cnt, 1, MPI_INT,
-                                      local_rank_lst[i], 0,
-                                      MPI_COMM_WORLD);
+                                  local_rank_lst[i], 0,
+                                  MPI_COMM_WORLD);
                     if (rc != MPI_SUCCESS) {
                         DEBUG("rank:%d, MPI_Send failed", dbg_rank);
                         return UNIFYCR_FAILURE;
@@ -2568,7 +2556,7 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     } else {
         MPI_Status status;
         rc = MPI_Recv(&local_del_cnt, 1, MPI_INT, local_rank_lst[0],
-                          0, MPI_COMM_WORLD, &status);
+                      0, MPI_COMM_WORLD, &status);
         if (rc != MPI_SUCCESS) {
             DEBUG("rank:%d, MPI_Recv failed.", dbg_rank);
             return UNIFYCR_FAILURE;
@@ -2578,7 +2566,7 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
             return UNIFYCR_FAILURE;
         } else  {
             rc = unifycr_init_socket(local_rank_idx,
-                    local_rank_cnt, local_del_cnt);
+                                     local_rank_cnt, local_del_cnt);
             if (rc < 0) {
                 DEBUG("rank:%d, fail to initialize socket.", dbg_rank);
                 return UNIFYCR_FAILURE;

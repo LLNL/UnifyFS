@@ -218,6 +218,8 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
+    LOG(LOG_DBG, "finished service initialization");
+
     MPI_Barrier(MPI_COMM_WORLD);
     while (1) {
         rc = sock_wait_cli_cmd();
@@ -259,6 +261,7 @@ int main(int argc, char *argv[])
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
 
+    LOG(LOG_DBG, "terminating service");
     rc = unifycr_clean_runstate(&server_cfg);
 
     return 0;

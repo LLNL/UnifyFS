@@ -29,14 +29,9 @@
 
 #ifndef UNIFYCR_SOCK_H
 #define UNIFYCR_SOCK_H
+
 #include <poll.h>
-#include  "unifycr_const.h"
-
-#define DEF_SOCK_PATH "/tmp/unifycr_server_sock"
-#define UNIFYCR_SOCK_TIMEOUT 5000
-
-extern int server_sockfd;
-extern struct pollfd poll_set[MAX_NUM_CLIENTS];
+#include "unifycr_const.h"
 
 int sock_init_server(int local_rank_idx);
 int sock_add(int fd);
@@ -52,4 +47,5 @@ char *sock_get_ack_buf(int sock_id);
 int sock_remove(int idx);
 int sock_notify_cli(int sock_id, int cmd);
 char *sock_get_cmd_buf(int sock_id);
+
 #endif

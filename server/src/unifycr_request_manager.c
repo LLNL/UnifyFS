@@ -38,7 +38,7 @@
 #include "unifycr_metadata.h"
 #include "unifycr_sock.h"
 
-extern struct pollfd poll_set[MAX_NUM_CLIENTS];
+//extern struct pollfd poll_set[MAX_NUM_CLIENTS];
 
 struct timespec shm_wait_tm;
 

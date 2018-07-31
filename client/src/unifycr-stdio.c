@@ -40,29 +40,11 @@
  * Please also read this file LICENSE.CRUISE
  */
 
-#include "unifycr-runtime-config.h"
-#include <stdio.h>
-#include <wchar.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/resource.h>
-#include <fcntl.h>
-#include <stdarg.h>
-#include <string.h>
-#include <time.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <sys/uio.h>
-#include <sys/mman.h>
-#include <search.h>
-#include <assert.h>
-#include <libgen.h>
-#include <limits.h>
-#define __USE_GNU
-#include <pthread.h>
-#include "unifycr-stdio.h"
 #include "unifycr-internal.h"
+#include "unifycr-stdio.h"
+
+#define _GNU_SOURCE
+#include <pthread.h>
 
 static int unifycr_fpos_enabled = 1; /* whether we can use fgetpos/fsetpos */
 

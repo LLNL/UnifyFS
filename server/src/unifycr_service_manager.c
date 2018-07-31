@@ -1027,7 +1027,7 @@ int sm_init_socket()
 
     /*which delegator I belong to*/
     snprintf(tmp_path, sizeof(tmp_path), "%s%d",
-             DEF_SOCK_PATH, local_rank_idx);
+             SOCKET_PATH, local_rank_idx);
 
     strcpy(serv_addr.sun_path, tmp_path);
     len = sizeof(serv_addr);
