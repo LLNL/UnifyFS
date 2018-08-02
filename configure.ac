@@ -47,7 +47,7 @@ AC_CHECK_TYPES([ptrdiff_t])
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h limits.h stdlib.h string.h sys/socket.h sys/time.h])
 AC_CHECK_HEADERS([unistd.h arpa/inet.h inttypes.h netdb.h netinet/in.h])
-AC_CHECK_HEADERS([stddef.h stdint.h strings.h syslog.h])
+AC_CHECK_HEADERS([stddef.h stdint.h libgen.h strings.h syslog.h])
 AC_CHECK_HEADERS([inttypes.h wchar.h wctype.h])
 AC_CHECK_HEADER([openssl/md5.h], [], [AC_MSG_FAILURE([
         *** openssl/md5.h missing, openssl-devel package required])])
@@ -69,7 +69,7 @@ AC_ARG_ENABLE([debug],
 BUILD_DEBUG=no
 if test "x$enable_debug" = "xyes"; then
         BUILD_DEBUG=yes
-        CFLAGS=`echo $CFLAGS | sed -e s/O2/O0/`
+        CFLAGS=`echo $CFLAGS | sed -e s/O2/O1/`
 else
         BUILD_DEBUG=no
 fi
@@ -296,6 +296,8 @@ AC_CONFIG_FILES([Makefile
                  client/src/Makefile
                  client/tests/Makefile
                  client/unifycr.pc
+                 examples/Makefile
+                 examples/src/Makefile
                  extras/Makefile
                  extras/unifycr.conf
                  t/Makefile
