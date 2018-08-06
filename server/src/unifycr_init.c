@@ -121,13 +121,18 @@ int main(int argc, char *argv[])
 {
     int provided;
     int rc;
+    bool daemon = true;
     char dbg_fname[UNIFYCR_MAX_FILENAME] = {0};
 
     rc = unifycr_config_init(&server_cfg, argc, argv);
     if (rc != 0)
         exit(1);
 
-    daemonize();
+    rc = configurator_bool_val(server_cfg.unifycr_daemonize, &daemon);
+    if (rc != 0)
+        exit(1);
+    if (daemon)
+        daemonize();
 
     rc = unifycr_write_runstate(&server_cfg);
     if (rc != (int)UNIFYCR_SUCCESS)
