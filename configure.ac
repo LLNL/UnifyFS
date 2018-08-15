@@ -155,6 +155,10 @@ PKG_CHECK_MODULES([LEVELDB], [leveldb], ,
 # look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
 UNIFYCR_AC_GOTCHA
 
+# HDF found?
+AX_LIB_HDF5
+AM_CONDITIONAL([HAVE_HDF5], [test x$with_hdf5 = xyes])
+
 # libc functions wrapped by unifycr
 
 CP_WRAPPERS+="-Wl,-wrap,access"
@@ -294,7 +298,6 @@ AC_CONFIG_FILES([Makefile
                  server/src/Makefile
                  client/Makefile
                  client/src/Makefile
-                 client/tests/Makefile
                  client/unifycr.pc
                  examples/Makefile
                  examples/src/Makefile

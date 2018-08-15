@@ -40,6 +40,7 @@ static int use_pread;       /* use pread(2) */
 static int pattern;         /* N to 1 (N1, default) or N to N (NN) */
 static int fd;              /* target file descriptor */
 
+static int lipsum;          /* check contents written by the write test. */
 static int standard;        /* not mounting unifycr when set */
 
 /* time statistics */
@@ -87,6 +88,17 @@ static int do_read(void)
                                  use_pread ? "pread()" : "read()");
                 return -1;
             }
+
+            if (lipsum) {
+                uint64_t epos = 0;
+
+                ret = lipsum_check(buf, chunksize, offset, &epos);
+                if (ret < 0) {
+                    test_print(rank, "lipsum check failed at offset %llu.\n",
+                               (unsigned long long) epos);
+                    return -1;
+                }
+            }
         }
     }
 
@@ -129,6 +141,22 @@ static int do_listread(void)
     if (ret < 0) {
         test_print(rank, "lio_listio failed");
         return -1;
+    }
+
+    if (lipsum) {
+        for (i = 0; i < nblocks*(blocksize/chunksize); i++) {
+            uint64_t epos = 0;
+
+            current = &aiocb_items[i];
+
+            ret = lipsum_check((const char *) current->aio_buf, chunksize,
+                               current->aio_offset, &epos);
+            if (ret < 0) {
+                test_print(rank, "lipsum check failed at offset %llu.\n",
+                           (unsigned long long) epos);
+                return -1;
+            }
+        }
     }
 
     gettimeofday(&read_end, NULL);
@@ -182,6 +210,7 @@ static struct option const long_opts[] = {
     { "debug", 0, 0, 'd' },
     { "filename", 1, 0, 'f' },
     { "help", 0, 0, 'h' },
+    { "lipsum", 0, 0, 'L' },
     { "listio", 0, 0, 'l' },
     { "mount", 1, 0, 'm' },
     { "pattern", 1, 0, 'p' },
@@ -191,7 +220,7 @@ static struct option const long_opts[] = {
     { 0, 0, 0, 0},
 };
 
-static char *short_opts = "b:n:c:df:hlm:Pp:su";
+static char *short_opts = "b:n:c:df:hLlm:Pp:su";
 
 static const char *usage_str =
 "\n"
@@ -209,11 +238,13 @@ static const char *usage_str =
 " -f, --filename=<filename>        target file name under mountpoint\n"
 "                                  (default: testfile)\n"
 " -h, --help                       help message\n"
+" -L, --lipsum                     check contents written by write test\n"
 " -l, --listio                     use lio_listio(2) instead of read(2)\n"
 " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
 "                                  (default: /tmp)\n"
 " -P, --pread                      use pread(2) instead of read(2)\n"
 " -p, --pattern=<pattern>          should be 'n1'(n to 1) or 'nn' (n to n)\n"
+" -s, --standard                   do not use unifycr but run standard I/O\n"
 " -u, --unmount                    unmount the filesystem after test\n"
 "\n";
 
@@ -261,6 +292,10 @@ int main(int argc, char **argv)
             debug = 1;
             break;
 
+        case 'L':
+            lipsum = 1;
+            break;
+
         case 'l':
             use_listio = 1;
             break;
@@ -300,6 +335,18 @@ int main(int argc, char **argv)
     if (blocksize < chunksize || blocksize % chunksize > 0) {
         test_print_once(rank, "blocksize should be larger than "
                               "and divisible by chunksize.\n");
+        exit(-1);
+    }
+
+    if (chunksize % (1<<10) > 0) {
+        test_print_once(rank, "chunksize and blocksize should be divisible "
+                              "by 1024.\n");
+        exit(-1);
+    }
+
+    if (static_linked(program) && standard) {
+        test_print_once(rank, "--standard, -s option only works when "
+                              "dynamically linked.\n");
         exit(-1);
     }
 

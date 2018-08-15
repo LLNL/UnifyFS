@@ -82,3 +82,20 @@ app_tileio_static_SOURCES = app-tileio.c
 app_tileio_static_CPPFLAGS = $(test_cppflags)
 app_tileio_static_LDADD   = $(test_static_ldadd)
 app_tileio_static_LDFLAGS = $(test_static_ldflags)
+
+if HAVE_HDF5
+noinst_PROGRAMS += app-hdf5-create-gotcha \
+                   app-hdf5-writeread-gotcha
+
+app_hdf5_create_gotcha_SOURCES = app-hdf5-create.c
+app_hdf5_create_gotcha_CPPFLAGS = $(test_cppflags) $(HDF5_CPPFLAGS)
+app_hdf5_create_gotcha_LDADD   = $(test_gotcha_ldadd) $(HDF5_LIBS)
+app_hdf5_create_gotcha_LDFLAGS = $(AM_LDFLAGS) $(HDF5_LDFLAGS)
+
+app_hdf5_writeread_gotcha_SOURCES = app-hdf5-writeread.c
+app_hdf5_writeread_gotcha_CPPFLAGS = $(test_cppflags) $(HDF5_CPPFLAGS)
+app_hdf5_writeread_gotcha_LDADD   = $(test_gotcha_ldadd) $(HDF5_LIBS)
+app_hdf5_writeread_gotcha_LDFLAGS = $(AM_LDFLAGS) $(HDF5_LDFLAGS)
+endif
+
+CLEANFILES = $(noinst_PROGRAMS)

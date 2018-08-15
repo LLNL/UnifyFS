@@ -47,6 +47,7 @@ static int pattern;         /* N to 1 (N1, default) or N to N (NN) */
 static int fd;              /* target file descriptor */
 static int synchronous;     /* sync metadata for each write? (default: no)*/
 
+static int lipsum;          /* generate contents to verify correctness */
 static int standard;        /* not mounting unifycr when set */
 
 /* time statistics */
@@ -77,6 +78,9 @@ static int do_write(void)
                          + j*chunksize;
             else
                 offset = i*blocksize + j*chunksize;
+
+            if (lipsum)
+                lipsum_generate(buf, chunksize, offset);
 
             if (use_pwrite)
                 ret = pwrite(fd, buf, chunksize, offset);
@@ -158,6 +162,7 @@ static struct option const long_opts[] = {
     { "debug", 0, 0, 'd' },
     { "filename", 1, 0, 'f' },
     { "help", 0, 0, 'h' },
+    { "lipsum", 0, 0, 'L' },
     { "mount", 1, 0, 'm' },
     { "pattern", 1, 0, 'p' },
     { "pwrite", 0, 0, 'P' },
@@ -167,7 +172,7 @@ static struct option const long_opts[] = {
     { 0, 0, 0, 0},
 };
 
-static char *short_opts = "b:n:c:df:hm:p:PSsu";
+static char *short_opts = "b:n:c:df:hlm:p:PSsu";
 
 static const char *usage_str =
 "\n"
@@ -185,6 +190,7 @@ static const char *usage_str =
 " -f, --filename=<filename>        target file name under mountpoint\n"
 "                                  (default: testfile)\n"
 " -h, --help                       help message\n"
+" -L, --lipsum                     generate contents to verify correctness\n"
 " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
 "                                  (default: /tmp)\n"
 " -P, --pwrite                     use pwrite(2) instead of write(2)\n"
@@ -245,6 +251,10 @@ int main(int argc, char **argv)
             pattern = read_io_pattern(optarg);
             break;
 
+        case 'L':
+            lipsum = 1;
+            break;
+
         case 'm':
             mountpoint = strdup(optarg);
             break;
@@ -276,6 +286,18 @@ int main(int argc, char **argv)
     if (blocksize < chunksize || blocksize % chunksize > 0) {
         test_print_once(rank, "blocksize should be larger than "
                               "and divisible by chunksize.\n");
+        exit(-1);
+    }
+
+    if (chunksize % (1<<10) > 0) {
+        test_print_once(rank, "chunksize and blocksize should be divisible "
+                              "by 1024.\n");
+        exit(-1);
+    }
+
+    if (static_linked(program) && standard) {
+        test_print_once(rank, "--standard, -s option only works when "
+                              "dynamically linked.\n");
         exit(-1);
     }
 

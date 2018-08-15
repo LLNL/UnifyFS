@@ -123,4 +123,46 @@ static inline const char *io_pattern_string(int pattern)
         return "Unknown";
 }
 
+static inline int static_linked(const char *program)
+{
+    char *pos = strstr(program, "-static");
+
+    return pos ? 1 : 0;
+}
+
+/*
+ * Each 8 byte (uint64_t) will be sequentially numbered.
+ */
+static inline void lipsum_generate(char *buf, uint64_t len, uint64_t offset)
+{
+    uint64_t i;
+    uint64_t start = offset / sizeof(uint64_t);
+    uint64_t count = len / sizeof(uint64_t);
+    uint64_t *ibuf = (uint64_t *) buf;
+
+    for (i = 0; i < count; i++)
+        ibuf[i] = start + i;
+}
+
+/*
+ * returns 0 on successful check, -1 otherwise with @error_offset is set.
+ */
+static inline
+int lipsum_check(const char *buf, uint64_t len, uint64_t offset,
+                 uint64_t *error_offset)
+{
+    uint64_t i;
+    uint64_t start = offset / sizeof(uint64_t);
+    uint64_t count = len / sizeof(uint64_t);
+    const uint64_t *ibuf = (uint64_t *) buf;
+
+    for (i = 0; i < count; i++)
+        if (ibuf[i] != start + i) {
+            *error_offset = (start + i) * sizeof(uint64_t);
+            return -1;
+        }
+
+    return 0;
+}
+
 #endif /* __TESTLIB_H */

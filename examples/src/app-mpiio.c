@@ -320,6 +320,18 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
+    if (chunksize % (1<<10) > 0) {
+        test_print_once(rank, "chunksize and blocksize should be divisible "
+                              "by 1024.\n");
+        exit(-1);
+    }
+
+    if (static_linked(program) && standard) {
+        test_print_once(rank, "--standard, -s option only works when "
+                              "dynamically linked.\n");
+        exit(-1);
+    }
+
     sprintf(targetfile, "%s/%s", mountpoint, filename);
 
     if (debug)
