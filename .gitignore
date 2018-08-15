@@ -64,10 +64,6 @@ meta/src/Mlog2/.dirstamp
 t/sys/.dirstamp
 
 # test files
-client/tests/test_read_gotcha
-client/tests/test_read_static
-client/tests/test_write_gotcha
-client/tests/test_write_static
 client/unifycr-runtime-config.h
 examples/src/app-btio-gotcha
 examples/src/app-btio-static
@@ -83,6 +79,8 @@ examples/src/sysio-writeread-gotcha
 examples/src/sysio-writeread-static
 examples/src/sysio-writeread2-gotcha
 examples/src/sysio-writeread2-static
+examples/src/app-hdf5-create-gotcha
+examples/src/app-hdf5-writeread-gotcha
 t/sys/open.t
 t/test-results/
 t/unifycr_unmount.t
