@@ -40,11 +40,7 @@
  * Please also read this file LICENSE.CRUISE
  */
 
-#include "unifycr-internal.h"
-#include "unifycr_meta.h"
-
-#define _GNU_SOURCE
-#include <pthread.h>
+#include "unifycr-fixed.h"
 
 extern int dbgrank;
 extern unifycr_index_buf_t unifycr_indices;

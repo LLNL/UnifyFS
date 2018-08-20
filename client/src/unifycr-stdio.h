@@ -42,7 +42,6 @@
 
 #ifndef UNIFYCR_STDIO_H
 #define UNIFYCR_STDIO_H
-#include <wchar.h>
 
 #include "unifycr-internal.h"
 

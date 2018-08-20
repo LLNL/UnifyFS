@@ -119,33 +119,18 @@ AC_C_BIGENDIAN
 
 dnl temporarily set large file flags just for this test; we don't want
 dnl it to propagate to the makefile because of zlib bugs
-old_cflags="$CFLAGS"
-CFLAGS="$CFLAGS -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE"
 AC_MSG_CHECKING(for off64_t)
 AC_TRY_COMPILE(
     [
-    #include <stdio.h>
-    #include <unistd.h>
+    #define _FILE_OFFSET_BITS 64
+    #define _LARGEFILE64_SOURCE
     #include <sys/types.h>
-    #include <sys/stat.h>
-    #include <fcntl.h>
-    #include <stdarg.h>
-    #include <string.h>
-    #include <time.h>
-    #include <stdlib.h>
-    #include <errno.h>
-    #include <sys/uio.h>
-    #include <pthread.h>
-    #include <sys/mman.h>
-    #include <search.h>
-    #include <assert.h>
     ],
     [ off64_t off; ],
     AC_MSG_RESULT(yes)
     AC_DEFINE(HAVE_OFF64_T, 1, Define if off64_t type is defined),
     AC_MSG_RESULT(no)
 )
-CFLAGS="$old_cflags"
 
 AC_CHECK_HEADERS(mntent.h sys/mount.h)
 
@@ -292,7 +277,6 @@ AC_SUBST(__CP_LOG_PATH)
 AC_SUBST(CP_WRAPPERS)
 AC_SUBST(DISABLE_LDPRELOAD)
 AC_OUTPUT(client/unifycr-config)
-AC_OUTPUT(client/unifycr-runtime-config.h)
 
 AC_CONFIG_FILES([Makefile
                  common/Makefile

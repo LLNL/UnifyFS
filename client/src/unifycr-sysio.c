@@ -40,15 +40,9 @@
  * Please also read this file LICENSE.CRUISE
  */
 
-#define _LARGEFILE64_SOURCE
-#include "unifycr-internal.h"
-#include "unifycr_meta.h"
 #include "unifycr-sysio.h"
 
 #include <aio.h>
-
-#define _GNU_SOURCE
-#include <pthread.h>
 
 /* -------------------
  * define external variables

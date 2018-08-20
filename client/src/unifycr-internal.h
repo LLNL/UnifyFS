@@ -43,14 +43,25 @@
 #ifndef UNIFYCR_INTERNAL_H
 #define UNIFYCR_INTERNAL_H
 
-#include "unifycr-runtime-config.h"
+#include <config.h>
 
-/* this is overkill to include all of these here, but just to get things working... */
+#ifdef HAVE_OFF64_T
+# define _FILE_OFFSET_BITS 64
+# define _LARGEFILE64_SOURCE
+#else
+# define off64_t int64_t
+#endif
+
+/* -------------------------------
+ * Common includes
+ * -------------------------------
+ */
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
 #include <limits.h>
+#include <poll.h>
 #include <search.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -61,22 +72,32 @@
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/shm.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/uio.h>
+#include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
 #include <wchar.h>
 
+#define _GNU_SOURCE
+#include <pthread.h>
+#include <sched.h>
+
 #include "utlist.h"
 #include "uthash.h"
 
+#include "unifycr.h"
 #include "unifycr_configurator.h"
 #include "unifycr_meta.h"
+#include "unifycr-stack.h"
+
 
 /* -------------------------------
  * Defines and types
- * ------------------------------- */
+ * -------------------------------
+ */
 
 extern int unifycr_debug_level;
 
@@ -126,7 +147,6 @@ do { \
 /* we need the dlsym function */
 #define __USE_GNU
 #include <dlfcn.h>
-#include <stdlib.h>
 
 /* define a static variable called __real_open to record address of
  * real open call and initialize it to NULL */
@@ -176,10 +196,6 @@ do { \
 
 #endif
 
-
-#ifndef HAVE_OFF64_T
-typedef int64_t off64_t;
-#endif
 
 /* structure to represent file descriptors */
 typedef struct {
@@ -266,7 +282,6 @@ typedef struct {
     long offset;
     long length;
     char *buf;
-
 } read_req_t;
 
 typedef struct {
@@ -279,8 +294,6 @@ typedef struct {
     off_t *ptr_num_entries;
     unifycr_index_t *index_entry;
 } unifycr_index_buf_t;
-
-
 
 typedef struct {
     off_t *ptr_num_entries;
@@ -315,7 +328,6 @@ extern char cmd_buf[CMD_BUF_SIZE];
 extern char ack_msg[3];
 extern unifycr_fattr_buf_t unifycr_fattrs;
 
-
 extern int glb_superblock_size;
 extern int dbg_rank;
 extern int app_id;
@@ -324,17 +336,6 @@ extern int reqbuf_fd;
 extern int recvbuf_fd;
 extern int superblock_fd;
 extern long unifycr_key_slice_range;
-
-/* -------------------------------
- * Common includes
- * ------------------------------- */
-
-/* TODO: move common includes to another file */
-#include "unifycr.h"
-#include "unifycr-stack.h"
-#include "unifycr-fixed.h"
-#include "unifycr-sysio.h"
-#include "unifycr-stdio.h"
 
 /* -------------------------------
  * Global varaible declarations
@@ -530,5 +531,10 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
                                read_req_t *match_req);
 int unifycr_locate_req(read_req_t *read_req, int count,
                        read_req_t *match_req);
+
+// These require types/structures defined above
+#include "unifycr-fixed.h"
+#include "unifycr-stdio.h"
+#include "unifycr-sysio.h"
 
 #endif /* UNIFYCR_INTERNAL_H */
