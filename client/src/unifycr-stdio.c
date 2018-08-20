@@ -40,11 +40,8 @@
  * Please also read this file LICENSE.CRUISE
  */
 
-#include "unifycr-internal.h"
 #include "unifycr-stdio.h"
-
-#define _GNU_SOURCE
-#include <pthread.h>
+#include "unifycr-sysio.h"
 
 static int unifycr_fpos_enabled = 1; /* whether we can use fgetpos/fsetpos */
 

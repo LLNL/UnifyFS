@@ -44,6 +44,7 @@
 #define UNIFYCR_SYSIO_H
 
 #include "unifycr-internal.h"
+
 /* ---------------------------------------
  * POSIX wrappers: paths
  * --------------------------------------- */

@@ -40,27 +40,24 @@
  * Please also read this file LICENSE.CRUISE
  */
 
-#include <config.h>
+#include "unifycr-internal.h"
+#include "unifycr-fixed.h"
+#include "unifycr_meta.h"
+#include "unifycr_pmix.h"
+#include "unifycr_runstate.h"
+
 #include <mpi.h>
 #include <openssl/md5.h>
 
-#include "unifycr-internal.h"
-#include "unifycr_pmix.h"
-#include "unifycr_runstate.h"
+#ifdef ENABLE_NUMA_POLICY
+#include <numa.h>
+#endif
 
 #ifdef UNIFYCR_GOTCHA
 #include "gotcha/gotcha_types.h"
 #include "gotcha/gotcha.h"
 #include "gotcha_map_unifycr_list.h"
 #endif
-
-#ifdef ENABLE_NUMA_POLICY
-#include <numa.h>
-#endif
-
-#define _GNU_SOURCE
-#include <pthread.h>
-#include <sched.h>
 
 static int unifycr_fpos_enabled   = 1;  /* whether we can use fgetpos/fsetpos */
 

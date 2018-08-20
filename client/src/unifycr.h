@@ -43,10 +43,14 @@
 #ifndef UNIFYCR_H
 #define UNIFYCR_H
 
-#include <poll.h>
+#include <stddef.h>      // size_t
+#include <sys/types.h>   // off_t
+
 #include <limits.h>
-#include <sys/socket.h>
-#include <sys/un.h>
+#ifndef HOST_NAME_MAX
+# define HOST_NAME_MAX 256
+#endif
+
 /* TODO: namespace C */
 
 /* linked list of chunk information given to an external library wanting
