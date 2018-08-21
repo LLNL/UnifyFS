@@ -51,49 +51,62 @@
 
 
 /**
- * @brief options read from command line arguments
+ * @brief The requested command-line options
  */
 struct _unifycr_args {
-    int cleanup;                    /* cleanup on termination? (0 or 1) */
-    unifycr_cm_e consistency;       /* consistency model */
-    char *mountpoint;               /* mountpoint */
-    char *server_path;              /* full path to installed unifycrd */
-    char *transfer_in;              /* data path to stage-in */
-    char *transfer_out;             /* data path to stage-out (drain) */
+    int debug;                 /* enable debug output */
+    int cleanup;               /* cleanup on termination? (0 or 1) */
+    unifycr_cm_e consistency;  /* consistency model */
+    char *mountpoint;          /* mountpoint */
+    char *server_path;         /* full path to installed unifycrd */
+    char *stage_in;            /* data path to stage-in */
+    char *stage_out;           /* data path to stage-out (drain) */
+    char *script;              /* path to custom launch/cleanup script */
 };
 
 typedef struct _unifycr_args unifycr_args_t;
 
 /**
- * @brief nodes allocated to the current job.
+ * @brief The job resource record, including allocated nodes
  */
 struct _unifycr_resource {
-    unifycr_rm_e rm;                /* resource manager */
-    uint64_t n_nodes;               /* number of nodes in job allocation */
-    char **nodes;                   /* allocated node names */
+    unifycr_rm_e rm;           /* resource manager */
+    size_t n_nodes;            /* number of nodes in job allocation */
+    char **nodes;              /* allocated node names */
 };
 
 typedef struct _unifycr_resource unifycr_resource_t;
 
 /**
- * @brief detect a resource manager and find allocated nodes accordingly.
+ * @brief Detect a resource manager and query allocated nodes
  *
- * @param resource the structure to be filled by this function
+ * @param resource  The job resource record to be filled
  *
  * @return 0 on success, negative errno otherwise
  */
-int unifycr_read_resource(unifycr_resource_t *resource);
+int unifycr_detect_resources(unifycr_resource_t *resource);
 
 /**
- * @brief
+ * @brief Start the unifycrd server on all allocated nodes
  *
- * @param resource
- * @param state
+ * @param resource  The job resource record
+ * @param args      The command-line options
  *
- * @return
+ * @return -errno on failure (exec's on success)
  */
-int unifycr_launch_daemon(unifycr_resource_t *resource,
+int unifycr_start_servers(unifycr_resource_t *resource,
                           unifycr_args_t *args);
+
+/**
+ * @brief Stop the unifycrd server on all allocated nodes
+ *
+ * @param resource  The job resource record
+ * @param args      The command-line options
+ *
+ * @return -errno on failure (exec's on success)
+ */
+int unifycr_stop_servers(unifycr_resource_t *resource,
+                         unifycr_args_t *args);
 
 #endif  /* __UNIFYCR_H */
 

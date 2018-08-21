@@ -51,15 +51,16 @@
  * @brief available actions.
  */
 
-enum {
+typedef enum {
+    INVALID_ACTION   = -1,
     ACT_START        = 0,
-    ACT_TERMINATE,
-    N_ACT,
-};
+    ACT_TERMINATE    = 1,
+    N_ACT            = 2
+} action_e;
 
 static char *actions[N_ACT] = { "start", "terminate" };
 
-static int action = -1;
+static action_e action = INVALID_ACTION;
 static unifycr_args_t cli_args;
 static unifycr_resource_t resource;
 
@@ -67,16 +68,17 @@ static struct option const long_opts[] = {
     { "cleanup", no_argument, NULL, 'c' },
     { "consistency", required_argument, NULL, 'C' },
     { "debug", no_argument, NULL, 'd' },
+    { "exe", required_argument, NULL, 'e' },
     { "help", no_argument, NULL, 'h' },
     { "mount", required_argument, NULL, 'm' },
-    { "server", required_argument, NULL, 's' },
-    { "transfer-in", required_argument, NULL, 'i' },
-    { "transfer-out", required_argument, NULL, 'o' },
+    { "script", required_argument, NULL, 's' },
+    { "stage-in", required_argument, NULL, 'i' },
+    { "stage-out", required_argument, NULL, 'o' },
     { 0, 0, 0, 0 },
 };
 
 static char *program;
-static char *short_opts = ":cC:dhi:m:o:s:";
+static char *short_opts = ":cC:de:hi:m:o:s:";
 static char *usage_str =
     "\n"
     "Usage: %s <command> [options...]\n"
@@ -85,15 +87,21 @@ static char *usage_str =
     "  start       start the unifycr server daemon\n"
     "  terminate   terminate the unifycr server daemon\n"
     "\n"
-    "Available options for \"start\":\n"
-    "  -C, --consistency=<model> consistency model (none, laminated, or posix)\n"
-    "  -m, --mount=<path>        mount unifycr at <path>\n"
-    "  -s, --server=<path>       <path> where unifycrd is installed\n"
-    "  -i, --transfer-in=<path>  stage in file(s) at <path>\n"
-    "  -o, --transfer-out=<path> transfer file(s) to <path> on termination\n"
+    "Common options:\n"
+    "  -d, --debug               enable debug output\n"
+    "  -h, --help                print usage\n"
     "\n"
-    "Available options for \"terminate\":\n"
+    "Command options for \"start\":\n"
+    "  -C, --consistency=<model> consistency model (NONE | LAMINATED | POSIX)\n"
+    "  -e, --exe=<path>          <path> where unifycrd is installed\n"
+    "  -m, --mount=<path>        mount unifycr at <path>\n"
+    "  -s, --script=<path>       <path> to custom launch script\n"
+    "  -i, --stage-in=<path>     stage in file(s) at <path>\n"
+    "  -o, --stage-out=<path>    stage out file(s) to <path> on termination\n"
+    "\n"
+    "Command options for \"terminate\":\n"
     "  -c, --cleanup             clean up the unifycr storage on termination\n"
+    "  -s, --script=<path>       <path> to custom termination script\n"
     "\n";
 
 static int debug;
@@ -109,11 +117,12 @@ static void parse_cmd_arguments(int argc, char **argv)
     int ch = 0;
     int optidx = 2;
     int cleanup = 0;
-    unifycr_cm_e consistency = UNIFYCR_CM_INVALID;
+    unifycr_cm_e consistency = UNIFYCR_CM_LAMINATED;
     char *mountpoint = NULL;
-    char *srvrpath = NULL;
-    char *transfer_in = NULL;
-    char *transfer_out = NULL;
+    char *script = NULL;
+    char *srvr_exe = NULL;
+    char *stage_in = NULL;
+    char *stage_out = NULL;
 
     while ((ch = getopt_long(argc, argv,
                              short_opts, long_opts, &optidx)) >= 0) {
@@ -129,7 +138,11 @@ static void parse_cmd_arguments(int argc, char **argv)
             break;
 
         case 'd':
-            debug = 1;
+            debug = 5;
+            break;
+
+        case 'e':
+            srvr_exe = strdup(optarg);
             break;
 
         case 'm':
@@ -137,15 +150,17 @@ static void parse_cmd_arguments(int argc, char **argv)
             break;
 
         case 's':
-            srvrpath = strdup(optarg);
+            script = strdup(optarg);
             break;
 
         case 'i':
-            transfer_in = strdup(optarg);
+            printf("WARNING: stage-in not yet supported!\n");
+            stage_in = strdup(optarg);
             break;
 
         case 'o':
-            transfer_out = strdup(optarg);
+            printf("WARNING: stage-out not yet supported!\n");
+            stage_out = strdup(optarg);
             break;
 
         case 'h':
@@ -155,12 +170,14 @@ static void parse_cmd_arguments(int argc, char **argv)
         }
     }
 
+    cli_args.debug = debug;
     cli_args.cleanup = cleanup;
     cli_args.consistency = consistency;
+    cli_args.script = script;
     cli_args.mountpoint = mountpoint;
-    cli_args.server_path = srvrpath;
-    cli_args.transfer_in = transfer_in;
-    cli_args.transfer_out = transfer_out;
+    cli_args.server_path = srvr_exe;
+    cli_args.stage_in = stage_in;
+    cli_args.stage_out = stage_out;
 }
 
 int main(int argc, char **argv)
@@ -179,12 +196,12 @@ int main(int argc, char **argv)
 
     for (i = 0; i < N_ACT; i++) {
         if (strcmp(cmd, actions[i]) == 0) {
-            action = i;
+            action = (action_e)i;
             break;
         }
     }
 
-    if (action < 0)
+    if (action == INVALID_ACTION)
         usage(1);
 
     parse_cmd_arguments(argc, argv);
@@ -195,26 +212,32 @@ int main(int argc, char **argv)
         printf("consistency:\t%s\n",
                unifycr_cm_enum_str(cli_args.consistency));
         printf("mountpoint:\t%s\n", cli_args.mountpoint);
+        printf("script:\t%s\n", cli_args.script);
         printf("server:\t%s\n", cli_args.server_path);
-        printf("transfer_in:\t%s\n", cli_args.transfer_in);
-        printf("transfer_out:\t%s\n", cli_args.transfer_out);
+        printf("stage_in:\t%s\n", cli_args.stage_in);
+        printf("stage_out:\t%s\n", cli_args.stage_out);
     }
 
-    ret = unifycr_read_resource(&resource);
+    ret = unifycr_detect_resources(&resource);
     if (ret) {
-        fprintf(stderr, "failed to detect a resource manager\n");
-        goto out;
+        fprintf(stderr, "ERROR: no supported resource manager detected\n");
+        return ret;
     }
 
     if (debug) {
-        printf("\n## job allocation (%llu nodes) ##\n",
-               (unsigned long long) resource.n_nodes);
+        printf("\n## job allocation (%zu nodes) ##\n",
+               resource.n_nodes);
         for (i = 0; i < resource.n_nodes; i++)
             printf("%s\n", resource.nodes[i]);
     }
+    fflush(stdout);
 
-    ret = unifycr_launch_daemon(&resource, &cli_args);
-
-out:
-    return ret;
+    if (action == ACT_START)
+        return unifycr_start_servers(&resource, &cli_args);
+    else if (action == ACT_TERMINATE)
+        return unifycr_stop_servers(&resource, &cli_args);
+    else {
+        fprintf(stderr, "INTERNAL ERROR: unhandled action %d\n", (int)action);
+        return -1;
+    }
 }
