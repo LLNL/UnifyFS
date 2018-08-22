@@ -911,14 +911,11 @@ static int unifycr_get_global_fid(const char *path, int *gfid)
  * */
 static int set_global_file_meta(unifycr_file_attr_t *f_meta)
 {
-    int cmd = COMM_META;
-    int flag = 2;
+    int cmd = COMM_META_SET;
 
     memset(cmd_buf, 0, sizeof(cmd_buf));
     memcpy(cmd_buf, &cmd, sizeof(int));
-    memcpy(cmd_buf + sizeof(int), &flag, sizeof(int));
-    memcpy(cmd_buf + sizeof(int) + sizeof(int),
-           f_meta, sizeof(unifycr_file_attr_t));
+    memcpy(cmd_buf + sizeof(int), f_meta, sizeof(unifycr_file_attr_t));
 
     int rc = __real_write(client_sockfd, cmd_buf, sizeof(cmd_buf));
     if (rc != 0) {
@@ -941,8 +938,8 @@ static int set_global_file_meta(unifycr_file_attr_t *f_meta)
                             /*remote connection is closed*/
                             return -1;
                         } else {
-                            if (*((int *)cmd_buf) != COMM_META || *((int *)cmd_buf + 1)
-                                != ACK_SUCCESS) {
+                            if (*((int *)cmd_buf) != COMM_META_SET
+                                || *((int *)cmd_buf + 1) != ACK_SUCCESS) {
                                 /*encounter delegator-side error*/
                                 return -1;
                             } else {
@@ -981,14 +978,11 @@ static int set_global_file_meta(unifycr_file_attr_t *f_meta)
 static int get_global_file_meta(int gfid, unifycr_file_attr_t **file_meta)
 {
     /* format value length, payload 1, payload 2*/
-    int cmd = COMM_META;
-    int flag = 1;
+    int cmd = COMM_META_GET;
 
     memset(cmd_buf, 0, sizeof(cmd_buf));
     memcpy(cmd_buf, &cmd, sizeof(int));
-    memcpy(cmd_buf + sizeof(int), &flag, sizeof(int));
-    memcpy(cmd_buf + sizeof(int) + sizeof(int),
-           &gfid, sizeof(int));
+    memcpy(cmd_buf + sizeof(int), &gfid, sizeof(int));
 
     int rc = __real_write(client_sockfd, cmd_buf, sizeof(cmd_buf));
     if (rc != 0) {
@@ -1011,8 +1005,8 @@ static int get_global_file_meta(int gfid, unifycr_file_attr_t **file_meta)
                             /*remote connection is closed*/
                             return -1;
                         } else {
-                            if (*((int *)cmd_buf) != COMM_META || *((int *)cmd_buf + 1)
-                                != ACK_SUCCESS) {
+                            if (*((int *)cmd_buf) != COMM_META_GET
+                            || *((int *)cmd_buf + 1) != ACK_SUCCESS) {
                                 *file_meta = NULL;
                                 return -1;
                             } else {

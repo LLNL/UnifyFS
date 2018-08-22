@@ -19,6 +19,20 @@
 
 #include "unifycr_const.h"
 
+/**
+ * Server commands
+ */
+typedef enum {
+    COMM_MOUNT,
+    COMM_META_FSYNC,
+    COMM_META_GET,
+    COMM_META_SET,
+    COMM_READ,
+    COMM_UNMOUNT,
+    COMM_DIGEST,
+    COMM_SYNC_DEL,
+} cmd_lst_t;
+
 typedef struct {
     int fid;
     int gfid;

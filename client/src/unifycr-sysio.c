@@ -1633,13 +1633,11 @@ int UNIFYCR_WRAP(fsync)(int fd)
         }
 
         /*put indices to key-value store*/
-        int cmd = COMM_META;
-        int flag = 3;
+        int cmd = COMM_META_FSYNC;
         int res = -1;
 
         memset(cmd_buf, 0, sizeof(cmd_buf));
         memcpy(cmd_buf, &cmd, sizeof(int));
-        memcpy(cmd_buf + sizeof(int), &flag, sizeof(int));
 
         res = __real_write(client_sockfd, cmd_buf, sizeof(cmd_buf));
 
@@ -1663,7 +1661,7 @@ int UNIFYCR_WRAP(fsync)(int fd)
                             return -1;
                         } else {
                             /**/
-                            if (*((int *)cmd_buf) != COMM_META ||
+                            if (*((int *)cmd_buf) != COMM_META_FSYNC ||
                                     *((int *)cmd_buf + 1) != ACK_SUCCESS) {
                                 return -1;
                             } else {
