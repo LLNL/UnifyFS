@@ -24,7 +24,8 @@ static int set_global_file_meta(unifycr_metaset_in_t* in,
     return UNIFYCR_SUCCESS;
 }
 
-static int get_global_file_meta(int fid, int gfid, unifycr_metaget_out_t* out , unifycr_fattr_t **file_meta)
+static int get_global_file_meta(int fid, int gfid, unifycr_metaget_out_t* out,
+                                unifycr_fattr_t **file_meta)
 {
     *file_meta = (unifycr_fattr_t *)calloc(1, sizeof(unifycr_fattr_t));
     (*file_meta)->fid = fid;
@@ -61,6 +62,7 @@ uint32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t** unifycr_
     assert(hret == HG_SUCCESS);
 
 	unifycr_key_slice_range = out.max_recs_per_slice;
+	printf("set  unifycr_key_slice_range to %ld\n",  unifycr_key_slice_range);
 
     margo_free_output(handle, &out);
     margo_destroy(handle);
@@ -186,7 +188,9 @@ uint32_t unifycr_client_read_rpc_invoke(unifycr_client_rpc_context_t**
                                                 uint32_t app_id,
                                                 uint32_t local_rank_idx,
                                                 uint32_t gfid,
-                                                uint32_t read_count)
+                                                uint32_t read_count,
+                                                hg_size_t size,
+                                                void* buffer)
 {
     hg_handle_t handle;
     unifycr_read_in_t in;
@@ -201,15 +205,21 @@ uint32_t unifycr_client_read_rpc_invoke(unifycr_client_rpc_context_t**
                             (*unifycr_rpc_context)->unifycr_read_rpc_id,
                             &handle);
     assert(hret == HG_SUCCESS);
+	hret = margo_bulk_create((*unifycr_rpc_context)->mid, 1, &buffer, &size, 
+                             HG_BULK_READ_ONLY, &in.bulk_handle);
+    assert(hret == HG_SUCCESS);
 
     /* fill in input struct */
     in.app_id         = app_id;
     in.local_rank_idx = local_rank_idx;
     in.gfid           = gfid;
     in.read_count     = read_count;
+	in.bulk_size = size;
+	
 
     hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
+    printf("Forwarded\n");
 
     /* decode response */
     hret = margo_get_output(handle, &out);
@@ -217,6 +227,7 @@ uint32_t unifycr_client_read_rpc_invoke(unifycr_client_rpc_context_t**
 
     printf("Got response ret: %d\n", out.ret);
 
+	margo_bulk_free(in.bulk_handle);
     margo_free_output(handle, &out);
     margo_destroy(handle);
     return out.ret;

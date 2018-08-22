@@ -224,7 +224,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     unifycr_mount_in_t in;
     int ret = HG_Get_input(handle, &in);
     assert(ret == HG_SUCCESS);
-	printf("mount called\n");
+	printf("mount called for app_id %d\n", in.app_id);
 
     unifycr_mount_out_t out;
     //const struct hg_info* hgi = margo_get_info(handle);
@@ -265,7 +265,9 @@ static void unifycr_mount_rpc(hg_handle_t handle)
         }
 
         rc = arraylist_insert(app_config_list, in.app_id, tmp_config);
+		printf("arraylist_insert returned %d for app_id %d\n", rc, in.app_id);
         if (rc != 0) {
+			printf("insert failed: %d\n", rc);
             out.ret = rc;
         }
     } else {
@@ -280,12 +282,12 @@ static void unifycr_mount_rpc(hg_handle_t handle)
         thrd_ctrl = (thrd_ctrl_t *)malloc(sizeof(thrd_ctrl_t));
         memset(thrd_ctrl, 0, sizeof(thrd_ctrl_t));
 
-        thrd_ctrl->exit_flag = 0;
         cli_signature = (cli_signature_t *)malloc(sizeof(cli_signature_t));
         cli_signature->app_id = in.app_id;
-        // cli_signature->sock_id = sock_id;
+        cli_signature->sock_id = in.local_rank_idx;
         rc = pthread_mutex_init(&(thrd_ctrl->thrd_lock), NULL);
         if (rc != 0) {
+			printf("pthread_mutex_init failed: %d\n", rc);
             out.ret = ULFS_ERROR_THRDINIT;
         }
     }
@@ -293,6 +295,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     if ( out.ret == 0 ) {
         rc = pthread_cond_init(&(thrd_ctrl->thrd_cond), NULL);
         if (rc != 0) {
+			printf("pthread_cond_init failed: %d\n", rc);
             out.ret = ULFS_ERROR_THRDINIT;
         }
     }
@@ -300,10 +303,10 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     if ( out.ret == 0 ) {
         thrd_ctrl->del_req_set = (msg_meta_t *)malloc(sizeof(msg_meta_t));
         if (!thrd_ctrl->del_req_set) {
+			printf("thread_ctrl req_set ealloc failed: %d\n", rc);
             out.ret =  ULFS_ERROR_NOMEM;
         }
     }
-	printf("1st out.ret = %d\n", out.ret);
 	
 	if (out.ret == 0 ) {
     	memset(thrd_ctrl->del_req_set, 0, sizeof(msg_meta_t));
@@ -311,44 +314,55 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     	thrd_ctrl->del_req_stat =
         	(del_req_stat_t *)malloc(sizeof(del_req_stat_t));
 
-		if (!thrd_ctrl->del_req_stat) 
+		if (!thrd_ctrl->del_req_stat) {
+			printf("thread_ctrl del_req_stat malloc failed: %d\n", rc);
        		out.ret = ULFS_ERROR_NOMEM;
+		}
     }
-	printf("2nd out.ret = %d\n", out.ret);
 	
 	if (out.ret == 0 ) {
 		memset(thrd_ctrl->del_req_stat, 0, sizeof(del_req_stat_t));
 
     	thrd_ctrl->del_req_stat->req_stat =
        	 (per_del_stat_t *)malloc(sizeof(per_del_stat_t) * glb_size);
-    	if (!thrd_ctrl->del_req_stat->req_stat)
-        	out.ret = ULFS_ERROR_NOMEM;
-   	}
+    	if (!thrd_ctrl->del_req_stat->req_stat) {
+			printf("thread_ctrl del_req_stat->req_stat malloc failed: %d\n", rc);
+			out.ret = ULFS_ERROR_NOMEM;
+		}
+	}
 
-	printf("3rd out.ret = %d\n", out.ret);
 
 	if ( out.ret == 0 ) {
 		memset(thrd_ctrl->del_req_stat->req_stat,
            0, sizeof(per_del_stat_t) * glb_size);
 		rc = arraylist_add(thrd_list, thrd_ctrl);
-    	if (rc != 0) 
+    	if (rc != 0) {
+			printf("arraylist_addthrd_list, thrd_ctrl failed: %d\n", rc);
 			out.ret = rc;
+		}
     }
 
+
 	if ( out.ret == 0 ) {
-    	tmp_config->thrd_idxs[sock_get_id()] = arraylist_size(thrd_list) - 1;
-    	tmp_config->client_ranks[sock_get_id()] = in.local_rank_idx;
-    	tmp_config->dbg_ranks[sock_get_id()] = 0; /*add debug rank*/
+		int client_id = in.local_rank_idx;
+		printf("setting thread_idxs[%d] to %d\n", client_id, arraylist_size(thrd_list) - 1); 
+    	tmp_config->thrd_idxs[client_id] = arraylist_size(thrd_list) - 1;
+    	tmp_config->client_ranks[client_id] = in.local_rank_idx;
+    	tmp_config->dbg_ranks[client_id] = 0; /*add debug rank*/
 
 	    rc = attach_to_shm(tmp_config, in.app_id, in.local_rank_idx);
-   		if (rc != ULFS_SUCCESS)
+   		if (rc != ULFS_SUCCESS) {
+			printf("attach to shm failed: %d\n", rc);
         	out.ret = rc;
+		}
     }
 
 	if ( out.ret == 0 ) {
     	rc = open_log_file(tmp_config, in.app_id, in.local_rank_idx);
-    	if (rc < 0) 
-       		 out.ret = rc;
+    	if (rc < 0)  {
+			printf("open log file failed: %d\n", rc);
+       		out.ret = rc;
+		}
     }
 
 	if ( out.ret == 0 ) {
@@ -356,12 +370,17 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     	thrd_ctrl->has_waiting_dispatcher = 0;
     	rc = pthread_create(&(thrd_ctrl->thrd), NULL, rm_delegate_request_thread,
                         	cli_signature);
-    	if (rc != 0) 
+    	if (rc != 0) {
+			printf("pthread create failed: %d\n", rc);
        		out.ret = ULFS_ERROR_THRDINIT;
+		}
     }
-	printf("out.ret = %d\n", out.ret);
-	if (out.ret == 0)
+
+	if (out.ret == 0) {
+		printf("max recs per slice = %ld\n",  max_recs_per_slice);
 		out.max_recs_per_slice = max_recs_per_slice;
+	}
+
     margo_free_input(handle, &in);
 
     hg_return_t hret = margo_respond(handle, &out);
@@ -444,16 +463,43 @@ static void unifycr_read_rpc(hg_handle_t handle)
 
     unifycr_read_out_t out;
 
-    out.ret = rm_read_remote_data(in.app_id, in.local_rank_idx, in.gfid, in.read_count);
+	printf("calling rm_read_remote_data for gfid: %d, read_count: %d, bulk_size: %d\n", in.gfid, in.read_count, in.bulk_size);
+	hg_size_t size = in.bulk_size;
+	void* buffer = (void*)malloc(size);
+	assert(buffer);
+	const struct hg_info* hgi = margo_get_info(handle);
+    assert(hgi);
+    margo_instance_id mid = margo_hg_info_get_instance(hgi);
+    assert(mid != MARGO_INSTANCE_NULL);
 
+    /* register local target buffer for bulk access */
+	hg_bulk_t bulk_handle;
+
+    hg_return_t hret = margo_bulk_create(mid, 1, &buffer,
+        &size, HG_BULK_WRITE_ONLY, &bulk_handle);
+ 
+	hret = margo_bulk_transfer(mid, HG_BULK_PULL,
+        hgi->addr, in.bulk_handle, 0,
+        bulk_handle, 0, size);
+    assert(hret == HG_SUCCESS);
+
+    out.ret = rm_read_remote_data(in.app_id, in.local_rank_idx, in.gfid, in.read_count,
+                                  buffer);
+
+	printf("completed rm_read_remote_data for gfid: %d, read_count: %d\n", in.gfid, in.read_count);
     margo_free_input(handle, &in);
 
-    hg_return_t hret = margo_respond(handle, &out);
+    hret = margo_respond(handle, &out);
+	printf("responded in rpc handler\n");
 
     assert(hret == HG_SUCCESS);
 
+	margo_bulk_free(bulk_handle);
     margo_destroy(handle);
+	free(buffer);
+	printf("end of rpc handler\n");
 }
+
 DEFINE_MARGO_RPC_HANDLER(unifycr_read_rpc)
 
 /**
@@ -618,7 +664,7 @@ int attach_to_shm(app_config_t *app_config, int app_id, int client_side_id)
     int ret = 0;
     char shm_name[GEN_STR_LEN] = {0};
 
-    // int client_side_id = app_config->client_ranks[sock_id];
+    //client_side_id = app_config->client_ranks[sock_get_id()];
 
     /* attach shared superblock,
      * a superblock is created by each
@@ -667,6 +713,7 @@ int attach_to_shm(app_config_t *app_config, int app_id, int client_side_id)
     app_config->shm_req_bufs[client_side_id] = mmap(NULL,
             app_config->req_buf_sz, PROT_READ | PROT_WRITE,
             MAP_SHARED, tmp_fd, SEEK_SET);
+	printf("shm_req_buf: %p\n", app_config->shm_req_bufs[client_side_id]);
     if (NULL == app_config->shm_req_bufs[client_side_id]) {
         return (int)UNIFYCR_ERROR_SHMEM;
     }
@@ -732,12 +779,8 @@ int open_log_file(app_config_t *app_config,
 
     snprintf(path, sizeof(path), "%s/spill_index_%d_%d.log",
             app_config->external_spill_dir, app_id, client_side_id);
-    app_config->spill_index_log_fds[client_side_id] =
-        open(path, O_RDONLY, 0666);
-    /*
-        LOG(LOG_DBG, "openning index log file %s, client_side_id:%d\n",
-                path, client_side_id);
-    */
+	app_config->spill_index_log_fds[client_side_id] =
+			open(path, O_RDONLY, 0666);
     strcpy(app_config->spill_index_log_name[client_side_id], path);
     if (app_config->spill_index_log_fds[client_side_id] < 0) {
         printf("rank:%d, openning index file %s failure\n", glb_rank, path);

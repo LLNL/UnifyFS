@@ -72,7 +72,7 @@ void print_bget_indices(int app_id, int cli_id,
                         send_msg_t *index_set, int tot_num);
 int meta_process_fsync(int app_id, int client_side_id, int gfid);
 int meta_batch_get(int app_id, int client_id,
-                   int thrd_id, int dbg_rank, char* shm_reqbuf, int num,
+                   int thrd_id, int dbg_rank, void* reqbuf, int num,
                    msg_meta_t* del_req_set);
 int meta_init_indices();
 int meta_free_indices();

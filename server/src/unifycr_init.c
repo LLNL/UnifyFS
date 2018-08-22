@@ -164,10 +164,10 @@ static margo_instance_id setup_sm_target()
     char addr_self_string[128];
     hg_size_t addr_self_string_sz = 128;
     mid = margo_init(SMSVR_ADDR_STR, MARGO_SERVER_MODE,
-                                            0, 0);
+                                            1, 1);
     assert(mid);
-    printf("mid: %d\n", mid);
-    margo_diag_start(mid);
+    // printf("mid: %d\n", mid);
+    //margo_diag_start(mid);
 
     /* figure out what address this server is listening on */
     hret = margo_addr_self(mid, &addr_self);
@@ -175,16 +175,16 @@ static margo_instance_id setup_sm_target()
     {
         fprintf(stderr, "Error: margo_addr_self()\n");
         margo_finalize(mid);
-        return(-1);
+        return(NULL);
         }
     hret = margo_addr_to_string(mid, addr_self_string,
                                &addr_self_string_sz, addr_self);
     if(hret != HG_SUCCESS)
     {
-        printf(stderr, "Error: margo_addr_to_string()\n");
+        fprintf(stderr, "Error: margo_addr_to_string()\n");
         margo_addr_free(mid, addr_self);
         margo_finalize(mid);
-        return(-1);
+        return(NULL);
      }
     margo_addr_free(mid, addr_self);
 
@@ -205,14 +205,6 @@ static margo_instance_id setup_sm_target()
                      unifycr_mount_in_t, unifycr_mount_out_t,
                      unifycr_mount_rpc);
 
-    MARGO_REGISTER(mid, "unifycr_fsync_rpc",
-                     unifycr_fsync_in_t, unifycr_fsync_out_t,
-                     unifycr_fsync_rpc);
-
-    MARGO_REGISTER(mid, "unifycr_read_rpc",
-                     unifycr_read_in_t, unifycr_read_out_t,
-                     unifycr_read_rpc);
-
     MARGO_REGISTER(mid, "unifycr_metaget_rpc",
                      unifycr_metaget_in_t, unifycr_metaget_out_t,
                      unifycr_metaget_rpc);
@@ -224,6 +216,10 @@ static margo_instance_id setup_sm_target()
     MARGO_REGISTER(mid, "unifycr_fsync_rpc",
                      unifycr_fsync_in_t, unifycr_fsync_out_t,
                      unifycr_fsync_rpc);
+
+    MARGO_REGISTER(mid, "unifycr_read_rpc",
+                     unifycr_read_in_t, unifycr_read_out_t,
+                     unifycr_read_rpc);
 
     return mid;
 }
@@ -513,8 +509,7 @@ int main(int argc, char *argv[])
     }
 
     //TODO: replace with unifycr_server_rpc_init??
-    margo_instance_id mid;
-    mid = unifycr_server_rpc_init();
+    margo_instance_id mid = unifycr_server_rpc_init();
     rc = sock_init_server(local_rank_idx);
     if (rc != 0) {
         LOG(LOG_ERR, "%s",
@@ -557,22 +552,12 @@ int main(int argc, char *argv[])
     LOG(LOG_DBG, "finished service initialization");
 
     MPI_Barrier(MPI_COMM_WORLD);
-
-    margo_wait_for_finalize(mid);
-#if 0
-    while (1) {
+	int cnt = 0;
+    while ( cnt < 2) {
         rc = sock_wait_cli_cmd();
+		cnt++;
+/*
         if (rc != ULFS_SUCCESS) {
-            int sock_id = sock_get_error_id();
-            if (sock_id == 1) {
-                /* received exit command from the
-                 * service manager
-                 * thread.
-                 * */
-                unifycr_exit();
-                break;
-            }
-
             int ret = sock_handle_error(rc);
             if (ret != 0) {
                 LOG(LOG_ERR, "%s",
@@ -582,7 +567,6 @@ int main(int argc, char *argv[])
 
         } else {
             int sock_id = sock_get_id();
-            /*sock_id is 0 if it is a listening socket*/
             if (sock_id != 0) {
                 char *cmd = sock_get_cmd_buf(sock_id);
                 //TODO: remove this loop and replace with rpc calls?
@@ -594,9 +578,11 @@ int main(int argc, char *argv[])
                 }
             }
         }
+*/
 
     }
-#endif
+
+    margo_wait_for_finalize(mid);
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
 

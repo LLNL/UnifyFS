@@ -39,7 +39,7 @@ typedef struct ServerRpcContext
     //hg_id_t readtransfer_rpc_id;
 } ServerRpcContext_t;
 
-static const char* SMSVR_ADDR_STR   = "na+sm://";
+static const char* SMSVR_ADDR_STR   = "cci+sm://";
 static const char* VERBSVR_ADDR_STR = "cci+verbs";
 static const char* TCPSVR_ADDR_STR  = "cci+tcp";
 

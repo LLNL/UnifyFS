@@ -35,6 +35,7 @@
 #include "arraylist.h"
 #include "unifycr_const.h"
 #include "unifycr_global.h"
+#include "../../client/src/unifycr_read_builder.h"
 
 unifycr_key_t **unifycr_keys;
 unifycr_val_t **unifycr_vals;
@@ -296,6 +297,7 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
     int i;
     for (i = 0; i < num_entries; i++) {
         if ( meta_payload[i].fid == gfid ) {
+			printf("setting mdata for gfid: %d, file_pos: %lu, mem_pos: %lu, length: %lu\n", meta_payload[i].fid, meta_payload[i].file_pos, meta_payload[i].mem_pos, meta_payload[i].length); 
             unifycr_keys[used_entries]->fid = meta_payload[i].fid;
             unifycr_keys[used_entries]->offset = meta_payload[i].file_pos;
             unifycr_vals[used_entries]->addr = meta_payload[i].mem_pos;
@@ -392,7 +394,7 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
 /* get the locations of all the requested file segments from
  * the key-value store.
 * @param app_id: client's application id
-* @param client_id: client-side process id
+* @param client_id: client-side iiiikkijuprocess id
 * @param del_req_set: the set of read requests to be
 * @param thrd_id: the thread created for processing
 * its client's read requests.
@@ -406,21 +408,34 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
 * @return success/error code
 */
 int meta_batch_get(int app_id, int client_id,
-                   int thrd_id, int dbg_rank, char *shm_reqbuf, int num,
+                   int thrd_id, int dbg_rank, void* reqbuf, int num,
                    msg_meta_t *del_req_set)
 {
-    cli_req_t *tmp_cli_req = (cli_req_t *) shm_reqbuf;
-
+	printf("in meta_batch_get for app_id: %d, client_id: %d, thrd_id: %d\n", app_id, client_id, thrd_id);
+    //cli_req_t *tmp_cli_req = (cli_req_t *) shm_reqbuf;
+    unifycr_ReadRequest_table_t readRequest = unifycr_ReadRequest_as_root(reqbuf);
+	printf("read request as root\n");
+	unifycr_Extent_vec_t extents = unifycr_ReadRequest_extents(readRequest);
+	printf("read request extents\n");
+	size_t extents_len = unifycr_Extent_vec_len(extents);
+	printf("read request extents length\n");
+	assert(extents_len == num);
+	printf("asserted\n");
     int i, rc = 0;
     for (i = 0; i < num; i++) {
-        unifycr_keys[2 * i]->fid = tmp_cli_req[i].fid;
-        unifycr_keys[2 * i]->offset = tmp_cli_req[i].offset;
+		printf("fid: %d, offset: %d, length: %d\n",
+                unifycr_Extent_fid(unifycr_Extent_vec_at(extents,i)),
+            unifycr_Extent_offset(unifycr_Extent_vec_at(extents,i)),
+			unifycr_Extent_length(unifycr_Extent_vec_at(extents,i)));
+        unifycr_keys[2 * i]->fid = unifycr_Extent_fid(unifycr_Extent_vec_at(extents,i));
+        unifycr_keys[2 * i]->offset =
+			unifycr_Extent_offset(unifycr_Extent_vec_at(extents,i));
         unifycr_key_lens[2 * i] = sizeof(unifycr_key_t);
-        unifycr_keys[2 * i + 1]->fid = tmp_cli_req[i].fid;
+        unifycr_keys[2 * i + 1]->fid =
+			unifycr_Extent_fid(unifycr_Extent_vec_at(extents,i));
         unifycr_keys[2 * i + 1]->offset =
-            tmp_cli_req[i].offset + tmp_cli_req[i].length - 1;
+			unifycr_Extent_offset(unifycr_Extent_vec_at(extents,i)) + unifycr_Extent_length(unifycr_Extent_vec_at(extents,i)) - 1;
         unifycr_key_lens[2 * i + 1] = sizeof(unifycr_key_t);
-
     }
 
     md->primary_index = unifycr_indexes[0];

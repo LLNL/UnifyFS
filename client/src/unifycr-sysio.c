@@ -45,6 +45,7 @@
 #include "unifycr-sysio.h"
 #include "unifycr-internal.h"
 #include "unifycr_client.h"
+#include "unifycr_read_builder.h"
 
 /* -------------------
  * define external variables
@@ -1430,10 +1431,116 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
                                &tmp_read_req_set, unifycr_key_slice_range,
                                &read_req_set);
 
+    shm_meta_t *tmp_sh_meta;
+
+/*
+    int cmd = COMM_READ;
+    memcpy(cmd_buf, &cmd, sizeof(int));
+    memcpy(cmd_buf + sizeof(int), &(read_req_set.count), sizeof(int));
+
+   *((int *)shm_recvbuf) = 0;
+   *((int *)shm_recvbuf + 1) = 0;
+*/
+
+	flatcc_builder_t builder;
+    flatcc_builder_init(&builder);
+
+	unifycr_Extent_vec_start(&builder);
+	unifycr_Extent_vec_extend(&builder, read_req_set.count);
+    void *buffer;
+	unifycr_Extent_ref_t* v = unifycr_Extent_vec_edit(&builder);
+	//unifycr_Extent_t ext;
+	for (i = 0; i < read_req_set.count; i++) {
+		printf("adding extent %d in log read\n", i);
+		unifycr_Extent_ref_t ext = unifycr_Extent_create(&builder,
+                                                         read_req_set.read_reqs[i].fid,
+                                                         read_req_set.read_reqs[i].offset,
+                                                         read_req_set.read_reqs[i].length);
+		v[i] = ext;
+
+
+/*
+        tot_sz += read_req_set.read_reqs[i].length;
+
+        tmp_sh_meta = (shm_meta_t *)(shm_reqbuf + i * sizeof(shm_meta_t));
+        tmp_sh_meta->src_fid = read_req_set.read_reqs[i].fid;
+        tmp_sh_meta->offset = read_req_set.read_reqs[i].offset;
+        tmp_sh_meta->length = read_req_set.read_reqs[i].length;
+
+        memcpy(shm_reqbuf + i * sizeof(shm_meta_t), \
+                tmp_sh_meta, sizeof(shm_meta_t));
+*/
+    }
+	unifycr_Extent_vec_ref_t extents = unifycr_Extent_vec_end(&builder); 
+	unifycr_ReadRequest_create_as_root(&builder, extents);
+	//unifycr_ReadRequest_end_as_root(&builder);
+    size_t size;
+    buffer = flatcc_builder_finalize_buffer(&builder, &size);
+    assert(buffer);
+	printf("size is %ld\n", size);
+
+    flatcc_builder_clear(&builder);
+
     /* invoke read rpc here */
     unifycr_client_read_rpc_invoke(&unifycr_rpc_context, app_id, local_rank_idx,
-                                   ptr_meta_entry->gfid, read_req_set.count);
+                                   ptr_meta_entry->gfid, read_req_set.count, size,
+                                   buffer);
+	printf("completed read_rpc_invoke\n");
+	free(buffer);
 
+	  /*
+     * ToDo: Exception handling when some of the requests
+     *      * are missed
+     *           * */
+    while(tot_sz > 0) {
+        cmd_fd.events = POLLIN|POLLPRI;
+        cmd_fd.revents = 0;
+
+        //rc = poll(&cmd_fd, 1, -1);
+        rc = sleep(2);
+        if (rc == 0) {
+            read_req_t tmp_read_req;
+            shm_meta_t *tmp_req;
+
+            if (cmd_fd.revents != 0) {
+                if (cmd_fd.revents == POLLIN) {
+                    int sh_cursor = 0;
+                    //__real_read(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
+                    ptr_size = (int *)shm_recvbuf;
+                    num = *((int *)shm_recvbuf + 1); /*The first int spared out for size*/
+                    ptr_num = (int *)((char *)shm_recvbuf + sizeof(int));
+
+                    int j;
+                    for (j = 0; j < num; j++) {
+                        tmp_req = (shm_meta_t *)(shm_recvbuf 
+                                   + 2*sizeof(int) + sh_cursor);
+
+                        sh_cursor += sizeof(shm_meta_t);
+                        *ptr_size -= sizeof(shm_meta_t);
+
+                        tmp_read_req.fid = tmp_req->src_fid;
+                        tmp_read_req.offset = tmp_req->offset;
+                        tmp_read_req.length = tmp_req->length;
+                        tmp_read_req.buf = shm_recvbuf  + 2 * sizeof(int)+ sh_cursor;
+
+                        rc = unifycr_match_received_ack(read_req,\
+                                   count, &tmp_read_req);
+                        if (rc == 0) {
+                            sh_cursor += tmp_req->length;
+                            tot_sz -= tmp_req->length;
+                            *ptr_size -= tmp_req->length;
+                            (*ptr_num)--;
+                        } else {
+                            rc = -1;
+                            return rc;
+                        }
+                    }
+                }
+            }
+        } else {
+            printf("poll returned %d; error: %s\n", rc,  strerror(errno));
+				}
+    }
     return rc;
 }
 

@@ -41,6 +41,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <assert.h>
 #include "log.h"
 #include "unifycr_sock.h"
 #include "unifycr_service_manager.h"
@@ -77,11 +78,12 @@ void *sm_service_reads(void *ctx)
     int return_code, irecv_flag = 0;
     int rc, cmd, flag = 0;
 
-    rc = sm_init_socket();
+/*    rc = sm_init_socket();
     if (rc < 0) {
         sm_rc = (int)UNIFYCR_ERROR_SOCKET;
         return (void *)&sm_rc;
     }
+*/
 
     dbg_rank = glb_rank;
 
@@ -144,9 +146,11 @@ void *sm_service_reads(void *ctx)
     /*received message format: cmd, req_num, a list of read
      * requests*/
     while (!flag) {
+		//printf("waiting on requests\n");
         MPI_Irecv(req_msg_buf, REQ_BUF_LEN, MPI_CHAR,
                   MPI_ANY_SOURCE, CLI_DATA_TAG,
                   MPI_COMM_WORLD, &request);
+		//printf("received a request\n");
 
         return_code = MPI_Test(&request,
                                &irecv_flag, &status);
@@ -154,6 +158,7 @@ void *sm_service_reads(void *ctx)
             sm_rc = (int)UNIFYCR_ERROR_RECV;
             return (void *)&sm_rc;
         }
+		//printf("received a request successfully\n");
 
         /*
          * keep receiving the read request
@@ -188,6 +193,7 @@ void *sm_service_reads(void *ctx)
                     }
                     rc = sm_read_send_pipe(&read_task_set,
                                            &service_msgs, &rank_ack_task);
+					//printf("read send pipe complete\n");
                     if (rc != 0) {
                         sm_rc = rc;
                         return (void *)&sm_rc;
@@ -257,11 +263,13 @@ int sm_cluster_reads(task_set_t *read_task_set,
                      service_msgs_t *service_msgs)
 {
     int i;
+	//printf("in cluster reads\n");
     qsort(service_msgs->msg, service_msgs->num,
           sizeof(send_msg_t), compare_send_msg);
 
     read_task_set->num = 0;
     reset_read_tasks(read_task_set, service_msgs, 0);
+	//printf("reading service messages #: %d\n", service_msgs->num);
 
     for (i = 1; i < service_msgs->num; i++) {
         /*reading on a different local log file*/
@@ -270,11 +278,13 @@ int sm_cluster_reads(task_set_t *read_task_set,
             service_msgs->msg[i].dest_app_id ||
             read_task_set->read_tasks[read_task_set->num].cli_id !=
             service_msgs->msg[i].dest_client_id) {
+			//printf("reading a different local log file\n");
             read_task_set->num++;
             reset_read_tasks(read_task_set, service_msgs, i);
 
         } else {
 
+            //printf("contiguous from the last offset\n");
             /*contiguous from the last offset*/
             if (service_msgs->msg[i - 1].dest_offset
                 + service_msgs->msg[i - 1].length ==
@@ -305,6 +315,7 @@ int sm_cluster_reads(task_set_t *read_task_set,
                 }
 
             } else { /*not contiguous from the last offset*/
+            //printf("not contiguous from the last offset\n");
                 read_task_set->num++;
                 reset_read_tasks(read_task_set, service_msgs, i);
             }
@@ -327,12 +338,13 @@ int sm_read_send_pipe(task_set_t *read_task_set,
                       rank_ack_task_t *rank_ack_task)
 {
 
+	//printf("in read send pipe\n");
     qsort(read_task_set->read_tasks, read_task_set->num,
           sizeof(read_task_t), compare_read_task);
 
     int tmp_app_id, tmp_cli_id, start_idx, tmp_fd;
 
-    app_config_t *app_config;
+    app_config_t *app_config = NULL;
     long tmp_offset, buf_cursor = 0;
 
 
@@ -349,6 +361,7 @@ int sm_read_send_pipe(task_set_t *read_task_set,
         tmp_app_id = read_task_set->read_tasks[i].app_id;
         tmp_cli_id = read_task_set->read_tasks[i].cli_id;
         app_config = arraylist_get(app_config_list, tmp_app_id);
+		assert(app_config);
         start_idx = read_task_set->read_tasks[i].start_idx;
         tmp_offset = service_msgs->msg[start_idx].dest_offset;
         tmp_fd = service_msgs->msg[start_idx].src_fid;
@@ -356,10 +369,13 @@ int sm_read_send_pipe(task_set_t *read_task_set,
         /*requested data in read_task is totally in shared memory */
         if (tmp_offset + read_task_set->read_tasks[i].size
             <= app_config->data_size) {
+        	//printf("requested data in read_task is totally in shared memory\n");
             memcpy(mem_buf + buf_cursor,
                    app_config->shm_superblocks[tmp_cli_id]
                    + app_config->data_offset + tmp_offset,
                    read_task_set->read_tasks[i].size);
+        	
+        	//printf("requested data read from shared memory\n");
             burst_data_sz += read_task_set->read_tasks[i].size;
             // put to the network list
 
@@ -466,7 +482,6 @@ int sm_wait_until_digested(task_set_t *read_task_set,
             cur_pended_read = (pended_read_t *)arraylist_get(pended_reads, i);
             if (aio_error(&cur_pended_read->read_cb)
                 != EINPROGRESS && ptr_flags[i] != 1) {
-                counter++;
                 ptr_flags[i] = 1;
                 ret_code = aio_return(&cur_pended_read->read_cb);
                 if (ret_code > 0) {
@@ -648,7 +663,7 @@ int sm_ack_remote_delegator(rank_ack_meta_t *ptr_ack_meta)
 {
     long i;
     int send_sz = sizeof(int), len;
-
+	//printf("in sm_ack_remote_delegator\n");
     len = arraylist_size(ptr_ack_meta->ack_list)
           - ptr_ack_meta->start_cursor;
 
@@ -938,7 +953,6 @@ int compare_rank_thrd(int src_rank, int src_thrd,
 void reset_read_tasks(task_set_t *read_task_set,
                       service_msgs_t *service_msgs, int index)
 {
-
     read_task_set->read_tasks[read_task_set->num].start_idx = index;
     read_task_set->read_tasks[read_task_set->num].size =
         service_msgs->msg[index].length;
@@ -949,7 +963,6 @@ void reset_read_tasks(task_set_t *read_task_set,
         service_msgs->msg[index].dest_client_id;
     read_task_set->read_tasks[read_task_set->num].arrival_time =
         service_msgs->msg[index].arrival_time;
-
 }
 
 /**

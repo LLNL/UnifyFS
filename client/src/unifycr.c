@@ -2026,7 +2026,7 @@ static int unifycr_init(int rank)
         unifycr_superblock =
             unifycr_superblock_shmget(sb_size, unifycr_mount_shmget_key);
         if (unifycr_superblock == NULL) {
-            DEBUG("unifycr_superblock_shmget() failed\n");
+            printf("unifycr_superblock_shmget() failed\n");
             return UNIFYCR_FAILURE;
         }
 
@@ -2049,7 +2049,7 @@ static int unifycr_init(int rank)
                 unifycr_get_spillblock(unifycr_spillover_size,
                                        spillfile_prefix);
             if (unifycr_spilloverblock < 0) {
-                DEBUG("unifycr_get_spillblock() failed!\n");
+                printf("unifycr_get_spillblock() failed!\n");
                 return UNIFYCR_FAILURE;
             }
 
@@ -2069,7 +2069,7 @@ static int unifycr_init(int rank)
                 unifycr_get_spillblock(unifycr_index_buf_size,
                                        spillfile_prefix);
             if (unifycr_spillmetablock < 0) {
-               DEBUG("unifycr_get_spillmetablock failed!\n");
+               printf("unifycr_get_spillmetablock failed!\n");
                 return UNIFYCR_FAILURE;
             }
         }
@@ -2269,6 +2269,7 @@ static int unifycr_init_recv_shm(int local_rank_idx, int app_id)
         return UNIFYCR_FAILURE;
 
     *((int *)shm_recvbuf) = app_id + 3;
+	printf("shm_recbuf initialized\n");
     return 0;
 }
 
@@ -2430,7 +2431,7 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
     /* initialize margo */
     printf("svr_addr_str:%s\n", svr_addr_str);
     (*unifycr_rpc_context)->mid = margo_init(proto, MARGO_CLIENT_MODE,
-                                             0, 0);
+                                             1, 0);
     assert((*unifycr_rpc_context)->mid);
     margo_diag_start((*unifycr_rpc_context)->mid);
 
@@ -2896,6 +2897,18 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
         return UNIFYCR_FAILURE;
     }
 
+	rc = unifycr_init_req_shm(local_rank_idx, app_id);
+    if (rc < 0) {
+      printf("rank:%d, fail to init shared request memory.", dbg_rank);
+      return UNIFYCR_FAILURE;
+    }
+
+    rc = unifycr_init_recv_shm(local_rank_idx, app_id);
+    if (rc < 0) {
+      printf("rank:%d, fail to init shared receive memory.", dbg_rank);
+      return UNIFYCR_FAILURE;
+    }
+
     //TODO: //not sure if i need all of this..
     /* add mount point as a new directory in the file list */
     if (unifycr_get_fid_from_path(prefix) >= 0) {
@@ -2909,6 +2922,7 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
 
         if (fid < 0) {
             /* if there was an error, return it */
+			printf("fid < 0\n");
             return fid;
         }
     }

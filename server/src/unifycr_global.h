@@ -145,6 +145,13 @@ typedef struct {
     struct stat file_attr;
 } fattr_val_t;
 
+typedef struct {
+    int fid;
+    int gfid;
+    char filename[ULFS_MAX_FILENAME];
+    struct stat file_attr;
+} unifycr_file_attr_t;
+
 extern arraylist_t *app_config_list;
 extern arraylist_t *thrd_list;
 
