@@ -50,9 +50,8 @@ struct timespec shm_wait_tm;
 * @param req_num: number of read requests
 * @return success/error code
 */
-int rm_read_remote_data(int app_id, int client_id, int gfid, int req_num)
+int rm_read_remote_data(int app_id, int client_id, int gfid, int req_num, void* buffer)
 {
-
     int rc;
 
     //int app_id = invert_sock_ids[sock_id];
@@ -61,17 +60,19 @@ int rm_read_remote_data(int app_id, int client_id, int gfid, int req_num)
 
   	//int client_id = app_config->client_ranks[sock_id];
     //int dbg_rank = app_config->dbg_ranks[sock_id];
+    int dbg_rank = 1;
 
-    int thrd_id = app_config->thrd_idxs[sock_get_id()];
+    int thrd_id = app_config->thrd_idxs[client_id];
     thrd_ctrl_t *thrd_ctrl = (thrd_ctrl_t *)arraylist_get(thrd_list, thrd_id);
 
     pthread_mutex_lock(&thrd_ctrl->thrd_lock);
 
     /* get the locations of all the read requests from the key-value store*/
-    rc = meta_batch_get(app_id, client_id, thrd_id, 0,
-                        app_config->shm_req_bufs[client_id], req_num,
+	printf("calling meta_batch_get with req_num: %d, thrd_id: %d\n", req_num, thrd_id);
+    rc = meta_batch_get(app_id, client_id, thrd_id, 0, buffer, req_num,
                         thrd_ctrl->del_req_set);
 
+	printf("completed meta_batch_get\n");
     /*
      * group together the read requests
      * to be sent to the same delegators.
@@ -79,8 +80,8 @@ int rm_read_remote_data(int app_id, int client_id, int gfid, int req_num)
     qsort(thrd_ctrl->del_req_set->msg_meta,
           thrd_ctrl->del_req_set->num,
           sizeof(send_msg_t), compare_delegators);
-//  print_send_msgs(thrd_ctrl->del_req_set->msg_meta,
-//  thrd_ctrl->del_req_set->num, dbg_rank);
+    print_send_msgs(thrd_ctrl->del_req_set->msg_meta,
+                    thrd_ctrl->del_req_set->num, dbg_rank);
     thrd_ctrl->del_req_stat->req_stat[0].req_cnt = 1;
 
 
@@ -88,6 +89,8 @@ int rm_read_remote_data(int app_id, int client_id, int gfid, int req_num)
     int i, del_cnt = 0;
     thrd_ctrl->del_req_stat->req_stat[0].del_id =
         thrd_ctrl->del_req_set->msg_meta[0].dest_delegator_rank;
+
+	printf("calculate the number of read requests to be sent to each delegator\n");
 
     /* calculate the number of read requests
      * to be sent to each delegator*/
@@ -107,22 +110,114 @@ int rm_read_remote_data(int app_id, int client_id, int gfid, int req_num)
 
     thrd_ctrl->del_req_stat->del_cnt = del_cnt;
 
-    // print_remote_del_reqs(app_id, client_id, dbg_rank,
-    //thrd_ctrl->del_req_stat);
+    print_remote_del_reqs(app_id, thrd_id, dbg_rank,
+                          thrd_ctrl->del_req_stat);
 
+    printf("wake up the service thread for the requesting client\n");
     /*wake up the service thread for the requesting client*/
     if (!thrd_ctrl->has_waiting_delegator) {
+		printf("has waiting delegator\n");
         thrd_ctrl->has_waiting_dispatcher = 1;
         pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
+		printf("has waiting dispatcherr\n");
         thrd_ctrl->has_waiting_dispatcher = 0;
         pthread_cond_signal(&thrd_ctrl->thrd_cond);
+		printf("signaled\n");
     } else {
+		printf("does not have waiting delegator\n");
         pthread_cond_signal(&thrd_ctrl->thrd_cond);
     }
+	printf("woked\n");
     pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
+	printf("unlocked\n");
     return rc;
 
 }
+#ifdef RPC
+int rm_read_remote_data(int app_id, int thrd_id, int gfid, int req_num)
+{
+    int rc;
+
+    //int app_id = invert_sock_ids[sock_id];
+    app_config_t *app_config =
+        (app_config_t *)arraylist_get(app_config_list, app_id);
+
+  	//int client_id = app_config->client_ranks[sock_id];
+    //int dbg_rank = app_config->dbg_ranks[sock_id];
+    int dbg_rank = 1;
+
+    int thrd_id = app_config->thrd_idxs[client_id];
+    client_ctrl_t *client_ctrl = (client_ctrl_t *)arraylist_get(client_list, thrd_id);
+
+    //pthread_mutex_lock(&thrd_ctrl->thrd_lock);
+
+    /* get the locations of all the read requests from the key-value store*/
+	printf("calling meta_batch_get\n");
+    rc = meta_batch_get(app_id, client_id, thrd_id, 0,
+                        app_config->shm_req_bufs[client_id], req_num,
+                        client_ctrl->del_req_set);
+
+	printf("completed meta_batch_get\n");
+    /*
+     * group together the read requests
+     * to be sent to the same delegators.
+     * */
+    qsort(client_ctrl->del_req_set->msg_meta,
+          client_ctrl->del_req_set->num,
+          sizeof(send_msg_t), compare_delegators);
+    print_send_msgs(client_ctrl->del_req_set->msg_meta,
+                    client_ctrl->del_req_set->num, dbg_rank);
+    client_ctrl->del_req_stat->req_stat[0].req_cnt = 1;
+
+
+
+    int i, del_cnt = 0;
+    client_ctrl->del_req_stat->req_stat[0].del_id =
+        client_ctrl->del_req_set->msg_meta[0].dest_delegator_rank;
+	printf("calculate the number of read requests to be sent to each delegator\n");
+
+    /* calculate the number of read requests
+     * to be sent to each delegator*/
+    for (i = 1; i < client_ctrl->del_req_set->num; i++) {
+        if (client_ctrl->del_req_set->msg_meta[i].dest_delegator_rank
+            == client_ctrl->del_req_set->msg_meta[i - 1].dest_delegator_rank) {
+            client_ctrl->del_req_stat->req_stat[del_cnt].req_cnt++;
+        } else {
+            del_cnt++;
+            client_ctrl->del_req_stat->req_stat[del_cnt].req_cnt = 1;
+            client_ctrl->del_req_stat->req_stat[del_cnt].del_id =
+                client_ctrl->del_req_set->msg_meta[i].dest_delegator_rank;
+
+        }
+    }
+    del_cnt++;
+
+    client_ctrl->del_req_stat->del_cnt = del_cnt;
+
+    print_remote_del_reqs(app_id, client_id, dbg_rank,
+                          client_ctrl->del_req_stat);
+
+    printf("wake up the service thread for the requesting client\n");
+    /*wake up the service thread for the requesting client*/
+    if (!thrd_ctrl->has_waiting_delegator) {
+		printf("has waiting delegator\n");
+        thrd_ctrl->has_waiting_dispatcher = 1;
+        pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
+        thrd_ctrl->has_waiting_dispatcher = 0;
+		printf("has waiting dispatcher\n");
+        pthread_cond_signal(&thrd_ctrl->thrd_cond);
+		printf("signaled\n");
+    } else {
+		printf("does not have waiting delegator\n");
+        pthread_cond_signal(&thrd_ctrl->thrd_cond);
+    }
+	printf("woked\n");
+    pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
+	printf("unlocked\n");
+    return rc;
+
+}
+#endif
 
 /**
 * pack the the requests to be sent to the same
@@ -187,10 +282,12 @@ int rm_send_remote_requests(thrd_ctrl_t *thrd_ctrl,
 
     int msg_cursor = 0;
     while (i < thrd_ctrl->del_req_stat->del_cnt) {
+		printf("request data transfer for client_id: %d, src_fid: %d, dest_offset %ld, src_offset %ld, length %ld\n", thrd_ctrl->del_req_set->msg_meta[msg_cursor].dest_client_id, thrd_ctrl->del_req_set->msg_meta[msg_cursor].src_fid, thrd_ctrl->del_req_set->msg_meta[msg_cursor].dest_offset, thrd_ctrl->del_req_set->msg_meta[msg_cursor].src_offset, thrd_ctrl->del_req_set->msg_meta[msg_cursor].length);
         int packed_size = rm_pack_send_requests(thrd_ctrl->del_req_msg_buf,
                                                 &(thrd_ctrl->del_req_set->msg_meta[msg_cursor]),
                                                 thrd_ctrl->del_req_stat->req_stat[i].req_cnt,
                                                 tot_sz);
+		printf("mpi sending\n");
         MPI_Send(thrd_ctrl->del_req_msg_buf, packed_size, MPI_CHAR,
                  thrd_ctrl->del_req_stat->req_stat[i].del_id,
                  CLI_DATA_TAG, MPI_COMM_WORLD);
@@ -200,6 +297,7 @@ int rm_send_remote_requests(thrd_ctrl_t *thrd_ctrl,
 
     }
 
+	printf("done with send_remote_requests\n");
     return ULFS_SUCCESS;
 }
 
@@ -232,8 +330,10 @@ void *rm_delegate_request_thread(void *arg)
         if (thrd_ctrl->has_waiting_dispatcher == 1) {
             pthread_cond_signal(&thrd_ctrl->thrd_cond);
         }
+		printf("thread %d waiting\n", thrd_id);
         pthread_cond_wait(&thrd_ctrl->thrd_cond,
                           &thrd_ctrl->thrd_lock);
+		printf("thread %d acting\n", thrd_id);
         thrd_ctrl->has_waiting_delegator = 0;
         if (thrd_ctrl->exit_flag == 1) {
             pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
@@ -241,6 +341,7 @@ void *rm_delegate_request_thread(void *arg)
         }
 
         long tot_sz = 0;
+		printf("send remote requests for client_id %d\n", sock_id);
         rc = rm_send_remote_requests(thrd_ctrl,
                                      thrd_id, &tot_sz);
         if (rc != ULFS_SUCCESS) {
@@ -248,7 +349,9 @@ void *rm_delegate_request_thread(void *arg)
             return NULL;
         }
 
+		printf("receive remote requests\n");
         rc = rm_receive_remote_message(app_id, sock_id, tot_sz);
+		printf("received remote requests\n");
         if (rc != 0) {
             pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
             return NULL;
@@ -297,11 +400,13 @@ int rm_receive_remote_message(int app_id,
         int i, return_code;
 
         for (i = 0; i < RECV_BUF_CNT; i++) {
+			printf("calling Irecv for read response\n");
             MPI_Irecv(thrd_ctrl->del_recv_msg_buf[i], RECV_BUF_LEN,
                       MPI_CHAR, MPI_ANY_SOURCE,
                       SER_DATA_TAG + thrd_id,
                       MPI_COMM_WORLD, &recv_req[i]);
         }
+		printf("completed Irecv for read response\n");
 
         int recv_counter = 0;
         while (tot_sz > 0) {
@@ -315,6 +420,7 @@ int rm_receive_remote_message(int app_id,
 
                     if (irecv_flag[i] != 0) {
 
+						printf("calling process_received msg for read response\n");
                         rc = rm_process_received_msg(app_id,
                                                      sock_id, thrd_ctrl->del_recv_msg_buf[i],
                                                      &tot_sz);
@@ -341,7 +447,9 @@ int rm_receive_remote_message(int app_id,
     }
 
     /*purify shared receive buffer*/
-    rc = sock_notify_cli(sock_id, COMM_DIGEST);
+	printf("calling notify in receive remote, for sock_id %d\n", sock_id);
+    //rc = sock_notify_cli(sock_id, COMM_DIGEST);
+printf("called notify in receive remote\n");
     if (rc != 0) {
         return rc;
     }
@@ -349,9 +457,12 @@ int rm_receive_remote_message(int app_id,
     int client_id = app_config->client_ranks[sock_id];
 
     int *ptr_size = (int *)app_config->shm_recv_bufs[client_id];
+/*
     while (*ptr_size != 0) {
+		printf("nanosleeping...\n");
         nanosleep(&shm_wait_tm, NULL);
     }
+*/
 
     return ULFS_SUCCESS;
 }
@@ -375,7 +486,9 @@ int rm_process_received_msg(int app_id, int sock_id,
     int rc;
     app_config_t *app_config =
         (app_config_t *)arraylist_get(app_config_list, app_id);
+	printf("looking up client id\n");
     int client_id = app_config->client_ranks[sock_id];
+	printf("got client id: %d\n", client_id);
 
     /*
      * format of recv_msg_buf: num,
@@ -403,6 +516,8 @@ int rm_process_received_msg(int app_id, int sock_id,
         (int *)(app_config->shm_recv_bufs[client_id]
                 + sizeof(int));
 
+	void* tmp_read_data_buf = (void*)(recv_msg_buf + sizeof(int) + sizeof(recv_msg_t));
+	printf("transferring to sm with num == %d\n", num);
     int j;
     for (j = 0; j < num; j++) {
 
@@ -411,7 +526,10 @@ int rm_process_received_msg(int app_id, int sock_id,
             /*client-side receive buffer is full,
              * wait until the client reads all the
              * data*/
+	//		printf("calling sock notify\n");
             rc = sock_notify_cli(sock_id, COMM_READ);
+
+	//		printf("called sock notify\n");
 
             if (rc != 0) {
                 return rc;
@@ -435,8 +553,11 @@ int rm_process_received_msg(int app_id, int sock_id,
         int client_id = app_config->client_ranks[sock_id];
 
         recv_cursor += sizeof(recv_msg_t);
+//		printf("ptr_size before: %d\n", *ptr_size); 
         *ptr_size += sizeof(shm_meta_t);
-
+		printf("ptr_size after: %d\n", *ptr_size); 
+		//printf("value at offset 23: %hhd\n", tmp_recv_msg[23]);
+		printf("length: %ld\n", tmp_recv_msg->length);
         memcpy(2 * sizeof(int)
                + app_config->shm_recv_bufs[client_id] + *ptr_size,
                (void *)(tmp_recv_msg + 1),
@@ -450,8 +571,10 @@ int rm_process_received_msg(int app_id, int sock_id,
         /*the message buffer may contain a list of messages*/
         tmp_recv_msg = (recv_msg_t *)(recv_msg_buf
                                       + sizeof(int) + recv_cursor);
+		tmp_read_data_buf = (void*)(recv_msg_buf + sizeof(int) + sizeof(recv_msg_t) + recv_cursor);
 
     }
+	printf("transferred to sm\n");
 
     return ULFS_SUCCESS;
 
