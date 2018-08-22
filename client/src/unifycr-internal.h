@@ -339,15 +339,6 @@ extern long unifycr_key_slice_range;
 #define UNIFYCR_CLI_TIME_OUT 5000
 
 typedef enum {
-    COMM_MOUNT,
-    COMM_META,
-    COMM_READ,
-    COMM_UNMOUNT,
-    COMM_DIGEST,
-    COMM_SYNC_DEL,
-} cmd_lst_t;
-
-typedef enum {
     ACK_SUCCESS,
     ACK_FAIL,
 } ack_status_t;

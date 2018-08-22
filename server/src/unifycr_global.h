@@ -36,15 +36,6 @@
 #include "arraylist.h"
 
 typedef enum {
-    COMM_MOUNT, /*the list of addrs: appid, size of buffer, offset of data section, metadata section*/
-    COMM_META,
-    COMM_READ,
-    COMM_UNMOUNT,
-    COMM_DIGEST,
-    COMM_SYNC_DEL,
-} cmd_lst_t;
-
-typedef enum {
     XFER_COMM_DATA,
     XFER_COMM_EXIT,
 } service_cmd_lst_t;

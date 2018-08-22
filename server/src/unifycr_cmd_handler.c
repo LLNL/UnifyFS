@@ -78,14 +78,59 @@ int delegator_handle_command(char *ptr_cmd, int sock_id)
         rc = sock_ack_cli(sock_id, ret_sz);
         return rc;
 
+    case COMM_META_GET:
+        (void)0;
+        /*get file attribute*/
+        unifycr_file_attr_t attr_val;
+
+        fattr_key_t _fattr_key = *((int *)(ptr_cmd + 2 * sizeof(int)));
+
+        rc = meta_process_attr_get(&_fattr_key, &attr_val);
+
+        ptr_ack = sock_get_ack_buf(sock_id);
+        ret_sz = pack_ack_msg(ptr_ack, cmd, rc,
+                                &attr_val, sizeof(unifycr_file_attr_t));
+        rc = sock_ack_cli(sock_id, ret_sz);
+
+        break;
+
+    case COMM_META_SET:
+        (void)0;
+        /*set file attribute*/
+        rc = meta_process_attr_set(ptr_cmd, sock_id);
+
+        ptr_ack = sock_get_ack_buf(sock_id);
+        ret_sz = pack_ack_msg(ptr_ack, cmd, rc, NULL, 0);
+        rc = sock_ack_cli(sock_id, ret_sz);
+        /*ToDo: deliver the error code/success to client*/
+
+        break;
+
+    case COMM_META_FSYNC:
+        /* synchronize both index and file attribute
+         * metadata to the key-value store
+         */
+
+        rc = meta_process_fsync(sock_id);
+
+        /*ack the result*/
+        ptr_ack = sock_get_ack_buf(sock_id);
+        ret_sz = pack_ack_msg(ptr_ack, cmd, rc, NULL, 0);
+        rc = sock_ack_cli(sock_id, ret_sz);
+
+        break;
+
+#if 0
     case COMM_META:
         (void)0;
         int type = *((int *)ptr_cmd + 1);
         if (type == 1) {
             /*get file attribute*/
             unifycr_file_attr_t attr_val;
-            rc = meta_process_attr_get(ptr_cmd,
-                                       sock_id, &attr_val);
+
+            fattr_key_t _fattr_key = *((int *)(ptr_cmd + 2 * sizeof(int)));
+
+            rc = meta_process_attr_get(&_fattr_key, &attr_val);
 
             ptr_ack = sock_get_ack_buf(sock_id);
             ret_sz = pack_ack_msg(ptr_ack, cmd, rc,
@@ -116,6 +161,7 @@ int delegator_handle_command(char *ptr_cmd, int sock_id)
             rc = sock_ack_cli(sock_id, ret_sz);
         }
         break;
+#endif
 
     case COMM_READ:
         (void)0;

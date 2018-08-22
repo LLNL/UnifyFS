@@ -209,7 +209,7 @@ int meta_process_attr_set(char *buf, int sock_id)
     int rc = ULFS_SUCCESS;
 
     unifycr_file_attr_t *ptr_fattr =
-        (unifycr_file_attr_t *)(buf + 2 * sizeof(int));
+        (unifycr_file_attr_t *)(buf + 1 * sizeof(int));
 
     *fattr_keys[0] = ptr_fattr->gfid;
     fattr_vals[0]->file_attr = ptr_fattr->file_attr;
@@ -238,23 +238,23 @@ int meta_process_attr_set(char *buf, int sock_id)
 * @return success/error code
 */
 
-int meta_process_attr_get(char *buf, int sock_id,
+int meta_process_attr_get(fattr_key_t *_fattr_key,
                           unifycr_file_attr_t *ptr_attr_val)
 {
-    *fattr_keys[0] = *((int *)(buf + 2 * sizeof(int)));
+    //*fattr_keys[0] = *((int *)(buf + 2 * sizeof(int)));
     fattr_val_t *tmp_ptr_attr;
 
     int rc;
 
     md->primary_index = unifycr_indexes[1];
-    bgrm = mdhimGet(md, md->primary_index, fattr_keys[0],
+    bgrm = mdhimGet(md, md->primary_index, _fattr_key,
                     sizeof(fattr_key_t), MDHIM_GET_EQ);
 
     if (!bgrm || bgrm->error)
         rc = (int)UNIFYCR_ERROR_MDHIM;
     else {
         tmp_ptr_attr = (fattr_val_t *)bgrm->values[0];
-        ptr_attr_val->gfid = *fattr_keys[0];
+        ptr_attr_val->gfid = *_fattr_key;
 
         /*  LOG(LOG_DBG, "rank:%d, getting fattr key:%d\n",
                     glb_rank, *fattr_keys[0]); */
