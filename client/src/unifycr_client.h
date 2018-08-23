@@ -56,6 +56,14 @@ uint32_t unifycr_client_read_rpc_invoke(unifycr_client_rpc_context_t**
                                                 uint32_t app_id,
                                                 uint32_t local_rank_idx,
                                                 uint32_t gfid,
+                                                uint64_t offset,
+                                                uint64_t length);
+
+uint32_t unifycr_client_mread_rpc_invoke(unifycr_client_rpc_context_t**
+                                                unifycr_rpc_context,
+                                                uint32_t app_id,
+                                                uint32_t local_rank_idx,
+                                                uint32_t gfid,
                                                 uint32_t read_count,
                                                 hg_size_t size,
                                                 void* buffer);

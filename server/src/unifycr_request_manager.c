@@ -41,6 +41,91 @@
 //extern struct pollfd poll_set[MAX_NUM_CLIENTS];
 
 struct timespec shm_wait_tm;
+/* the new read function for one requested extent 
+ *
+ */
+int rm_read_remote_data(int app_id, int client_id, int gfid, long offset, long length)
+{
+    int rc;
+
+    //int app_id = invert_sock_ids[sock_id];
+    app_config_t *app_config =
+        (app_config_t *)arraylist_get(app_config_list, app_id);
+
+  	//int client_id = app_config->client_ranks[sock_id];
+    //int dbg_rank = app_config->dbg_ranks[sock_id];
+    int dbg_rank = 1;
+
+    int thrd_id = app_config->thrd_idxs[client_id];
+    thrd_ctrl_t *thrd_ctrl = (thrd_ctrl_t *)arraylist_get(thrd_list, thrd_id);
+
+    pthread_mutex_lock(&thrd_ctrl->thrd_lock);
+
+    /* get the locations of all the read requests from the key-value store*/
+    rc = meta_read_get(app_id, client_id, thrd_id, 0, gfid, offset, length,
+                        thrd_ctrl->del_req_set);
+
+	printf("completed meta_batch_get\n");
+    /*
+     * group together the read requests
+     * to be sent to the same delegators.
+     * */
+    qsort(thrd_ctrl->del_req_set->msg_meta,
+          thrd_ctrl->del_req_set->num,
+          sizeof(send_msg_t), compare_delegators);
+    print_send_msgs(thrd_ctrl->del_req_set->msg_meta,
+                    thrd_ctrl->del_req_set->num, dbg_rank);
+    thrd_ctrl->del_req_stat->req_stat[0].req_cnt = 1;
+
+
+
+    int i, del_cnt = 0;
+    thrd_ctrl->del_req_stat->req_stat[0].del_id =
+        thrd_ctrl->del_req_set->msg_meta[0].dest_delegator_rank;
+
+	printf("calculate the number of read requests to be sent to each delegator\n");
+
+    /* calculate the number of read requests
+     * to be sent to each delegator*/
+    for (i = 1; i < thrd_ctrl->del_req_set->num; i++) {
+        if (thrd_ctrl->del_req_set->msg_meta[i].dest_delegator_rank
+            == thrd_ctrl->del_req_set->msg_meta[i - 1].dest_delegator_rank) {
+            thrd_ctrl->del_req_stat->req_stat[del_cnt].req_cnt++;
+        } else {
+            del_cnt++;
+            thrd_ctrl->del_req_stat->req_stat[del_cnt].req_cnt = 1;
+            thrd_ctrl->del_req_stat->req_stat[del_cnt].del_id =
+                thrd_ctrl->del_req_set->msg_meta[i].dest_delegator_rank;
+
+        }
+    }
+    del_cnt++;
+
+    thrd_ctrl->del_req_stat->del_cnt = del_cnt;
+
+    print_remote_del_reqs(app_id, thrd_id, dbg_rank,
+                          thrd_ctrl->del_req_stat);
+
+    printf("wake up the service thread for the requesting client\n");
+    /*wake up the service thread for the requesting client*/
+    if (!thrd_ctrl->has_waiting_delegator) {
+		printf("has waiting delegator\n");
+        thrd_ctrl->has_waiting_dispatcher = 1;
+        pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
+		printf("has waiting dispatcherr\n");
+        thrd_ctrl->has_waiting_dispatcher = 0;
+        pthread_cond_signal(&thrd_ctrl->thrd_cond);
+		printf("signaled\n");
+    } else {
+		printf("does not have waiting delegator\n");
+        pthread_cond_signal(&thrd_ctrl->thrd_cond);
+    }
+	printf("woked\n");
+    pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
+	printf("unlocked\n");
+    return rc;
+
+}
 
 /**
 * send the read requests to the
@@ -50,7 +135,7 @@ struct timespec shm_wait_tm;
 * @param req_num: number of read requests
 * @return success/error code
 */
-int rm_read_remote_data(int app_id, int client_id, int gfid, int req_num, void* buffer)
+int rm_mread_remote_data(int app_id, int client_id, int gfid, int req_num, void* buffer)
 {
     int rc;
 

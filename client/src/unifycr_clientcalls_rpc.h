@@ -59,14 +59,23 @@
         ((int32_t)(gfid)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_fsync_rpc)
 
-    MERCURY_GEN_PROC(unifycr_read_out_t, ((int32_t)(ret)))
-    MERCURY_GEN_PROC(unifycr_read_in_t,
+    MERCURY_GEN_PROC(unifycr_mread_out_t, ((int32_t)(ret)))
+    MERCURY_GEN_PROC(unifycr_mread_in_t,
         ((uint32_t)(app_id))\
         ((uint32_t)(local_rank_idx))\
         ((int32_t)(gfid))\
         ((int32_t)(read_count))\
         ((hg_size_t)(bulk_size))\
         ((hg_bulk_t)(bulk_handle)))
+    DECLARE_MARGO_RPC_HANDLER(unifycr_mread_rpc)
+
+    MERCURY_GEN_PROC(unifycr_read_out_t, ((int32_t)(ret)))
+    MERCURY_GEN_PROC(unifycr_read_in_t,
+        ((uint32_t)(app_id))\
+        ((uint32_t)(local_rank_idx))\
+        ((int32_t)(gfid))\
+        ((int64_t)(offset))\
+        ((int64_t)(length)))
     DECLARE_MARGO_RPC_HANDLER(unifycr_read_rpc)
 
 

@@ -40,7 +40,8 @@ typedef struct {
 } shm_meta_t; /*metadata format in the shared memory*/
 
 void *rm_delegate_request_thread(void *arg);
-int rm_read_remote_data(int app_id, int client_id, int gfid, int req_num, void* buffer);
+int rm_mread_remote_data(int app_id, int client_id, int gfid, int req_num, void* buffer);
+int rm_read_remote_data(int app_id, int client_id, int gfid,  long offset, long length);
 int rm_send_remote_requests(thrd_ctrl_t *thrd_ctrl,
                             int thrd_tag, long *tot_sz);
 int rm_pack_send_requests(char *req_msg_buf,

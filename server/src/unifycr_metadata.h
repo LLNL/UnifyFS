@@ -71,6 +71,9 @@ int meta_init_store(unifycr_cfg_t *cfg);
 void print_bget_indices(int app_id, int cli_id,
                         send_msg_t *index_set, int tot_num);
 int meta_process_fsync(int app_id, int client_side_id, int gfid);
+int meta_read_get(int app_id, int client_id,
+                   int thrd_id, int dbg_rank, int gfid, long offset, long length, 
+                   msg_meta_t* del_req_set);
 int meta_batch_get(int app_id, int client_id,
                    int thrd_id, int dbg_rank, void* reqbuf, int num,
                    msg_meta_t* del_req_set);

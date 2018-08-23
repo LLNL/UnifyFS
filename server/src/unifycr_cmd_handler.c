@@ -463,6 +463,34 @@ static void unifycr_read_rpc(hg_handle_t handle)
 
     unifycr_read_out_t out;
 
+	const struct hg_info* hgi = margo_get_info(handle);
+    assert(hgi);
+    margo_instance_id mid = margo_hg_info_get_instance(hgi);
+    assert(mid != MARGO_INSTANCE_NULL);
+
+    out.ret = rm_read_remote_data(in.app_id, in.local_rank_idx, in.gfid, in.offset, in.length);
+
+	printf("completed rm_read_remote_data for gfid: %d, offset: %d, length: %d\n", in.gfid, in.offset, in.length);
+    margo_free_input(handle, &in);
+
+    hg_return_t hret = margo_respond(handle, &out);
+	printf("responded in rpc handler\n");
+
+    assert(hret == HG_SUCCESS);
+
+    margo_destroy(handle);
+	printf("end of read rpc handler\n");
+}
+DEFINE_MARGO_RPC_HANDLER(unifycr_read_rpc)
+
+static void unifycr_mread_rpc(hg_handle_t handle)
+{
+    unifycr_mread_in_t in;
+    int ret = HG_Get_input(handle, &in);
+    assert(ret == HG_SUCCESS);
+
+    unifycr_mread_out_t out;
+
 	printf("calling rm_read_remote_data for gfid: %d, read_count: %d, bulk_size: %d\n", in.gfid, in.read_count, in.bulk_size);
 	hg_size_t size = in.bulk_size;
 	void* buffer = (void*)malloc(size);
@@ -483,7 +511,7 @@ static void unifycr_read_rpc(hg_handle_t handle)
         bulk_handle, 0, size);
     assert(hret == HG_SUCCESS);
 
-    out.ret = rm_read_remote_data(in.app_id, in.local_rank_idx, in.gfid, in.read_count,
+    out.ret = rm_mread_remote_data(in.app_id, in.local_rank_idx, in.gfid, in.read_count,
                                   buffer);
 
 	printf("completed rm_read_remote_data for gfid: %d, read_count: %d\n", in.gfid, in.read_count);
@@ -499,8 +527,7 @@ static void unifycr_read_rpc(hg_handle_t handle)
 	free(buffer);
 	printf("end of rpc handler\n");
 }
-
-DEFINE_MARGO_RPC_HANDLER(unifycr_read_rpc)
+DEFINE_MARGO_RPC_HANDLER(unifycr_mread_rpc)
 
 /**
 * receive and store the client-side information,

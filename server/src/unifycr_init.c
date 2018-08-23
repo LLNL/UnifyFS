@@ -221,6 +221,10 @@ static margo_instance_id setup_sm_target()
                      unifycr_read_in_t, unifycr_read_out_t,
                      unifycr_read_rpc);
 
+    MARGO_REGISTER(mid, "unifycr_mread_rpc",
+                     unifycr_mread_in_t, unifycr_mread_out_t,
+                     unifycr_mread_rpc);
+
     return mid;
 }
 
