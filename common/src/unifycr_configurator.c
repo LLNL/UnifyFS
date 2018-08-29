@@ -978,18 +978,25 @@ int configurator_directory_check(const char *s,
                                  const char *val,
                                  char **o)
 {
-    int rc;
+    int mode, rc;
     struct stat st;
 
     if (val == NULL)
         return 0;
 
+    // check dir exists
     rc = stat(val, &st);
     if (rc == 0) {
         if (st.st_mode & S_IFDIR)
             return 0;
         else
             return ENOTDIR;
+    } else { // try to create it
+        mode = 0770; // S_IRWXU | S_IRWXG
+        rc = mkdir(val, mode);
+        if (rc == 0)
+            return 0;
+        else
+            return errno; // invalid
     }
-    return errno; // invalid
 }
