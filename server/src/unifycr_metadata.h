@@ -97,4 +97,37 @@ int meta_process_attr_set(char *ptr_cmd, int sock_id);
 int meta_process_attr_get(fattr_key_t *_fattr_key,
                           unifycr_file_attr_t *ptr_attr_val);
 
+/*
+ *
+ */
+int unifycr_set_file_attribute(unifycr_file_attr_t *ptr_attr_val);
+
+/*
+ *
+ */
+int unifycr_get_file_attribute(int gfid,
+                               unifycr_file_attr_t *ptr_attr_val);
+
+/*
+ *
+ */
+int unifycr_set_file_extents(const char * const filename,
+                             unsigned int num_extents,
+                             unifycr_index_t *extents);
+
+/*
+ *
+ */
+int unifycr_bulk_set_file_extents(unsigned int num_files,
+                                  const char ** const filename,
+                                  unsigned int *num_extents,
+                                  unifycr_index_t **extents);
+
+/*
+ *
+ */
+int unifycr_get_file_extents(const char * const filename,
+                             unsigned int *num_extents,
+                             unifycr_index_t **extents);
+
 #endif

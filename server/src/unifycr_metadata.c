@@ -639,3 +639,104 @@ int meta_sanitize()
     mdhim_options_destroy(db_opts);
     return rc;
 }
+
+/*
+ *
+ */
+int unifycr_set_file_attribute(unifycr_file_attr_t *fattr_ptr)
+{
+    int rc = UNIFYCR_SUCCESS;
+
+    int gfid = fattr_ptr->gfid;
+
+    md->primary_index = unifycr_indexes[1];
+    brm = mdhimPut(md, &gfid, sizeof(int),
+                   fattr_ptr, sizeof(unifycr_file_attr_t),
+                   NULL, NULL);
+    if (!brm || brm->error) {
+        // return UNIFYCR_ERROR_MDHIM on error
+        rc = (int)UNIFYCR_ERROR_MDHIM;
+    }
+
+    mdhim_full_release_msg(brm);
+
+    return rc;
+}
+
+/*
+ *
+ */
+int unifycr_get_file_attribute(int gfid,
+                               unifycr_file_attr_t *attr_val_ptr)
+{
+    int rc = UNIFYCR_SUCCESS;
+    unifycr_file_attr_t *tmp_ptr_attr;
+
+    md->primary_index = unifycr_indexes[1];
+    bgrm = mdhimGet(md, md->primary_index, &gfid,
+                    sizeof(int), MDHIM_GET_EQ);
+
+    if (!bgrm || bgrm->error)
+        rc = (int)UNIFYCR_ERROR_MDHIM;
+    else {
+        tmp_ptr_attr = (unifycr_file_attr_t *)bgrm->values[0];
+
+        attr_val_ptr->file_attr = tmp_ptr_attr->file_attr;
+        attr_val_ptr->fid = tmp_ptr_attr->fid;
+        attr_val_ptr->gfid = tmp_ptr_attr->gfid;
+        strcpy(attr_val_ptr->filename, tmp_ptr_attr->filename);
+    }
+
+    mdhim_full_release_msg(bgrm);
+    return rc;
+}
+
+/*
+ *
+ */
+int unifycr_set_file_extents(const char * const filename,
+                             unsigned int num_extents,
+                             unifycr_index_t *extents)
+{
+    int rc = UNIFYCR_SUCCESS;
+
+    return rc;
+}
+
+/*
+ *
+ */
+int unifycr_bulk_set_file_extents(unsigned int num_files,
+                                  const char ** const filename,
+                                  unsigned int *num_extents,
+                                  unifycr_index_t **extents)
+{
+    int rc = UNIFYCR_SUCCESS;
+
+    return rc;
+}
+
+/*
+ *
+ */
+int unifycr_get_file_extents(const char * const filename,
+                             unsigned int *num_extents,
+                             unifycr_index_t **extents)
+{
+    int rc = UNIFYCR_SUCCESS;
+
+    return rc;
+}
+
+/*
+ *
+ */
+int unifycr_bulk_get_file_extents(unsigned int num_files,
+                                  const char * const filename,
+                                  unsigned int **num_extents,
+                                  unifycr_index_t ***extents)
+{
+    int rc = UNIFYCR_SUCCESS;
+
+    return rc;
+}

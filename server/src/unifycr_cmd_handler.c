@@ -80,27 +80,36 @@ int delegator_handle_command(char *ptr_cmd, int sock_id)
         break;
 
     case COMM_META_GET:
-        {
-            /* get file attribute */
-            unifycr_file_attr_t attr_val;
-            memset(&attr_val, 0, sizeof(attr_val));
-            rc = meta_process_attr_get((fattr_key_t *)ptr_args, &attr_val);
+    {
+        /*get file attribute*/
+        unifycr_file_attr_t attr_val = { 0, };
 
-            /* ack the result */
-            ret_sz = pack_ack_msg(ptr_ack, cmd, rc,
-                                  &attr_val, sizeof(attr_val));
-            rc = sock_ack_cli(sock_id, ret_sz);
-            break;
-        }
+        int gfid = *((int *)(ptr_cmd + 1 * sizeof(int)));
+
+        // get the metadata from the metadata store
+        rc = unifycr_get_file_attribute(gfid, &attr_val);
+
+        ptr_ack = sock_get_ack_buf(sock_id);
+        ret_sz = pack_ack_msg(ptr_ack, cmd, rc,
+                                &attr_val, sizeof(unifycr_file_attr_t));
+        rc = sock_ack_cli(sock_id, ret_sz);
+
+        break;
+    }
 
     case COMM_META_SET:
-        /* set file attribute */
-        rc = meta_process_attr_set(ptr_cmd, sock_id);
+    {
+        // get the file attribute out of the command buffer
+        unifycr_file_attr_t *fattr_ptr =
+            (unifycr_file_attr_t *)(ptr_cmd + 1 * sizeof(int));
+
+        rc = unifycr_set_file_attribute(fattr_ptr);
 
         /* ack the result */
         ret_sz = pack_ack_msg(ptr_ack, cmd, rc, NULL, 0);
         rc = sock_ack_cli(sock_id, ret_sz);
         break;
+    }
 
     case COMM_META_FSYNC:
         /* synchronize both index and file attribute
