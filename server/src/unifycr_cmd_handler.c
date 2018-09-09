@@ -83,7 +83,7 @@ int delegator_handle_command(char *ptr_cmd, int sock_id)
         /*get file attribute*/
         unifycr_file_attr_t attr_val;
 
-        fattr_key_t _fattr_key = *((int *)(ptr_cmd + 2 * sizeof(int)));
+        fattr_key_t _fattr_key = *((int *)(ptr_cmd + 1 * sizeof(int)));
 
         rc = meta_process_attr_get(&_fattr_key, &attr_val);
 
