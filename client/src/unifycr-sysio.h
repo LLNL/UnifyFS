@@ -112,4 +112,6 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count);
 int compare_read_req(const void *a, const void *b);
 int compare_index_entry(const void *a, const void *b);
 
+#include "unifycr-dirops.h"
+
 #endif /* UNIFYCR_SYSIO_H */

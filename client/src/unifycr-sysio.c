@@ -307,25 +307,39 @@ int UNIFYCR_WRAP(remove)(const char *path)
 int UNIFYCR_WRAP(stat)(const char *path, struct stat *buf)
 {
     int ret = 0;
+    int fid = -1;
+    int gfid = -1;
+    int found_local = 0;
+    int found_global = 0;
+    unifycr_file_attr_t gfattr = { 0, };
 
     DEBUG("stat was called for %s....\n", path);
+
     if (unifycr_intercept_path(path)) {
         if (!buf) {
             errno = EFAULT;
             return -1;
         }
 
-        int fid = unifycr_get_fid_from_path(path);
-        if (fid < 0) {
+        gfid = unifycr_generate_gfid(path);
+        fid = unifycr_get_fid_from_path(path);
+
+        found_global =
+            (unifycr_get_global_file_meta(gfid, &gfattr) == UNIFYCR_SUCCESS);
+        found_local = (fid >= 0);
+
+        if (!found_global) {
+            /* the local entry is obsolete and should be discarded. */
+            if (found_local)
+                unifycr_fid_unlink(fid); /* this always returns success */
+
             errno = ENOENT;
             return -1;
         }
 
-        ret = unifycr_fid_stat(fid, buf);
-        if (ret < 0)
-            errno = ENOENT;
+        *buf = gfattr.file_attr;
 
-        return ret;
+        return 0;
     } else {
         MAP_OR_FAIL(stat);
         ret = UNIFYCR_REAL(stat)(path, buf);
@@ -371,6 +385,12 @@ int UNIFYCR_WRAP(fstat)(int fd, struct stat *buf)
 int UNIFYCR_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 {
     int ret = 0;
+    int fid = -1;
+    int gfid = -1;
+    int found_local = 0;
+    int found_global = 0;
+    unifycr_file_attr_t gfattr = { 0, };
+
 
     DEBUG("xstat was called for %s....\n", path);
     if (unifycr_intercept_path(path)) {
@@ -384,20 +404,25 @@ int UNIFYCR_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
             return -1;
         }
 
-        /* get file id for path */
-        int fid = unifycr_get_fid_from_path(path);
-        if (fid < 0) {
-            /* file doesn't exist */
+        gfid = unifycr_generate_gfid(path);
+        fid = unifycr_get_fid_from_path(path);
+
+        found_global =
+            (unifycr_get_global_file_meta(gfid, &gfattr) == UNIFYCR_SUCCESS);
+        found_local = (fid >= 0);
+
+        if (!found_global) {
+            /* the local entry is obsolete and should be discarded. */
+            if (found_local)
+                unifycr_fid_unlink(fid); /* this always returns success */
+
             errno = ENOENT;
             return -1;
         }
 
-        /* get meta data for this file */
-        ret = unifycr_fid_stat(fid, buf);
-        if (ret < 0)
-            errno = ENOENT;
+        *buf = gfattr.file_attr;
 
-        return ret;
+        return 0;
     } else {
         MAP_OR_FAIL(__xstat);
         ret = UNIFYCR_REAL(__xstat)(vers, path, buf);
@@ -408,6 +433,11 @@ int UNIFYCR_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 int UNIFYCR_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
 {
     int ret = 0;
+    int fid = -1;
+    int gfid = -1;
+    int found_local = 0;
+    int found_global = 0;
+    unifycr_file_attr_t gfattr = { 0, };
 
     DEBUG("lxstat was called for %s....\n", path);
     if (unifycr_intercept_path(path)) {
@@ -420,21 +450,25 @@ int UNIFYCR_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
             return -1;
         }
 
-        /* get file id for path */
-        int fid = unifycr_get_fid_from_path(path);
+        gfid = unifycr_generate_gfid(path);
+        fid = unifycr_get_fid_from_path(path);
 
-        if (fid < 0) {
-            /* file doesn't exist */
+        found_global =
+            (unifycr_get_global_file_meta(gfid, &gfattr) == UNIFYCR_SUCCESS);
+        found_local = (fid >= 0);
+
+        if (!found_global) {
+            /* the local entry is obsolete and should be discarded. */
+            if (found_local)
+                unifycr_fid_unlink(fid); /* this always returns success */
+
             errno = ENOENT;
             return -1;
         }
 
-        /* get meta data for this file */
-        ret = unifycr_fid_stat(fid, buf);
-        if (ret < 0)
-            errno = ENOENT;
+        *buf = gfattr.file_attr;
 
-        return ret;
+        return 0;
     } else {
         MAP_OR_FAIL(__lxstat);
         ret = UNIFYCR_REAL(__lxstat)(vers, path, buf);

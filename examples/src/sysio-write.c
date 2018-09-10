@@ -195,6 +195,7 @@ static const char *usage_str =
 "                                  (default: /tmp)\n"
 " -P, --pwrite                     use pwrite(2) instead of write(2)\n"
 " -p, --pattern=<pattern>          should be 'n1'(n to 1) or 'nn' (n to n)\n"
+"                                  (default: n1)\n"
 " -S, --synchronous                sync metadata on each write\n"
 " -s, --standard                   do not use unifycr but run standard I/O\n"
 " -u, --unmount                    unmount the filesystem after test\n"
