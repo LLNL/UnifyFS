@@ -44,6 +44,18 @@ UNIFYCR_DEF(mmap64, void *, (void *addr, size_t length, int prot, int flags,
                              int fd, off_t offset));
 UNIFYCR_DEF(__fxstat, int, (int vers, int fd, struct stat *buf));
 UNIFYCR_DEF(close, int, (int fd));
+UNIFYCR_DEF(opendir, DIR *, (const char *name));
+UNIFYCR_DEF(fdopendir, DIR *, (int fd));
+UNIFYCR_DEF(closedir, int, (DIR *dirp));
+UNIFYCR_DEF(readdir, struct dirent *, (DIR *dirp));
+UNIFYCR_DEF(rewinddir, void, (DIR *dirp));
+UNIFYCR_DEF(dirfd, int, (DIR *dirp));
+UNIFYCR_DEF(telldir, long, (DIR *dirp));
+UNIFYCR_DEF(scandir, int, (const char *dirp, struct dirent **namelist,
+                           int (*filter)(const struct dirent *),
+                           int (*compar)(const struct dirent **,
+                                         const struct dirent **)));
+UNIFYCR_DEF(seekdir, void, (DIR *dirp, long loc));
 UNIFYCR_DEF(fopen, FILE *, (const char *path, const char *mode));
 UNIFYCR_DEF(freopen, FILE *, (const char *path, const char *mode,
                               FILE *stream));
@@ -126,6 +138,15 @@ struct gotcha_binding_t wrap_unifycr_list[] = {
     { "mmap64", UNIFYCR_WRAP(mmap64), &UNIFYCR_REAL(mmap64) },
     { "__fxstat", UNIFYCR_WRAP(__fxstat), &UNIFYCR_REAL(__fxstat) },
     { "close", UNIFYCR_WRAP(close), &UNIFYCR_REAL(close) },
+    { "opendir", UNIFYCR_WRAP(opendir), &UNIFYCR_REAL(opendir) },
+    { "fdopendir", UNIFYCR_WRAP(fdopendir), &UNIFYCR_REAL(fdopendir) },
+    { "closedir", UNIFYCR_WRAP(closedir), &UNIFYCR_REAL(closedir) },
+    { "readdir", UNIFYCR_WRAP(readdir), &UNIFYCR_REAL(readdir) },
+    { "rewinddir", UNIFYCR_WRAP(rewinddir), &UNIFYCR_REAL(rewinddir) },
+    { "dirfd", UNIFYCR_WRAP(dirfd), &UNIFYCR_REAL(dirfd) },
+    { "telldir", UNIFYCR_WRAP(telldir), &UNIFYCR_REAL(telldir) },
+    { "scandir", UNIFYCR_WRAP(scandir), &UNIFYCR_REAL(scandir) },
+    { "seekdir", UNIFYCR_WRAP(seekdir), &UNIFYCR_REAL(seekdir) },
     { "fopen", UNIFYCR_WRAP(fopen), &UNIFYCR_REAL(fopen) },
     { "freopen", UNIFYCR_WRAP(freopen), &UNIFYCR_REAL(freopen) },
     { "setvbuf", UNIFYCR_WRAP(setvbuf), &UNIFYCR_REAL(setvbuf) },

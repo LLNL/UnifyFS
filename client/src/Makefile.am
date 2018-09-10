@@ -15,6 +15,8 @@ libunifycr_la_SOURCES = \
   unifycr-stdio.h \
   unifycr-sysio.c \
   unifycr-sysio.h \
+  unifycr-dirops.h \
+  unifycr-dirops.c \
   unifycr.c \
   unifycr.h \
   unifycr-internal.h \
@@ -40,6 +42,8 @@ libunifycr_gotcha_la_SOURCES = \
   unifycr-stdio.h \
   unifycr-sysio.c \
   unifycr-sysio.h \
+  unifycr-dirops.h \
+  unifycr-dirops.c \
   unifycr.c \
   unifycr.h \
   gotcha_map_unifycr_list.h \

@@ -524,9 +524,17 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
 int unifycr_locate_req(read_req_t *read_req, int count,
                        read_req_t *match_req);
 
+int unifycr_generate_gfid(const char *path);
+
+int unifycr_set_global_file_meta(const char *path, int fid, int gfid,
+                                 struct stat *sb);
+
+int unifycr_get_global_file_meta(int gfid, unifycr_file_attr_t *gfattr);
+
 // These require types/structures defined above
 #include "unifycr-fixed.h"
 #include "unifycr-stdio.h"
 #include "unifycr-sysio.h"
+#include "unifycr-dirops.h"
 
 #endif /* UNIFYCR_INTERNAL_H */
