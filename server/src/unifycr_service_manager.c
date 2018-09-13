@@ -88,8 +88,12 @@ void *sm_service_reads(void *ctx)
     MPI_Status status;
     MPI_Request request;
 
-    mem_buf = malloc(READ_BUF_SZ);
-    memset(mem_buf, 0, READ_BUF_SZ);
+    mem_buf = calloc(1, READ_BUF_SZ);
+    if (mem_buf == NULL) {
+        // TODO: we need a better way to handle this case
+        fprintf(stderr, "Error allocating buffer!!!\n");
+        exit(-1);
+    }
 
     long bursty_interval = MAX_BURSTY_INTERVAL / 10;
 
