@@ -267,9 +267,6 @@ if test "x$runstatedir" = x; then
         AC_SUBST([runstatedir], ['${localstatedir}/run'])
 fi
 
-CFLAGS="$old_cflags"
-LIBS="$old_libs"
-
 AC_SUBST(unifycr_lib_path)
 AC_SUBST(unifycr_bin_path)
 AC_SUBST(LDFLAGS)
