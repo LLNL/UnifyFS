@@ -94,9 +94,8 @@ UNIFYCR_DECL(munmap, int, (void *addr, size_t length));
 UNIFYCR_DECL(msync, int, (void *addr, size_t length, int flags));
 UNIFYCR_DECL(__fxstat, int, (int vers, int fd, struct stat *buf));
 UNIFYCR_DECL(close, int, (int fd));
-/*UNIFYCR_DECL(lio_listio, ssize_t, (int mode,\
-   struct aiocb *const aiocb_list[], \
-                      int nitems, struct sigevent *sevp));*/
+UNIFYCR_DECL(lio_listio, int, (int mode, struct aiocb *const aiocb_list[],
+                               int nitems, struct sigevent *sevp));
 
 /* read count bytes info buf from file starting at offset pos,
  * returns number of bytes actually read in retcount,
