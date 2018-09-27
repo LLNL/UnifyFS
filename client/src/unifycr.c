@@ -45,6 +45,7 @@
 #include "unifycr_meta.h"
 #include "unifycr_pmix.h"
 #include "unifycr_runstate.h"
+#include "unifycr_client_context.h"
 
 #include <mpi.h>
 #include <openssl/md5.h>
@@ -1880,24 +1881,41 @@ int unifycr_unmount(void)
  * Transfer the client-side context information to the corresponding
  * delegator on the server side.
  */
+
+/*
+ * This function sends the client configuration with the delegator on the
+ * server side. The corresponding server side function is sync_with_client
+ * in unifycr_cmd_handler.c
+ */
 static int unifycr_sync_to_del(void)
 {
+    // the client side context information
+    unifycr_client_context_t client_ctx;
+    off_t offset;
     int cmd = COMM_MOUNT;
-    int num_procs_per_node = local_rank_cnt;
-    int req_buf_sz = shm_req_size;
-    int recv_buf_sz = shm_recv_size;
-    long superblock_sz = glb_superblock_size;
-    long meta_offset = (void *)unifycr_indices.ptr_num_entries -
-        unifycr_superblock;
-    long meta_size = unifycr_max_index_entries * sizeof(unifycr_index_t);
-    long fmeta_offset = (void *)unifycr_fattrs.ptr_num_entries -
-        unifycr_superblock;
-    long fmeta_size = unifycr_max_fattr_entries * sizeof(unifycr_file_attr_t);
-    long data_offset = (void *)unifycr_chunks - unifycr_superblock;
-    long data_size = (long)unifycr_max_chunks * unifycr_chunk_size;
-    char external_spill_dir[UNIFYCR_MAX_FILENAME] = {0};
 
-    strcpy(external_spill_dir, external_data_dir);
+
+    client_ctx.app_id = app_id;
+    client_ctx.local_rank_index = local_rank_idx;
+    client_ctx.dbg_rank = dbg_rank;
+    client_ctx.num_procs_per_node = local_rank_cnt;
+    client_ctx.req_buf_sz = shm_req_size;
+    client_ctx.recv_buf_sz = shm_recv_size;
+    client_ctx.superblock_sz = glb_superblock_size;
+    client_ctx.meta_offset = (void *)unifycr_indices.ptr_num_entries -
+        unifycr_superblock; // TODO: have a function to set this
+    client_ctx.meta_size = unifycr_max_index_entries * sizeof(unifycr_index_t);
+    client_ctx.fmeta_offset = (void *)unifycr_fattrs.ptr_num_entries -
+        unifycr_superblock;  // TODO: have a function to set this
+    client_ctx.fmeta_size = unifycr_max_fattr_entries *
+                            sizeof(unifycr_file_attr_t);
+    client_ctx.data_offset = (void *)unifycr_chunks - unifycr_superblock;
+    client_ctx.data_size = (long)unifycr_max_chunks * unifycr_chunk_size;
+    /*
+     * TODO: determian if a pointer to the string will be fine, since it will
+     * be copied
+     */
+    strcpy(client_ctx.external_spill_dir, external_data_dir);
 
     /*
      * Copy the client-side information to the command
@@ -1905,35 +1923,14 @@ static int unifycr_sync_to_del(void)
      * will attach to the client-side shared memory and open
      * the spill log file based on this information.
      */
+
+    offset = 0;
     memset(cmd_buf, 0, sizeof(cmd_buf));
     memcpy(cmd_buf, &cmd, sizeof(int));
-    memcpy(cmd_buf + sizeof(int), &app_id, sizeof(int));
-    memcpy(cmd_buf + 2 * sizeof(int),
-           &local_rank_idx, sizeof(int));
-    memcpy(cmd_buf + 3 * sizeof(int),
-           &dbg_rank, sizeof(int)); /*add debug info*/
-    memcpy(cmd_buf + 4 * sizeof(int), &num_procs_per_node, sizeof(int));
-    memcpy(cmd_buf + 5 * sizeof(int), &req_buf_sz, sizeof(int));
-    memcpy(cmd_buf + 6 * sizeof(int), &recv_buf_sz, sizeof(int));
+    offset += sizeof(cmd);
 
-    memcpy(cmd_buf + 7 * sizeof(int), &superblock_sz, sizeof(long));
-    memcpy(cmd_buf + 7 * sizeof(int) + sizeof(long),
-           &meta_offset, sizeof(long));
-    memcpy(cmd_buf + 7 * sizeof(int) + 2 * sizeof(long),
-           &meta_size, sizeof(long));
-
-    memcpy(cmd_buf + 7 * sizeof(int) + 3 * sizeof(long),
-           &fmeta_offset, sizeof(long));
-    memcpy(cmd_buf + 7 * sizeof(int) + 4 * sizeof(long),
-           &fmeta_size, sizeof(long));
-
-    memcpy(cmd_buf + 7 * sizeof(int) + 5 * sizeof(long),
-           &data_offset, sizeof(long));
-    memcpy(cmd_buf + 7 * sizeof(int) + 6 * sizeof(long),
-           &data_size, sizeof(long));
-
-    memcpy(cmd_buf + 7 * sizeof(int) + 7 * sizeof(long),
-           external_spill_dir, UNIFYCR_MAX_FILENAME);
+    // pack the client context into the command buffer
+    unifycr_pack_client_context(client_ctx, cmd_buf, &offset);
 
     int res = __real_write(client_sockfd,
                            cmd_buf, sizeof(cmd_buf));

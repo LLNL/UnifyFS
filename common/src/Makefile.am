@@ -19,7 +19,9 @@ BASE_SRCS = \
   unifycr_runstate.h \
   unifycr_runstate.c \
   unifycr_meta.h \
-  unifycr_pmix.h
+  unifycr_pmix.h \
+  unifycr_client_context.h \
+  unifycr_client_context.c
 
 OPT_SRCS =
 OPT_LIBS =
