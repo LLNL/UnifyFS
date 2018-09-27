@@ -42,6 +42,7 @@
 #include "unifycr_const.h"
 #include "unifycr_sock.h"
 #include "unifycr_metadata.h"
+#include "unifycr_client_context.h"
 
 /**
 * handle client-side requests, including init, open, fsync,
@@ -223,9 +224,19 @@ int pack_ack_msg(char *ptr_cmd, int cmd, int rc, void *val,
 */
 int sync_with_client(char *cmd_buf, int sock_id)
 {
-    int app_id = *((int *)(cmd_buf) + 1);
-    int local_rank_idx = *((int *)(cmd_buf) + 2);
-    int dbg_rank = *((int *)(cmd_buf) + 3);
+    unifycr_client_context_t client_ctx;
+    // increase offset by size of cmd
+    off_t offset;
+
+    offset = 0;
+    offset += sizeof(int);
+
+    // unpack the client context from the command buffer
+    unifycr_unpack_client_context(cmd_buf, &offset, &client_ctx);
+
+    int app_id = client_ctx.app_id;
+    int local_rank_idx = client_ctx.local_rank_index;
+    int dbg_rank = client_ctx.dbg_rank;
 
     app_config_t *tmp_config;
     /*if this client is from a new application, then
@@ -234,51 +245,27 @@ int sync_with_client(char *cmd_buf, int sock_id)
 
     int rc;
     if (arraylist_get(app_config_list, app_id) == NULL) {
-        int num_procs_per_node = *((int *)(cmd_buf) + 4);
-        int req_buf_sz = *((int *)(cmd_buf) + 5);
-        int recv_buf_sz = *((int *)(cmd_buf) + 6);
-        long superblock_sz =
-            *((long *)(cmd_buf +
-                       7 * sizeof(int)));
-        long meta_offset = *((long *)(cmd_buf + 7 * sizeof(int)
-                                      + sizeof(long)));
-        long meta_size = *((long *)(cmd_buf + 7 * sizeof(int)
-                                    + 2 * sizeof(long)));
-
-        long fmeta_offset = *((long *)(cmd_buf + 7 * sizeof(int)
-                                       + 3 * sizeof(long)));
-        long fmeta_size = *((long *)(cmd_buf + 7 * sizeof(int)
-                                     + 4 * sizeof(long)));
-
-        long data_offset = *((long *)(cmd_buf + 7 * sizeof(int)
-                                      + 5 * sizeof(long)));
-        long data_size = *((long *)(cmd_buf + 7 * sizeof(int)
-                                    + 6 * sizeof(long)));
-
-        int cursor = 7 * sizeof(int)
-                     + 7 * sizeof(long);
-
         /*          LOG(LOG_DBG, "superblock_sz:%ld, num_procs_per_node:%ld,
                              req_buf_sz:%ld, data_size:%ld\n",
                             superblock_sz, num_procs_per_node, req_buf_sz, data_size); */
         tmp_config = (app_config_t *)malloc(sizeof(app_config_t));
         memcpy(tmp_config->external_spill_dir,
-               cmd_buf + cursor, UNIFYCR_MAX_FILENAME);
+               client_ctx.external_spill_dir, UNIFYCR_MAX_FILENAME);
 
         /*don't forget to free*/
-        tmp_config->num_procs_per_node = num_procs_per_node;
-        tmp_config->req_buf_sz = req_buf_sz;
-        tmp_config->recv_buf_sz = recv_buf_sz;
-        tmp_config->superblock_sz = superblock_sz;
+        tmp_config->num_procs_per_node = client_ctx.num_procs_per_node;
+        tmp_config->req_buf_sz = client_ctx.req_buf_sz;
+        tmp_config->recv_buf_sz = client_ctx.recv_buf_sz;
+        tmp_config->superblock_sz = client_ctx.superblock_sz;
 
-        tmp_config->meta_offset = meta_offset;
-        tmp_config->meta_size = meta_size;
+        tmp_config->meta_offset = client_ctx.meta_offset;
+        tmp_config->meta_size = client_ctx.meta_size;
 
-        tmp_config->fmeta_offset = fmeta_offset;
-        tmp_config->fmeta_size = fmeta_size;
+        tmp_config->fmeta_offset = client_ctx.fmeta_offset;
+        tmp_config->fmeta_size = client_ctx.fmeta_size;
 
-        tmp_config->data_offset = data_offset;
-        tmp_config->data_size = data_size;
+        tmp_config->data_offset = client_ctx.data_offset;
+        tmp_config->data_size = client_ctx.data_size;
 
         int i;
         for (i = 0; i < MAX_NUM_CLIENTS; i++) {
