@@ -20,7 +20,7 @@ How to build UnifyCR
 
 Download the latest UnifyCR release from the `Releases
 <https://github.com/LLNL/UnifyCR/releases>`_ page. UnifyCR requires MPI,
-LevelDB, and GOTCHA.
+LevelDB, and GOTCHA(version 0.0.2).
 
 **Building with Spack**
 ***************************
@@ -38,12 +38,12 @@ If you use Dotkit then replace ``spack load`` with ``spack use``.
 .. code-block:: Bash
 
     $ git clone https://github.com/spack/spack
-    $ ./spack/bin/spack install leveldb
-    $ ./spack/bin/spack install gotcha
-    $ ./spack/bin/spack install environment-modules
     $ . spack/share/spack/setup-env.sh
+    $ spack install leveldb
+    $ spack install gotcha@0.0.2
+    $ spack install environment-modules
     $ spack load leveldb
-    $ spack load gotcha
+    $ spack load gotcha@0.0.2
 
 Then to build UnifyCR:
 
@@ -57,8 +57,8 @@ Then to build UnifyCR:
 **Building without Spack**
 ***************************
 
-For users who cannot use Spack, you may fetch the latest release of
-`GOTCHA <https://github.com/LLNL/GOTCHA>`_
+For users who cannot use Spack, you may fetch version 0.0.2 (compatibility with
+latest release in progress) of `GOTCHA <https://github.com/LLNL/GOTCHA/releases>`_
 
 And leveldb (if not already installed on your system):
 `leveldb <https://github.com/google/leveldb/releases/tag/v1.20>`_
@@ -89,7 +89,7 @@ from source.
 
 .. code-block:: Bash
 
-    $ ./configure --prefix=/path/to/install --with-gotcha=/path/to/gotcha --enable-debug --with-leveldb=/path/to/leveldb
+    $ ./configure --prefix=/path/to/install --with-gotcha=/path/to/gotcha --enable-debug
     $ make
     $ make install
 
