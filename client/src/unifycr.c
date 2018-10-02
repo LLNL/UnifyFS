@@ -2020,8 +2020,11 @@ static int unifycr_sync_to_del(void)
      */
 
     offset = 0;
+    /*
+     * TODO: might want to allocate this (probably from a memory pool)
+     */
     memset(cmd_buf, 0, sizeof(cmd_buf));
-    memcpy(cmd_buf, &cmd, sizeof(int));
+    *(int *)cmd_buf = cmd;
     offset += sizeof(cmd);
 
     // pack the client context into the command buffer
