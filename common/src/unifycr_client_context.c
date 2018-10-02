@@ -105,6 +105,7 @@ int unifycr_unpack_client_context(void *buffer, off_t *offset,
     *offset += sizeof(ctx->meta_offset);
 
     ctx->meta_size = *(long *)(buffer + *offset);
+    *offset += sizeof(ctx->meta_size);
 
     ctx->fmeta_offset = *(long *)(buffer + *offset);
     *offset += sizeof(ctx->fmeta_offset);
