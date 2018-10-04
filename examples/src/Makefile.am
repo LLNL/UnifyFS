@@ -1,6 +1,6 @@
 noinst_PROGRAMS = sysio-write-gotcha sysio-write-static \
                   sysio-read-gotcha sysio-read-static \
-                  sysio-writeread-gotcha sysio-writeread-static \
+                  sysio-writeread-gotcha sysio-writeread-static sysio-writeread-posix \
                   sysio-writeread2-gotcha sysio-writeread2-static \
                   sysio-dir-gotcha sysio-dir-static \
                   sysio-stat-gotcha sysio-stat-static \
@@ -34,6 +34,11 @@ sysio_read_static_SOURCES = sysio-read.c
 sysio_read_static_CPPFLAGS = $(test_cppflags)
 sysio_read_static_LDADD   = $(test_static_ldadd)
 sysio_read_static_LDFLAGS = $(test_static_ldflags)
+
+sysio_writeread_posix_SOURCES = sysio-writeread.c
+sysio_writeread_posix_CPPFLAGS = $(AM_CPPFLAGS) -DNO_UNIFYCR
+sysio_writeread_posix_LDADD = -lrt -lm
+sysio_writeread_posix_LDFLAGS = $(AM_LDFLAGS)
 
 sysio_writeread_gotcha_SOURCES = sysio-writeread.c
 sysio_writeread_gotcha_CPPFLAGS = $(test_cppflags)

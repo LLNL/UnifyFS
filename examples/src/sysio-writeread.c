@@ -49,17 +49,17 @@
 #include <mpi.h>
 #include <sys/time.h>
 #include <aio.h>
-#include <unifycr.h>
+
+#ifndef NO_UNIFYCR
+# include <unifycr.h>
+#endif
 
 #define GEN_STR_LEN 1024
-
-struct timeval read_start, read_end;
-double readtime;
 
 struct timeval write_start, write_end;
 double write_time;
 
-struct timeval meta_start, meta_end;
+struct timeval meta_start;
 double meta_time;
 
 struct timeval read_start, read_end;
@@ -74,65 +74,99 @@ typedef struct {
 
 int main(int argc, char *argv[])
 {
-    static const char *opts = "b:s:t:f:p:u:";
-    char tmpfname[GEN_STR_LEN], fname[GEN_STR_LEN];
-    long blk_sz = 0, seg_num = 0, tran_sz = 0, num_reqs = 0;
-    int pat = 0, c, rank_num, rank, fd, to_unmount = 0;
+    static const char *opts = "b:f:m:n:p:t:u:";
+    char tmpfname[GEN_STR_LEN], fname[GEN_STR_LEN], mntpt[GEN_STR_LEN];
+    size_t blk_sz = 0, num_blk = 0, tran_sz = 0, num_reqs = 0;
+    size_t index, i, j, offset = 0;
+    ssize_t rc;
+    int pat = 0, c, num_rank, rank, fd, use_unifycr = 0;
 
     MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &rank_num);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_rank);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     while ((c = getopt(argc, argv, opts)) != -1) {
         switch (c) {
         case 'b': /*size of block*/
             blk_sz = atol(optarg); break;
-        case 's': /*number of blocks each process writes*/
-            seg_num = atol(optarg); break;
-        case 't': /*size of each write */
-            tran_sz = atol(optarg); break;
         case 'f':
             strcpy(fname, optarg); break;
+        case 'm':
+            strcpy(mntpt, optarg); break;
+        case 'n': /*number of blocks each process writes*/
+            num_blk = atol(optarg); break;
         case 'p':
             pat = atoi(optarg); break; /* 0: N-1 segment/strided, 1: N-N*/
-        case 'u':
-            to_unmount = atoi(optarg); break;
+        case 't': /*size of each write */
+            tran_sz = atol(optarg); break;
+        case 'u': /* use unifycr */
+            use_unifycr = atoi(optarg); break;
         }
     }
 
-    unifycr_mount("/tmp", rank, rank_num, 0);
+    if (use_unifycr)
+        strcpy(mntpt, "/unifycr");
+    else
+        strcpy(mntpt, "/tmp");
+
+    if ((pat < 0) || (pat > 1)) {
+        printf("unsupported I/O pattern");
+        fflush(stdout);
+        return -1;
+    }
+
+    if (blk_sz == 0)
+        blk_sz = 1048576; /* 1 MiB block size */
+
+    if (num_blk == 0)
+        num_blk = 64; /* 64 blocks per process */
+
+    if (tran_sz == 0)
+        tran_sz = 32768; /* 32 KiB IO operation size */
+
+    size_t n_tran_per_blk = blk_sz / tran_sz;
 
     char *buf = malloc(tran_sz);
 
     if (buf == NULL)
         return -1;
 
-    memset(buf, 0, tran_sz);
+    int byte = (int)'0' + rank;
 
-    MPI_Barrier(MPI_COMM_WORLD);
+    memset(buf, byte, tran_sz);
 
-    if (pat == 1)
-        sprintf(tmpfname, "%s%d", fname, rank);
-    else
-        sprintf(tmpfname, "%s", fname);
+#ifndef NO_UNIFYCR
+    if (use_unifycr) {
+        unifycr_mount(mntpt, rank, num_rank, 0);
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+#endif
 
-    fd = open(tmpfname, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    if (pat == 0) { // N-1
+        sprintf(tmpfname, "%s/%s", mntpt, fname);
+    } else { // N-N
+        sprintf(tmpfname, "%s/%s%d", mntpt, fname, rank);
+    }
+
+    int open_flags = O_CREAT | O_RDWR;
+
+    fd = open(tmpfname, open_flags, 0644);
     if (fd < 0) {
         printf("open file failure\n");
         fflush(stdout);
         return -1;
     }
+    MPI_Barrier(MPI_COMM_WORLD);
 
     gettimeofday(&write_start, NULL);
 
-    long i, j, offset = 0, rc;
-
-    for (i = 0; i < seg_num; i++) {
-        for (j = 0; j < blk_sz/tran_sz; j++) {
+    for (i = 0; i < num_blk; i++) {
+        for (j = 0; j < n_tran_per_blk; j++) {
             if (pat == 0)
-                offset = i*rank_num*blk_sz + rank*blk_sz + j*tran_sz;
-            else if (pat == 1)
-                offset = i*blk_sz + j*tran_sz;
+                offset = (i * blk_sz * num_rank)
+                         + (rank * blk_sz) + (j * tran_sz);
+            else
+                offset = (i * blk_sz) + (j * tran_sz);
             rc = pwrite(fd, buf, tran_sz, offset);
 
             if (rc < 0)
@@ -142,66 +176,67 @@ int main(int argc, char *argv[])
 
     gettimeofday(&meta_start, NULL);
     fsync(fd);
-    gettimeofday(&meta_end, NULL);
-    meta_time += 1000000 * (meta_end.tv_sec - meta_start.tv_sec)
-                 + meta_end.tv_usec - meta_start.tv_usec;
-    meta_time /= 1000000;
+
     gettimeofday(&write_end, NULL);
+
+    meta_time += 1000000 * (write_end.tv_sec - meta_start.tv_sec)
+                 + write_end.tv_usec - meta_start.tv_usec;
+    meta_time /= 1000000;
+
     write_time += 1000000 * (write_end.tv_sec - write_start.tv_sec)
                 + write_end.tv_usec - write_start.tv_usec;
     write_time = write_time/1000000;
+
     MPI_Barrier(MPI_COMM_WORLD);
 
     free(buf);
 
-    num_reqs = blk_sz*seg_num/tran_sz;
+    /* read buffer */
+    char *read_buf = calloc(num_blk, blk_sz);
 
-    char *read_buf = malloc(blk_sz * seg_num); /*read buffer*/
-    struct aiocb *aiocb_list = (struct aiocb *)malloc(num_reqs
-            * sizeof(struct aiocb));
-    struct aiocb **cb_list = (struct aiocb **)malloc(num_reqs *
-            sizeof(struct aiocb *)); /*list of read requests in lio_listio*/
+    /* list of read requests for lio_listio */
+    num_reqs = num_blk * n_tran_per_blk;
 
-    gettimeofday(&read_start, NULL);
+    struct aiocb *aiocb_list = (struct aiocb *) calloc(num_reqs,
+                                                       sizeof(struct aiocb));
 
-    long index;
+    struct aiocb **cb_list = (struct aiocb **) calloc(num_reqs,
+                                                      sizeof(struct aiocb *));
 
-    if (pat == 0) { /* N-1 */
-        long i, j;
+    if ((read_buf == NULL) || (aiocb_list == NULL) || (cb_list == NULL))
+        return -1;
 
-        for (i = 0; i < seg_num; i++) {
-            for (j = 0; j < blk_sz/tran_sz; j++) {
-                index = i * (blk_sz/tran_sz) + j;
+    index = 0;
+
+    if (pat == 0) { // N-1
+        for (i = 0; i < num_blk; i++) {
+            for (j = 0; j < n_tran_per_blk; j++) {
                 aiocb_list[index].aio_fildes = fd;
-                aiocb_list[index].aio_buf = read_buf + index*tran_sz;
+                aiocb_list[index].aio_buf = read_buf + (index * tran_sz);
                 aiocb_list[index].aio_nbytes = tran_sz;
-                aiocb_list[index].aio_offset = i*rank_num*blk_sz
-                                               + rank*blk_sz + j*tran_sz;
+                aiocb_list[index].aio_offset = (i * blk_sz * num_rank)
+                                               + (rank * blk_sz)
+                                               + (j * tran_sz);
                 aiocb_list[index].aio_lio_opcode = LIO_READ;
                 cb_list[index] = &aiocb_list[index];
+                index++;
             }
         }
-    } else {
-        if (pat == 1) { /* N-N */
-            long i, j;
-
-            for (i = 0; i < seg_num; i++) {
-                for (j = 0; j < blk_sz/tran_sz; j++) {
-                    index = i * (blk_sz/tran_sz) + j;
-                    aiocb_list[index].aio_fildes = fd;
-                    aiocb_list[index].aio_buf = read_buf + index * tran_sz;
-                    aiocb_list[index].aio_nbytes = tran_sz;
-                    aiocb_list[index].aio_offset = i * blk_sz + j * tran_sz;
-                    aiocb_list[index].aio_lio_opcode = LIO_READ;
-                    cb_list[index] = &aiocb_list[index];
-                }
+    } else { // N-N
+        for (i = 0; i < num_blk; i++) {
+            for (j = 0; j < n_tran_per_blk; j++) {
+                aiocb_list[index].aio_fildes = fd;
+                aiocb_list[index].aio_buf = read_buf + (index * tran_sz);
+                aiocb_list[index].aio_nbytes = tran_sz;
+                aiocb_list[index].aio_offset = (i * blk_sz) + (j * tran_sz);
+                aiocb_list[index].aio_lio_opcode = LIO_READ;
+                cb_list[index] = &aiocb_list[index];
+                index++;
             }
-
-        } else {
-            printf("unsupported I/O pattern");
-            fflush(stdout);
         }
     }
+
+    gettimeofday(&read_start, NULL);
 
     int ret = lio_listio(LIO_WAIT, cb_list, num_reqs, NULL);
 
@@ -215,51 +250,51 @@ int main(int argc, char *argv[])
     read_time = read_time/1000000;
 
     close(fd);
+    free(read_buf);
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (to_unmount) {
+#ifndef NO_UNIFYCR
+    if (use_unifycr) {
         if (rank == 0)
             unifycr_unmount();
     }
-    free(read_buf);
+#endif
 
-    double write_bw = (double) blk_sz*seg_num/1048576/write_time;
-    double agg_write_bw;
+    double rank_mib = (double)(blk_sz * num_blk)/1048576;
+
+    double total_mib = rank_mib * num_rank;
+
+    double write_bw = rank_mib/write_time;
+
+    double read_bw = rank_mib/read_time;
+
+    double agg_write_bw, agg_read_bw;
+    double max_write_time, max_read_time;
 
     MPI_Reduce(&write_bw, &agg_write_bw, 1, MPI_DOUBLE, MPI_SUM,
                0, MPI_COMM_WORLD);
 
-    double max_write_time;
-
     MPI_Reduce(&write_time, &max_write_time, 1, MPI_DOUBLE, MPI_MAX,
                0, MPI_COMM_WORLD);
 
-    double min_write_bw;
-
-    min_write_bw = (double) blk_sz*seg_num*rank_num/1048576/max_write_time;
-
-    if (rank == 0) {
-        printf("Aggregate Write BW is %lfMB/s\n"
-               "Min Write BW is %lfMB/s\n",
-               agg_write_bw, min_write_bw);
-        fflush(stdout);
-    }
-
-    double read_bw = (double) blk_sz*seg_num/1048576/read_time;
-    double agg_read_bw;
-    double max_read_time, min_read_bw;
+    double min_write_bw = total_mib/max_write_time;
 
     MPI_Reduce(&read_bw, &agg_read_bw, 1, MPI_DOUBLE, MPI_SUM,
                0, MPI_COMM_WORLD);
+
     MPI_Reduce(&read_time, &max_read_time, 1, MPI_DOUBLE, MPI_MAX,
                0, MPI_COMM_WORLD);
 
-    min_read_bw = (double) blk_sz*seg_num*rank_num/1048576/max_read_time;
+    double min_read_bw = total_mib/max_read_time;
+
     if (rank == 0) {
-        printf("Aggregate Read BW is %lfMB/s\n"
-               "Min Read BW is %lf\n",
-               agg_read_bw,  min_read_bw);
+        printf("Aggregate Write BW is %.3lf MiB/s\n"
+               "  Minimum Write BW is %.3lf MiB/s\n\n",
+               agg_write_bw, min_write_bw);
+        printf("Aggregate Read BW is %.3lf MiB/s\n"
+               "  Minimum Read BW is %.3lf MiB/s\n\n",
+               agg_read_bw, min_read_bw);
         fflush(stdout);
     }
 
