@@ -2,7 +2,7 @@
  * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2017-2018, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -430,6 +430,8 @@ int meta_process_fsync(int sock_id)
 }
 
 
+
+
 /* get the locations of all the requested file segments from
  * the key-value store.
 * @param app_id: client's application id
@@ -694,9 +696,63 @@ int unifycr_get_file_attribute(int gfid,
 /*
  *
  */
-int unifycr_set_file_extents(const char * const filename,
-                             unsigned int num_extents,
-                             unifycr_index_t *extents)
+int unifycr_get_fvals(int num_keys, unifycr_key_t *keys,
+                      int *unifycr_key_lens, int *num_values,
+                      unifycr_keyval_t **keyval)
+{
+    /*
+     * This is using a modified version of mdhim. The function will return all
+     * key-value pairs within the range of the key tuple.
+     * We need to re-evaluate this function to use different key-value stores.
+     */
+
+    int rc;
+    int i;
+
+    md->primary_index = unifycr_indexes[0];
+    bgrm = mdhimBGet(md, md->primary_index, (void **)unifycr_keys,
+                     unifycr_key_lens, num_keys, MDHIM_RANGE_BGET);
+
+    int tot_num = 0;
+
+    unifycr_key_t *tmp_key;
+    unifycr_val_t *tmp_val;
+
+    bgrmp = bgrm;
+    while (bgrmp) {
+        if (bgrmp->error < 0)
+            rc = (int)UNIFYCR_ERROR_MDHIM;
+
+        // allocate memory for values
+        *keyval = calloc(bgrmp->num_keys, sizeof(unifycr_keyval_t));
+
+        for (i = 0; i < bgrmp->num_keys; i++) {
+            tmp_key = (unifycr_key_t *)bgrm->keys[i];
+            tmp_val = (unifycr_val_t *)bgrm->values[i];
+            (*keyval)[i].key.fid = tmp_key->fid;
+            (*keyval)[i].key.offset = tmp_key->offset;
+
+            (*keyval)[i].val.addr = tmp_val->addr;
+            (*keyval)[i].val.app_rank_id = tmp_val->app_rank_id;
+            (*keyval)[i].val.delegator_id = tmp_val->delegator_id;
+            (*keyval)[i].val.addr = tmp_val->len;
+        }
+        bgrmp = bgrmp->next;
+        mdhim_full_release_msg(bgrm);
+        bgrm = bgrmp;
+        tot_num++;
+    }
+
+    *num_values = tot_num;
+
+    return rc;
+}
+
+/*
+ *
+ */
+int unifycr_set_fvals(unsigned int num_entries,
+                      unifycr_index_t *extents)
 {
     int rc = UNIFYCR_SUCCESS;
 

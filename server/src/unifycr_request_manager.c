@@ -2,7 +2,7 @@
  * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2017-2018, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -53,6 +53,12 @@ struct timespec shm_wait_tm;
 int rm_read_remote_data(int sock_id, size_t req_cnt)
 {
     int rc;
+    cli_req_t *client_request;
+    unifycr_key_t *unifycr_keys;
+    unifycr_keyval_t *keyvals;
+    int *unifycr_key_lens;
+    int num_vals;
+    int i;
 
     int app_id = invert_sock_ids[sock_id];
     app_config_t *app_config =
@@ -66,14 +72,72 @@ int rm_read_remote_data(int sock_id, size_t req_cnt)
 
     pthread_mutex_lock(&thrd_ctrl->thrd_lock);
 
-    /* get the locations of all the read requests from the key-value store */
-    char *shm_req_buf = app_config->shm_req_bufs[client_id];
-    shm_hdr_t *req_hdr = (shm_hdr_t *)shm_req_buf;
-    assert((shm_req_buf != NULL) && (req_hdr->cnt == req_cnt));
-    shm_meta_t *meta_reqs = (shm_meta_t *)(shm_req_buf + sizeof(shm_hdr_t));
-    rc = meta_batch_get(app_id, client_id, thrd_id, dbg_rank,
-                        meta_reqs, req_cnt,
-                        thrd_ctrl->del_req_set);
+    client_request = (cli_req_t *)(app_config->shm_req_bufs[client_id]);
+
+    // allocate key storage
+    // TODO: might want to get this from a memory pool
+    unifycr_keys = calloc(req_num, sizeof(unifycr_key_t));
+    if (unifycr_keys == NULL) {
+        // this is a fatal error
+        // TODO: we need better error handling
+        fprintf(stderr, "Error allocating buffer in %s\n", __FILE__);
+         exit(-1);
+    }
+    unifycr_key_lens = calloc(req_num, sizeof(int));
+    if (unifycr_key_lens == NULL) {
+        // this is a fatal error
+        // TODO: we need better error handling
+        fprintf(stderr, "Error allocating buffer in %s\n", __FILE__);
+         exit(-1);
+    }
+
+    /* get keys from client request
+     * The loop is creating a tuple of keys for each read request. The tuple
+     * defines the start and the end offset of the read request. The
+     * implementation of mdhim will return all key-value pairs that fall within
+     * the range of this tuple.
+     * TODO: make this a function
+     * TODO: this is specific to the mdhim in the source tree and not portable
+     *       to other KV-stores. This needs to be reviseted to utilize some
+     *       other mechanism to retrieve all relevant key-value pairs from the
+     *       KV-store.
+     */
+    for (i = 0; i < req_num; i++) {
+        unifycr_keys[2 * i].fid = client_request[i].fid;
+        unifycr_keys[2 * i].offset = client_request[i].offset;
+        unifycr_key_lens[2 * i] = sizeof(unifycr_key_t);
+        unifycr_keys[2 * i + 1].fid = client_request[i].fid;
+        unifycr_keys[2 * i + 1].offset =
+            client_request[i].offset + client_request[i].length - 1;
+        unifycr_key_lens[2 * i + 1] = sizeof(unifycr_key_t);
+    }
+
+    rc = unifycr_get_fvals(req_num * 2, unifycr_keys, unifycr_key_lens,
+                           &num_vals, &keyvals);
+
+    // set up the thread_control delegator request set
+    // TODO: make this a function
+    for (i = 0; i < num_vals; i++) {
+        send_msg_t meta = thrd_ctrl->del_req_set->msg_meta[i];
+
+        meta.dest_offset = keyvals[i].val.addr;
+        meta.dest_delegator_rank = keyvals[i].val.delegator_id;
+        meta.length = keyvals[i].val.len;
+
+        memcpy(&meta.dest_app_id, (char *) &(keyvals[i].val.app_rank_id),
+               sizeof(int));
+        memcpy(&meta.dest_client_id, (char *) &(keyvals[i].val.app_rank_id)
+               + sizeof(int), sizeof(int));
+
+        meta.src_app_id = app_id;
+        meta.src_cli_id = client_id;
+
+        meta.src_offset = keyvals[i].key.offset;
+        meta.src_delegator_rank = glb_rank;
+        meta.src_fid = keyvals[i].key.fid;
+        meta.src_dbg_rank = dbg_rank;
+        meta.src_thrd = thrd_id;
+    }
 
     /*
      * group together the read requests
@@ -121,8 +185,8 @@ int rm_read_remote_data(int sock_id, size_t req_cnt)
         pthread_cond_signal(&thrd_ctrl->thrd_cond);
     }
     pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
-    return rc;
 
+    return rc;
 }
 
 /**

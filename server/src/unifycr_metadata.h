@@ -70,6 +70,17 @@ typedef struct {
 #define UNIFYCR_VAL_ADDR(valp) (((unifycr_val_t *)valp)->addr)
 #define UNIFYCR_VAL_LEN(valp) (((unifycr_val_t *)valp)->len)
 
+typedef struct {
+    unifycr_key_t key;
+    unifycr_val_t val;
+} unifycr_keyval_t;
+
+typedef struct {
+    int fid;
+    long offset;
+    long length;
+} cli_req_t;
+
 extern arraylist_t *ulfs_keys;
 extern arraylist_t *ulfs_vals;
 extern arraylist_t *ulfs_metas;
@@ -111,9 +122,15 @@ int unifycr_get_file_attribute(int gfid,
 /*
  *
  */
-int unifycr_set_file_extents(const char * const filename,
-                             unsigned int num_extents,
-                             unifycr_index_t *extents);
+int unifycr_get_fvals(int num_keys, unifycr_key_t *keys,
+                      int *unifycr_key_lens, int *num_values,
+                      unifycr_keyval_t **keyval);
+
+/*
+ *
+ */
+int unifycr_set_fvals(unsigned int num_extents,
+                      unifycr_index_t *extents);
 
 /*
  *

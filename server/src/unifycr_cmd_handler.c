@@ -2,7 +2,7 @@
  * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2017-2018, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -84,7 +84,7 @@ int delegator_handle_command(char *ptr_cmd, int sock_id)
         /*get file attribute*/
         unifycr_file_attr_t attr_val = { 0, };
 
-        int gfid = *((int *)(ptr_cmd + 1 * sizeof(int)));
+        int gfid = *((int *)(ptr_cmd + sizeof(int)));
 
         // get the metadata from the metadata store
         rc = unifycr_get_file_attribute(gfid, &attr_val);
@@ -101,7 +101,7 @@ int delegator_handle_command(char *ptr_cmd, int sock_id)
     {
         // get the file attribute out of the command buffer
         unifycr_file_attr_t *fattr_ptr =
-            (unifycr_file_attr_t *)(ptr_cmd + 1 * sizeof(int));
+            (unifycr_file_attr_t *)(ptr_cmd + sizeof(int));
 
         rc = unifycr_set_file_attribute(fattr_ptr);
 
