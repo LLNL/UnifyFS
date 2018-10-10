@@ -25,6 +25,7 @@ unifycrd_LDFLAGS = -static
 unifycrd_LDADD = $(top_builddir)/common/src/libunifycr_common.la \
                  $(top_builddir)/meta/src/libmdhim.a \
                  $(LEVELDB_LIBS) \
+                 $(MPI_CLDFLAGS) \
                  -lpthread -lm -lstdc++ -lrt
 
 AM_CPPFLAGS = -I$(top_srcdir)/common/src \
@@ -32,6 +33,6 @@ AM_CPPFLAGS = -I$(top_srcdir)/common/src \
               -I$(top_srcdir)/meta/src/uthash \
               -I$(top_srcdir)/meta/src/Mlog2
 
-AM_CFLAGS = -Wall
+AM_CFLAGS = -Wall $(MPI_CFLAGS)
 
 CLEANFILES = $(bin_PROGRAMS)
