@@ -36,10 +36,10 @@ struct unifycr_client_context_s {
 } typedef unifycr_client_context_t;
 
 
-int unifycr_pack_client_context(unifycr_client_context_t ctx, void *buffer,
+int unifycr_pack_client_context(unifycr_client_context_t ctx, char *buffer,
                                 off_t *offset);
 
-int unifycr_unpack_client_context(void *buffer, off_t *offset,
+int unifycr_unpack_client_context(char *buffer, off_t *offset,
                                   unifycr_client_context_t *ctx);
 
 #endif // UNIFYCR_CLIENT_CONTEXT_H

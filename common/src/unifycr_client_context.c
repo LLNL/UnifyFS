@@ -16,7 +16,7 @@
 #include "unifycr_client_context.h"
 
 #include "string.h"
-int unifycr_pack_client_context(unifycr_client_context_t ctx, void *buffer,
+int unifycr_pack_client_context(unifycr_client_context_t ctx, char *buffer,
                                 off_t *offset)
 {
     int rc = UNIFYCR_SUCCESS;
@@ -75,7 +75,7 @@ int unifycr_pack_client_context(unifycr_client_context_t ctx, void *buffer,
     return rc;
 }
 
-int unifycr_unpack_client_context(void *buffer, off_t *offset,
+int unifycr_unpack_client_context(char *buffer, off_t *offset,
                                   unifycr_client_context_t *ctx)
 {
     int rc = UNIFYCR_SUCCESS;
