@@ -10,10 +10,10 @@ noinst_PROGRAMS = sysio-write-gotcha sysio-write-static \
 
 noinst_HEADERS = testlib.h
 
-test_gotcha_ldadd = $(top_builddir)/client/src/libunifycr_gotcha.la -lrt -lm
+test_gotcha_ldadd = $(top_builddir)/client/src/libunifycr_gotcha.la -lrt -lm $(MPI_CLDFLAGS)
 test_static_ldadd = $(top_builddir)/client/src/libunifycr.la -lrt -lm
-test_static_ldflags = -static $(CP_WRAPPERS) $(AM_LDFLAGS)
-test_cppflags = $(AM_CPPFLAGS) -I$(top_srcdir)/client/src
+test_static_ldflags = -static $(CP_WRAPPERS) $(AM_LDFLAGS) $(MPI_CLDFLAGS)
+test_cppflags = $(AM_CPPFLAGS) -I$(top_srcdir)/client/src $(MPI_CFLAGS)
 
 sysio_write_gotcha_SOURCES = sysio-write.c
 sysio_write_gotcha_CPPFLAGS = $(test_cppflags)
@@ -36,9 +36,9 @@ sysio_read_static_LDADD   = $(test_static_ldadd)
 sysio_read_static_LDFLAGS = $(test_static_ldflags)
 
 sysio_writeread_posix_SOURCES = sysio-writeread.c
-sysio_writeread_posix_CPPFLAGS = $(AM_CPPFLAGS) -DNO_UNIFYCR
+sysio_writeread_posix_CPPFLAGS = $(AM_CPPFLAGS) -DNO_UNIFYCR $(MPI_CFLAGS)
 sysio_writeread_posix_LDADD = -lrt -lm
-sysio_writeread_posix_LDFLAGS = $(AM_LDFLAGS)
+sysio_writeread_posix_LDFLAGS = $(AM_LDFLAGS) $(MPI_CLDFLAGS)
 
 sysio_writeread_gotcha_SOURCES = sysio-writeread.c
 sysio_writeread_gotcha_CPPFLAGS = $(test_cppflags)

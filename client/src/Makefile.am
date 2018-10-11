@@ -5,8 +5,10 @@ libunifycr_gotchadir = $(includedir)
 
 AM_CFLAGS = -Wall -Wno-strict-aliasing
 
-libunifycr_HEADERS = unifycr.h
+include_HEADERS = unifycr.h
+
 libunifycr_la_SOURCES = \
+  unifycr.h \
   unifycr-fixed.c \
   unifycr-fixed.h \
   unifycr-stack.c \
@@ -28,12 +30,13 @@ libunifycr_la_CPPFLAGS = \
   -I$(top_builddir)/client \
   -I$(top_srcdir)/common/src
 
-libunifycr_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION)
+libunifycr_la_CFLAGS = $(MPI_CFLAGS)
+libunifycr_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION) $(MPI_CLDFLAGS)
 libunifycr_la_LIBADD = $(top_builddir)/common/src/libunifycr_common.la \
 					   -lcrypto -lrt -lpthread
 
-libunifycr_gotcha_HEADERS = unifycr.h
 libunifycr_gotcha_la_SOURCES = \
+  unifycr.h \
   unifycr-fixed.c \
   unifycr-fixed.h \
   unifycr-stack.c \
@@ -57,8 +60,8 @@ libunifycr_gotcha_la_CPPFLAGS = \
   -I$(top_builddir)/client \
   -I$(top_srcdir)/common/src
 
-libunifycr_gotcha_la_CFLAGS = $(GOTCHA_CFLAGS)
-libunifycr_gotcha_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION) $(GOTCHA_LDFLAGS)
+libunifycr_gotcha_la_CFLAGS = $(GOTCHA_CFLAGS) $(MPI_CFLAGS)
+libunifycr_gotcha_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION) $(GOTCHA_LDFLAGS) $(MPI_CLDFLAGS)
 libunifycr_gotcha_la_LIBADD = $(top_builddir)/common/src/libunifycr_common.la \
                               -lgotcha -lcrypto -lrt -lpthread
 

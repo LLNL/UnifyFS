@@ -16,7 +16,6 @@ AM_SILENT_RULES([yes])
 
 AM_MAINTAINER_MODE([disable])
 
-AC_PROG_CC([mpicc])
 AC_PROG_CC_STDC
 AC_PROG_AWK
 AC_PROG_CPP
@@ -133,6 +132,9 @@ AC_TRY_COMPILE(
 )
 
 AC_CHECK_HEADERS(mntent.h sys/mount.h)
+
+# look for MPI and set flags
+LX_FIND_MPI
 
 # check leveldb
 PKG_CHECK_MODULES([LEVELDB], [leveldb], ,
