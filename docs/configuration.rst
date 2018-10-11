@@ -7,85 +7,153 @@ particular, UnifyCR provides the following ways to configure:
 
 - System-wide configuration file: ``/etc/unifycr/unifycr.conf``
 - Environment variables
-- Command line arguments
+- Command line options to ``unifycrd``
 
-For the duplicated entries, the command line arguments have the highest
-priority, overriding any configuration options from ``unifycr.conf`` and
-environment variables. Similarily, environment variables have higher priority
-than options in the ``unifycr.conf`` file. ``unifycr`` command line utility
-creates the final configuration file (``unifycr-runstate.conf``) based on all
-forementioned configuration options.
+All configuration settings have corresponding environment variables, but only
+certain settings have command line options. When defined via multiple methods,
+the command line options have the highest priority, followed by environment
+variables, and finally config file options from ``unifycr.conf``.
 
----------------------------
-unifycr.conf
----------------------------
+The unified method for providing configuration control is adapted from
+CONFIGURATOR_. Configuration settings are grouped within named sections, and
+each setting consists of a key-value pair with one of the following types:
+    - ``BOOL``: ``0|1``, ``y|n``, ``Y|N``, ``yes|no``, ``true|false``, ``on|off``
+    - ``FLOAT``: scalars convertible to C double, or compatible expression
+    - ``INT``: scalars convertible to C long, or compatible expression
+    - ``STRING``: quoted character string
 
-unifycr.conf specifies the system-wide configuration options. The file is
-written in TOML_ language format. The unifycr.conf file has four different
-sections, i.e., global, filesystem, server, and client sections.
+.. _CONFIGURATOR: https://github.com/MichaelBrim/tedium/tree/master/configurator
 
-.. _TOML: https://github.com/toml-lang/toml
+--------------
+ unifycr.conf
+--------------
 
-- [global] section
-    - runstatedir: a directory where the final configuration file
-      (``unifycr-runstate.conf``) has to be created
-    - unifycrd_path: path to unifycrd server daemon process
+``unifycr.conf`` specifies the system-wide configuration options. The file is
+written in INI_ language format, as supported by the inih_ parser.
 
-- [filesystem] section
-    - mountpoint: unifycr file system mountpoint
-    - consistency: consistency model to be used, one of:
-        - ``none``:
-        - ``laminated``:
-        - ``posix``:
+.. _INI: http://en.wikipedia.org/wiki/INI_file
 
-- [server] section
-    - meta_server_ratio: the ratio between the number of unifycrd daemon and
-      the number of metadata key-value storage instance
-    - meta_db_name: name of the database file to store unifycr file system
-      metadata
-    - meta_db_path: the pathname of the metadata database file will be created
-    - server_debug_log_path: the debug log file of the unifycrd daemon
+.. _inih: https://github.com/benhoyt/inih
 
-- [client] section
-    - chunk_mem: allocation chunk size for unifycr file system memory storage
+The config file has several sections, each with a few key-value settings.
+In this description, we use ``section.key`` as shorthand for the name of
+a given section and key.
 
----------------------------
-Environment Variables
----------------------------
 
-The following is the list of the environment variables that UnifyCR supports.
+.. table:: ``[unifycr]`` section - main configuration settings
+   :widths: auto
 
-- ``UNIFYCR_META_SERVER_RATIO``: the ratio between the number of unifycrd
-  daemon and the number of metadata key-value storage instance
-- ``UNIFYCR_META_DB_NAME``: the name of the database file to store unifycr file
-  system metadata
-- ``UNIFYCR_META_DB_PATH``: the pathname of the metadata database file will be
-  created
-- ``UNIFYCR_SERVER_DEBUG_LOG``: the debug log file of the unifycrd daemon
-- ``UNIFYCR_CHUNK_MEM``: allocation chunk size for unifycr file system memory
-  storage
+   =============  ======  =====================================================
+   Key            Type    Description
+   =============  ======  =====================================================
+   configfile     STRING  path to custom configuration file
+   consistency    STRING  consistency model [ LAMINATED | POSIX | NONE ]
+   daemonize      BOOL    enable server daemonization (default: off)
+   debug          BOOL    enable debug output (default: off)
+   mountpoint     STRING  mountpoint path prefix (default: /unifycr)
+   =============  ======  =====================================================
 
----------------------------
-Command Line arguments
----------------------------
+.. table:: ``[client]`` section - client settings
+   :widths: auto
 
-Lastly, unifycr command line utility accepts arguments to configure the runtime options.
+   =============  ======  =====================================================
+   Key            Type    Description
+   =============  ======  =====================================================
+   max_files      INT     maximum number of open files per client process
+   =============  ======  =====================================================
 
-.. code-block:: Bash
-    :linenos:
+.. table:: ``[log]`` section - logging settings
+   :widths: auto
 
-        Usage: unifycr <command> [options...]
+   =============  ======  =====================================================
+   Key            Type    Description
+   =============  ======  =====================================================
+   dir            STRING  path to directory to contain server log file
+   file           STRING  server log file base name (rank will be appended)
+   verbosity      INT     server logging verbosity level [0-5] (default: 0)
+   =============  ======  =====================================================
 
-        <command> should be one of the following:
-          start       start the unifycr server daemon
-          terminate   terminate the unifycr server daemon
+.. table:: ``[meta]`` section - metadata settings
+   :widths: auto
 
-        Available options for "start":
-          -C, --consistency=<model> consistency model (none, laminated, or posix)
-          -m, --mount=<path>        mount unifycr at <path>
-          -i, --transfer-in=<path>  stage in file(s) at <path>
-          -o, --transfer-out=<path> transfer file(s) to <path> on termination
+   =============  ======  =====================================================
+   Key            Type    Description
+   =============  ======  =====================================================
+   db_name        STRING  metadata database file name
+   db_path        STRING  path to directory to contain metadata database
+   range_size     INT     metadata range size (B) (default: 1 MiB)
+   server_ratio   INT     # of UnifyCR servers per metadata server (default: 1)
+   =============  ======  =====================================================
 
-        Available options for "terminate":
-          -c, --cleanup             clean up the unifycr storage on termination
+.. table:: ``[runstate]`` section - server runstate settings
+   :widths: auto
+
+   =============  ======  =====================================================
+   Key            Type    Description
+   =============  ======  =====================================================
+   dir            STRING  path to directory to contain server runstate file
+   =============  ======  =====================================================
+
+.. table:: ``[shmem]`` section - shared memory segment usage settings
+   :widths: auto
+
+   =============  ======  =====================================================
+   Key            Type    Description
+   =============  ======  =====================================================
+   chunk_bits     INT     data chunk size (bits), size = 2^bits (default: 24)
+   chunk_mem      INT     segment size (B) for data chunks (default: 256 MiB)
+   recv_size      INT     segment size (B) for receiving data from local server
+   req_size       INT     segment size (B) for sending requests to local server
+   single         BOOL    use one memory region for all clients (default: off)
+   =============  ======  =====================================================
+
+.. table:: ``[spillover]`` section - local data storage spillover settings
+   :widths: auto
+
+   =============  ======  =====================================================
+   Key            Type    Description
+   =============  ======  =====================================================
+   enabled        BOOL    use local storage for data spillover (default: on)
+   data_dir       STRING  path to spillover data directory
+   meta_dir       STRING  path to spillover metadata directory
+   size           INT     maximum size (B) of spillover data (default: 1 GiB)
+   =============  ======  =====================================================
+
+
+-----------------------
+ Environment Variables
+-----------------------
+
+All environment variables take the form ``UNIFYCR_SECTION_KEY``, except for
+the ``[unifycr]`` section, which uses ``UNIFYCR_KEY``. For example,
+the setting ``log.verbosity`` has a corresponding environment variable
+named ``UNIFYCR_LOG_VERBOSITY``, while ``unifycr.mountpoint`` corresponds to
+``UNIFYCR_MOUNTPOINT``.
+
+
+----------------------
+ Command Line Options
+----------------------
+
+For server command line options, we use ``getopt_long()`` format. Thus, all
+command line options have long and short forms. The long form uses
+``--section-key=value``, while the short form ``-<optchar> value``, where
+the short option character is given in the below table.
+
+.. table:: ``unifycrd`` command line options
+   :widths: auto
+
+   ======================  ========
+   LongOpt                 ShortOpt
+   ======================  ========
+   --unifycr-configfile      -C
+   --unifycr-consistency     -c
+   --unifycr-daemonize       -D
+   --unifycr-debug           -d
+   --unifycr-mountpoint      -m
+   --log-dir                 -L
+   --log-file                -l
+   --log-verbosity           -v
+   --runstate-dir            -R
+   ======================  ========
 
