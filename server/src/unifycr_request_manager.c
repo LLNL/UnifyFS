@@ -43,6 +43,119 @@
 
 struct timespec shm_wait_tm;
 
+/*
+ * synchronize all the indices and file attributes
+ * to the key-value store
+ * @param sock_id: the connection id in poll_set of the delegator
+ * @return success/error code
+ */
+int rm_process_fsync(int sock_id)
+{
+    int ret = 0;
+
+    unifycr_key_t *unifycr_keys;
+    unifycr_val_t *unifycr_vals;
+    int *unifycr_key_lens;
+    int *unifycr_val_lens;
+
+    fattr_key_t *fattr_keys;
+    int *fattr_key_lens;
+    int *fattr_val_lens;
+
+    int app_id = invert_sock_ids[sock_id];
+    app_config_t *app_config = (app_config_t *)arraylist_get(app_config_list,
+                               app_id);
+
+    int client_side_id = app_config->client_ranks[sock_id];
+
+    unsigned long num_entries =
+        *((unsigned long *)(app_config->shm_superblocks[client_side_id]
+                            + app_config->meta_offset));
+
+    /*
+     * indices are stored in the superblock shared memory
+     * created by the client
+     */
+    int page_sz = getpagesize();
+    unifycr_index_t *meta_payload =
+        (unifycr_index_t *)(app_config->shm_superblocks[client_side_id]
+                            + app_config->meta_offset + page_sz);
+
+    long i;
+
+    // allocate storage for values
+    // TODO: possibly get this from memory pool
+    unifycr_keys = calloc(num_entries, sizeof(unifycr_key_t));
+    unifycr_vals = calloc(num_entries, sizeof(unifycr_val_t));
+    unifycr_key_lens = calloc(num_entries, sizeof(int));
+    unifycr_val_lens = calloc(num_entries, sizeof(int));
+
+    // file extends
+    for (i = 0; i < num_entries; i++) {
+        unifycr_keys[i].fid = meta_payload[i].fid;
+        unifycr_keys[i].offset = meta_payload[i].file_pos;
+        unifycr_vals[i].addr = meta_payload[i].mem_pos;
+        unifycr_vals[i].len = meta_payload[i].length;
+        unifycr_vals[i].delegator_id = glb_rank;
+        memcpy((char *) &(unifycr_vals[i].app_rank_id), &app_id, sizeof(int));
+        memcpy((char *) &(unifycr_vals[i].app_rank_id) + sizeof(int),
+               &client_side_id, sizeof(int));
+
+        unifycr_key_lens[i] = sizeof(unifycr_key_t);
+        unifycr_val_lens[i] = sizeof(unifycr_val_t);
+    }
+
+    ret = unifycr_set_fvals(num_entries, unifycr_keys, unifycr_key_lens,
+                            unifycr_vals, unifycr_val_lens);
+    if (ret != UNIFYCR_SUCCESS) {
+        // TODO: need propper error handling
+        return ret;
+    }
+
+    // file attributes
+    num_entries =
+        *((unsigned long *)(app_config->shm_superblocks[client_side_id]
+                            + app_config->fmeta_offset));
+
+    /*
+     * file attributes are stored in the superblock shared memory
+     * created by the client
+     */
+    unifycr_file_attr_t *attr_payload =
+        (unifycr_file_attr_t *)(app_config->shm_superblocks[client_side_id]
+                                + app_config->fmeta_offset + page_sz);
+
+    // allocate storage for values
+    // TODO: possibly get this from memory pool
+    fattr_keys = calloc(num_entries, sizeof(unifycr_key_t));
+    fattr_key_lens = calloc(num_entries, sizeof(int));
+    fattr_val_lens = calloc(num_entries, sizeof(int));
+
+    for (i = 0; i < num_entries; i++) {
+        fattr_keys[i] = attr_payload[i].gfid;
+        fattr_key_lens[i] = sizeof(fattr_key_t);
+        fattr_val_lens[i] = sizeof(fattr_val_t);
+    }
+
+    ret = unifycr_set_file_attributes(num_entries, fattr_keys, fattr_key_lens,
+                                      attr_payload, fattr_val_lens);
+    if (ret != UNIFYCR_SUCCESS) {
+        // TODO: need propper error handling
+        return ret;
+    }
+
+    // clean up memory
+    free(unifycr_keys);
+    free(unifycr_vals);
+    free(unifycr_key_lens);
+    free(unifycr_val_lens);
+    free(fattr_keys);
+    free(fattr_key_lens);
+    free(fattr_val_lens);
+
+    return ret;
+}
+
 /**
 * send the read requests to the remote delegators
 * @param sock_id: which socket in the poll_set received

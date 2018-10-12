@@ -107,11 +107,17 @@ int meta_process_attr_set(char *ptr_cmd, int sock_id);
 //                          unifycr_file_attr_t *ptr_attr_val);
 int meta_process_attr_get(fattr_key_t *_fattr_key,
                           unifycr_file_attr_t *ptr_attr_val);
-
 /*
  *
  */
 int unifycr_set_file_attribute(unifycr_file_attr_t *ptr_attr_val);
+
+/*
+ *
+ */
+int unifycr_set_file_attributes(int num_entries, fattr_key_t *keys,
+                                int *key_lens,
+                                unifycr_file_attr_t *fattr_ptr, int *val_lens);
 
 /*
  *
@@ -129,8 +135,9 @@ int unifycr_get_fvals(int num_keys, unifycr_key_t *keys,
 /*
  *
  */
-int unifycr_set_fvals(unsigned int num_extents,
-                      unifycr_index_t *extents);
+int unifycr_set_fvals(int num_entries, unifycr_key_t *keys,
+                      int *unifycr_key_lens, unifycr_val_t *val,
+                      int *unifycr_val_lens);
 
 /*
  *

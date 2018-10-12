@@ -668,6 +668,40 @@ int unifycr_set_file_attribute(unifycr_file_attr_t *fattr_ptr)
 /*
  *
  */
+int unifycr_set_file_attributes(int num_entries, fattr_key_t *keys,
+                                int *key_lens,
+                                unifycr_file_attr_t *fattr_ptr, int *val_lens)
+{
+    int rc = UNIFYCR_SUCCESS;
+
+    md->primary_index = unifycr_indexes[1];
+    brm = mdhimBPut(md, (void **)&keys[0], key_lens, (void **)&fattr_ptr[0],
+                    val_lens, num_entries, NULL, NULL);
+    brmp = brm;
+    if (!brmp || brmp->error) {
+        rc = (int)UNIFYCR_ERROR_MDHIM;
+        LOG(LOG_DBG, "Rank - %d: Error inserting keys/values into MDHIM\n",
+            md->mdhim_rank);
+    }
+
+    while (brmp) {
+        if (brmp->error < 0) {
+            rc = (int)UNIFYCR_ERROR_MDHIM;
+            break;
+        }
+
+        brm = brmp;
+        brmp = brmp->next;
+        mdhim_full_release_msg(brm);
+
+    }
+
+    return rc;
+}
+
+/*
+ *
+ */
 int unifycr_get_file_attribute(int gfid,
                                unifycr_file_attr_t *attr_val_ptr)
 {
@@ -751,10 +785,34 @@ int unifycr_get_fvals(int num_keys, unifycr_key_t *keys,
 /*
  *
  */
-int unifycr_set_fvals(unsigned int num_entries,
-                      unifycr_index_t *extents)
+int unifycr_set_fvals(int num_entries, unifycr_key_t *keys,
+                      int *unifycr_key_lens, unifycr_val_t *val,
+                      int *unifycr_val_lens)
 {
     int rc = UNIFYCR_SUCCESS;
+
+    md->primary_index = unifycr_indexes[0];
+
+    brm = mdhimBPut(md, (void **)(&unifycr_keys[0]), unifycr_key_lens,
+                    (void **)(&unifycr_vals[0]), unifycr_val_lens, num_entries,
+                    NULL, NULL);
+    brmp = brm;
+    if (!brmp || brmp->error) {
+        rc = (int)UNIFYCR_ERROR_MDHIM;
+        LOG(LOG_DBG, "Rank - %d: Error inserting keys/values into MDHIM\n",
+            md->mdhim_rank);
+    }
+
+    while (brmp) {
+        if (brmp->error < 0) {
+            rc = (int)UNIFYCR_ERROR_MDHIM;
+            break;
+        }
+
+        brm = brmp;
+        brmp = brmp->next;
+        mdhim_full_release_msg(brm);
+    }
 
     return rc;
 }

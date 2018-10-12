@@ -114,7 +114,8 @@ int delegator_handle_command(char *ptr_cmd, int sock_id)
     case COMM_META_FSYNC:
         /* synchronize both index and file attribute
          * metadata to the key-value store */
-        rc = meta_process_fsync(sock_id);
+
+        rc = rm_process_fsync(sock_id);
 
         /* ack the result */
         ret_sz = pack_ack_msg(ptr_ack, cmd, rc, NULL, 0);

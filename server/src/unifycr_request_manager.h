@@ -35,6 +35,21 @@
 #include "unifycr_meta.h"
 #include "arraylist.h"
 
+typedef struct {
+    int src_fid;
+    long offset;
+    long length;
+} shm_meta_t; /*metadata format in the shared memory*/
+
+
+/**
+ * synchronize all the indices and file attributes
+ * to the key-value store
+ * @param sock_id: the connection id in poll_set of the delegator
+ * @return success/error code
+ */
+int rm_process_fsync(int sock_id);
+
 void *rm_delegate_request_thread(void *arg);
 
 int rm_read_remote_data(int sock_id,
