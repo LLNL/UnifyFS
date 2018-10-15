@@ -105,8 +105,8 @@ int rm_process_fsync(int sock_id)
         unifycr_val_lens[i] = sizeof(unifycr_val_t);
     }
 
-    ret = unifycr_set_fvals(num_entries, unifycr_keys, unifycr_key_lens,
-                            unifycr_vals, unifycr_val_lens);
+    ret = unifycr_set_file_extents(num_entries, unifycr_keys, unifycr_key_lens,
+                                   unifycr_vals, unifycr_val_lens);
     if (ret != UNIFYCR_SUCCESS) {
         // TODO: need propper error handling
         return ret;
@@ -225,8 +225,8 @@ int rm_read_remote_data(int sock_id, size_t req_cnt)
         unifycr_key_lens[2 * i + 1] = sizeof(unifycr_key_t);
     }
 
-    rc = unifycr_get_fvals(req_num * 2, unifycr_keys, unifycr_key_lens,
-                           &num_vals, &keyvals);
+    rc = unifycr_get_file_extents(req_num * 2, unifycr_keys, unifycr_key_lens,
+                                  &num_vals, &keyvals);
 
     // set up the thread_control delegator request set
     // TODO: make this a function

@@ -730,9 +730,9 @@ int unifycr_get_file_attribute(int gfid,
 /*
  *
  */
-int unifycr_get_fvals(int num_keys, unifycr_key_t *keys,
-                      int *unifycr_key_lens, int *num_values,
-                      unifycr_keyval_t **keyval)
+int unifycr_get_file_extents(int num_keys, unifycr_key_t *keys,
+                             int *unifycr_key_lens, int *num_values,
+                             unifycr_keyval_t **keyval)
 {
     /*
      * This is using a modified version of mdhim. The function will return all
@@ -785,9 +785,9 @@ int unifycr_get_fvals(int num_keys, unifycr_key_t *keys,
 /*
  *
  */
-int unifycr_set_fvals(int num_entries, unifycr_key_t *keys,
-                      int *unifycr_key_lens, unifycr_val_t *val,
-                      int *unifycr_val_lens)
+int unifycr_set_file_extents(int num_entries, unifycr_key_t *keys,
+                             int *unifycr_key_lens, unifycr_val_t *val,
+                             int *unifycr_val_lens)
 {
     int rc = UNIFYCR_SUCCESS;
 
@@ -813,44 +813,6 @@ int unifycr_set_fvals(int num_entries, unifycr_key_t *keys,
         brmp = brmp->next;
         mdhim_full_release_msg(brm);
     }
-
-    return rc;
-}
-
-/*
- *
- */
-int unifycr_bulk_set_file_extents(unsigned int num_files,
-                                  const char ** const filename,
-                                  unsigned int *num_extents,
-                                  unifycr_index_t **extents)
-{
-    int rc = UNIFYCR_SUCCESS;
-
-    return rc;
-}
-
-/*
- *
- */
-int unifycr_get_file_extents(const char * const filename,
-                             unsigned int *num_extents,
-                             unifycr_index_t **extents)
-{
-    int rc = UNIFYCR_SUCCESS;
-
-    return rc;
-}
-
-/*
- *
- */
-int unifycr_bulk_get_file_extents(unsigned int num_files,
-                                  const char * const filename,
-                                  unsigned int **num_extents,
-                                  unifycr_index_t ***extents)
-{
-    int rc = UNIFYCR_SUCCESS;
 
     return rc;
 }
