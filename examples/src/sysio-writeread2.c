@@ -392,11 +392,11 @@ int main(int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &ranks);
 
-    unifycr_mount("/tmp", rank, ranks, 0);
+    unifycr_mount("/unifycr", rank, ranks, 0);
 
     char name[256];
 
-    sprintf(name, "/tmp/rank.%d", rank);
+    sprintf(name, "/unifycr/rank.%d", rank);
 
     /* allocate space for the checkpoint data (make filesize a function of rank
      * for some variation)

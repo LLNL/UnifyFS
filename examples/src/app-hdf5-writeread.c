@@ -59,7 +59,7 @@ static int writeonly;
 static int debug;           /* pause for attaching debugger */
 static int standard;        /* not mounting unifycr when set */
 static int unmount;         /* unmount unifycr after running the test */
-static char *mountpoint = "/tmp";   /* unifycr mountpoint */
+static char *mountpoint = "/unifycr";   /* unifycr mountpoint */
 static char *filename = "test.h5";  /* testfile name under mountpoint */
 static char targetfile[NAME_MAX];   /* target file name */
 
@@ -85,10 +85,10 @@ static const char *usage_str =
 " -d, --debug                      pause before running test\n"
 "                                  (handy for attaching in debugger)\n"
 " -f, --filename=<filename>        target file name under mountpoint\n"
-"                                  (default: testfile)\n"
+"                                  (default: test.h5)\n"
 " -h, --help                       help message\n"
 " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-"                                  (default: /tmp)\n"
+"                                  (default: /unifycr)\n"
 " -r, --readonly                   only read the dataset\n"
 "                                  (default: write then read)\n"
 " -s, --standard                   do not use unifycr but run standard I/O\n"

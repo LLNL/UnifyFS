@@ -653,7 +653,7 @@ int unifycr_fd_write(int fd, off_t pos, const void *buf, size_t count)
         unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
         if (write_rc == 0) {
             meta->size = newpos;
-            meta->real_size = pos + count;
+            meta->log_size = pos + count;
         }
     }
     return write_rc;
@@ -917,12 +917,17 @@ ssize_t UNIFYCR_WRAP(read)(int fd, void *buf, size_t count)
     /* check whether we should intercept this file descriptor */
     if (unifycr_intercept_fd(&fd)) {
         /* get pointer to file descriptor structure */
+        unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fd);
         unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
-        if (filedesc == NULL) {
+
+        if (meta == NULL || filedesc == NULL) {
             /* ERROR: invalid file descriptor */
             errno = EBADF;
             return (ssize_t) (-1);
         }
+
+        if (filedesc->pos >= meta->size)
+            return 0;   /* EOF */
 
         /* read data from file */
         size_t retcount;
@@ -934,12 +939,15 @@ ssize_t UNIFYCR_WRAP(read)(int fd, void *buf, size_t count)
         tmp_req.length = count;
         tmp_req.offset = filedesc->pos;
 
+        /*
+         * this returns error code, which is zero for successful cases.
+         */
         int ret = unifycr_fd_logreadlist(&tmp_req, 1);
 
-        if (!ret)
+        if (ret)
             retcount = 0;
         else
-            retcount = count;
+            retcount = tmp_req.length;
 
         /* update position */
         filedesc->pos += (off_t) retcount;
@@ -1401,6 +1409,21 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
     int *ptr_num = NULL;
 
     /*
+     * Adjust length for fitting the EOF.
+     */
+    for (i = 0; i < count; i++) {
+        read_req_t *req = &read_req[i];
+        unifycr_filemeta_t *meta = NULL;
+
+        meta = unifycr_get_meta_from_fid(req->fid - unifycr_fd_limit);
+        if (!meta)
+            return -1;
+
+        if (req->offset + req->length > meta->size)
+            req->length = meta->size - req->offset;
+    }
+
+    /*
      * Todo: When the number of read requests exceed the
      * request buffer, split list io into multiple bulk
      * sends and transfer in bulks
@@ -1523,12 +1546,17 @@ ssize_t UNIFYCR_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
     /* check whether we should intercept this file descriptor */
     if (unifycr_intercept_fd(&fd)) {
         /* get pointer to file descriptor structure */
+        unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fd);
         unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
-        if (filedesc == NULL) {
+
+        if (meta == NULL || filedesc == NULL) {
             /* ERROR: invalid file descriptor */
             errno = EBADF;
             return (ssize_t) (-1);
         }
+
+        if (offset >= meta->size)
+            return 0;
 
         size_t retcount;
         read_req_t tmp_req;
@@ -1538,12 +1566,12 @@ ssize_t UNIFYCR_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
         tmp_req.length = count;
         tmp_req.offset = offset;
 
-        int read_rc =  unifycr_fd_logreadlist(&tmp_req, 1);
+        int ret = unifycr_fd_logreadlist(&tmp_req, 1);
 
-        if (read_rc == 0)
-            return count;
+        if (ret)
+            retcount = 0;
         else
-            return 0;
+            retcount = tmp_req.length;
 
         /* return number of bytes read */
         return (ssize_t) retcount;
@@ -1889,6 +1917,11 @@ int UNIFYCR_WRAP(close)(int fd)
             errno = EBADF;
             return -1;
         }
+
+        unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
+
+        if (filedesc->write)
+            fsync(fd + unifycr_fd_limit);
 
         /* close the file id */
         int close_rc = unifycr_fid_close(fid);

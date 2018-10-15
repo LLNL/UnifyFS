@@ -53,7 +53,7 @@ static int total_ranks;
 static int debug;                   /* pause for attaching debugger */
 static int unmount;                 /* unmount unifycr after test */
 static char *buf;                   /* I/O buffer */
-static char *mountpoint = "/tmp";   /* unifycr mountpoint */
+static char *mountpoint = "/unifycr";   /* unifycr mountpoint */
 static char *filename = "testfile"; /* testfile name under mountpoint */
 static char targetfile[NAME_MAX];   /* target file name */
 
@@ -229,7 +229,7 @@ static const char *usage_str =
 " -f, --filename=<filename>        target file name (default: testfile)\n"
 " -h, --help                       help message\n"
 " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-"                                  (default: /tmp)\n"
+"                                  (default: /unifycr)\n"
 " -p, --pattern=<pattern>          should be 'n1'(n to 1) or 'nn' (n to n)\n"
 " -s, --standard                   do not use unifycr but run standard I/O\n"
 " -t, --type=<write|read>          I/O type\n"

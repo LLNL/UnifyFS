@@ -193,7 +193,7 @@ int main(int argc, char *argv[])
     memset(buf, 0, elems_per_tile * SZ_PER_ELEM);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    unifycr_mount("/tmp", rank, ranknum, 0);
+    unifycr_mount("/unifycr", rank, ranknum, 0);
     MPI_Barrier(MPI_COMM_WORLD);
 
     int fd = open(fname, O_RDWR | O_CREAT | O_TRUNC, 0600);
