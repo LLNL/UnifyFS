@@ -51,7 +51,7 @@ static int total_ranks;
 
 static int debug;           /* pause for attaching debugger */
 static int unmount;         /* unmount unifycr after running the test */
-static char *mountpoint = "/tmp";   /* unifycr mountpoint */
+static char *mountpoint = "/unifycr"; /* unifycr mountpoint */
 static char *filename = "testfile"; /* testfile name under mountpoint */
 static char targetfile[NAME_MAX];   /* target file name */
 
@@ -241,7 +241,7 @@ static const char *usage_str =
 " -L, --lipsum                     check contents written by write test\n"
 " -l, --listio                     use lio_listio(2) instead of read(2)\n"
 " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-"                                  (default: /tmp)\n"
+"                                  (default: /unifycr)\n"
 " -P, --pread                      use pread(2) instead of read(2)\n"
 " -p, --pattern=<pattern>          should be 'n1'(n to 1) or 'nn' (n to n)\n"
 "                                  (default: n1)\n"

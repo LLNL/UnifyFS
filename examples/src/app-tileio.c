@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
     memset(buf, 0, x_size * sz_per_elem);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    unifycr_mount("/tmp", rank, ranknum, 0);
+    unifycr_mount("/unifycr", rank, ranknum, 0);
     MPI_Barrier(MPI_COMM_WORLD);
 
     int fd;
