@@ -560,7 +560,7 @@ static int unifycr_exit()
     }
 
     /* shutdown the metadata service*/
-    meta_sanitize();
+    meta_finalize();
     /* notify the service threads to exit*/
 
     /* destroy the sockets except for the ones

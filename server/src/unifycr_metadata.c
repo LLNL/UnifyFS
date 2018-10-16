@@ -36,11 +36,11 @@
 #include "unifycr_const.h"
 #include "unifycr_global.h"
 
-unifycr_key_t **unifycr_keys;
-unifycr_val_t **unifycr_vals;
+//unifycr_key_t **unifycr_keys;
+//unifycr_val_t **unifycr_vals;
 
-fattr_key_t **fattr_keys;
-fattr_val_t **fattr_vals;
+//fattr_key_t **fattr_keys;
+//fattr_val_t **fattr_vals;
 
 char *manifest_path;
 
@@ -177,14 +177,16 @@ int meta_init_store(unifycr_cfg_t *cfg)
 
     MPI_Comm_size(md->mdhim_comm, &md_size);
 
+#if 0
     rc = meta_init_indices();
     if (rc != 0)
         return -1;
-
+#endif
     return 0;
 
 }
 
+#if 0
 /**
 * initialize the key and value list used to
 * put/get key-value pairs
@@ -240,77 +242,7 @@ int meta_init_indices()
     return 0;
 
 }
-
-/**
-* store the file attribute to the key-value store
-* @param buf: file attribute received from the client
-* @param sock_id: the connection id in poll_set of
-* the delegator
-* @return success/error code
-*/
-int meta_process_attr_set(char *buf, int sock_id)
-{
-    int rc = ULFS_SUCCESS;
-
-    unifycr_file_attr_t *ptr_fattr =
-        (unifycr_file_attr_t *)(buf + 1 * sizeof(int));
-
-    *fattr_keys[0] = ptr_fattr->gfid;
-    fattr_vals[0]->file_attr = ptr_fattr->file_attr;
-    strcpy(fattr_vals[0]->fname, ptr_fattr->filename);
-
-    /*  LOG(LOG_DBG, "rank:%d, setting fattr key:%d, value:%s\n",
-                glb_rank, *fattr_keys[0], fattr_vals[0]->fname); */
-    md->primary_index = unifycr_indexes[1];
-    brm = mdhimPut(md, fattr_keys[0], sizeof(fattr_key_t),
-                   fattr_vals[0], sizeof(fattr_val_t),
-                   NULL, NULL);
-    if (!brm || brm->error)
-        rc = (int)UNIFYCR_ERROR_MDHIM;
-    else
-        rc = ULFS_SUCCESS;
-
-    mdhim_full_release_msg(brm);
-
-    return rc;
-}
-
-
-/* get the file attribute from the key-value store
-* @param buf: a buffer that stores the gid
-* @param sock_id: the connection id in poll_set of the delegator
-* @return success/error code
-*/
-
-int meta_process_attr_get(fattr_key_t *_fattr_key,
-                          unifycr_file_attr_t *ptr_attr_val)
-{
-    //*fattr_keys[0] = *((int *)(buf + 2 * sizeof(int)));
-    fattr_val_t *tmp_ptr_attr;
-
-    int rc;
-
-    md->primary_index = unifycr_indexes[1];
-    bgrm = mdhimGet(md, md->primary_index, _fattr_key,
-                    sizeof(fattr_key_t), MDHIM_GET_EQ);
-
-    if (!bgrm || bgrm->error)
-        rc = (int)UNIFYCR_ERROR_MDHIM;
-    else {
-        tmp_ptr_attr = (fattr_val_t *)bgrm->values[0];
-        ptr_attr_val->gfid = *_fattr_key;
-
-        /*  LOG(LOG_DBG, "rank:%d, getting fattr key:%d\n",
-                    glb_rank, *fattr_keys[0]); */
-        ptr_attr_val->file_attr = tmp_ptr_attr->file_attr;
-        strcpy(ptr_attr_val->filename, tmp_ptr_attr->fname);
-
-        rc = ULFS_SUCCESS;
-    }
-
-    mdhim_full_release_msg(bgrm);
-    return rc;
-}
+#endif
 
 /*synchronize all the indices and file attributes
 * to the key-value store
@@ -583,33 +515,9 @@ void print_fsync_indices(unifycr_key_t **unifycr_keys,
     }
 }
 
-int meta_free_indices()
-{
-    int i;
-    for (i = 0; i < MAX_META_PER_SEND; i++)
-        free(unifycr_keys[i]);
-    free(unifycr_keys);
-
-    for (i = 0; i < MAX_META_PER_SEND; i++)
-        free(unifycr_vals[i]);
-    free(unifycr_vals);
-
-    for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++)
-        free(fattr_keys[i]);
-    free(fattr_keys);
-
-    for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++)
-        free(fattr_vals[i]);
-    free(fattr_vals);
-
-    return 0;
-}
-
-int meta_sanitize()
+int meta_finalize(void)
 {
     int rc = ULFS_SUCCESS;
-
-    meta_free_indices();
 
     char dbfilename[UNIFYCR_MAX_FILENAME] = {0};
     char statfilename[UNIFYCR_MAX_FILENAME] = {0};
@@ -740,11 +648,11 @@ int unifycr_get_file_extents(int num_keys, unifycr_key_t *keys,
      * We need to re-evaluate this function to use different key-value stores.
      */
 
-    int rc;
+    int rc = UNIFYCR_SUCCESS;
     int i;
 
     md->primary_index = unifycr_indexes[0];
-    bgrm = mdhimBGet(md, md->primary_index, (void **)unifycr_keys,
+    bgrm = mdhimBGet(md, md->primary_index, (void **)keys,
                      unifycr_key_lens, num_keys, MDHIM_RANGE_BGET);
 
     int tot_num = 0;
@@ -786,15 +694,15 @@ int unifycr_get_file_extents(int num_keys, unifycr_key_t *keys,
  *
  */
 int unifycr_set_file_extents(int num_entries, unifycr_key_t *keys,
-                             int *unifycr_key_lens, unifycr_val_t *val,
+                             int *unifycr_key_lens, unifycr_val_t *vals,
                              int *unifycr_val_lens)
 {
     int rc = UNIFYCR_SUCCESS;
 
     md->primary_index = unifycr_indexes[0];
 
-    brm = mdhimBPut(md, (void **)(&unifycr_keys[0]), unifycr_key_lens,
-                    (void **)(&unifycr_vals[0]), unifycr_val_lens, num_entries,
+    brm = mdhimBPut(md, (void **)(&keys[0]), unifycr_key_lens,
+                    (void **)(&vals[0]), unifycr_val_lens, num_entries,
                     NULL, NULL);
     brmp = brm;
     if (!brmp || brmp->error) {

@@ -27,6 +27,11 @@
  * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
+/**
+ * @file unifycr_metadata.h
+ * @brief API to store metadata in a KV-Store
+ */
+
 #ifndef UNIFYCR_METADATA_H
 #define UNIFYCR_METADATA_H
 
@@ -42,11 +47,16 @@
 #include "unifycr_meta.h"
 #include "unifycr_global.h"
 
-
+/** prefix for the manifest file name */
 #define MANIFEST_FILE_NAME "mdhim_manifest_"
 
+/**
+ * Key for a file extent
+ */
 typedef struct {
+    /** file id */
     unsigned long fid;
+    /** offset */
     unsigned long offset;
 } unifycr_key_t;
 
@@ -65,32 +75,66 @@ typedef struct {
     int rank;
 } unifycr_val_t;
 
-#define UNIFYCR_VAL_SZ (sizeof(unifycr_val_t))
-
-#define UNIFYCR_VAL_ADDR(valp) (((unifycr_val_t *)valp)->addr)
-#define UNIFYCR_VAL_LEN(valp) (((unifycr_val_t *)valp)->len)
-
+/**
+ * Value for a file extent
+ */
 typedef struct {
+    /** delegator_id */
+    unsigned long delegator_id;
+    /** length */
+    unsigned long len;
+    /** address of the extent*/
+    unsigned long addr;
+    /** app and rank id  */
+    unsigned long app_rank_id; /*include both app and rank id*/
+} unifycr_val_t;
+
+/**
+ * key-value tuple for a file extent
+ */
+typedef struct {
+    /** key */
     unifycr_key_t key;
+    /** value */
     unifycr_val_t val;
 } unifycr_keyval_t;
 
+/**
+ * Client read request
+ */
 typedef struct {
+    /** file id */
     int fid;
+    /** file offset */
     long offset;
+    /** length of the chunk */
     long length;
 } cli_req_t;
 
-extern arraylist_t *ulfs_keys;
-extern arraylist_t *ulfs_vals;
-extern arraylist_t *ulfs_metas;
+/**
+ * Shut down the KV-Store
+ */
+int meta_finalize(void);
 
 void debug_log_key_val(const char* ctx,
                        unifycr_key_t *key,
                        unifycr_val_t *val);
 
 int meta_sanitize();
+/**
+ * Initialize the KV-Store
+ *
+ * @param[in] cfg UnifyCR configuration
+ */
 int meta_init_store(unifycr_cfg_t *cfg);
+
+#if 0
+// Not sure if this is the right place for the print functions.
+// They are currently not used and probably broken.
+// We might want to remove them.
+/**
+ *
+ */
 void print_bget_indices(int app_id, int cli_id,
                         send_msg_t *index_set, int tot_num);
 int meta_process_fsync(int sock_id);
@@ -99,44 +143,71 @@ int meta_batch_get(int app_id, int client_id, int thrd_id, int dbg_rank,
                    msg_meta_t *del_req_set);
 int meta_init_indices();
 int meta_free_indices();
+
+/**
+ *
+ */
 void print_fsync_indices(unifycr_key_t **unifycr_keys,
                          unifycr_val_t **unifycr_vals, long num_entries);
-int meta_process_attr_set(char *ptr_cmd, int sock_id);
+#endif
 
-//int meta_process_attr_get(char *buf, int sock_id,
-//                          unifycr_file_attr_t *ptr_attr_val);
-int meta_process_attr_get(fattr_key_t *_fattr_key,
-                          unifycr_file_attr_t *ptr_attr_val);
-/*
+/**
+ * Store a File attribute to the KV-Store.
  *
+ * @param[in] *ptr_attr_val
+ * @return UNIFYCR_SUCCESS on success
  */
 int unifycr_set_file_attribute(unifycr_file_attr_t *ptr_attr_val);
 
-/*
+/**
+ * Store File attributes to the KV-Store.
  *
+ * @param[in] num_entries number of key value pairs to store
+ * @param[in] keys array storing the keys
+ * @param[in] key_lens array with the length of the elements in \p keys
+ * @param[in] vals array with the values
+ * @param[in] val_lens array with the length of the elements in \p vals
  */
-int unifycr_set_file_attributes(int num_entries, fattr_key_t *keys,
-                                int *key_lens,
-                                unifycr_file_attr_t *fattr_ptr, int *val_lens);
+int unifycr_set_file_attributes(int num_entries,
+                                fattr_key_t *keys, int *key_lens,
+                                unifycr_file_attr_t *vals, int *val_lens);
 
-/*
+/**
+ * Retrieve a File attribute from the KV-Store.
  *
+ * @param [in] gfid
+ * @param[out] *ptr_attr_val
+ * @return UNIFYCR_SUCCESS on success
  */
 int unifycr_get_file_attribute(int gfid,
                                unifycr_file_attr_t *ptr_attr_val);
 
-/*
+/**
+ * Store File extents in the KV-Store.
  *
- */
-int unifycr_get_file_extents(int num_keys, unifycr_key_t *keys,
-                             int *unifycr_key_lens, int *num_values,
-                             unifycr_keyval_t **keyval);
-
-/*
- *
+ * @param [in] num_entries number of key value pairs to store
+ * @param[in] keys array storing the keys
+ * @param[in] key_lens array with the length of the elements in \p keys
+ * @param[in] vals array with the values
+ * @param[in] val_lens array with the length of the elements in \p vals
+ * @return UNIFYCR_SUCCESS on success
  */
 int unifycr_set_file_extents(int num_entries, unifycr_key_t *keys,
-                             int *unifycr_key_lens, unifycr_val_t *val,
-                             int *unifycr_val_lens);
+                             int *key_lens, unifycr_val_t *vals,
+                             int *val_lens);
+
+/**
+ * Retrieve File extents from the KV-Store.
+ *
+ * @param[in] num_keys number of keys
+ * @param[in] keys array of keys to retrieve the values for
+ * @param[in] key_lens array with the length of the key in \p keys
+ * @param[out] num_values number of values in the keyval array
+ * @param[out] keyval array containing the key-value tuples found
+ * @return UNIFYCR_SUCCESS on success
+ */
+int unifycr_get_file_extents(int num_keys,
+                             unifycr_key_t *keys, int *key_lens,
+                             int *num_values, unifycr_keyval_t **keyval);
 
 #endif
