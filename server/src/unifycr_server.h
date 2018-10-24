@@ -15,9 +15,7 @@
 
 #include <mercury.h>
 #include <abt.h>
-#include <abt-snoozer.h>
 #include <margo.h>
-#include <abt-io.h>
 
 typedef struct ServerRpcContext
 {
@@ -47,8 +45,6 @@ extern bool usetcp;
 
 extern uint16_t total_rank;
 extern uint16_t my_rank;
-
-extern abt_io_instance_id aid;
 
 typedef struct ServerAddress
 {

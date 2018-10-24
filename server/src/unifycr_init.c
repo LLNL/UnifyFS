@@ -66,8 +66,6 @@ int log_print_level = 5;
 
 unifycr_cfg_t server_cfg;
 
-abt_io_instance_id aid = NULL;
-
 static const int IO_POOL_SIZE = 2;
 
 /* not needed
