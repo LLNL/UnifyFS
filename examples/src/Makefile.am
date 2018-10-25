@@ -1,4 +1,4 @@
-noinst_PROGRAMS = sysio-write-gotcha sysio-write-static \
+libexec_PROGRAMS = sysio-write-gotcha sysio-write-static \
                   sysio-read-gotcha sysio-read-static \
                   sysio-writeread-gotcha sysio-writeread-static sysio-writeread-posix \
                   sysio-writeread2-gotcha sysio-writeread2-static \
@@ -111,7 +111,7 @@ app_tileio_static_LDADD   = $(test_static_ldadd)
 app_tileio_static_LDFLAGS = $(test_static_ldflags)
 
 if HAVE_HDF5
-noinst_PROGRAMS += app-hdf5-create-gotcha \
+libexec_PROGRAMS += app-hdf5-create-gotcha \
                    app-hdf5-writeread-gotcha
 
 app_hdf5_create_gotcha_SOURCES = app-hdf5-create.c
