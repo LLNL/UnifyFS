@@ -35,7 +35,7 @@
 #include "arraylist.h"
 #include "unifycr_const.h"
 #include "unifycr_global.h"
-#include "../../client/src/unifycr_read_builder.h"
+#include "../../client/src/ucr_read_builder.h"
 
 unifycr_key_t **unifycr_keys;
 unifycr_val_t **unifycr_vals;
@@ -417,7 +417,7 @@ int meta_read_get(int app_id, int client_id,
     bgrmp = bgrm;
     while (bgrmp) {
         if (bgrmp->error < 0) {
-            rc = ULFS_ERROR_MDHIM;
+            rc = (int)UNIFYCR_ERROR_MDHIM;
         }
 		int i;
         for (i = 0; i < bgrmp->num_keys; i++) {

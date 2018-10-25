@@ -45,19 +45,15 @@
 #include "unifycr_sock.h"
 
 int server_rank_idx;
+
 int server_sockfd;
-<<<<<<< fc0db961eecfcac6ca2425542231d3309372b89e
-struct sockaddr_un server_address;
-=======
 int client_sockfd;
 int num_fds = 0;
->>>>>>> RPC read request bulk transfer
 
 //int thrd_pipe_fd[2] = {0};
 
-int num_fds; // = 0, number of fds currrently in poll_set
 struct pollfd poll_set[MAX_NUM_CLIENTS];
-
+struct sockaddr_un server_address;
 char cmd_buf[MAX_NUM_CLIENTS][CMD_BUF_SIZE];
 char ack_buf[MAX_NUM_CLIENTS][CMD_BUF_SIZE];
 int ack_msg[3] = {0};
@@ -158,12 +154,10 @@ int sock_remove(int idx)
  * */
 int sock_notify_cli(int sock_id, int cmd)
 {
-<<<<<<< fc0db961eecfcac6ca2425542231d3309372b89e
     memset(ack_buf[sock_id], 0, sizeof(ack_buf[sock_id]));
-=======
+
 	printf("sock notifying fd: %d\n", client_sockfd);
 
->>>>>>> RPC read request bulk transfer
     memcpy(ack_buf[sock_id], &cmd, sizeof(int));
     int rc = write(client_sockfd,
                    ack_buf[sock_id], sizeof(ack_buf[sock_id]));

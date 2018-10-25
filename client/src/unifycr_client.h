@@ -39,11 +39,11 @@ uint32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t**
 
 uint32_t unifycr_client_metaset_rpc_invoke(unifycr_client_rpc_context_t**
                                                   unifycr_rpc_context,
-                                                  unifycr_fattr_t* f_meta);
+                                                  unifycr_file_attr_t* f_meta);
 
 uint32_t unifycr_client_metaget_rpc_invoke(unifycr_client_rpc_context_t**
                                                   unifycr_rpc_context,
-                                                  unifycr_fattr_t** file_meta, int fid, int gfid);
+                                                  unifycr_file_attr_t** file_meta, int fid, int gfid);
 
 uint32_t unifycr_client_fsync_rpc_invoke(unifycr_client_rpc_context_t**
                                                   unifycr_rpc_context,

@@ -74,8 +74,9 @@ DIR *UNIFYCR_WRAP(opendir)(const char *name)
      * if valid, populate the local file meta cache accordingly.
      */
 
+    fid = unifycr_get_fid_from_path(name);
     gfid = unifycr_generate_gfid(name);
-    ret = unifycr_get_global_file_meta(gfid, &gfattr);
+    ret = unifycr_get_global_file_meta(fid, gfid, &gfattr);
     if (ret != UNIFYCR_SUCCESS) {
         errno = ENOENT;
         return NULL;
@@ -87,7 +88,6 @@ DIR *UNIFYCR_WRAP(opendir)(const char *name)
         return NULL;
     }
 
-    fid = unifycr_get_fid_from_path(name);
     if (fid >= 0) {
         meta = unifycr_get_meta_from_fid(fid);
 

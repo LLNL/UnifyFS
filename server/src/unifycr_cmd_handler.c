@@ -288,7 +288,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
         rc = pthread_mutex_init(&(thrd_ctrl->thrd_lock), NULL);
         if (rc != 0) {
 			printf("pthread_mutex_init failed: %d\n", rc);
-            out.ret = ULFS_ERROR_THRDINIT;
+            out.ret = (int)UNIFYCR_ERROR_THRDINIT;
         }
     }
 
@@ -296,7 +296,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
         rc = pthread_cond_init(&(thrd_ctrl->thrd_cond), NULL);
         if (rc != 0) {
 			printf("pthread_cond_init failed: %d\n", rc);
-            out.ret = ULFS_ERROR_THRDINIT;
+            out.ret = (int)UNIFYCR_ERROR_THRDINIT;
         }
     }
 
@@ -304,7 +304,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
         thrd_ctrl->del_req_set = (msg_meta_t *)malloc(sizeof(msg_meta_t));
         if (!thrd_ctrl->del_req_set) {
 			printf("thread_ctrl req_set ealloc failed: %d\n", rc);
-            out.ret =  ULFS_ERROR_NOMEM;
+            out.ret =  (int)UNIFYCR_ERROR_NOMEM;
         }
     }
 	
@@ -316,7 +316,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
 
 		if (!thrd_ctrl->del_req_stat) {
 			printf("thread_ctrl del_req_stat malloc failed: %d\n", rc);
-       		out.ret = ULFS_ERROR_NOMEM;
+       		out.ret = (int)UNIFYCR_ERROR_NOMEM;
 		}
     }
 	
@@ -327,7 +327,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
        	 (per_del_stat_t *)malloc(sizeof(per_del_stat_t) * glb_size);
     	if (!thrd_ctrl->del_req_stat->req_stat) {
 			printf("thread_ctrl del_req_stat->req_stat malloc failed: %d\n", rc);
-			out.ret = ULFS_ERROR_NOMEM;
+			out.ret = (int)UNIFYCR_ERROR_NOMEM;
 		}
 	}
 
@@ -372,7 +372,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
                         	cli_signature);
     	if (rc != 0) {
 			printf("pthread create failed: %d\n", rc);
-       		out.ret = ULFS_ERROR_THRDINIT;
+       		out.ret = (int)UNIFYCR_ERROR_THRDINIT;
 		}
     }
 

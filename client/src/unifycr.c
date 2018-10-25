@@ -74,7 +74,6 @@ static int unifycr_fpos_enabled   = 1;  /* whether we can use fgetpos/fsetpos */
 
 unifycr_cfg_t client_cfg;
 
-//fs_type_t fs_type = UNIFYCRFS;
 unifycr_index_buf_t unifycr_indices;
 unifycr_fattr_buf_t unifycr_fattrs;
 static size_t
@@ -652,6 +651,7 @@ static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,
 }
 
 
+#if 0
 /*
  * send global file metadata to the delegator,
  * which puts it to the key-value store
@@ -702,6 +702,7 @@ static int set_global_file_meta(unifycr_file_attr_t *file_meta)
 
     return UNIFYCR_SUCCESS;
 }
+#endif
 
 int unifycr_set_global_file_meta(const char *path, int fid, int gfid,
                                  struct stat *sb)
@@ -717,7 +718,9 @@ int unifycr_set_global_file_meta(const char *path, int fid, int gfid,
     new_fmeta.gfid = gfid;
     new_fmeta.file_attr = *sb;
 
-    ret = set_global_file_meta(&new_fmeta);
+    ret = unifycr_client_metaset_rpc_invoke(&unifycr_rpc_context,
+                                                  &new_fmeta);
+    //ret = set_global_file_meta(&new_fmeta);
     if (ret < 0)
         return ret;
 
@@ -726,50 +729,19 @@ int unifycr_set_global_file_meta(const char *path, int fid, int gfid,
     return 0;
 }
 
-int unifycr_get_global_file_meta(int gfid, unifycr_file_attr_t *gfattr)
+int unifycr_get_global_file_meta(int fid, int gfid, unifycr_file_attr_t *gfattr)
 {
     int rc = 0;
-    ssize_t nbytes = 0;
-    int cmd = COMM_META_GET;
-    int *response = NULL;
-    unifycr_file_attr_t *fmeta = NULL;
 
     if (!gfattr)
         return -EINVAL;
 
-    memset(cmd_buf, 0, sizeof(cmd_buf));
-    memcpy(cmd_buf, &cmd, sizeof(int));
-    memcpy(cmd_buf + sizeof(int), &gfid, sizeof(int));
+    unifycr_file_attr_t* fmeta = NULL;
+    int ret = unifycr_client_metaget_rpc_invoke(&unifycr_rpc_context, &fmeta, fid, gfid);
+    if (ret == UNIFYCR_SUCCESS)
+        *gfattr = *fmeta;
 
-    nbytes = __real_write(client_sockfd, cmd_buf, sizeof(cmd_buf));
-    if (nbytes <= 0)
-        return -errno;
-
-    nbytes = 0;
-    cmd_fd.events = POLLIN | POLLPRI;
-    cmd_fd.revents = 0;
-
-    rc = poll(&cmd_fd, 1, -1);
-    if (rc <= 0) /* timeout or error, both are fail cases for us */
-        return -EIO;
-
-    /* FIXME: how do we have to report back this case? */
-    if (cmd_fd.revents != POLLIN)
-        return -EIO;
-
-    nbytes = __real_read(client_sockfd, cmd_buf, sizeof(cmd_buf));
-    if (nbytes == 0)
-        return -errno;  /*remote connection is closed*/
-
-    response = (int *) cmd_buf;
-
-    if (response[0] != COMM_META_GET || response[1] != ACK_SUCCESS)
-        return -EIO;
-
-    fmeta = (unifycr_file_attr_t *) &response[2];
-    *gfattr = *fmeta;
-
-    return UNIFYCR_SUCCESS;
+    return ret;
 }
 
 
@@ -790,7 +762,7 @@ int unifycr_fid_stat(int fid, struct stat *buf)
 
     gfid = unifycr_gfid_from_fid(fid);
 
-    ret = unifycr_get_global_file_meta(gfid, &gfattr);
+    ret = unifycr_get_global_file_meta(fid, gfid, &gfattr);
     if (ret != UNIFYCR_SUCCESS)
         return -UNIFYCR_ERROR_IO;
 
@@ -919,7 +891,7 @@ int unifycr_fid_create_directory(const char *path)
     gfid = unifycr_generate_gfid(path);
 
     found_global =
-        (unifycr_get_global_file_meta(gfid, &gfattr) == UNIFYCR_SUCCESS);
+        (unifycr_get_global_file_meta(fid, gfid, &gfattr) == UNIFYCR_SUCCESS);
     found_local = (fid >= 0);
 
     if (found_local && found_global)
@@ -1149,7 +1121,7 @@ int unifycr_fid_truncate(int fid, off_t length)
         off_t gap_size = length - size;
         int zero_rc = unifycr_fid_write_zero(fid, size, gap_size);
         if (zero_rc != UNIFYCR_SUCCESS) {
-            return UNIFYCR_ERR_IO;
+            return (int)UNIFYCR_ERROR_IO;
         }
     }
 
@@ -1179,34 +1151,6 @@ static int unifycr_get_global_fid(const char *path, int *gfid)
     return UNIFYCR_SUCCESS;
 }
 
-/*
- * insert file attribute to attributed share memory buffer
- * */
-static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,
-                         unifycr_fattr_t *ins_fattr)
-{
-    int meta_cnt = *(ptr_f_meta_log->ptr_num_entries), i;
-    unifycr_fattr_t *meta_entry = ptr_f_meta_log->meta_entry;
-
-    for (i = 0; i < meta_cnt - 1; i++) {
-        if (meta_entry[i].fid > ins_fattr->fid) {
-            break;
-        }
-
-        /* write zero values to new bytes */
-        off_t gap_size = length - size;
-        int zero_rc = unifycr_fid_write_zero(fid, size, gap_size);
-        if (zero_rc != UNIFYCR_SUCCESS) {
-            return (int)UNIFYCR_ERROR_IO;
-        }
-    }
-
-    /* set the new size */
-    meta->size = length;
-
-    return UNIFYCR_SUCCESS;
-}
-
 #if 0
 /* opens a new file id with specified path, access flags, and permissions,
  * fills outfid with file id and outpos with position for current file pointer,
@@ -1233,12 +1177,12 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
             rc = unifycr_get_global_fid(path, &gfid);
             if (rc != UNIFYCR_SUCCESS) {
                 DEBUG("Failed to generate fid for file %s\n", path);
-                return UNIFYCR_ERR_IO;
+                return (int)UNIFYCR_ERROR_IO;
             }
 
             gfid = abs(gfid);
 
-            unifycr_fattr_t *ptr_meta = NULL;
+            unifycr_file_attr_t *ptr_meta = NULL;
             rc = unifycr_client_metaget_rpc_invoke(&unifycr_rpc_context,
                                                    &ptr_meta, fid, gfid);
 
@@ -1251,14 +1195,14 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
                 fid = unifycr_fid_create_file(path);
                 if (fid < 0) {
                     DEBUG("Failed to create new file %s\n", path);
-                    return UNIFYCR_ERR_NFILE;
+                    return (int)UNIFYCR_ERROR_NFILE;
                 }
 
                 /* initialize the storage for the file */
                 int store_rc = unifycr_fid_store_alloc(fid);
                 if (store_rc != UNIFYCR_SUCCESS) {
                     DEBUG("Failed to create storage for file %s\n", path);
-                    return UNIFYCR_ERR_IO;
+                    return (int)UNIFYCR_ERROR_IO;
                 }
                 /* initialize the global metadata
                  * */
@@ -1297,13 +1241,13 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
             int store_rc = unifycr_fid_store_alloc(fid);
             if (store_rc != UNIFYCR_SUCCESS) {
                 DEBUG("Failed to create storage for file %s\n", path);
-                return UNIFYCR_ERR_IO;
+                return (int)UNIFYCR_ERROR_IO;
             }
 
             if (fs_type == UNIFYCR_LOG) {
                 /*create a file and send its attribute to key-value store*/
-                unifycr_fattr_t *new_fmeta =
-                    (unifycr_fattr_t *)malloc(sizeof(unifycr_fattr_t));
+                unifycr_file_attr_t *new_fmeta =
+                    (unifycr_file_attr_t *)malloc(sizeof(unifycr_file_attr_t));
                 strcpy(new_fmeta->filename, path);
                 new_fmeta->fid = fid;
                 new_fmeta->gfid = gfid;
@@ -1397,7 +1341,7 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
     DEBUG("unifycr_get_fid_from_path() gave %d (gfid = %d)\n", fid, gfid);
 
     found_global =
-        (unifycr_get_global_file_meta(gfid, &gfattr) == UNIFYCR_SUCCESS);
+        (unifycr_get_global_file_meta(fid, gfid, &gfattr) == UNIFYCR_SUCCESS);
     found_local = (fid >= 0);
 
     /* possibly, the file still exists in our local cache but globally
@@ -2198,7 +2142,7 @@ int unifycr_sync_to_del(unifycr_mount_in_t* in)
     long meta_size = unifycr_max_index_entries * sizeof(unifycr_index_t);
     long fmeta_offset = (void *)unifycr_fattrs.ptr_num_entries -
         unifycr_superblock;
-    long fmeta_size = unifycr_max_fattr_entries * sizeof(unifycr_fattr_t);
+    long fmeta_size = unifycr_max_fattr_entries * sizeof(unifycr_file_attr_t);
     long data_offset = (void *)unifycr_chunks - unifycr_superblock;
     long data_size = (long)unifycr_max_chunks * unifycr_chunk_size;
     char* external_spill_dir = malloc(UNIFYCR_MAX_FILENAME);
@@ -2867,16 +2811,6 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     if (ret != UNIFYCR_SUCCESS)
         return ret;
 
-    if (fs_type == UNIFYCR_LOG || fs_type == UNIFYCR_STRIPE) {
-        char host_name[UNIFYCR_MAX_FILENAME] = {0};
-        int rc = gethostname(host_name, UNIFYCR_MAX_FILENAME);
-
-        if (rc != 0) {
-            printf("rank:%d, fail to get the host name.", dbg_rank);
-            return UNIFYCR_FAILURE;
-        }
-    }
-
     FILE *fp;
     char addr_string[50];
     fp = fopen("/dev/shm/svr_id","r");
@@ -2890,7 +2824,7 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     printf("calling mount\n");
     unifycr_client_mount_rpc_invoke(&unifycr_rpc_context);
 
-    int rc = unifycr_init_socket(local_rank_idx, local_rank_cnt,
+    rc = unifycr_init_socket(local_rank_idx, local_rank_cnt,
                                 local_del_cnt);
     if (rc < 0) {
         printf("rank:%d, fail to initialize socket, rc == %d.", dbg_rank, rc);

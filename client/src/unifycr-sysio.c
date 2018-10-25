@@ -40,12 +40,10 @@
  * Please also read this file LICENSE.CRUISE
  */
 
-#include <aio.h>
-
 #include "unifycr-sysio.h"
 #include "unifycr-internal.h"
 #include "unifycr_client.h"
-#include "unifycr_read_builder.h"
+#include "ucr_read_builder.h"
 
 /* -------------------
  * define external variables
@@ -328,7 +326,7 @@ int UNIFYCR_WRAP(stat)(const char *path, struct stat *buf)
         fid = unifycr_get_fid_from_path(path);
 
         found_global =
-            (unifycr_get_global_file_meta(gfid, &gfattr) == UNIFYCR_SUCCESS);
+            (unifycr_get_global_file_meta(fid, gfid, &gfattr) == UNIFYCR_SUCCESS);
         found_local = (fid >= 0);
 
         if (!found_global) {
@@ -411,7 +409,7 @@ int UNIFYCR_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
         fid = unifycr_get_fid_from_path(path);
 
         found_global =
-            (unifycr_get_global_file_meta(gfid, &gfattr) == UNIFYCR_SUCCESS);
+            (unifycr_get_global_file_meta(fid, gfid, &gfattr) == UNIFYCR_SUCCESS);
         found_local = (fid >= 0);
 
         if (!found_global) {
@@ -457,7 +455,7 @@ int UNIFYCR_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
         fid = unifycr_get_fid_from_path(path);
 
         found_global =
-            (unifycr_get_global_file_meta(gfid, &gfattr) == UNIFYCR_SUCCESS);
+            (unifycr_get_global_file_meta(fid, gfid, &gfattr) == UNIFYCR_SUCCESS);
         found_local = (fid >= 0);
 
         if (!found_global) {
@@ -1685,12 +1683,12 @@ int UNIFYCR_WRAP(ftruncate)(int fd, off_t length)
 uint32_t get_gfid(int fd)
 {
     uint32_t gfid;
-    unifycr_fattr_t tmp_meta_entry;
+    unifycr_file_attr_t tmp_meta_entry;
     tmp_meta_entry.fid = fd;
-    unifycr_fattr_t *ptr_meta_entry = (unifycr_fattr_t *)bsearch(&tmp_meta_entry,
+    unifycr_file_attr_t *ptr_meta_entry = (unifycr_file_attr_t *)bsearch(&tmp_meta_entry,
                                                                  unifycr_fattrs.meta_entry,
                                                                  *unifycr_fattrs.ptr_num_entries,
-                                                                 sizeof(unifycr_fattr_t),
+                                                                 sizeof(unifycr_file_attr_t),
                                                                  compare_fattr);
     if (ptr_meta_entry != NULL) {
         gfid = (uint32_t)ptr_meta_entry->gfid;
@@ -1711,6 +1709,7 @@ int UNIFYCR_WRAP(fsync)(int fd)
             return -1;
         }
 
+        /* TODO: if using spill over we may have some fsyncing to do */
         if (unifycr_use_spillover) {
             int ret = __real_fsync(unifycr_spilloverblock);
             if (ret != 0) {
@@ -1718,7 +1717,8 @@ int UNIFYCR_WRAP(fsync)(int fd)
             }
         }
 
-        if (fs_type == UNIFYCR_LOG) {
+        unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
+        if (meta->storage == FILE_STORAGE_LOGIO) {
             /* get gfid */
             uint32_t gfid;
             gfid = get_gfid(fd);
@@ -1729,21 +1729,6 @@ int UNIFYCR_WRAP(fsync)(int fd)
                                             local_rank_idx,
                                             gfid);
         }
-    }
-
-    /* check whether we should intercept this file descriptor */
-    if (unifycr_intercept_fd(&fd)) {
-        /* get the file id for this file descriptor */
-        int fid = unifycr_get_fid_from_fd(fd);
-        if (fid < 0) {
-            /* ERROR: invalid file descriptor */
-            errno = EBADF;
-            return -1;
-        }
-        /* TODO: if using spill over we may have some fsyncing to do */
-
-        /* nothing to do in our case */
-        return 0;
     } else {
         MAP_OR_FAIL(fsync);
         int ret = UNIFYCR_REAL(fsync)(fd);

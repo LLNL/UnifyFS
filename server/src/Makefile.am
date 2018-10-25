@@ -26,6 +26,7 @@ unifycrd_LDADD = $(top_builddir)/common/src/libunifycr_common.la \
                  $(top_builddir)/meta/src/libmdhim.a \
                  $(LEVELDB_LIBS) \
                  $(MPI_CLDFLAGS) \
+                 -lmargo -labt -lmercury -lflatcc_d \
                  -lpthread -lm -lstdc++ -lrt
 
 AM_CPPFLAGS = -I$(top_srcdir)/common/src \

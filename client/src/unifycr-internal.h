@@ -43,13 +43,13 @@
 #ifndef UNIFYCR_INTERNAL_H
 #define UNIFYCR_INTERNAL_H
 
-#include <config.h>
+#include "config.h"
 
 #ifdef HAVE_OFF64_T
-# define _FILE_OFFSET_BITS 64
-# define _LARGEFILE64_SOURCE
+#define _FILE_OFFSET_BITS 64
+#define _LARGEFILE64_SOURCE
 #else
-# define off64_t int64_t
+#define off64_t int64_t
 #endif
 
 /* -------------------------------
@@ -529,7 +529,7 @@ int unifycr_generate_gfid(const char *path);
 int unifycr_set_global_file_meta(const char *path, int fid, int gfid,
                                  struct stat *sb);
 
-int unifycr_get_global_file_meta(int gfid, unifycr_file_attr_t *gfattr);
+int unifycr_get_global_file_meta(int fid, int gfid, unifycr_file_attr_t *gfattr);
 
 // These require types/structures defined above
 #include "unifycr-fixed.h"
