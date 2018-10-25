@@ -51,7 +51,7 @@
 #include <mpi.h>
 #include <openssl/md5.h>
 
-#ifdef ENABLE_NUMA_POLICY
+#ifdef HAVE_LIBNUMA
 #include <numa.h>
 #endif
 
@@ -132,9 +132,7 @@ static size_t
 unifycr_spillover_size;  /* number of bytes in spillover to be used for chunk storage */
 long    unifycr_spillover_max_chunks; /* maximum number of chunks that fit in spillover storage */
 
-
-
-#ifdef ENABLE_NUMA_POLICY
+#ifdef HAVE_LIBNUMA
 static char unifycr_numa_policy[10];
 static int unifycr_numa_bank = -1;
 #endif
@@ -1883,8 +1881,8 @@ static int unifycr_init(int rank)
         unifycr_max_fattr_entries =
             unifycr_fattr_buf_size / sizeof(unifycr_file_attr_t);
 
-#ifdef ENABLE_NUMA_POLICY
-        env = getenv("UNIFYCR_NUMA_POLICY");
+#ifdef HAVE_LIBNUMA
+        char *env = getenv("UNIFYCR_NUMA_POLICY");
         if (env) {
             sprintf(unifycr_numa_policy, env);
             DEBUG("NUMA policy used: %s\n", unifycr_numa_policy);
