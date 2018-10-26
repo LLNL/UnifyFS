@@ -42,15 +42,32 @@ If you use Dotkit then replace ``spack load`` with ``spack use``.
     $ spack install leveldb
     $ spack install gotcha@0.0.2
     $ spack install environment-modules
-    $ spack load leveldb
-    $ spack load gotcha@0.0.2
+    $ 
+    $ git clone https://xgitlab.cels.anl.gov/sds/sds-repo.git sds-repo.git
+    $ cd sds-repo.git
+    $   spack repo add .
+    $ cd ..
+    $ spack install margo
+    $ spack install argobots
+    $
+    $ git clone https://github.com/dvidelabs/flatcc flatcc.git
+    $ cd flatcc.git
+    $   cmake -DCMAKE_INSTALL_PREFIX=/path/to/flatbuffers -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Debug -DFLATCC_INSTALL=on
+    $   make install
+    $ cd ..
 
 Then to build UnifyCR:
 
 .. code-block:: Bash
 
+    $ spack load leveldb
+    $ spack load gotcha@0.0.2
+    $ spack load mercury
+    $ spack load argobots
+    $ spack load margo
+    $
     $ ./autogen.sh
-    $ ./configure --prefix=/path/to/install --enable-debug
+    $ ./configure --prefix=/path/to/install --enable-debug --with-flatbuffers=/path/to/flatbuffers
     $ make
     $ make install
 
@@ -62,6 +79,11 @@ latest release in progress) of `GOTCHA <https://github.com/LLNL/GOTCHA/releases>
 
 And leveldb (if not already installed on your system):
 `leveldb <https://github.com/google/leveldb/releases/tag/v1.20>`_
+
+To download and install Margo and its dependencies (Mercury and Argobots)
+follow the instructions here: `Margo <https://xgitlab.cels.anl.gov/sds/margo>`_
+
+To get flat buffers: `flatbuffers <https://github.com/dvidelabs/flatcc>`_
 
 If you installed leveldb from source then you may have to add the pkgconfig file
 for leveldb manually. This is assuming your install of leveldb does not contain
@@ -89,7 +111,7 @@ from source.
 
 .. code-block:: Bash
 
-    $ ./configure --prefix=/path/to/install --with-gotcha=/path/to/gotcha --enable-debug
+    $ ./configure --prefix=/path/to/install --enable-debug --with-gotcha=/path/to/gotcha --with-mercury=/path/to/mercury --with-argobots=/path/to/argobots --with-margo=/path/to/margo --with-flatbuffers=/path/to/flatbuffers
     $ make
     $ make install
 
