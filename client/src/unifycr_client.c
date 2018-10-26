@@ -5,10 +5,12 @@
  ********************************************************************************************/
 
 /* add margo and argobots */
-#include <abt.h>
-#include <margo.h>
+#include "unifycr-internal.h"
 #include "unifycr_client.h"
 #include "unifycr_clientcalls_rpc.h"
+
+#include <abt.h>
+#include <margo.h>
 
 /* declaration should be moved to header file */
 int unifycr_sync_to_del(unifycr_mount_in_t* in);

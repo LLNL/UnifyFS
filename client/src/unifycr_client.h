@@ -8,9 +8,10 @@
  *
  * ******************************************************************************/
 
+#include "unifycr-internal.h"
+
 #include <unistd.h>
 #include <margo.h>
-#include "unifycr-internal.h"
 
  typedef struct ClientRpcContext
  {

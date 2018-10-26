@@ -61,7 +61,8 @@
 #include "gotcha_map_unifycr_list.h"
 #endif
 
-#include "unifycr_client.c"
+#include "unifycr_client.h"
+#include "unifycr_clientcalls_rpc.h"
 
 /* global rpc context (probably should find a better spot for this) */
 unifycr_client_rpc_context_t* unifycr_rpc_context = NULL;

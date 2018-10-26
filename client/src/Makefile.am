@@ -23,6 +23,13 @@ libunifycr_la_SOURCES = \
   unifycr.h \
   unifycr-internal.h \
   unifycr-wrap.h \
+  unifycr_clientcalls_rpc.h \
+  unifycr_client.c \
+  unifycr_client.h \
+  flatbuffers_common_builder.h \
+  flatbuffers_common_reader.h \
+  ucr_read_builder.h \
+  ucr_read_reader.h \
   uthash.h \
   utlist.h
 
@@ -52,6 +59,13 @@ libunifycr_gotcha_la_SOURCES = \
   gotcha_map_unifycr_list.h \
   unifycr-internal.h \
   unifycr-wrap.h \
+  unifycr_clientcalls_rpc.h \
+  unifycr_client.c \
+  unifycr_client.h \
+  flatbuffers_common_builder.h \
+  flatbuffers_common_reader.h \
+  ucr_read_builder.h \
+  ucr_read_reader.h \
   uthash.h \
   utlist.h
 
