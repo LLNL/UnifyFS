@@ -7,10 +7,10 @@ AC_DEFUN([UNIFYCR_AC_FLATBUFFERS], [
   AC_ARG_WITH([flatbuffers], [AC_HELP_STRING([--with-flatbuffers=PATH],
     [path to installed libflatcc_d [default=/usr/local]])], [
     FLATBUFFERS_CFLAGS="-I${withval}/include"
-    FLATBUFFERS_LDFLAGS="-L${withval}/lib -rpath ${withval}/lib"
+    FLATBUFFERS_LDFLAGS="-L${withval}/lib"
     CFLAGS="$CFLAGS ${FLATBUFFERS_CFLAGS}"
     CXXFLAGS="$CXXFLAGS ${FLATBUFFERS_CFLAGS}"
-    LDFLAGS="$LDFLAGS -L${withval}/lib"
+    LDFLAGS="$LDFLAGS ${FLATBUFFERS_LDFLAGS}"
   ], [])
 
   AC_CHECK_LIB([flatcc_d], [flatcc_create_context],
