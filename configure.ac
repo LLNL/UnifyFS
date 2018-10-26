@@ -296,11 +296,11 @@ AC_CONFIG_FILES([Makefile
                  examples/src/Makefile
                  extras/Makefile
                  extras/unifycr.conf
-                 t/Makefile
-                 t/lib/Makefile
                  util/Makefile
                  util/unifycr/Makefile
                  util/unifycr/src/Makefile])
+#                 t/Makefile
+#                 t/lib/Makefile
 
 UNIFYCR_VERSION=${PACKAGE_VERSION}
 AC_SUBST(UNIFYCR_VERSION)
