@@ -8,14 +8,14 @@ AC_DEFUN([UNIFYCR_AC_MERCURY], [
     [path to installed libmercury [default=/usr/local]])], [
     MERCURY_CFLAGS="-I${withval}/include"
     MERCURY_LDFLAGS="-L${withval}/lib"
-    MERCURY_LIBS="-lmercury"
     CFLAGS="$CFLAGS ${MERCURY_CFLAGS}"
     CXXFLAGS="$CXXFLAGS ${MERCURY_CFLAGS}"
     LDFLAGS="$LDFLAGS ${MERCURY_LDFLAGS}"
   ], [])
 
   AC_CHECK_LIB([mercury], [HG_Init],
-    [AC_SUBST(MERCURY_CFLAGS)
+    [MERCURY_LIBS="-lmercury"
+     AC_SUBST(MERCURY_CFLAGS)
      AC_SUBST(MERCURY_LDFLAGS)
      AC_SUBST(MERCURY_LIBS)
     ],

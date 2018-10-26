@@ -8,14 +8,14 @@ AC_DEFUN([UNIFYCR_AC_ARGOBOTS], [
     [path to installed libabt [default=/usr/local]])], [
     ARGOBOTS_CFLAGS="-I${withval}/include"
     ARGOBOTS_LDFLAGS="-L${withval}/lib"
-    ARGOBOTS_LIBS="-labt"
     CFLAGS="$CFLAGS ${ARGOBOTS_CFLAGS}"
     CXXFLAGS="$CXXFLAGS ${ARGOBOTS_CFLAGS}"
     LDFLAGS="$LDFLAGS ${ARGOBOTS_LDFLAGS}"
   ], [])
 
   AC_CHECK_LIB([abt], [ABT_init],
-    [AC_SUBST(ARGOBOTS_CFLAGS)
+    [ARGOBOTS_LIBS="-labt"
+     AC_SUBST(ARGOBOTS_CFLAGS)
      AC_SUBST(ARGOBOTS_LDFLAGS)
      AC_SUBST(ARGOBOTS_LIBS)
     ],

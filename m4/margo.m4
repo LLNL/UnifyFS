@@ -8,14 +8,14 @@ AC_DEFUN([UNIFYCR_AC_MARGO], [
     [path to installed libmargo [default=/usr/local]])], [
     MARGO_CFLAGS="-I${withval}/include"
     MARGO_LDFLAGS="-L${withval}/lib"
-    MARGO_LIBS="-lmargo"
     CFLAGS="$CFLAGS ${MARGO_CFLAGS}"
     CXXFLAGS="$CXXFLAGS ${MARGO_CFLAGS}"
     LDFLAGS="$LDFLAGS ${MARGO_LDFLAGS}"
   ], [])
 
   AC_CHECK_LIB([margo], [margo_init],
-    [AC_SUBST(MARGO_CFLAGS)
+    [MARGO_LIBS="-lmargo"
+     AC_SUBST(MARGO_CFLAGS)
      AC_SUBST(MARGO_LDFLAGS)
      AC_SUBST(MARGO_LIBS)
     ],
