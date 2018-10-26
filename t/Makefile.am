@@ -36,7 +36,7 @@ test_ldadd = \
 	$(top_builddir)/t/lib/libtap.la \
 	$(top_builddir)/t/lib/libtestutil.la \
 	$(top_builddir)/client/src/libunifycr_gotcha.la \
-        $(MPI_CLDFLAGS)
+        $(MPI_CLDFLAGS) $(FLATBUFFERS_LDFLAGS) $(FLATBUFFERS_LIBS)
 
 test_cppflags = \
 	-I$(top_srcdir) \
