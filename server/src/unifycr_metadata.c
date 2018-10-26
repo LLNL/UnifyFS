@@ -394,10 +394,12 @@ int meta_read_get(int app_id, int client_id,
                    int thrd_id, int dbg_rank, int gfid, long offset, long length,
                    msg_meta_t *del_req_set)
 {
-	int rc;
-	printf("in meta_read_get for app_id: %d, client_id: %d, thrd_id: %d\n", app_id, client_id, thrd_id);
-    //cli_req_t *tmp_cli_req = (cli_req_t *) shm_reqbuf;
-	printf("fid: %d, offset: %d, length: %d\n", gfid, offset, length);
+    /* assume we'll succeed, set to error otherwise */
+    int rc = (int)UNIFYCR_SUCCESS;
+
+    printf("in meta_read_get for app_id: %d, client_id: %d, thrd_id: %d\n", app_id, client_id, thrd_id);
+    printf("fid: %d, offset: %d, length: %d\n", gfid, offset, length);
+
     unifycr_keys[0]->fid = gfid;
     unifycr_keys[0]->offset = offset;
     unifycr_key_lens[0] = sizeof(unifycr_key_t);

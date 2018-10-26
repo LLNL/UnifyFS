@@ -46,8 +46,6 @@ struct timespec shm_wait_tm;
  */
 int rm_read_remote_data(int app_id, int client_id, int gfid, long offset, long length)
 {
-    int rc;
-
     //int app_id = invert_sock_ids[sock_id];
     app_config_t *app_config =
         (app_config_t *)arraylist_get(app_config_list, app_id);
@@ -62,7 +60,7 @@ int rm_read_remote_data(int app_id, int client_id, int gfid, long offset, long l
     pthread_mutex_lock(&thrd_ctrl->thrd_lock);
 
     /* get the locations of all the read requests from the key-value store*/
-    rc = meta_read_get(app_id, client_id, thrd_id, 0, gfid, offset, length,
+    int rc = meta_read_get(app_id, client_id, thrd_id, 0, gfid, offset, length,
                         thrd_ctrl->del_req_set);
 
 	printf("completed meta_batch_get\n");
