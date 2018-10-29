@@ -37,5 +37,4 @@ int attach_to_shm(app_config_t *app_config,
                   int app_id, int sock_id);
 int pack_ack_msg(char *ptr_cmd, int cmd,
                  int rc, void *val, int val_len);
-int unifycr_broadcast_exit(int sock_id);
 #endif
