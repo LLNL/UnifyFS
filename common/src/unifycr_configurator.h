@@ -64,7 +64,8 @@
 /* UNIFYCR_CONFIGS is the list of configuration settings, and should contain
    one macro definition per setting */
 #define UNIFYCR_CONFIGS \
-    UNIFYCR_CFG_CLI(unifycr, configfile, STRING, SYSCONFDIR/unifycr/unifycr.conf, "path to configuration file", configurator_file_check, 'C', "specify full path to config file") \
+    UNIFYCR_CFG_CLI(unifycr, cleanup, BOOL, off, "cleanup storage on server exit", NULL, 'C', "on|off") \
+    UNIFYCR_CFG_CLI(unifycr, configfile, STRING, SYSCONFDIR/unifycr/unifycr.conf, "path to configuration file", configurator_file_check, 'f', "specify full path to config file") \
     UNIFYCR_CFG_CLI(unifycr, consistency, STRING, LAMINATED, "consistency model", NULL, 'c', "specify consistency model (NONE | LAMINATED | POSIX)") \
     UNIFYCR_CFG_CLI(unifycr, daemonize, BOOL, on, "enable server daemonization", NULL, 'D', "on|off") \
     UNIFYCR_CFG_CLI(unifycr, debug, BOOL, off, "enable debug output", NULL, 'd', "on|off") \
