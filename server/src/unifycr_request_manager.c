@@ -53,12 +53,13 @@ int rm_process_fsync(int sock_id)
 {
     int ret = 0;
 
-    unifycr_key_t *unifycr_keys;
-    unifycr_val_t *unifycr_vals;
+    unifycr_key_t **unifycr_keys;
+    unifycr_val_t **unifycr_vals;
     int *unifycr_key_lens;
     int *unifycr_val_lens;
 
-    fattr_key_t *fattr_keys;
+    fattr_key_t **fattr_keys;
+    unifycr_file_attr_t **fattr_vals;
     int *fattr_key_lens;
     int *fattr_val_lens;
 
@@ -83,22 +84,44 @@ int rm_process_fsync(int sock_id)
 
     long i;
 
+    unifycr_keys = (unifycr_key_t **)malloc(MAX_META_PER_SEND
+                                           * sizeof(unifycr_key_t *));
+
+    unifycr_vals = (unifycr_val_t **)malloc(MAX_META_PER_SEND
+                                            * sizeof(unifycr_val_t *));
+
+    for (i = 0; i < MAX_META_PER_SEND; i++) {
+        unifycr_keys[i] = (unifycr_key_t *)malloc(sizeof(unifycr_key_t));
+        if (unifycr_keys[i] == NULL)
+            return (int)UNIFYCR_ERROR_NOMEM;
+        memset(unifycr_keys[i], 0, sizeof(unifycr_key_t));
+    }
+
+    for (i = 0; i < MAX_META_PER_SEND; i++) {
+        unifycr_vals[i] = (unifycr_val_t *)malloc(sizeof(unifycr_val_t));
+        if (unifycr_vals[i] == NULL)
+            return (int)UNIFYCR_ERROR_NOMEM;
+        memset(unifycr_vals[i], 0, sizeof(unifycr_val_t));
+    }
+
     // allocate storage for values
     // TODO: possibly get this from memory pool
-    unifycr_keys = calloc(num_entries, sizeof(unifycr_key_t));
-    unifycr_vals = calloc(num_entries, sizeof(unifycr_val_t));
+    // unifycr_keys = calloc(num_entries, sizeof(unifycr_key_t*));
+    // unifycr_vals = calloc(num_entries, sizeof(unifycr_val_t*));
     unifycr_key_lens = calloc(num_entries, sizeof(int));
     unifycr_val_lens = calloc(num_entries, sizeof(int));
 
     // file extends
     for (i = 0; i < num_entries; i++) {
-        unifycr_keys[i].fid = meta_payload[i].fid;
-        unifycr_keys[i].offset = meta_payload[i].file_pos;
-        unifycr_vals[i].addr = meta_payload[i].mem_pos;
-        unifycr_vals[i].len = meta_payload[i].length;
-        unifycr_vals[i].delegator_id = glb_rank;
-        memcpy((char *) &(unifycr_vals[i].app_rank_id), &app_id, sizeof(int));
-        memcpy((char *) &(unifycr_vals[i].app_rank_id) + sizeof(int),
+        unifycr_keys[i] = malloc(sizeof(unifycr_key_t *));
+        unifycr_vals[i] = malloc(sizeof(unifycr_val_t *));
+        unifycr_keys[i]->fid = meta_payload[i].fid;
+        unifycr_keys[i]->offset = meta_payload[i].file_pos;
+        unifycr_vals[i]->addr = meta_payload[i].mem_pos;
+        unifycr_vals[i]->len = meta_payload[i].length;
+        unifycr_vals[i]->delegator_id = glb_rank;
+        memcpy((char *) &(unifycr_vals[i]->app_rank_id), &app_id, sizeof(int));
+        memcpy((char *) &(unifycr_vals[i]->app_rank_id) + sizeof(int),
                &client_side_id, sizeof(int));
 
         unifycr_key_lens[i] = sizeof(unifycr_key_t);
@@ -127,18 +150,23 @@ int rm_process_fsync(int sock_id)
 
     // allocate storage for values
     // TODO: possibly get this from memory pool
-    fattr_keys = calloc(num_entries, sizeof(unifycr_key_t));
+    fattr_keys = calloc(num_entries,
+                        sizeof(unifycr_key_t *));
+    fattr_vals = calloc(num_entries,
+                        sizeof(unifycr_file_attr_t *));
     fattr_key_lens = calloc(num_entries, sizeof(int));
     fattr_val_lens = calloc(num_entries, sizeof(int));
 
     for (i = 0; i < num_entries; i++) {
-        fattr_keys[i] = attr_payload[i].gfid;
+        fattr_keys[i] = (fattr_key_t *)malloc(sizeof(fattr_key_t));
+        *fattr_keys[i] = attr_payload[i].gfid;
+        fattr_vals[i] = &(attr_payload[i]);
         fattr_key_lens[i] = sizeof(fattr_key_t);
         fattr_val_lens[i] = sizeof(fattr_val_t);
     }
 
     ret = unifycr_set_file_attributes(num_entries, fattr_keys, fattr_key_lens,
-                                      attr_payload, fattr_val_lens);
+                                      fattr_vals, fattr_val_lens);
     if (ret != UNIFYCR_SUCCESS) {
         // TODO: need propper error handling
         return ret;

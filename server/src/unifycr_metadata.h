@@ -169,8 +169,8 @@ int unifycr_set_file_attribute(unifycr_file_attr_t *ptr_attr_val);
  * @param[in] val_lens array with the length of the elements in \p vals
  */
 int unifycr_set_file_attributes(int num_entries,
-                                fattr_key_t *keys, int *key_lens,
-                                unifycr_file_attr_t *vals, int *val_lens);
+                                fattr_key_t **keys, int *key_lens,
+                                unifycr_file_attr_t **vals, int *val_lens);
 
 /**
  * Retrieve a File attribute from the KV-Store.
@@ -192,8 +192,8 @@ int unifycr_get_file_attribute(int gfid,
  * @param[in] val_lens array with the length of the elements in \p vals
  * @return UNIFYCR_SUCCESS on success
  */
-int unifycr_set_file_extents(int num_entries, unifycr_key_t *keys,
-                             int *key_lens, unifycr_val_t *vals,
+int unifycr_set_file_extents(int num_entries, unifycr_key_t **keys,
+                             int *key_lens, unifycr_val_t **vals,
                              int *val_lens);
 
 /**
