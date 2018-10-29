@@ -84,8 +84,8 @@ static char *usage_str =
     "Usage: %s <command> [options...]\n"
     "\n"
     "<command> should be one of the following:\n"
-    "  start       start the unifycr server daemon\n"
-    "  terminate   terminate the unifycr server daemon\n"
+    "  start       start the UnifyCR server daemons\n"
+    "  terminate   terminate the UnifyCR server daemons\n"
     "\n"
     "Common options:\n"
     "  -d, --debug               enable debug output\n"
@@ -94,13 +94,13 @@ static char *usage_str =
     "Command options for \"start\":\n"
     "  -C, --consistency=<model> consistency model (NONE | LAMINATED | POSIX)\n"
     "  -e, --exe=<path>          <path> where unifycrd is installed\n"
-    "  -m, --mount=<path>        mount unifycr at <path>\n"
+    "  -m, --mount=<path>        mount UnifyCR at <path>\n"
     "  -s, --script=<path>       <path> to custom launch script\n"
-    "  -i, --stage-in=<path>     stage in file(s) at <path>\n"
-    "  -o, --stage-out=<path>    stage out file(s) to <path> on termination\n"
+    "  -c, --cleanup             (NOT YET SUPPORTED) clean up the UnifyCR storage upon server exit\n"
+    "  -i, --stage-in=<path>     (NOT YET SUPPORTED) stage in file(s) at <path>\n"
+    "  -o, --stage-out=<path>    (NOT YET SUPPORTED) stage out file(s) to <path> on termination\n"
     "\n"
     "Command options for \"terminate\":\n"
-    "  -c, --cleanup             clean up the unifycr storage on termination\n"
     "  -s, --script=<path>       <path> to custom termination script\n"
     "\n";
 
@@ -128,6 +128,7 @@ static void parse_cmd_arguments(int argc, char **argv)
                              short_opts, long_opts, &optidx)) >= 0) {
         switch (ch) {
         case 'c':
+            printf("WARNING: cleanup not yet supported!\n");
             cleanup = 1;
             break;
 

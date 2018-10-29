@@ -61,7 +61,7 @@ struct _unifycr_args {
     char *server_path;         /* full path to installed unifycrd */
     char *stage_in;            /* data path to stage-in */
     char *stage_out;           /* data path to stage-out (drain) */
-    char *script;              /* path to custom launch/cleanup script */
+    char *script;              /* path to custom launch/terminate script */
 };
 
 typedef struct _unifycr_args unifycr_args_t;

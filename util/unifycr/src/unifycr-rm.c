@@ -53,15 +53,15 @@ typedef int (*unifycr_rm_read_resource_t)(unifycr_resource_t *resource);
 typedef int (*unifycr_rm_launch_t)(unifycr_resource_t *resource,
                                    unifycr_args_t *args);
 
-typedef int (*unifycr_rm_cleanup_t)(unifycr_resource_t *resource,
-                                    unifycr_args_t *args);
+typedef int (*unifycr_rm_terminate_t)(unifycr_resource_t *resource,
+                                      unifycr_args_t *args);
 
 struct _ucr_resource_manager {
     const char *type;
 
     unifycr_rm_read_resource_t read_resource;
     unifycr_rm_launch_t launch;
-    unifycr_rm_cleanup_t cleanup;
+    unifycr_rm_terminate_t terminate;
 };
 
 typedef struct _ucr_resource_manager _ucr_resource_manager_t;
@@ -342,6 +342,12 @@ static size_t construct_server_argv(unifycr_args_t *args,
         argc += 3;
     }
 
+    if (args->cleanup) {
+        if (server_argv != NULL)
+            server_argv[argc] = strdup("-C");
+        argc++;
+    }
+
     if (args->consistency != UNIFYCR_CM_LAMINATED) {
         if (server_argv != NULL) {
             server_argv[argc] = strdup("-c");
@@ -377,15 +383,15 @@ static int invalid_launch(unifycr_resource_t *resource,
 }
 
 /**
- * @brief Default server cleanup routine
+ * @brief Default server terminate routine
  *
  * @param resource  Not used
  * @param args      Not used
  *
  * @return -ENOSYS
  */
-static int invalid_cleanup(unifycr_resource_t *resource,
-                           unifycr_args_t *args)
+static int invalid_terminate(unifycr_resource_t *resource,
+                             unifycr_args_t *args)
 {
     return -ENOSYS;
 }
@@ -438,8 +444,8 @@ static int jsrun_launch(unifycr_resource_t *resource,
  *
  * @return
  */
-static int jsrun_cleanup(unifycr_resource_t *resource,
-                         unifycr_args_t *args)
+static int jsrun_terminate(unifycr_resource_t *resource,
+                           unifycr_args_t *args)
 {
     size_t argc, jsrun_argc;
     char **argv = NULL;
@@ -514,8 +520,8 @@ static int mpirun_launch(unifycr_resource_t *resource,
  *
  * @return
  */
-static int mpirun_cleanup(unifycr_resource_t *resource,
-                          unifycr_args_t *args)
+static int mpirun_terminate(unifycr_resource_t *resource,
+                            unifycr_args_t *args)
 {
     size_t argc, mpirun_argc;
     char **argv = NULL;
@@ -587,8 +593,8 @@ static int srun_launch(unifycr_resource_t *resource,
  *
  * @return
  */
-static int srun_cleanup(unifycr_resource_t *resource,
-                        unifycr_args_t *args)
+static int srun_terminate(unifycr_resource_t *resource,
+                          unifycr_args_t *args)
 {
     size_t argc, srun_argc;
     char **argv = NULL;
@@ -656,8 +662,8 @@ static int script_launch(unifycr_resource_t *resource,
  *
  * @return
  */
-static int script_cleanup(unifycr_resource_t *resource,
-                          unifycr_args_t *args)
+static int script_terminate(unifycr_resource_t *resource,
+                            unifycr_args_t *args)
 {
     size_t argc, script_argc;
     char **argv = NULL;
@@ -676,7 +682,7 @@ static int script_cleanup(unifycr_resource_t *resource,
     argv[3] = strdup("unifycrd");
 
     execvp(argv[0], argv);
-    perror("failed to execvp() custom cleanup script");
+    perror("failed to execvp() custom terminate script");
     return -errno;
 }
 
@@ -684,11 +690,11 @@ static int script_cleanup(unifycr_resource_t *resource,
  * match the definition in common/src/rm_enumerator.h
  */
 static _ucr_resource_manager_t resource_managers[] = {
-    { "none", &invalid_read_resource, &invalid_launch, &invalid_cleanup },
-    { "pbs", &pbs_read_resource, &mpirun_launch, &mpirun_cleanup },
-    { "slurm", &slurm_read_resource, &srun_launch, &srun_cleanup },
-    { "lsf", &lsf_read_resource, &mpirun_launch, &mpirun_cleanup },
-    { "lsfcsm", &lsf_read_resource, &jsrun_launch, &jsrun_cleanup },
+    { "none", &invalid_read_resource, &invalid_launch, &invalid_terminate },
+    { "pbs", &pbs_read_resource, &mpirun_launch, &mpirun_terminate },
+    { "slurm", &slurm_read_resource, &srun_launch, &srun_terminate },
+    { "lsf", &lsf_read_resource, &mpirun_launch, &mpirun_terminate },
+    { "lsfcsm", &lsf_read_resource, &jsrun_launch, &jsrun_terminate },
 };
 
 int unifycr_detect_resources(unifycr_resource_t *resource)
@@ -729,7 +735,7 @@ int unifycr_stop_servers(unifycr_resource_t *resource,
         return -EINVAL;
 
     if (args->script != NULL)
-        return script_cleanup(resource, args);
+        return script_terminate(resource, args);
     else
-        return resource_managers[resource->rm].cleanup(resource, args);
+        return resource_managers[resource->rm].terminate(resource, args);
 }
