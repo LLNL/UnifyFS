@@ -78,6 +78,22 @@ char* concat(const char *s1, const char *s2)
 }
 */
 
+/* publishes server RPC address to a place where clients can find it */
+static void addr_publish_server_rpc(const char* addr)
+{
+    /* TODO: support other publish modes like PMIX */
+
+    /* write server address to /dev/shm/ for client on node to
+     * read from */
+    FILE *fp = fopen("/dev/shm/svr_id", "w+");
+    if (fp != NULL) {
+        fprintf(fp, addr);
+        fclose(fp);
+    } else {
+        fprintf(stderr, "Error writing server rpc addr to file `/dev/shm/svr_id'\n");
+    }
+}
+
 /* find_address - Resolves a name string to an address structure.
  *
  */
@@ -110,14 +126,11 @@ static int find_address(hg_class_t* hg_class,
     //add to address string here
     addr_string = strcpy(addr_string, addr_self_string);
 
-    /* write server address to /dev/shm/ for client on node to
-     * read from */
-    FILE *fp;
-    fp = fopen("/dev/shm/svr_id", "w+");
-    fprintf(fp, addr_string);
-    fclose(fp);
     printf("addr string:%s\n", addr_string);
-    //addr_string.append(addr_self_string);
+
+    /* publish rpc address of server for local clients */
+    addr_publish_server_rpc(addr_self_string);
+
     return 0;
 }
 
@@ -188,12 +201,8 @@ static margo_instance_id setup_sm_target()
 
     printf("# accepting RPCs on address \"%s\"\n", addr_self_string);
 
-    /* write server address to /dev/shm/ for client on node to
-     * read from */
-    FILE *fp;
-    fp = fopen("/dev/shm/svr_id", "w+");
-    fprintf(fp, addr_self_string);
-    fclose(fp);
+    /* publish rpc address of server for local clients */
+    addr_publish_server_rpc(addr_self_string);
 
         //margo_instance_id mid = margo_init_pool(*progress_pool, handler_pool,
         //                                    hg_context);
@@ -554,10 +563,8 @@ int main(int argc, char *argv[])
     LOG(LOG_DBG, "finished service initialization");
 
     MPI_Barrier(MPI_COMM_WORLD);
-	int cnt = 0;
-    while ( cnt < 2) {
+    while (1) {
         rc = sock_wait_cli_cmd();
-		cnt++;
 /*
         if (rc != ULFS_SUCCESS) {
             int ret = sock_handle_error(rc);
@@ -581,7 +588,6 @@ int main(int argc, char *argv[])
             }
         }
 */
-
     }
 
     margo_wait_for_finalize(mid);
@@ -878,5 +884,4 @@ static int unifycr_exit()
      * for acks*/
     sock_sanitize();
     return rc;
-
 }

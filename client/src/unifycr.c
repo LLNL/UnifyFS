@@ -649,60 +649,6 @@ static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,
 
 }
 
-
-#if 0
-/*
- * send global file metadata to the delegator,
- * which puts it to the key-value store
- * @param gfid: global file id
- * @return: error code
- */
-static int set_global_file_meta(unifycr_file_attr_t *file_meta)
-{
-    int rc = 0;
-    ssize_t nbytes = 0;
-    int cmd = COMM_META_SET;
-    int *response = NULL;
-
-    if (!file_meta)
-        return -EINVAL;
-
-    memset(cmd_buf, 0, sizeof(cmd_buf));
-    memcpy(cmd_buf, &cmd, sizeof(int));
-    memcpy(cmd_buf + sizeof(int), file_meta, sizeof(*file_meta));
-
-    nbytes = __real_write(client_sockfd, cmd_buf, sizeof(cmd_buf));
-    if (nbytes <= 0)
-        return -errno;
-
-    nbytes = 0;
-    cmd_fd.events = POLLIN | POLLPRI;
-    cmd_fd.revents = 0;
-
-    /*
-     * hsim: potentially giving -1 (unlimited) timeout may hang the program.
-     */
-    rc = poll(&cmd_fd, 1, -1);
-    if (rc <= 0) /* timeout or error, both are fail cases for us */
-        return -EIO;
-
-    /* FIXME: how do we have to report back this case? */
-    if (cmd_fd.revents != POLLIN)
-        return -EIO;
-
-    nbytes = __real_read(client_sockfd, cmd_buf, sizeof(cmd_buf));
-    if (nbytes == 0)
-        return -errno;  /*remote connection is closed*/
-
-    response = (int *) cmd_buf;
-
-    if (response[0] != COMM_META_SET || response[1] != ACK_SUCCESS)
-        return -EIO;
-
-    return UNIFYCR_SUCCESS;
-}
-#endif
-
 int unifycr_set_global_file_meta(const char *path, int fid, int gfid,
                                  struct stat *sb)
 {
@@ -2269,69 +2215,6 @@ static int unifycr_init_req_shm(int local_rank_idx, int app_id)
     return 0;
 }
 
-/**
- * get the number of delegators on the
- * same node from the first delegator
- * on the server side
- */
-static int get_pel_cnt(void)
-{
-    int cmd = COMM_SYNC_DEL;
-    int res;
-    int *response = NULL;
-
-    memset(cmd_buf, 0, sizeof(cmd_buf));
-    memcpy(cmd_buf, &cmd, sizeof(int));
-    res = __real_write(client_sockfd, cmd_buf, sizeof(cmd_buf));
-
-    if (res != 0) {
-        int bytes_read = 0;
-        int rc = -1;
-
-        cmd_fd.events = POLLIN | POLLPRI;
-        cmd_fd.revents = 0;
-
-        rc = poll(&cmd_fd, 1, -1);
-        if (rc == 0) {
-            /* encounter timeout*/
-            return -1;
-        } else {
-            if (rc > 0) {
-                if (cmd_fd.revents != 0) {
-                    if (cmd_fd.revents == POLLIN) {
-                        bytes_read = __real_read(client_sockfd, cmd_buf,
-                                                 sizeof(cmd_buf));
-
-                        response = (int *) cmd_buf;
-
-                        if (bytes_read == 0)
-                            return -1;
-
-                        if (response[0] != COMM_SYNC_DEL ||
-                            response[1] != ACK_SUCCESS)
-                            return rc;
-                    } else {
-                        /*encounter connection error*/
-                        return -1;
-                    }
-                } else {
-                    /*file descriptor is negative*/
-                    return -1;
-                }
-            } else {
-                /* encounter error*/
-                return -1;
-            }
-        }
-    } else {
-        /*write error*/
-        return -1;
-    }
-
-    return *(int *)(cmd_buf + 2 * sizeof(int));
-
-}
-
 /* unifycr_init_rpc is replacing unifycr_init_socket */
 static int unifycr_client_rpc_init(char* svr_addr_str,
                             unifycr_client_rpc_context_t** unifycr_rpc_context)
@@ -2347,30 +2230,6 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
     for(i = 0; i < 11 && svr_addr_str[i] != '\0' && svr_addr_str[i] != ':'; i++)
         proto[i] = svr_addr_str[i];
 
-#if 0
-    /* initialize mercury using transport protocol */
-    (*unifycr_rpc_context)->hg_class = HG_Init(proto, HG_FALSE);
-    if (!(*unifycr_rpc_context)->hg_class) {
-        fprintf(stderr, "Error: HG_Init()\n");
-        return UNIFYCR_FAILURE;
-    }
-
-    /* store results of initialization in (*unifycr_rpc_context) */
-    (*unifycr_rpc_context)->hg_context =
-        HG_Context_create((*unifycr_rpc_context)->hg_class);
-    if (!((*unifycr_rpc_context)->hg_context)) {
-        fprintf(stderr, "Error: HG_Context_create()\n");
-        HG_Finalize((*unifycr_rpc_context)->hg_class);
-        return UNIFYCR_FAILURE;
-    }
-
-    /* initialize argobots to track mercury progress */
-    int ret = ABT_init(1, NULL);
-    if (ret != 0) {
-        fprintf(stderr, "Error: ABT_init()\n");
-        return UNIFYCR_FAILURE;
-    }
-#endif
     /* initialize margo */
     printf("svr_addr_str:%s\n", svr_addr_str);
     (*unifycr_rpc_context)->mid = margo_init(proto, MARGO_CLIENT_MODE,
@@ -2378,29 +2237,6 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
     assert((*unifycr_rpc_context)->mid);
     margo_diag_start((*unifycr_rpc_context)->mid);
 
-#if 0
-    /* set primary ES to idle without polling */
-    ret = ABT_snoozer_xstream_self_set();
-    if (ret != 0) {
-        fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
-        return UNIFYCR_FAILURE;
-    }
-    /* retrive current pool to use for ULT creation */
-    ABT_xstream xstream;
-    int ret = ABT_xstream_self(&xstream);
-    if (ret != 0) {
-        fprintf(stderr, "Error: ABT_xstream_self()\n");
-        return UNIFYCR_FAILURE;
-    }
-
-    ABT_pool pool;
-    ret = ABT_xstream_get_main_pools(xstream, 1, &pool);
-    if (ret != 0) {
-        fprintf(stderr, "Error: ABT_xstream_get_main_pools()\n");
-        return UNIFYCR_FAILURE;
-    }
-
-#endif
     /* register read rpc with mercury */
     (*unifycr_rpc_context)->unifycr_read_rpc_id =
         MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_read_rpc",
@@ -2428,7 +2264,7 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
                        unifycr_fsync_in_t, unifycr_fsync_out_t,
                        NULL);
 
-	(*unifycr_rpc_context)->unifycr_read_rpc_id =
+    (*unifycr_rpc_context)->unifycr_read_rpc_id =
         MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_read_rpc",
                        unifycr_read_in_t,
                        unifycr_read_out_t,
@@ -2498,6 +2334,7 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
         nprocs_per_del = l_num_procs_per_node / l_num_del_per_node;
         if ((l_num_procs_per_node % l_num_del_per_node) != 0)
             nprocs_per_del++;
+
         snprintf(tmp_path, sizeof(tmp_path), "%s%d",
                  SOCKET_PATH, proc_id / nprocs_per_del);
     }
@@ -2509,7 +2346,7 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
     /* exit with error if connection is not successful */
     if (result == -1) {
         rc = -1;
-		printf("socket connect failed\n");
+        printf("socket connect failed\n");
         return rc;
     }
 
@@ -2762,6 +2599,33 @@ static int CountTasksPerNode(int rank, int numTasks)
     return 0;
 }
 
+/* returns server rpc address in newly allocated string
+ * to be freed by caller, returns NULL if not found */
+static char* addr_lookup_server_rpc()
+{
+    /* returns NULL if we can't find server address */
+    char* str = NULL;
+
+    /* TODO: support other lookup methods here like PMIX */
+
+    /* read server address string from well-known file name in ramdisk */
+    FILE *fp = fopen("/dev/shm/svr_id", "r");
+    if (fp != NULL) {
+        /* opened the file, now read the address string */
+        char addr_string[50];
+        int rc = fscanf(fp, "%s", addr_string);
+        if (rc == 1) {
+            /* read the server address, dup a copy of it */
+            str = strdup(addr_string);
+        }
+        fclose(fp);
+    }
+
+    if (str != NULL) {
+        printf("rpc address: %s\n", str);
+    }
+    return str;
+}
 
 /* mount memfs at some prefix location */
 int unifycrfs_mount(const char prefix[], size_t size, int rank)
@@ -2788,12 +2652,6 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
         if ((rc == 0) && b)
             unifycr_use_single_shm = 1;
     }
-#if 0 // OLD WAY
-    if (unifycr_use_single_shm)
-        unifycr_mount_shmget_key = UNIFYCR_SUPERBLOCK_KEY + rank;
-    else
-        unifycr_mount_shmget_key = IPC_PRIVATE;
-#endif
 
     // note: the following call initializes local_rank_{lst,cnt}
     rc = CountTasksPerNode(rank, size);
@@ -2810,14 +2668,9 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     if (ret != UNIFYCR_SUCCESS)
         return ret;
 
-    FILE *fp;
-    char addr_string[50];
-    fp = fopen("/dev/shm/svr_id","r");
-    fscanf(fp, "%s", addr_string);
-	printf("rpc address: %s\n", addr_string);
-    fclose(fp);
-
+    char* addr_string = addr_lookup_server_rpc();
     unifycr_client_rpc_init(addr_string, &unifycr_rpc_context);
+    free(addr_string);
 
     //TODO: call client rpc function here (which calls unifycr_sync_to_del
     printf("calling mount\n");
@@ -2830,7 +2683,7 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
         return UNIFYCR_FAILURE;
     }
 
-	rc = unifycr_init_req_shm(local_rank_idx, app_id);
+    rc = unifycr_init_req_shm(local_rank_idx, app_id);
     if (rc < 0) {
       printf("rank:%d, fail to init shared request memory.", dbg_rank);
       return UNIFYCR_FAILURE;
@@ -2846,7 +2699,7 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     /* add mount point as a new directory in the file list */
     if (unifycr_get_fid_from_path(prefix) >= 0) {
         /* we can't mount this location, because it already exists */
-		printf("we can't mount this location, because it already exists\n");
+        printf("we can't mount this location, because it already exists\n");
         errno = EEXIST;
         return -1;
     } else {
@@ -2855,7 +2708,7 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
 
         if (fid < 0) {
             /* if there was an error, return it */
-			printf("fid < 0\n");
+            printf("fid < 0\n");
             return fid;
         }
     }
