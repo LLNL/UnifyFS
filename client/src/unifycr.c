@@ -2039,6 +2039,7 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
  */
 int unifycr_unmount(void)
 {
+#if 0
     int cmd = COMM_UNMOUNT;
     int bytes_read = 0;
     int rc;
@@ -2067,6 +2068,7 @@ int unifycr_unmount(void)
             response[0] != COMM_UNMOUNT || response[1] != ACK_SUCCESS)
             return UNIFYCR_FAILURE;
     }
+#endif
 
     return UNIFYCR_SUCCESS;
 }

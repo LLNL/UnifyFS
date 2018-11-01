@@ -1384,6 +1384,128 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
 
 }
 
+/* notify our delegator that the shared memory buffer
+ * is now clear and ready to hold more read data */
+static int delegator_signal()
+{
+    int rc = UNIFYCR_SUCCESS;
+
+    /* set shm flag to 0 to signal delegator we're done */
+    volatile int *ptr_flag = (volatile int *)shm_recvbuf;
+    *ptr_flag = 0;
+
+    /* TODO: MEM_FLUSH */
+
+    return rc;
+}
+
+/* wait for delegator to inform us that shared memory buffer
+ * is filled with read data */
+static int delegator_wait()
+{
+#if 0
+    /* wait for signal on socket */
+    cmd_fd.events = POLLIN|POLLPRI;
+    cmd_fd.revents = 0;
+    rc = poll(&cmd_fd, 1, -1);
+
+   /* check that we got something good */
+    if (rc == 0) {
+        if (cmd_fd.revents != 0) {
+            if (cmd_fd.revents == POLLIN) {
+                return UNIFYCR_SUCCESS;
+            } else {
+                printf("poll returned %d; error: %s\n", rc,  strerror(errno));
+            }
+        } else {
+            printf("poll returned %d; error: %s\n", rc,  strerror(errno));
+        }
+    } else {
+        printf("poll returned %d; error: %s\n", rc,  strerror(errno));
+    }
+#endif
+
+    /* specify time to sleep between checking flag in shared
+     * memory indicating server has produced */
+    struct timespec shm_wait_tm;
+    shm_wait_tm.tv_sec  = 0;
+    shm_wait_tm.tv_nsec = SHM_WAIT_INTERVAL;
+
+    /* get pointer to flag in shared memory */
+    volatile int *ptr_flag = (volatile int *)shm_recvbuf;
+
+    /* TODO: MEM_FETCH */
+
+    /* wait for server to set flag to non-zero */
+    while (*ptr_flag == 0) {
+        /* not there yet, sleep for a while */
+        nanosleep(&shm_wait_tm, NULL);
+        /* TODO: MEM_FETCH */
+    }
+
+    return UNIFYCR_FAILURE;
+}
+
+/* copy read data from shared memory buffer to user buffers from read
+ * calls, sets done=1 on return when delegator informs us it has no
+ * more data */
+static int process_read_data(read_req_t *read_req, int count, int *done)
+{
+    /* assume we'll succeed */
+    int rc = UNIFYCR_SUCCESS;
+
+    /* get pointer to start of shared memory buffer */
+    char *shmptr = (char *)shm_recvbuf;
+
+    /* extract pointer to flag */
+    int *ptr_flag = (int *)shmptr;
+    shmptr += sizeof(int);
+
+    /* extract pointer to size */
+    int *ptr_size = (int *)shmptr;
+    shmptr += sizeof(int);
+
+    /* extract number of read replies in buffer */
+    int *ptr_num = (int *)shmptr;
+    shmptr += sizeof(int);
+    int num = *ptr_num;
+
+    /* process each of our replies */
+    int j;
+    for (j = 0; j < num; j++) {
+        /* get pointer to current read reply header */
+        shm_meta_t *msg = (shm_meta_t *)shmptr;
+        shmptr += sizeof(shm_meta_t);
+
+        /* define request object */
+        read_req_t req;
+        req.fid    = msg->src_fid;
+        req.offset = msg->offset;
+        req.length = msg->length;
+
+        /* get pointer to data */
+        req.buf = shmptr;
+        shmptr += msg->length;
+
+        /* process this read reply */
+        int tmp_rc = unifycr_match_received_ack(read_req, count, &req);
+        if (tmp_rc != UNIFYCR_SUCCESS) {
+            rc = UNIFYCR_FAILURE;
+        }
+    }
+
+    /* set done flag if there is no more data */
+    if (*ptr_flag == 2) {
+        *done = 1;
+    };
+
+    /* zero out size and count in recv buffer */
+    *ptr_size = 0;
+    *ptr_num  = 0;
+
+    return rc;
+}
+
 /*
  * get data for a list of read requests from the
  * delegator
@@ -1440,6 +1562,9 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
    *((int *)shm_recvbuf + 1) = 0;
 */
 
+    /* prepare our shared memory buffer for delegator */
+    delegator_signal();
+
     if (read_req_set.count > 1) {
         flatcc_builder_t builder;
         flatcc_builder_init(&builder);
@@ -1490,58 +1615,18 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
         read_req_set.read_reqs[0].length);
     }
 	
-	  /*
+    /*
      * ToDo: Exception handling when some of the requests
-     *      * are missed
-     *           * */
-    while(tot_sz > 0) {
-        cmd_fd.events = POLLIN|POLLPRI;
-        cmd_fd.revents = 0;
+     * are missed
+     * */
 
-        //rc = poll(&cmd_fd, 1, -1);
-        rc = sleep(2);
-        if (rc == 0) {
-            read_req_t tmp_read_req;
-            shm_meta_t *tmp_req;
-
-            if (cmd_fd.revents != 0) {
-                if (cmd_fd.revents == POLLIN) {
-                    int sh_cursor = 0;
-                    //__real_read(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
-                    ptr_size = (int *)shm_recvbuf;
-                    num = *((int *)shm_recvbuf + 1); /*The first int spared out for size*/
-                    ptr_num = (int *)((char *)shm_recvbuf + sizeof(int));
-
-                    int j;
-                    for (j = 0; j < num; j++) {
-                        tmp_req = (shm_meta_t *)(shm_recvbuf 
-                                   + 2*sizeof(int) + sh_cursor);
-
-                        sh_cursor += sizeof(shm_meta_t);
-                        *ptr_size -= sizeof(shm_meta_t);
-
-                        tmp_read_req.fid = tmp_req->src_fid;
-                        tmp_read_req.offset = tmp_req->offset;
-                        tmp_read_req.length = tmp_req->length;
-                        tmp_read_req.buf = shm_recvbuf  + 2 * sizeof(int)+ sh_cursor;
-
-                        rc = unifycr_match_received_ack(read_req, count, &tmp_read_req);
-                        if (rc == 0) {
-                            sh_cursor += tmp_req->length;
-                            tot_sz -= tmp_req->length;
-                            *ptr_size -= tmp_req->length;
-                            (*ptr_num)--;
-                        } else {
-                            rc = -1;
-                            return rc;
-                        }
-                    }
-                }
-            }
-        } else {
-            printf("poll returned %d; error: %s\n", rc,  strerror(errno));
-		}
+    int done = 0;
+    while (! done) {
+        delegator_wait();
+        process_read_data(read_req, count, &done);
+        delegator_signal();
     }
+
     return rc;
 }
 
