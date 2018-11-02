@@ -1043,170 +1043,207 @@ int UNIFYCR_WRAP(lio_listio)(int mode, struct aiocb *const aiocb_list[],
     return ret;
 }
 
+/* order by file id then by file position */
 int compare_index_entry(const void *a, const void *b)
 {
     const unifycr_index_t *ptr_a = a;
     const unifycr_index_t *ptr_b = b;
 
-    if (ptr_a->fid - ptr_b->fid > 0)
+    if (ptr_a->fid > ptr_b->fid)
         return 1;
 
-    if (ptr_a->fid - ptr_b->fid < 0)
+    if (ptr_a->fid < ptr_b->fid)
         return -1;
 
-    if (ptr_a->file_pos - ptr_b->file_pos > 0)
+    if (ptr_a->file_pos > ptr_b->file_pos)
         return 1;
 
-    if (ptr_a->file_pos - ptr_b->file_pos < 0)
+    if (ptr_a->file_pos < ptr_b->file_pos)
         return -1;
 
     return 0;
 }
 
+/* order by file id then by offset */
 int compare_read_req(const void *a, const void *b)
 {
     const read_req_t *ptr_a = a;
     const read_req_t *ptr_b = b;
 
-    if (ptr_a->fid - ptr_b->fid > 0)
+    if (ptr_a->fid > ptr_b->fid)
         return 1;
 
-    if (ptr_a->fid - ptr_b->fid < 0)
+    if (ptr_a->fid < ptr_b->fid)
         return -1;
 
-    if (ptr_a->offset - ptr_b->offset > 0)
+    if (ptr_a->offset > ptr_b->offset)
         return 1;
 
-    if (ptr_a->offset - ptr_b->offset < 0)
+    if (ptr_a->offset < ptr_b->offset)
         return -1;
 
     return 0;
 }
 
+/* returns index into read_req of item whose offset is
+ * just below offset of target item (if one exists) */
 int unifycr_locate_req(read_req_t *read_req, int count,
                        read_req_t *match_req)
 {
+    /* if list is empty, indicate that there is valid starting request */
     if (count == 0) {
         return -1;
     }
 
+    /* if we only have one item, return its index */
     if (count == 1) {
         return 0;
     }
 
+    /* if we have two items, return index to item that must come before */
     if (count == 2) {
         if (compare_read_req(match_req, &read_req[1]) < 0) {
+            /* second item is clearly bigger, so try first */
             return 0;
         }
 
+        /* second item is less than or equal to target */
         return 1;
     }
 
-    int left = 0;
-    int right = count - 1;
-    int mid = (left + right) / 2;
+    /* execute binary search comparing target to list of requests */
 
+    int left  = 0;
+    int right = count - 1;
+    int mid   = (left + right) / 2;
+
+    /* iterate until we find an exact match or have cut the list
+     * to just two items */
     int found = 0;
     while (left + 1 < right) {
+        /* bail out if we find an exact match */
         if (compare_read_req(match_req, &read_req[mid]) == 0) {
+            /* found exact match */
             found = 1;
             break;
         }
 
+        /* if target if bigger than mid, set left bound to mid */
         if (compare_read_req(match_req, &read_req[mid]) > 0) {
             left = mid;
         }
 
+        /* if target is smaller than mid, set right bounds to mid */
         if (compare_read_req(match_req, &read_req[mid]) < 0) {
             right = mid;
         }
 
+        /* update middle index */
         mid = (left + right) / 2;
-
     }
 
+    /* return index of exact match if found one */
     if (found == 1) {
         return mid;
     }
 
+    /* got two items, let's pick one */
     if (compare_read_req(match_req, &read_req[left]) < 0) {
+        /* target is smaller than left item,
+         * return index to left of left item if we can */
         if (left == 0) {
+            /* at left most item, so return this index */
             return 0;
         }
         return left - 1;
     } else {
         if (compare_read_req(match_req, &read_req[right]) < 0) {
+            /* target is smaller than right item,
+             * return index of item one less than right */
             return right - 1;
         } else {
+            /* target is greater or equal to right item */
             return right;
         }
     }
-
 }
 
 /*
- * given an read request, split it into multiple indices whose range is equal or smaller
- * than slice_range size
+ * given an read request, split it into multiple indices whose range
+ * is equal or smaller than slice_range size
  * @param cur_read_req: the read request to split
  * @param slice_range: the slice size of the key-value store
- * @return read_req_set: the set of split read requests
+ * @return out_set: the set of split read requests
  * */
-int unifycr_split_read_requests(read_req_t *cur_read_req,
-                                read_req_set_t *read_req_set,
+int unifycr_split_read_requests(read_req_t *req,
+                                read_req_set_t *out_set,
                                 long slice_range)
 {
-    long cur_read_start = cur_read_req->offset;
-    long cur_read_end = cur_read_req->offset + cur_read_req->length - 1;
+    /* compute offset of first and last byte in request */
+    long req_start = req->offset;
+    long req_end   = req->offset + req->length - 1;
 
-    long cur_slice_start = cur_read_req->offset / slice_range * slice_range;
-    long cur_slice_end = cur_slice_start + slice_range - 1;
+    /* compute offset of first and lasy byte of slice
+     * that contains first byte of request */
+    long slice_start = (req->offset / slice_range) * slice_range;
+    long slice_end   = slice_start + slice_range - 1;
 
-    read_req_set->count = 0;
+    /* initialize request count in output set */
+    int count = 0;
 
-    if (cur_read_end <= cur_slice_end) {
-        /*
-        cur_slice_start                                  cur_slice_end
-                         cur_read_start     cur_read_end
-
-        */
-        read_req_set->read_reqs[read_req_set->count]
-            = *cur_read_req;
-        read_req_set->count++;
+    if (req_end <= slice_end) {
+        /* slice fully contains request
+         * 
+         * slice_start                         slice_end
+         *                req_start     req_end
+         *
+         */
+        out_set->read_reqs[count] = *req;
+        count++;
     } else {
-        /*
-        cur_slice_start                     cur_slice_endnext_slice_start                   next_slice_end
-                         cur_read_start                                     cur_read_end
+        /* read request spans multiple slices
+         * 
+         * slice_start       slice_end  next_slice_start      next_slice_end
+         *           req_start                          req_end
+         *
+         */
 
-        */
-        read_req_set->read_reqs[read_req_set->count] = *cur_read_req;
-        read_req_set->read_reqs[read_req_set->count].length =
-            cur_slice_end - cur_read_start + 1;
-        read_req_set->count++;
+        /* account for leading bytes in read request in first slice */
+        out_set->read_reqs[count] = *req;
+        out_set->read_reqs[count].length = slice_end - req_start + 1;
+        count++;
 
-        cur_slice_start = cur_slice_end + 1;
-        cur_slice_end = cur_slice_start + slice_range - 1;
+        /* advance to next slice */
+        slice_start = slice_end + 1;
+        slice_end   = slice_start + slice_range - 1;
 
+        /* account for all middle slices */
         while (1) {
-            if (cur_read_end <= cur_slice_end) {
+            if (req_end <= slice_end) {
+                /* found the slice that contains end byte in read request */
                 break;
             }
 
-            read_req_set->read_reqs[read_req_set->count].fid = cur_read_req->fid;
-            read_req_set->read_reqs[read_req_set->count].offset = cur_slice_start;
-            read_req_set->read_reqs[read_req_set->count].length = slice_range;
+            /* full slice is contained in read request */
+            out_set->read_reqs[count].fid    = req->fid;
+            out_set->read_reqs[count].offset = slice_start;
+            out_set->read_reqs[count].length = slice_range;
+            count++;
 
-            cur_slice_start = cur_slice_end + 1;
-            cur_slice_end = cur_slice_start + slice_range - 1;
-            read_req_set->count++;
-
+            /* advance to next slice */
+            slice_start = slice_end + 1;
+            slice_end   = slice_start + slice_range - 1;
         }
 
-        read_req_set->read_reqs[read_req_set->count].fid = cur_read_req->fid;
-        read_req_set->read_reqs[read_req_set->count].offset = cur_slice_start;
-        read_req_set->read_reqs[read_req_set->count].length =
-            cur_read_end - cur_slice_start + 1;
-        read_req_set->count++;
+        /* account for bytes in final slice */
+        out_set->read_reqs[count].fid    = req->fid;
+        out_set->read_reqs[count].offset = slice_start;
+        out_set->read_reqs[count].length = req_end - slice_start + 1;
+        count++;
     }
+
+    /* set size of output set */
+    out_set->count = count;
 
     return 0;
 }
@@ -1218,54 +1255,64 @@ int unifycr_split_read_requests(read_req_t *cur_read_req,
  * than unifycr_key_slice range
  * @param read_req: a list of read requests
  * @param count: number of read requests
- * @param tmp_read_req_set: a temporary read requests buffer
+ * @param tmp_set: a temporary read requests buffer
  * to hold the intermediate result
  * @param unifycr_key_slice_range: slice size of distributed
  * key-value store
- * @return read_req_set: the coalesced read requests
+ * @return out_set: the coalesced read requests
  *
  * */
 int unifycr_coalesce_read_reqs(read_req_t *read_req, int count,
-                               read_req_set_t *tmp_read_req_set, long unifycr_key_slice_range,
-                               read_req_set_t *read_req_set)
+                               read_req_set_t *tmp_set, long slice_range,
+                               read_req_set_t *out_set)
 {
+    /* initialize output and temporary sets */
+    out_set->count = 0;
+    tmp_set->count = 0;
 
-    read_req_set->count = 0;
-    tmp_read_req_set->count = 0;
-
-    int cursor = 0;
-    int i, j;
+    int i;
+    int out_idx = 0;
     for (i = 0; i < count; i++) {
-        j = 0;
-        unifycr_split_read_requests(&read_req[i], tmp_read_req_set,
-                                    unifycr_key_slice_range);
-        if (cursor != 0) {
-            if (read_req_set->read_reqs[cursor - 1].fid
-                == tmp_read_req_set->read_reqs[0].fid) {
-                if (read_req_set->read_reqs[cursor - 1].offset
-                    + read_req_set->read_reqs[cursor - 1].length ==
-                    tmp_read_req_set->read_reqs[0].offset) {
-                    /*
-                     * if not within the same slice, then don't coalesce
-                     *
-                     * */
-                    if (read_req_set->read_reqs[cursor - 1].offset / unifycr_key_slice_range ==
-                        tmp_read_req_set->read_reqs[0].offset / unifycr_key_slice_range) {
-                        read_req_set->read_reqs[cursor - 1].length
-                        += tmp_read_req_set->read_reqs[0].length;
-                        j++;
-                    }
+        /* index into temp set */
+        int tmp_idx = 0;
 
+        /* split this read request into parts based on slice range
+         * store resulting requests in tmp_set */
+        unifycr_split_read_requests(&read_req[i], tmp_set, slice_range);
+
+        /* look to merge last item in output set with first item
+         * in split requests */
+        if (out_idx > 0) {
+            /* get pointer to last item in out_set */
+            read_req_t *out_req = &(out_set->read_reqs[out_idx - 1]);
+
+            /* get pointer to first item in tmp_set */
+            read_req_t *tmp_req = &(tmp_set->read_reqs[0]);
+
+            /* look to merge these items if they are contiguous */
+            if (out_req->fid == tmp_req->fid &&
+                out_req->offset + out_req->length == tmp_req->offset)
+            {
+                /* refers to contiguous range in the same file,
+                 * coalesce if in the same slice */
+                uint64_t cur_slice = out_req->offset / slice_range;
+                uint64_t tmp_slice = tmp_req->offset / slice_range;
+                if (cur_slice == tmp_slice) {
+                    /* just increase length to merge */
+                    out_req->length += tmp_req->length;
+
+                    /* bump offset into tmp set array */
+                    tmp_idx++;
                 }
             }
         }
 
-        for (; j < tmp_read_req_set->count; j++) {
-            read_req_set->read_reqs[cursor] = tmp_read_req_set->read_reqs[j];
-            read_req_set->count++;
-            cursor++;
+        /* tack on remaining items from tmp set into output set */
+        for (; tmp_idx < tmp_set->count; tmp_idx++) {
+            out_set->read_reqs[out_idx] = tmp_set->read_reqs[tmp_idx];
+            out_set->count++;
+            out_idx++;
         }
-
     }
 
     return 0;
@@ -1280,108 +1327,139 @@ int unifycr_coalesce_read_reqs(read_req_t *read_req, int count,
  * @return error code
  *
  * */
-
 int unifycr_match_received_ack(read_req_t *read_req, int count,
                                read_req_t *match_req)
 {
+    /* given fid, offset, and length of match_req that holds read reply,
+     * identify which read request this belongs to in read_req array,
+     * then copy data to user buffer */
 
+    /* create a request corresponding to the first byte in read reply */
     read_req_t match_start = *match_req;
+
+    /* create a request corresponding to last byte in read reply */
     read_req_t match_end = *match_req;
-    read_req_t tmp_req_start, tmp_req_end;
     match_end.offset += match_end.length - 1;
 
+    /* find index of read request that contains our first byte */
     int start_pos = unifycr_locate_req(read_req, count, &match_start);
+
+    /* find index of read request that contains our last byte */
     int end_pos = unifycr_locate_req(read_req, count, &match_end);
 
+    /* could not find a valid read request in read_req array */
     if (start_pos == -1) {
         return -1;
     }
 
-    /*s: start of match_req, e: end of match_req*/
+    /* s: start of match_req, e: end of match_req */
+
     if (start_pos == 0) {
         if (compare_read_req(&match_start, &read_req[0]) < 0) {
-            /*
-             *                      ************    ***********         *************
-             *                  s
+            /* starting offset in read reply comes before lowest
+             * offset in read requests, consider this to be an error
+             *
+             *   ************    ***********         *************
+             * s
+             *
              * */
             return -1;
         }
     }
 
-    tmp_req_start = read_req[start_pos];
-    tmp_req_end = read_req[start_pos];
-    tmp_req_end.offset += tmp_req_end.length - 1;
+    /* create read request corresponding to first byte of first read request */
+    read_req_t first_start = read_req[start_pos];
 
-    /*              tmp_s       tmp_e
-     *              *****************           *************
-     *                     s  e
-     * */
-    if (compare_read_req(&match_start, &tmp_req_start) >= 0 &&
-        compare_read_req(&match_end, &tmp_req_end) <= 0) {
+    /* create read request corresponding to last byte of first read request */
+    read_req_t first_end = read_req[start_pos];
+    first_end.offset += first_end.length - 1;
 
+    /* check whether read reply is fully contained by first read request */
+    if (compare_read_req(&match_start, &first_start) >= 0 &&
+        compare_read_req(&match_end,   &first_end)   <= 0)
+    {
+       /* read reply is fully contained within first read request
+        * 
+        * first_s   first_e
+        * *****************           *************
+        *        s  e
+        *
+        * */
 
-        int copy_offset = match_start.offset - tmp_req_start.offset;
-        memcpy(tmp_req_start.buf + copy_offset, match_req->buf,
-               match_req->length);
+        /* compute buffer location to copy data */
+        size_t offset = (size_t) (match_start.offset - first_start.offset);
+        char* buf = first_start.buf + offset; 
+
+        /* copy data to user buffer */
+        memcpy(buf, match_req->buf, match_req->length);
 
         return 0;
     }
 
-    /*  tmp_s       tmp_e   req_s   req_endreq_s    req_endreq_s            req_e
-     *  *************************************************************************
-     *          s                                                       e
-     * */
+    /* define read request for offset of first byte in last read request */
+    read_req_t last_start = read_req[end_pos];
 
+    /* define read request for offset of last byte in last read request */
+    read_req_t last_end = read_req[end_pos];
+    last_end.offset += last_end.length - 1;
 
-    read_req_t tmp_start_req_start, tmp_start_req_end,
-               tmp_end_req_start, tmp_end_req_end;
+    /* determine whether read reply is contained in a range of read requests */
+    if (compare_read_req(&match_start, &first_start) >= 0 &&
+        compare_read_req(&match_end,   &last_end)    <= 0)
+    {
+        /* read reply spans multiple read requests
+         * 
+         *  first_s   first_e  req_s req_e  req_s req_e  last_s    last_e
+         *  *****************  ***********  ***********  ****************
+         *          s                                              e
+         *
+         * */
 
-    tmp_start_req_start = read_req[start_pos];
-    tmp_start_req_end = read_req[start_pos];
-    tmp_start_req_end.offset += tmp_start_req_end.length - 1;
-
-    tmp_end_req_start = read_req[end_pos];
-    tmp_end_req_end = read_req[end_pos];
-    tmp_end_req_end.offset += tmp_end_req_end.length - 1;
-
-
-    if (compare_read_req(&match_start, &tmp_start_req_start) >= 0 &&
-        compare_read_req(&match_end, &tmp_end_req_end) <= 0) {
-
-        /*read requests are noncontiguous, so we returned more
-         * data, error*/
+        /* check that read requests from start_pos to end_pos
+         * define a contiguous set of bytes */
         int i;
         for (i = start_pos + 1; i <= end_pos; i++) {
             if (read_req[i - 1].offset + read_req[i - 1].length != read_req[i].offset) {
+                /* read requests are noncontiguous, so we returned data
+                 * covering a hole in the original array of read requests, error */
                 return -1;
             }
         }
 
-        /*read requests are contiguous, so we fill all req buffers in the
-         * middle*/
-        long copy_offset = match_start.offset - tmp_start_req_start.offset;
-        long copy_length = tmp_start_req_end.offset - match_start.offset + 1;
-        memcpy(tmp_start_req_start.buf + copy_offset, match_req->buf,
-               copy_length);
+        /* read requests are contiguous, fill all buffers in middle */
 
+        /* get pointer to start of read reply data */
+        char* ptr = match_req->buf;
 
-        long cursor = copy_length;
+        /* compute position in user buffer to copy data */
+        size_t offset = (size_t) (match_start.offset - first_start.offset);
+        char* buf = first_start.buf + offset;
+
+        /* compute number of bytes to copy into first read request */
+        size_t length = (size_t) (first_end.offset - match_start.offset + 1);
+
+        /* copy data into user buffer for first read request */
+        memcpy(buf, ptr, length);
+        ptr += length;
+
+        /* copy data for middle read requests */
         for (i = start_pos + 1; i < end_pos; i++) {
-            memcpy(read_req[i].buf, match_req->buf + cursor,
-                   read_req[i].length);
-            cursor += read_req[i].length;
+            memcpy(read_req[i].buf, ptr, read_req[i].length);
+            ptr += read_req[i].length;
         }
 
-        copy_offset = 0;
-        copy_length = match_end.offset - tmp_end_req_start.offset + 1;
-        memcpy(tmp_end_req_start.buf + copy_offset, match_req->buf,
-               copy_length);
+        /* compute bytes for last read request */
+        length = (size_t) (match_end.offset - last_start.offset + 1);
+
+        /* copy data into user buffer for last read request */
+        memcpy(last_start.buf, ptr, length);
+        ptr += length;
 
         return 0;
     }
 
+    /* could not find a matching read request, return an error */
     return -1;
-
 }
 
 /* notify our delegator that the shared memory buffer
@@ -1487,7 +1565,8 @@ static int process_read_data(read_req_t *read_req, int count, int *done)
         req.buf = shmptr;
         shmptr += msg->length;
 
-        /* process this read reply */
+        /* process this read reply, identify which application read
+         * request this reply goes to and copy data to user buffer */
         int tmp_rc = unifycr_match_received_ack(read_req, count, &req);
         if (tmp_rc != UNIFYCR_SUCCESS) {
             rc = UNIFYCR_FAILURE;
@@ -1553,66 +1632,53 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
 
     shm_meta_t *tmp_sh_meta;
 
-/*
-    int cmd = COMM_READ;
-    memcpy(cmd_buf, &cmd, sizeof(int));
-    memcpy(cmd_buf + sizeof(int), &(read_req_set.count), sizeof(int));
-
-   *((int *)shm_recvbuf) = 0;
-   *((int *)shm_recvbuf + 1) = 0;
-*/
-
     /* prepare our shared memory buffer for delegator */
     delegator_signal();
 
     if (read_req_set.count > 1) {
+        /* got multiple read requests,
+         * build up a flat buffer to include them all */
         flatcc_builder_t builder;
         flatcc_builder_init(&builder);
         
         unifycr_Extent_vec_start(&builder);
-        unifycr_Extent_vec_extend(&builder, read_req_set.count);
-        void *buffer;
-        unifycr_Extent_ref_t* v = unifycr_Extent_vec_edit(&builder);
-        for (i = 0; i < read_req_set.count; i++) {
-            printf("adding extent %d in log read\n", i);
-            unifycr_Extent_ref_t ext = unifycr_Extent_create(&builder,
-            read_req_set.read_reqs[i].fid,
-            read_req_set.read_reqs[i].offset,
-            read_req_set.read_reqs[i].length);
-            v[i] = ext;
 
-/*
-    tot_sz += read_req_set.read_reqs[i].length;
-    
-    tmp_sh_meta = (shm_meta_t *)(shm_reqbuf + i * sizeof(shm_meta_t));
-    tmp_sh_meta->src_fid = read_req_set.read_reqs[i].fid;
-    tmp_sh_meta->offset = read_req_set.read_reqs[i].offset;
-    tmp_sh_meta->length = read_req_set.read_reqs[i].length;
-    
-    memcpy(shm_reqbuf + i * sizeof(shm_meta_t),
-        tmp_sh_meta, sizeof(shm_meta_t));
-*/
+        /* allocate an entry for each request, get pointer to array */
+        unifycr_Extent_vec_extend(&builder, read_req_set.count);
+        unifycr_Extent_ref_t* v = unifycr_Extent_vec_edit(&builder);
+
+        /* fill in values for each request entry */
+        for (i = 0; i < read_req_set.count; i++) {
+            unifycr_Extent_ref_t ext = unifycr_Extent_create(&builder,
+                read_req_set.read_reqs[i].fid,
+                read_req_set.read_reqs[i].offset,
+                read_req_set.read_reqs[i].length);
+            v[i] = ext;
         }
     
+        /* complete the array */
         unifycr_Extent_vec_ref_t extents = unifycr_Extent_vec_end(&builder); 
         unifycr_ReadRequest_create_as_root(&builder, extents);
         //unifycr_ReadRequest_end_as_root(&builder);
+
+        /* allocate our buffer to be sent */
         size_t size;
-        buffer = flatcc_builder_finalize_buffer(&builder, &size);
+        void* buffer = flatcc_builder_finalize_buffer(&builder, &size);
         assert(buffer);
-        printf("size is %ld\n", size);
         	
         flatcc_builder_clear(&builder);
         
         /* invoke read rpc here */
         unifycr_client_mread_rpc_invoke(&unifycr_rpc_context, app_id, local_rank_idx,
             ptr_meta_entry->gfid, read_req_set.count, size, buffer);
-        printf("completed mread_rpc_invoke\n");
+
         free(buffer);
     } else {
+        /* got a single read request */
+        uint64_t offset = read_req_set.read_reqs[0].offset;
+        uint64_t length = read_req_set.read_reqs[0].length;
         unifycr_client_read_rpc_invoke(&unifycr_rpc_context, app_id, local_rank_idx,
-        ptr_meta_entry->gfid, read_req_set.read_reqs[0].offset,
-        read_req_set.read_reqs[0].length);
+            ptr_meta_entry->gfid, offset, length);
     }
 	
     /*
