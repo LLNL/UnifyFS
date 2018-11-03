@@ -18,6 +18,16 @@ UnifyCR: A file system for burst buffers
    api-mount
    configuration
    start-stop
+   examples
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Contributing
+
+   contribute-ways
+   style-guides
+   testing
+   wrappers
 
 .. toctree::
    :maxdepth: 2
