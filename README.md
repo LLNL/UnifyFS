@@ -17,7 +17,7 @@ scalable metadata indexing, co-located I/O delegation, and server-side read
 clustering and pipelining.
 
 ## Documentation
-Full UnifyCR documentation is contained [here](http://unifycr.readthedocs.io).
+Full UnifyCR documentation is contained [here](https://unifycr.readthedocs.io).
 
 Use [Build & I/O Interception](http://unifycr.readthedocs.io/en/latest/build-intercept.html)
 for instructions on how to build and install UnifyCR.
@@ -26,7 +26,8 @@ for instructions on how to build and install UnifyCR.
 The current status of the UnifyCR dev branch is:
 
 [![Build Status](https://api.travis-ci.org/LLNL/UnifyCR.png?branch=dev)](https://travis-ci.org/LLNL/UnifyCR)
+[![Read the Docs](https://readthedocs.org/projects/unifycr/badge/?version=dev)](https://unifycr.readthedocs.io)
 
 ## Contribute and Develop
-We have a separate document with
-[contribution guidelines](./.github/CONTRIBUTING.md).
+Contributing guidelines can be found in our
+[documentation](https://unifycr.readthedocs.io/en/dev/style-guides.html).
