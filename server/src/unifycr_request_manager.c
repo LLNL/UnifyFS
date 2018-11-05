@@ -40,88 +40,112 @@
 
 //extern struct pollfd poll_set[MAX_NUM_CLIENTS];
 
-/* the new read function for one requested extent 
- *
+/* read function for one requested extent,
+ * called from rpc handler to fill shared data structures
+ * with read requests to be handled by the delegator thread
+ * returns before requests are handled
  */
 int rm_read_remote_data(int app_id, int client_id, int gfid, long offset, long length)
 {
-    //int app_id = invert_sock_ids[sock_id];
+    /* rank to print debug messages */
+    int dbg_rank = -1;
+
+    /* get pointer to app structure for this app id */
     app_config_t *app_config =
         (app_config_t *)arraylist_get(app_config_list, app_id);
 
-  	//int client_id = app_config->client_ranks[sock_id];
-    //int dbg_rank = app_config->dbg_ranks[sock_id];
-    int dbg_rank = 1;
-
+    /* get thread id for this client */
     int thrd_id = app_config->thrd_idxs[client_id];
+
+    /* look up thread control structure */
     thrd_ctrl_t *thrd_ctrl = (thrd_ctrl_t *)arraylist_get(thrd_list, thrd_id);
 
+    /* lock for shared memory holding requests and condition variable */
     pthread_mutex_lock(&thrd_ctrl->thrd_lock);
 
     /* get the locations of all the read requests from the key-value store*/
     int rc = meta_read_get(app_id, client_id, thrd_id, 0, gfid, offset, length,
                         thrd_ctrl->del_req_set);
 
-	printf("completed meta_batch_get\n");
-    /*
-     * group together the read requests
-     * to be sent to the same delegators.
-     * */
+    /* group together the read requests
+     * to be sent to the same delegators. */
     qsort(thrd_ctrl->del_req_set->msg_meta,
           thrd_ctrl->del_req_set->num,
           sizeof(send_msg_t), compare_delegators);
+
+    /* debug print */
     print_send_msgs(thrd_ctrl->del_req_set->msg_meta,
                     thrd_ctrl->del_req_set->num, dbg_rank);
-    thrd_ctrl->del_req_stat->req_stat[0].req_cnt = 1;
 
+    /* get pointer to list of delegator stat objects to record
+     * delegator rank and count of requests for each delegator */
+    del_req_stat_t *req_stat = thrd_ctrl->del_req_stat->req_stat;
 
+    /* get pointer to send message structures, one for each request */
+    send_msg_t *msg_meta = thrd_ctrl->del_req_set->msg_meta;
 
-    int i, del_cnt = 0;
-    thrd_ctrl->del_req_stat->req_stat[0].del_id =
+    /* record rank of first delegator we'll send to */
+    req_stat[0].del_id =
         thrd_ctrl->del_req_set->msg_meta[0].dest_delegator_rank;
 
-	printf("calculate the number of read requests to be sent to each delegator\n");
+    /* initialize request count for first delegator to 1 */
+    req_stat[0].req_cnt = 1;
 
-    /* calculate the number of read requests
-     * to be sent to each delegator*/
+    /* iterate over read requests and count number of requests
+     * to be sent to each delegator */
+    int del_cnt = 0;
+    int i;
     for (i = 1; i < thrd_ctrl->del_req_set->num; i++) {
-        if (thrd_ctrl->del_req_set->msg_meta[i].dest_delegator_rank
-            == thrd_ctrl->del_req_set->msg_meta[i - 1].dest_delegator_rank) {
-            thrd_ctrl->del_req_stat->req_stat[del_cnt].req_cnt++;
+        int cur_rank  = msg_meta[i    ].dest_delegator_rank;
+        int prev_rank = msg_meta[i - 1].dest_delegator_rank;
+        if (cur_rank == prev_rank) {
+            /* another message for the current delegator */
+            req_stat[del_cnt].req_cnt++;
         } else {
-            del_cnt++;
-            thrd_ctrl->del_req_stat->req_stat[del_cnt].req_cnt = 1;
-            thrd_ctrl->del_req_stat->req_stat[del_cnt].del_id =
-                thrd_ctrl->del_req_set->msg_meta[i].dest_delegator_rank;
+            /* got a new delegator, set the rank */
+            req_stat[del_cnt].del_id = msg_meta[i].dest_delegator_rank;
 
+            /* initialize the request count */
+            req_stat[del_cnt].req_cnt = 1;
+
+            /* increment the delegator count */
+            del_cnt++;
         }
     }
     del_cnt++;
 
+    /* record number of delegators we'll send to */
     thrd_ctrl->del_req_stat->del_cnt = del_cnt;
 
+    /* debug print */
     print_remote_del_reqs(app_id, thrd_id, dbg_rank,
                           thrd_ctrl->del_req_stat);
 
-    printf("wake up the service thread for the requesting client\n");
-    /*wake up the service thread for the requesting client*/
-    if (!thrd_ctrl->has_waiting_delegator) {
-		printf("has waiting delegator\n");
+    /* wake up the service thread for the requesting client */
+    if (! thrd_ctrl->has_waiting_delegator) {
+        /* delegator thread is not waiting, but we are in critical
+         * section, we just added requests so we must wait for delegator
+         * to signal us that it's reached the critical section before
+         * we escaple so we don't overwrite these requests before it
+         * has had a chance to process them */
         thrd_ctrl->has_waiting_dispatcher = 1;
         pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
-		printf("has waiting dispatcherr\n");
+
+        /* delegator thread has signaled us that it's now waiting,
+         * so signal it to go ahead and then release the lock,
+         * so it can start */
         thrd_ctrl->has_waiting_dispatcher = 0;
         pthread_cond_signal(&thrd_ctrl->thrd_cond);
-		printf("signaled\n");
     } else {
-		printf("does not have waiting delegator\n");
+        /* have a delegator thread waiting on condition variable,
+         * signal it to begin processing the requests we just added */
         pthread_cond_signal(&thrd_ctrl->thrd_cond);
     }
-	printf("woked\n");
-    pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
-	printf("unlocked\n");
-    return rc;
 
+    /* done updating shared variables, release the lock */
+    pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
+
+    return rc;
 }
 
 /**
@@ -139,10 +163,6 @@ int rm_mread_remote_data(int app_id, int client_id, int gfid, int req_num, void*
     //int app_id = invert_sock_ids[sock_id];
     app_config_t *app_config =
         (app_config_t *)arraylist_get(app_config_list, app_id);
-
-  	//int client_id = app_config->client_ranks[sock_id];
-    //int dbg_rank = app_config->dbg_ranks[sock_id];
-    int dbg_rank = 1;
 
     int thrd_id = app_config->thrd_idxs[client_id];
     thrd_ctrl_t *thrd_ctrl = (thrd_ctrl_t *)arraylist_get(thrd_list, thrd_id);
@@ -426,37 +446,53 @@ void *rm_delegate_request_thread(void *arg)
         (thrd_ctrl_t *)arraylist_get(thrd_list, thrd_id);
 
     while (1) {
+        /* grab lock */
         pthread_mutex_lock(&thrd_ctrl->thrd_lock);
 
+        /* inform dispatcher that we're waiting for work
+         * inside the critical section */
         thrd_ctrl->has_waiting_delegator = 1;
 
+        /* if dispatcher is waiting on us, signal it to go ahead */
         if (thrd_ctrl->has_waiting_dispatcher == 1) {
             pthread_cond_signal(&thrd_ctrl->thrd_cond);
         }
 
+        /* release lock and wait to be signaled by dispatcher */
         pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
 
+        /* set flag to indicate we're no longer waiting */
         thrd_ctrl->has_waiting_delegator = 0;
 
+        /* go do work ... */
+
+        /* release lock and bail out if we've been told to exit */
         if (thrd_ctrl->exit_flag == 1) {
             pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
             break;
         }
 
+        /* this will hold the total number of bytes we expect
+         * to come in, compute in send, subtracted in receive */
         long tot_sz = 0;
-        int rc = rm_send_remote_requests(thrd_ctrl,
-                                     thrd_id, &tot_sz);
-        if (rc != ULFS_SUCCESS) {
+
+        /* send read requests to remote servers */
+        int rc = rm_send_remote_requests(thrd_ctrl, thrd_id, &tot_sz);
+        if (rc != UNIFYCR_SUCCESS) {
+            /* release lock and exit if we hit an error */
             pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
             return NULL;
         }
 
+        /* wait for data to come back from servers */
         rc = rm_receive_remote_message(app_id, sock_id, tot_sz);
-        if (rc != 0) {
+        if (rc != UNIFYCR_SUCCESS) {
+            /* release lock and exit if we hit an error */
             pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
             return NULL;
         }
 
+        /* release lock */
         pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
     }
 

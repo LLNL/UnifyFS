@@ -806,33 +806,42 @@ static int unifycr_exit()
     for (i = 0; i < arraylist_size(thrd_list); i++) {
         thrd_ctrl_t *tmp_ctrl =
             (thrd_ctrl_t *)arraylist_get(thrd_list, i);
+
+        /* grab the lock */
         pthread_mutex_lock(&tmp_ctrl->thrd_lock);
 
-        if (!tmp_ctrl->has_waiting_delegator) {
+        /* if delegator thread is not waiting in critical
+         * section, let's wait on it to come back */
+        if (! tmp_ctrl->has_waiting_delegator) {
+            /* delegator thread is not in critical section,
+             * tell it we've got something and signal it */
             tmp_ctrl->has_waiting_dispatcher = 1;
             pthread_cond_wait(&tmp_ctrl->thrd_cond, &tmp_ctrl->thrd_lock);
-            tmp_ctrl->exit_flag = 1;
+
+            /* we're no longer waiting */
             tmp_ctrl->has_waiting_dispatcher = 0;
-            free(tmp_ctrl->del_req_set);
-            free(tmp_ctrl->del_req_stat->req_stat);
-            free(tmp_ctrl->del_req_stat);
-            pthread_cond_signal(&tmp_ctrl->thrd_cond);
-
-        } else {
-            tmp_ctrl->exit_flag = 1;
-
-            free(tmp_ctrl->del_req_set);
-            free(tmp_ctrl->del_req_stat->req_stat);
-            free(tmp_ctrl->del_req_stat);
-
-            pthread_cond_signal(&tmp_ctrl->thrd_cond);
         }
+
+        /* inform delegator thread that it's time to exit */
+        tmp_ctrl->exit_flag = 1;
+
+        /* free storage holding shared data structures */
+        free(tmp_ctrl->del_req_set);
+        free(tmp_ctrl->del_req_stat->req_stat);
+        free(tmp_ctrl->del_req_stat);
+
+        /* signal delegator thread */
+        pthread_cond_signal(&tmp_ctrl->thrd_cond);
+
+        /* release the lock */
         pthread_mutex_unlock(&tmp_ctrl->thrd_lock);
 
+        /* wait for delegator thread to exit */
         void *status;
         pthread_join(tmp_ctrl->thrd, &status);
     }
 
+    /* all threads have joined back, so release our control strucutres */
     arraylist_free(thrd_list);
 
     /* sanitize the shared memory and delete the log files
