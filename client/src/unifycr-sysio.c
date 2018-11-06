@@ -1860,21 +1860,22 @@ int UNIFYCR_WRAP(fsync)(int fd)
             return -1;
         }
 
-        /* TODO: if using spill over we may have some fsyncing to do */
+        /* if using spill over, fsync spillover data to disk */
         if (unifycr_use_spillover) {
             int ret = __real_fsync(unifycr_spilloverblock);
             if (ret != 0) {
-                return errno;
+                /* error, need to set errno appropriately,
+                 * we called the real fsync which should
+                 * have already set errno to something reasonable */
+                return -1;
             }
         }
 
+        /* if using LOGIO, call fsync rpc */
         unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
         if (meta->storage == FILE_STORAGE_LOGIO) {
-            /* get gfid */
-            uint32_t gfid;
-            gfid = get_gfid(fd);
-
-            /* invoke fsync rpc here */
+            /* invoke fsync rpc to register index metadata with server */
+            uint32_t gfid = get_gfid(fd);
             unifycr_client_fsync_rpc_invoke(&unifycr_rpc_context,
                                             app_id,
                                             local_rank_idx,
