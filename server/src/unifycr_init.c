@@ -536,23 +536,6 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    /*wait for the service manager to connect to the
-     *request manager so that they can exchange control
-     *information*/
-    /*rc = sock_wait_cli_cmd();
-    if (rc != ULFS_SUCCESS) {
-        int ret = sock_handle_error(rc);
-        if (ret != 0) {
-            LOG(LOG_ERR, "%s",
-                unifycr_error_enum_description((unifycr_error_e)ret));
-            exit(1);
-        }
-    } else {
-        int sock_id = sock_get_id();
-        if (sock_id != 0)
-            exit(1);
-    }*/
-
     rc = meta_init_store(&server_cfg);
     if (rc != 0) {
         LOG(LOG_ERR, "%s",
