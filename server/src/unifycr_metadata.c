@@ -390,9 +390,15 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
     return ret;
 }
 
-int meta_read_get(int app_id, int client_id,
-                   int thrd_id, int dbg_rank, int gfid, long offset, long length,
-                   msg_meta_t *del_req_set)
+int meta_read_get(
+    int app_id,
+    int client_id,
+    int thrd_id,
+    int dbg_rank,
+    int gfid,
+    long offset,
+    long length,
+    msg_meta_t *del_req_set)
 {
     /* assume we'll succeed, set to error otherwise */
     int rc = (int)UNIFYCR_SUCCESS;
@@ -400,66 +406,91 @@ int meta_read_get(int app_id, int client_id,
     printf("in meta_read_get for app_id: %d, client_id: %d, thrd_id: %d\n", app_id, client_id, thrd_id);
     printf("fid: %d, offset: %d, length: %d\n", gfid, offset, length);
 
-    unifycr_keys[0]->fid = gfid;
+    /* create key to describe first byte we'll read */
+    unifycr_keys[0]->fid    = gfid;
     unifycr_keys[0]->offset = offset;
-    unifycr_key_lens[0] = sizeof(unifycr_key_t);
-    unifycr_keys[1]->fid = gfid;
-    unifycr_keys[1]->offset = offset + length -1;
-    unifycr_key_lens[1] = sizeof(unifycr_key_t);
+    unifycr_key_lens[0]     = sizeof(unifycr_key_t);
+
+    /* create key to describe last byte we'll read */
+    unifycr_keys[1]->fid    = gfid;
+    unifycr_keys[1]->offset = offset + length - 1;
+    unifycr_key_lens[1]     = sizeof(unifycr_key_t);
 
     md->primary_index = unifycr_indexes[0];
+
+    /* get list of values for these keys */
     bgrm = mdhimBGet(md, md->primary_index, (void **)unifycr_keys,
                      unifycr_key_lens, 2, MDHIM_RANGE_BGET);
 
+    /* track number of items we got */
     int tot_num = 0;
-    int dest_client, dest_app;
-    unifycr_key_t *tmp_key;
-    unifycr_val_t *tmp_val;
 
+    /* iterate over each item returned by get */
     bgrmp = bgrm;
     while (bgrmp) {
+        /* check that we didn't hit an error with this item */
         if (bgrmp->error < 0) {
             rc = (int)UNIFYCR_ERROR_MDHIM;
         }
-		int i;
+
+        /* iterate over each key and value in this item */
+        int i;
         for (i = 0; i < bgrmp->num_keys; i++) {
-            tmp_key = (unifycr_key_t *)bgrm->keys[i];
-            tmp_val = (unifycr_val_t *)bgrm->values[i];
+            /* get pointer to key and value */
+            unifycr_key_t *key = (unifycr_key_t *)bgrm->keys[i];
+            unifycr_val_t *val = (unifycr_val_t *)bgrm->values[i];
 
-            memcpy(&dest_app, (char *) & (tmp_val->app_rank_id), sizeof(int));
-            memcpy(&dest_client, (char *) & (tmp_val->app_rank_id)
-                   + sizeof(int), sizeof(int));
-            /* physical offset of the requested file segment on the log file*/
-            del_req_set->msg_meta[tot_num].dest_offset = tmp_val->addr;
+            /* extract dest_app_id from value */
+            int dest_app;
+            char* ptr = (char *) &(val->app_rank_id);
+            memcpy(&dest_app, ptr, sizeof(int));
+            ptr += sizeof(int);
 
-            /* rank of the remote delegator*/
-            del_req_set->msg_meta[tot_num].dest_delegator_rank = tmp_val->delegator_id;
+            /* extract dest_client_id from value */
+            int dest_client;
+            memcpy(&dest_client, ptr, sizeof(int));
+            ptr += sizeof(int);
+
+            /* get pointer to next send_msg structure */
+            send_msg_t *msg = &(del_req_set->msg_meta[tot_num]);
 
             /* dest_client_id and dest_app_id uniquely identifies the remote physical
-             * log file that contains the requested segments*/
-            del_req_set->msg_meta[tot_num].dest_client_id = dest_client;
-            del_req_set->msg_meta[tot_num].dest_app_id = dest_app;
-            del_req_set->msg_meta[tot_num].length = tmp_val->len;
+             * log file that contains the requested segments */
+            msg->dest_app_id    = dest_app;
+            msg->dest_client_id = dest_client;
 
-            /* src_app_id and src_cli_id identifies the requested client*/
-            del_req_set->msg_meta[tot_num].src_app_id = app_id;
-            del_req_set->msg_meta[tot_num].src_cli_id = client_id;
+            /* physical offset of the requested file segment on the log file */
+            msg->dest_offset = val->addr;
 
-            /* src_offset is the logical offset of the shared file*/
-            del_req_set->msg_meta[tot_num].src_offset = tmp_key->offset;
-            del_req_set->msg_meta[tot_num].src_delegator_rank = glb_rank;
-            del_req_set->msg_meta[tot_num].src_fid = tmp_key->fid;
-            del_req_set->msg_meta[tot_num].src_dbg_rank = dbg_rank;
-            del_req_set->msg_meta[tot_num].src_thrd = thrd_id;
+            /* rank of the remote delegator hosting log file */
+            msg->dest_delegator_rank = val->delegator_id;
+
+            msg->length = val->len;
+
+            msg->src_delegator_rank = glb_rank;
+
+            /* src_app_id and src_cli_id identifies the requested client */
+            msg->src_cli_id = client_id;
+            msg->src_app_id = app_id;
+
+            /* src_offset is the logical offset of the shared file */
+            msg->src_fid      = key->fid;
+            msg->src_offset   = key->offset;
+            msg->src_thrd     = thrd_id;
+            msg->src_dbg_rank = dbg_rank;
+
+            /* increment number of items we got */
             tot_num++;
         }
+
+        /* advance to next item in list */
         bgrmp = bgrmp->next;
         mdhim_full_release_msg(bgrm);
         bgrm = bgrmp;
     }
 
+    /* record total number of entries */
     del_req_set->num = tot_num;
-//    print_bget_indices(app_id, client_id, del_req_set->msg_meta, tot_num);
 
     return rc;
 }
@@ -513,8 +544,6 @@ int meta_batch_get(int app_id, int client_id,
 
     int tot_num = 0;
     int dest_client, dest_app;
-    unifycr_key_t *tmp_key;
-    unifycr_val_t *tmp_val;
 
     bgrmp = bgrm;
     while (bgrmp) {
@@ -522,12 +551,13 @@ int meta_batch_get(int app_id, int client_id,
             rc = (int)UNIFYCR_ERROR_MDHIM;
 
         for (i = 0; i < bgrmp->num_keys; i++) {
-            tmp_key = (unifycr_key_t *)bgrm->keys[i];
-            tmp_val = (unifycr_val_t *)bgrm->values[i];
+            unifycr_key_t *tmp_key = (unifycr_key_t *)bgrm->keys[i];
+            unifycr_val_t *tmp_val = (unifycr_val_t *)bgrm->values[i];
 
             memcpy(&dest_app, (char *) & (tmp_val->app_rank_id), sizeof(int));
             memcpy(&dest_client, (char *) & (tmp_val->app_rank_id)
                    + sizeof(int), sizeof(int));
+
             /* physical offset of the requested file segment on the log file*/
             del_req_set->msg_meta[tot_num].dest_offset = tmp_val->addr;
 

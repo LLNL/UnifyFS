@@ -270,11 +270,15 @@ typedef struct {
 
 } unifycr_filemeta_t;
 
-/* path to fid lookup struct */
+/* struct used to map a full path to its local file id,
+ * an array of these is kept and a simple linear search
+ * is used to find a match */
 typedef struct {
-    int in_use; /* flag incidating whether slot is in use */
-    const char filename[UNIFYCR_MAX_FILENAME];
+    /* flag incidating whether slot is in use */
+    int in_use;
+
     /* full path and name of file */
+    const char filename[UNIFYCR_MAX_FILENAME];
 } unifycr_filename_t;
 
 /*unifycr structures*/
@@ -333,9 +337,6 @@ extern int glb_superblock_size;
 extern int dbg_rank;
 extern int app_id;
 extern int glb_size;
-extern int reqbuf_fd;
-extern int recvbuf_fd;
-extern int superblock_fd;
 extern long unifycr_key_slice_range;
 
 /* -------------------------------
@@ -353,7 +354,10 @@ typedef enum {
 /* keep track of what we've initialized */
 extern int unifycr_initialized;
 
-/* list of file names */
+/* list of file name structures of fixed length,
+ * used to map a full path to its local file id,
+ * an array of these is kept and a simple linear search
+ * is used to find a match */
 extern unifycr_filename_t *unifycr_filelist;
 
 /* mount directory */
@@ -510,19 +514,7 @@ int unifycr_fid_close(int fid);
 int unifycr_fid_unlink(int fid);
 
 
-/*functions used in UnifyCR*/
-int unifycr_split_index(unifycr_index_t *cur_idx, index_set_t *index_set,
-                        long slice_range);
-int unifycr_split_read_requests(read_req_t *cur_read_req,
-                                read_req_set_t *read_req_set,
-                                long slice_range);
-int unifycr_coalesce_read_reqs(read_req_t *read_req, int count,
-                               read_req_set_t *tmp_read_req_set, long unifycr_key_slice_range,
-                               read_req_set_t *read_req_set);
-int unifycr_match_received_ack(read_req_t *read_req, int count,
-                               read_req_t *match_req);
-int unifycr_locate_req(read_req_t *read_req, int count,
-                       read_req_t *match_req);
+/* functions used in UnifyCR */
 
 int unifycr_generate_gfid(const char *path);
 

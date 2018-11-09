@@ -929,11 +929,10 @@ ssize_t UNIFYCR_WRAP(read)(int fd, void *buf, size_t count)
         size_t retcount;
 
         read_req_t tmp_req;
-
-        tmp_req.buf = buf;
-        tmp_req.fid = fd + unifycr_fd_limit;
-        tmp_req.length = count;
+        tmp_req.fid    = fd + unifycr_fd_limit;
         tmp_req.offset = filedesc->pos;
+        tmp_req.length = count;
+        tmp_req.buf    = buf;
 
         int ret = unifycr_fd_logreadlist(&tmp_req, 1);
 
@@ -944,6 +943,7 @@ ssize_t UNIFYCR_WRAP(read)(int fd, void *buf, size_t count)
 
         /* update position */
         filedesc->pos += (off_t) retcount;
+
         /* return number of bytes read */
         return (ssize_t) retcount;
     } else {
@@ -1022,29 +1022,31 @@ ssize_t UNIFYCR_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
 int UNIFYCR_WRAP(lio_listio)(int mode, struct aiocb *const aiocb_list[],
                              int nitems, struct sigevent *sevp)
 {
+    /* TODO: missing pass through for non-intercepted lio_listio */
 
-    int ret = 0, i;
-    read_req_t *glb_read_reqs = malloc(nitems * sizeof(read_req_t));
+    read_req_t *reqs = malloc(nitems * sizeof(read_req_t));
 
+    int i;
     for (i = 0; i < nitems; i++) {
         if (aiocb_list[i]->aio_lio_opcode != LIO_READ) {
             //does not support write operation currently
             return -1;
         }
-        glb_read_reqs[i].fid = aiocb_list[i]->aio_fildes;
-        glb_read_reqs[i].buf = (char *)aiocb_list[i]->aio_buf;
-        glb_read_reqs[i].length = aiocb_list[i]->aio_nbytes;
-        glb_read_reqs[i].offset = aiocb_list[i]->aio_offset;
-
+        reqs[i].fid    = aiocb_list[i]->aio_fildes;
+        reqs[i].buf    = (char *)aiocb_list[i]->aio_buf;
+        reqs[i].length = aiocb_list[i]->aio_nbytes;
+        reqs[i].offset = aiocb_list[i]->aio_offset;
     }
 
-    ret = unifycr_fd_logreadlist(glb_read_reqs, nitems);
-    free(glb_read_reqs);
+    int ret = unifycr_fd_logreadlist(reqs, nitems);
+
+    free(reqs);
+
     return ret;
 }
 
 /* order by file id then by file position */
-int compare_index_entry(const void *a, const void *b)
+static int compare_index_entry(const void *a, const void *b)
 {
     const unifycr_index_t *ptr_a = a;
     const unifycr_index_t *ptr_b = b;
@@ -1065,7 +1067,7 @@ int compare_index_entry(const void *a, const void *b)
 }
 
 /* order by file id then by offset */
-int compare_read_req(const void *a, const void *b)
+static int compare_read_req(const void *a, const void *b)
 {
     const read_req_t *ptr_a = a;
     const read_req_t *ptr_b = b;
@@ -1087,7 +1089,7 @@ int compare_read_req(const void *a, const void *b)
 
 /* returns index into read_req of item whose offset is
  * just below offset of target item (if one exists) */
-int unifycr_locate_req(read_req_t *read_req, int count,
+static int unifycr_locate_req(read_req_t *read_req, int count,
                        read_req_t *match_req)
 {
     /* if list is empty, indicate that there is valid starting request */
@@ -1175,7 +1177,7 @@ int unifycr_locate_req(read_req_t *read_req, int count,
  * @param slice_range: the slice size of the key-value store
  * @return out_set: the set of split read requests
  * */
-int unifycr_split_read_requests(read_req_t *req,
+static int unifycr_split_read_requests(read_req_t *req,
                                 read_req_set_t *out_set,
                                 long slice_range)
 {
@@ -1249,10 +1251,14 @@ int unifycr_split_read_requests(read_req_t *req,
 }
 
 /*
- * coalesce contiguous read requests and
- * split the read requests whose size is larger than
- * unifycr_key_slice_range into the ones smaller
- * than unifycr_key_slice range
+ * coalesce read requests refering to contiguous data within a given
+ * file id, and split read requests whose size is larger than
+ * unifycr_key_slice_range into more requests that are smaller
+ *
+ * Note: a series of read requests that have overlapping spans
+ * will prevent merging of contiguous ranges, this should still
+ * function, but performance may be lost
+ *
  * @param read_req: a list of read requests
  * @param count: number of read requests
  * @param tmp_set: a temporary read requests buffer
@@ -1262,7 +1268,7 @@ int unifycr_split_read_requests(read_req_t *req,
  * @return out_set: the coalesced read requests
  *
  * */
-int unifycr_coalesce_read_reqs(read_req_t *read_req, int count,
+static int unifycr_coalesce_read_reqs(read_req_t *read_req, int count,
                                read_req_set_t *tmp_set, long slice_range,
                                read_req_set_t *out_set)
 {
@@ -1294,7 +1300,7 @@ int unifycr_coalesce_read_reqs(read_req_t *read_req, int count,
                 out_req->offset + out_req->length == tmp_req->offset)
             {
                 /* refers to contiguous range in the same file,
-                 * coalesce if in the same slice */
+                 * coalesce if also in the same slice */
                 uint64_t cur_slice = out_req->offset / slice_range;
                 uint64_t tmp_slice = tmp_req->offset / slice_range;
                 if (cur_slice == tmp_slice) {
@@ -1623,9 +1629,10 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
         }
     }
 
+    /* order read request by increasing file id, then increasing offset */
     qsort(read_req, count, sizeof(read_req_t), compare_read_req);
 
-    /*coalesce the contiguous read requests*/
+    /* coalesce the contiguous read requests */
     unifycr_coalesce_read_reqs(read_req, count,
                                &tmp_read_req_set, unifycr_key_slice_range,
                                &read_req_set);

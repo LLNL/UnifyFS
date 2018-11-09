@@ -318,8 +318,9 @@ static int unifycr_fopen(
     } else if (append) {
         /* force all writes to end of file when append is set */
         if (plus) {
-            /* a+ ==> append, open or create file for update, at end of file */
-            open_rc = unifycr_fid_open(path, O_RDWR | O_CREAT | O_APPEND,
+            /* a+ ==> append, open or create file for update, initial file
+             * position for reading should be at start */
+            open_rc = unifycr_fid_open(path, O_RDWR | O_CREAT,
                                        perms, &fid, &pos);
         } else {
             /* a ==> append, open or create file for writing, at end of file */
@@ -671,7 +672,7 @@ static int unifycr_stream_write(
         current = unifycr_fid_size(fid);
 
         /* like a seek, we discard push back bytes */
-        s->ubuflen;
+        s->ubuflen = 0;
     } else {
         /* otherwise, write at current file pointer */
         current = filedesc->pos;

@@ -331,169 +331,137 @@ int unifycr_split_index(unifycr_index_t *cur_idx, index_set_t *index_set,
 /* read data from specified chunk id, chunk offset, and count into user buffer,
  * count should fit within chunk starting from specified offset */
 static int unifycr_logio_chunk_write(
-    int fid,
-    long pos,                /* write offset inside the file */
+    int fid,                  /* local file id */
+    long pos,                 /* write offset inside the file */
     unifycr_filemeta_t *meta, /* pointer to file meta data */
-    int chunk_id,            /* logical chunk id to write to */
-    off_t chunk_offset,      /* logical offset within chunk to write to */
-    const void *buf,         /* buffer holding data to be written */
-    size_t count)            /* number of bytes to write */
+    int chunk_id,             /* logical chunk id to write to */
+    off_t chunk_offset,       /* logical offset within chunk to write to */
+    const void *buf,          /* buffer holding data to be written */
+    size_t count)             /* number of bytes to write */
 {
     /* get chunk meta data */
     unifycr_chunkmeta_t *chunk_meta = &(meta->chunk_meta[chunk_id]);
+
+    if (chunk_meta->location != CHUNK_LOCATION_MEMFS &&
+        chunk_meta->location != CHUNK_LOCATION_SPILLOVER)
+    {
+        /* unknown chunk type */
+        DEBUG("unknown chunk type in read\n");
+        return UNIFYCR_ERROR_IO;
+    }
+
     /* determine location of chunk */
+    off_t log_offset = 0;
     if (chunk_meta->location == CHUNK_LOCATION_MEMFS) {
         /* just need a memcpy to write data */
         char *chunk_buf = unifycr_compute_chunk_buf(meta, chunk_id, chunk_offset);
         memcpy(chunk_buf, buf, count);
-        /* Synchronize metadata*/
 
-        unifycr_index_t cur_idx;
-        cur_idx.file_pos = pos;
-        cur_idx.mem_pos = chunk_buf - unifycr_chunks;
-        cur_idx.length = count;
-
-        /* find the corresponding file attr entry and update attr*/
-        unifycr_file_attr_t tmp_meta_entry;
-        tmp_meta_entry.fid = fid;
-        unifycr_file_attr_t *ptr_meta_entry
-            = (unifycr_file_attr_t *)bsearch(&tmp_meta_entry,
-                                         unifycr_fattrs.meta_entry,
-                                         *unifycr_fattrs.ptr_num_entries,
-                                         sizeof(unifycr_file_attr_t),
-					 compare_fattr);
-        if (ptr_meta_entry !=  NULL) {
-            ptr_meta_entry->file_attr.st_size = pos + count;
-        }
-        cur_idx.fid = ptr_meta_entry->gfid;
-
-        /*split the write requests larger than unifycr_key_slice_range into
-         * the ones smaller than unifycr_key_slice_range
-         * */
-        unifycr_split_index(&cur_idx, &tmp_index_set,
-                            unifycr_key_slice_range);
-
-        int i = 0;
-        if (*(unifycr_indices.ptr_num_entries) + tmp_index_set.count
-            < unifycr_max_index_entries) {
-            /*coalesce contiguous indices*/
-
-            if (*unifycr_indices.ptr_num_entries >= 1) {
-                unifycr_index_t *ptr_last_idx =
-                    &unifycr_indices.index_entry[*unifycr_indices.ptr_num_entries - 1];
-                if (ptr_last_idx->fid == tmp_index_set.idxes[0].fid &&
-                    ptr_last_idx->file_pos + ptr_last_idx->length
-                    == tmp_index_set.idxes[0].file_pos) {
-                    if (ptr_last_idx->file_pos / unifycr_key_slice_range
-                        == tmp_index_set.idxes[0].file_pos / unifycr_key_slice_range) {
-                        ptr_last_idx->length  += tmp_index_set.idxes[0].length;
-                        i++;
-                    }
-                }
-            }
-
-            for (; i < tmp_index_set.count; i++) {
-                unifycr_indices.index_entry[*unifycr_indices.ptr_num_entries].file_pos =
-                    tmp_index_set.idxes[i].file_pos;
-                unifycr_indices.index_entry[*unifycr_indices.ptr_num_entries].mem_pos =
-                    tmp_index_set.idxes[i].mem_pos;
-                unifycr_indices.index_entry[*unifycr_indices.ptr_num_entries].length =
-                    tmp_index_set.idxes[i].length;
-
-
-                unifycr_indices.index_entry[*unifycr_indices.ptr_num_entries].fid
-                    = tmp_index_set.idxes[i].fid;
-                (*unifycr_indices.ptr_num_entries)++;
-            }
-
-
-
-        } else {
-            /*TOdO:swap out existing metadata buffer to disk*/
-        }
-
-
-
-
+        log_offset = chunk_buf - unifycr_chunks;
     } else if (chunk_meta->location == CHUNK_LOCATION_SPILLOVER) {
         /* spill over to a file, so write to file descriptor */
         //MAP_OR_FAIL(pwrite);
         off_t spill_offset = unifycr_compute_spill_offset(meta, chunk_id, chunk_offset);
-        /*  printf("spill_offset is %ld, count:%ld, chunk_offset is %ld\n",
-                  spill_offset, count, chunk_offset);
-          fflush(stdout); */
         ssize_t rc = __real_pwrite(unifycr_spilloverblock, buf, count, spill_offset);
         if (rc < 0)  {
             perror("pwrite failed");
         }
 
+        log_offset = spill_offset + unifycr_max_chunks * (1 << unifycr_chunk_bits);
+    }
 
-        unifycr_index_t cur_idx;
-        cur_idx.file_pos = pos;
+    /* find the corresponding file attr entry and update attr*/
+    unifycr_file_attr_t tmp_meta_entry;
+    tmp_meta_entry.fid = fid;
+    unifycr_file_attr_t *ptr_meta_entry
+        = (unifycr_file_attr_t *)bsearch(&tmp_meta_entry,
+                                     unifycr_fattrs.meta_entry,
+                                     *unifycr_fattrs.ptr_num_entries,
+                                     sizeof(unifycr_file_attr_t),
+    				 compare_fattr);
+    if (ptr_meta_entry !=  NULL) {
+        ptr_meta_entry->file_attr.st_size = pos + count;
+    }
 
-        cur_idx.mem_pos = spill_offset + unifycr_max_chunks * (1 << unifycr_chunk_bits);
-        cur_idx.length = count;
+    /* define an new index entry for this write operation */
+    unifycr_index_t cur_idx;
+    cur_idx.fid      = ptr_meta_entry->gfid;
+    cur_idx.file_pos = pos;
+    cur_idx.mem_pos  = log_offset;
+    cur_idx.length   = count;
 
-        /* find the corresponding file attr entry and update attr*/
-        unifycr_file_attr_t tmp_meta_entry;
-        tmp_meta_entry.fid = fid;
-        unifycr_file_attr_t *ptr_meta_entry
-            = (unifycr_file_attr_t *)bsearch(&tmp_meta_entry,
-                                         unifycr_fattrs.meta_entry,
-					 *unifycr_fattrs.ptr_num_entries,
-                                         sizeof(unifycr_file_attr_t),
-					 compare_fattr);
-        if (ptr_meta_entry !=  NULL) {
-            ptr_meta_entry->file_attr.st_size = pos + count;
-        }
-        cur_idx.fid = ptr_meta_entry->gfid;
+    /* split the write requests larger than unifycr_key_slice_range into
+     * the ones smaller than unifycr_key_slice_range
+     * */
+    unifycr_split_index(&cur_idx, &tmp_index_set,
+                        unifycr_key_slice_range);
 
-        /*split the write requests larger than unifycr_key_slice_range into
-         * the ones smaller than unifycr_key_slice_range
-         * */
-        unifycr_split_index(&cur_idx, &tmp_index_set,
-                            unifycr_key_slice_range);
+    /* lookup number of existing index entries */
+    off_t num_entries = *(unifycr_indices.ptr_num_entries);
+
+    /* number of new entries we may add */
+    off_t tmp_entries = (off_t) tmp_index_set.count;
+
+    /* check whether there is room to add new entries */
+    if (num_entries + tmp_entries < unifycr_max_index_entries) {
+        /* get pointer to index array */
+        unifycr_index_t *idxs = unifycr_indices.index_entry;
+
+        /* coalesce contiguous indices */
         int i = 0;
-        if (*(unifycr_indices.ptr_num_entries) + tmp_index_set.count
-            < unifycr_max_index_entries) {
-            /*coalesce contiguous indices*/
+        if (num_entries > 0) {
+            /* pointer to last element in index array */
+            unifycr_index_t *prev_idx = &idxs[num_entries - 1];
 
-            if (*unifycr_indices.ptr_num_entries >= 1) {
-                unifycr_index_t *ptr_last_idx =
-                    &unifycr_indices.index_entry[*unifycr_indices.ptr_num_entries - 1];
-                if (ptr_last_idx->fid == tmp_index_set.idxes[0].fid &&
-                    ptr_last_idx->file_pos + ptr_last_idx->length
-                    == tmp_index_set.idxes[0].file_pos) {
-                    if (ptr_last_idx->file_pos / unifycr_key_slice_range
-                        == tmp_index_set.idxes[0].file_pos / unifycr_key_slice_range) {
-                        ptr_last_idx->length  += tmp_index_set.idxes[0].length;
-                        i++;
-                    }
+            /* pointer to first element in temp list */
+            unifycr_index_t *next_idx = &tmp_index_set.idxes[0];
+
+            /* offset of last byte for last index in list */
+            off_t prev_offset = prev_idx->file_pos + prev_idx->length;
+
+            /* check whether last index and temp index refer to
+             * contiguous bytes in the same file */
+            if (prev_idx->fid == next_idx->fid &&
+                prev_offset   == next_idx->file_pos)
+            {
+                /* got contiguous bytes in the same file,
+                 * check if both index values fall in the same slice */
+                off_t prev_slice = prev_idx->file_pos / unifycr_key_slice_range;
+                off_t next_slice = next_idx->file_pos / unifycr_key_slice_range;
+                if (prev_slice == next_slice) {
+                    /* index values also are in same slice,
+                     * so append first index in temp list to
+                     * last index in list */
+                    prev_idx->length  += next_idx->length;
+
+                    /* advance to next index in temp list */
+                    i++;
                 }
             }
-
-            for (; i < tmp_index_set.count; i++) {
-                unifycr_indices.index_entry[*unifycr_indices.ptr_num_entries].file_pos =
-                    tmp_index_set.idxes[i].file_pos;
-                unifycr_indices.index_entry[*unifycr_indices.ptr_num_entries].mem_pos =
-                    tmp_index_set.idxes[i].mem_pos;
-                unifycr_indices.index_entry[*unifycr_indices.ptr_num_entries].length =
-                    tmp_index_set.idxes[i].length;
-
-                unifycr_indices.index_entry[*unifycr_indices.ptr_num_entries].fid
-                    = tmp_index_set.idxes[i].fid;
-                (*unifycr_indices.ptr_num_entries)++;
-            }
-
-        } else {
-            /*Todo:page out existing metadata buffer to disk*/
         }
 
-        /* TOdo: check return code for errors */
+        /* pointer to temp index list */
+        unifycr_index_t *newidxs = tmp_index_set.idxes;
+
+        /* copy remaining items in temp index list to index list */
+        while (i < tmp_index_set.count) {
+            /* copy index fields */
+            idxs[num_entries].fid      = newidxs[i].fid;
+            idxs[num_entries].file_pos = newidxs[i].file_pos;
+            idxs[num_entries].mem_pos  = newidxs[i].mem_pos;
+            idxs[num_entries].length   = newidxs[i].length;
+
+            /* advance to next element in each list */
+            num_entries++;
+            i++;
+        }
+
+        /* update number of entries in index array */
+        (*unifycr_indices.ptr_num_entries) = num_entries;
     } else {
-        /* unknown chunk type */
-        DEBUG("unknown chunk type in read\n");
-        return UNIFYCR_ERROR_IO;
+        /* TODO: no room to write additional index metadata entries,
+         * swap out existing metadata buffer to disk*/
+        printf("exhausted metadata");
     }
 
     /* assume read was successful if we get to here */
