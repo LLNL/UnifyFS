@@ -33,8 +33,8 @@
 #define DEF_ARR_CAP 1024
 
 typedef struct {
-    long cap;
-    long size;
+    int cap;
+    int size;
     void **elems;
 } arraylist_t;
 

@@ -33,7 +33,9 @@
 #include <poll.h>
 #include "unifycr_const.h"
 
-int sock_init_server(void);
+extern char server_sock_path[UNIFYCR_MAX_FILENAME];
+
+int sock_init_server(int del_id);
 int sock_add(int fd);
 void sock_reset();
 int sock_wait_cli_cmd();

@@ -59,118 +59,67 @@ int delegator_handle_command(char *ptr_cmd, int sock_id)
 
     int rc = 0, ret_sz = 0;
     int cmd = *((int *)ptr_cmd);
-    char *ptr_ack;
+    char *ptr_ack = sock_get_ack_buf(sock_id);
+    char *ptr_args = ptr_cmd + sizeof(cmd);
 
     switch (cmd) {
     case COMM_SYNC_DEL:
-        (void)0;
-        ptr_ack = sock_get_ack_buf(sock_id);
+        /* ack the result */
         ret_sz = pack_ack_msg(ptr_ack, cmd, ACK_SUCCESS,
                               &local_rank_cnt, sizeof(int));
         rc = sock_ack_cli(sock_id, ret_sz);
-        return rc;
+        break;
 
     case COMM_MOUNT:
         rc = sync_with_client(ptr_cmd, sock_id);
 
-        ptr_ack = sock_get_ack_buf(sock_id);
+        /* ack the result */
         ret_sz = pack_ack_msg(ptr_ack, cmd, rc,
-                              &max_recs_per_slice, sizeof(long));
+                              &max_recs_per_slice, sizeof(max_recs_per_slice));
         rc = sock_ack_cli(sock_id, ret_sz);
-        return rc;
-
-    case COMM_META_GET:
-        (void)0;
-        /*get file attribute*/
-        unifycr_file_attr_t attr_val = { 0, };
-
-        fattr_key_t _fattr_key = *((int *)(ptr_cmd + 1 * sizeof(int)));
-
-        rc = meta_process_attr_get(&_fattr_key, &attr_val);
-
-        ptr_ack = sock_get_ack_buf(sock_id);
-        ret_sz = pack_ack_msg(ptr_ack, cmd, rc,
-                                &attr_val, sizeof(unifycr_file_attr_t));
-        rc = sock_ack_cli(sock_id, ret_sz);
-
         break;
 
+    case COMM_META_GET:
+        {
+            /* get file attribute */
+            unifycr_file_attr_t attr_val;
+            memset(&attr_val, 0, sizeof(attr_val));
+            rc = meta_process_attr_get((fattr_key_t *)ptr_args, &attr_val);
+
+            /* ack the result */
+            ret_sz = pack_ack_msg(ptr_ack, cmd, rc,
+                                  &attr_val, sizeof(attr_val));
+            rc = sock_ack_cli(sock_id, ret_sz);
+            break;
+        }
+
     case COMM_META_SET:
-        (void)0;
-        /*set file attribute*/
+        /* set file attribute */
         rc = meta_process_attr_set(ptr_cmd, sock_id);
 
-        ptr_ack = sock_get_ack_buf(sock_id);
+        /* ack the result */
         ret_sz = pack_ack_msg(ptr_ack, cmd, rc, NULL, 0);
         rc = sock_ack_cli(sock_id, ret_sz);
-        /*ToDo: deliver the error code/success to client*/
-
         break;
 
     case COMM_META_FSYNC:
         /* synchronize both index and file attribute
-         * metadata to the key-value store
-         */
-
+         * metadata to the key-value store */
         rc = meta_process_fsync(sock_id);
 
-        /*ack the result*/
-        ptr_ack = sock_get_ack_buf(sock_id);
+        /* ack the result */
         ret_sz = pack_ack_msg(ptr_ack, cmd, rc, NULL, 0);
         rc = sock_ack_cli(sock_id, ret_sz);
-
         break;
-
-#if 0
-    case COMM_META:
-        (void)0;
-        int type = *((int *)ptr_cmd + 1);
-        if (type == 1) {
-            /*get file attribute*/
-            unifycr_file_attr_t attr_val;
-
-            fattr_key_t _fattr_key = *((int *)(ptr_cmd + 2 * sizeof(int)));
-
-            rc = meta_process_attr_get(&_fattr_key, &attr_val);
-
-            ptr_ack = sock_get_ack_buf(sock_id);
-            ret_sz = pack_ack_msg(ptr_ack, cmd, rc,
-                                  &attr_val, sizeof(unifycr_file_attr_t));
-            rc = sock_ack_cli(sock_id, ret_sz);
-
-        }
-
-        if (type == 2) {
-            /*set file attribute*/
-            rc = meta_process_attr_set(ptr_cmd, sock_id);
-
-            ptr_ack = sock_get_ack_buf(sock_id);
-            ret_sz = pack_ack_msg(ptr_ack, cmd, rc, NULL, 0);
-            rc = sock_ack_cli(sock_id, ret_sz);
-            /*ToDo: deliver the error code/success to client*/
-        }
-
-        if (type == 3) {
-            /*synchronize both index and file attribute
-             *metadata to the key-value store*/
-
-            rc = meta_process_fsync(sock_id);
-
-            /*ack the result*/
-            ptr_ack = sock_get_ack_buf(sock_id);
-            ret_sz = pack_ack_msg(ptr_ack, cmd, rc, NULL, 0);
-            rc = sock_ack_cli(sock_id, ret_sz);
-        }
-        break;
-#endif
 
     case COMM_READ:
-        (void)0;
-        int num = *(((int *)ptr_cmd) + 1);
-        /* result is handled by the individual thread in
-         * the request manager*/
-        rc = rm_read_remote_data(sock_id, num);
-        break;
+        {
+            size_t count = *(size_t *)ptr_args;
+            /* result is handled by the individual thread in
+             * the request manager */
+            rc = rm_read_remote_data(sock_id, count);
+            break;
+        }
 
     case COMM_UNMOUNT:
         unifycr_broadcast_exit(sock_id);
@@ -197,23 +146,26 @@ int delegator_handle_command(char *ptr_cmd, int sock_id)
 * @param val: payload
 * @return success/error code
 */
-int pack_ack_msg(char *ptr_cmd, int cmd, int rc, void *val,
-                 int val_len)
+int pack_ack_msg(char *ptr_cmd, int cmd, int rc,
+                 void *val, int val_len)
 {
     int ret_sz = 0;
 
     memset(ptr_cmd, 0, CMD_BUF_SIZE);
-    memcpy(ptr_cmd, &cmd, sizeof(int));
-    ret_sz += sizeof(int);
-    memcpy(ptr_cmd + sizeof(int), &rc, sizeof(int));
-    ret_sz += sizeof(int);
+
+    memcpy(ptr_cmd, &cmd, sizeof(cmd));
+    ret_sz += sizeof(cmd);
+
+    memcpy(ptr_cmd + ret_sz, &rc, sizeof(rc));
+    ret_sz += sizeof(rc);
 
     if (val != NULL) {
-        memcpy(ptr_cmd + 2 * sizeof(int), val, val_len);
+        memcpy(ptr_cmd + ret_sz, val, val_len);
         ret_sz += val_len;
     }
     return ret_sz;
 }
+
 /**
 * receive and store the client-side information,
 * then attach to the client-side shared buffers.
@@ -225,32 +177,28 @@ int pack_ack_msg(char *ptr_cmd, int cmd, int rc, void *val,
 int sync_with_client(char *cmd_buf, int sock_id)
 {
     unifycr_client_context_t client_ctx;
-    // increase offset by size of cmd
-    off_t offset;
-
-    offset = 0;
-    offset += sizeof(int);
 
     // unpack the client context from the command buffer
-    unifycr_unpack_client_context(cmd_buf, &offset, &client_ctx);
+    unifycr_unpack_client_context(cmd_buf + sizeof(int), &client_ctx);
 
     int app_id = client_ctx.app_id;
     int local_rank_idx = client_ctx.local_rank_index;
     int dbg_rank = client_ctx.dbg_rank;
 
     app_config_t *tmp_config;
-    /*if this client is from a new application, then
+    /* if this client is from a new application, then
      * initialize this application's information
      * */
 
     int rc;
     if (arraylist_get(app_config_list, app_id) == NULL) {
-        /*          LOG(LOG_DBG, "superblock_sz:%ld, num_procs_per_node:%ld,
-                             req_buf_sz:%ld, data_size:%ld\n",
-                            superblock_sz, num_procs_per_node, req_buf_sz, data_size); */
-        tmp_config = (app_config_t *)malloc(sizeof(app_config_t));
+        /* LOG(LOG_DBG, "superblock_sz:%ld, num_procs_per_node:%ld,
+         *     req_buf_sz:%ld, data_size:%ld\n",
+         *     superblock_sz, num_procs_per_node, req_buf_sz, data_size); */
+        tmp_config = (app_config_t *) calloc(1, sizeof(app_config_t));
         memcpy(tmp_config->external_spill_dir,
-               client_ctx.external_spill_dir, UNIFYCR_MAX_FILENAME);
+               client_ctx.external_spill_dir,
+               sizeof(tmp_config->external_spill_dir));
 
         /*don't forget to free*/
         tmp_config->num_procs_per_node = client_ctx.num_procs_per_node;
@@ -285,20 +233,20 @@ int sync_with_client(char *cmd_buf, int sock_id)
             return rc;
         }
     } else {
-        tmp_config = (app_config_t *)arraylist_get(app_config_list,
-                     app_id);
+        tmp_config = (app_config_t *) arraylist_get(app_config_list,
+                                                    app_id);
     }
     /* The following code attach a delegator thread
      * to this new connection */
-    thrd_ctrl_t *thrd_ctrl =
-        (thrd_ctrl_t *)malloc(sizeof(thrd_ctrl_t));
-    memset(thrd_ctrl, 0, sizeof(thrd_ctrl_t));
+    thrd_ctrl_t *thrd_ctrl = (thrd_ctrl_t *)
+        calloc(1, sizeof(thrd_ctrl_t));
 
     thrd_ctrl->exit_flag = 0;
-    cli_signature_t *cli_signature =
-        (cli_signature_t *)malloc(sizeof(cli_signature_t));
+    cli_signature_t *cli_signature = (cli_signature_t *)
+        calloc(1, sizeof(cli_signature_t));
     cli_signature->app_id = app_id;
     cli_signature->sock_id = sock_id;
+
     rc = pthread_mutex_init(&(thrd_ctrl->thrd_lock), NULL);
     if (rc != 0) {
         return (int)UNIFYCR_ERROR_THRDINIT;
@@ -309,28 +257,24 @@ int sync_with_client(char *cmd_buf, int sock_id)
         return (int)UNIFYCR_ERROR_THRDINIT;
     }
 
-    thrd_ctrl->del_req_set =
-        (msg_meta_t *)malloc(sizeof(msg_meta_t));
+    thrd_ctrl->del_req_set = (msg_meta_t *)
+        calloc(1, sizeof(msg_meta_t));
     if (!thrd_ctrl->del_req_set) {
         return (int)UNIFYCR_ERROR_NOMEM;
     }
-    memset(thrd_ctrl->del_req_set,
-           0, sizeof(msg_meta_t));
 
-    thrd_ctrl->del_req_stat =
-        (del_req_stat_t *)malloc(sizeof(del_req_stat_t));
+    thrd_ctrl->del_req_stat = (del_req_stat_t *)
+        calloc(1, sizeof(del_req_stat_t));
     if (!thrd_ctrl->del_req_stat) {
         return (int)UNIFYCR_ERROR_NOMEM;
     }
-    memset(thrd_ctrl->del_req_stat, 0, sizeof(del_req_stat_t));
 
-    thrd_ctrl->del_req_stat->req_stat =
-        (per_del_stat_t *)malloc(sizeof(per_del_stat_t) * glb_size);
+    thrd_ctrl->del_req_stat->req_stat = (per_del_stat_t *)
+        calloc(glb_size, sizeof(per_del_stat_t));
     if (!thrd_ctrl->del_req_stat->req_stat) {
         return (int)UNIFYCR_ERROR_NOMEM;
     }
-    memset(thrd_ctrl->del_req_stat->req_stat,
-           0, sizeof(per_del_stat_t) * glb_size);
+
     rc = arraylist_add(thrd_list, thrd_ctrl);
     if (rc != 0) {
         return rc;
@@ -354,7 +298,8 @@ int sync_with_client(char *cmd_buf, int sock_id)
 
     thrd_ctrl->has_waiting_delegator = 0;
     thrd_ctrl->has_waiting_dispatcher = 0;
-    rc = pthread_create(&(thrd_ctrl->thrd), NULL, rm_delegate_request_thread,
+    rc = pthread_create(&(thrd_ctrl->thrd), NULL,
+                        rm_delegate_request_thread,
                         cli_signature);
     if (rc != 0) {
         return (int)UNIFYCR_ERROR_THRDINIT;
@@ -478,37 +423,40 @@ int open_log_file(app_config_t *app_config,
 
     snprintf(path, sizeof(path), "%s/spill_%d_%d.log",
             app_config->external_spill_dir, app_id, client_side_id);
+    /*  LOG(LOG_DBG, "opening log file %s, client_side_id:%d\n",
+     *      path, client_side_id);
+     */
     app_config->spill_log_fds[client_side_id] = open(path, O_RDONLY, 0666);
-    /*  LOG(LOG_DBG, "openning log file %s, client_side_id:%d\n",
-                path, client_side_id);
-    */
-    strcpy(app_config->spill_log_name[client_side_id], path);
     if (app_config->spill_log_fds[client_side_id] < 0) {
-        printf("rank:%d, openning file %s failure\n", glb_rank, path);
-        fflush(stdout);
+        fprintf(stderr,
+                "ERROR - rank:%d, failed to open spill data file %s\n",
+                glb_rank, path);
+        fflush(stderr);
         return (int)UNIFYCR_ERROR_FILE;
     }
+    strcpy(app_config->spill_log_name[client_side_id], path);
 
     snprintf(path, sizeof(path), "%s/spill_index_%d_%d.log",
             app_config->external_spill_dir, app_id, client_side_id);
+    /*  LOG(LOG_DBG, "opening index log file %s, client_side_id:%d\n",
+     *      path, client_side_id);
+     */
     app_config->spill_index_log_fds[client_side_id] =
         open(path, O_RDONLY, 0666);
-    /*
-        LOG(LOG_DBG, "openning index log file %s, client_side_id:%d\n",
-                path, client_side_id);
-    */
-    strcpy(app_config->spill_index_log_name[client_side_id], path);
     if (app_config->spill_index_log_fds[client_side_id] < 0) {
-        printf("rank:%d, openning index file %s failure\n", glb_rank, path);
-        fflush(stdout);
+        fprintf(stderr,
+                "ERROR - rank:%d, failed to open spill index file %s\n",
+                glb_rank, path);
+        fflush(stderr);
         return (int)UNIFYCR_ERROR_FILE;
     }
+    strcpy(app_config->spill_index_log_name[client_side_id], path);
 
     return ULFS_SUCCESS;
 }
 
 /**
-* broad cast the exit command to all other
+* broadcast the exit command to all other
 * delegators in the job
 * @return success/error code
 */

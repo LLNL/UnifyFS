@@ -53,23 +53,23 @@
 #define UNIFYCR_MAX_FILENAME KIB
 
 // Metadata
-#define MAX_META_PER_SEND (512*KIB)
+#define MAX_META_PER_SEND 256
 #define MAX_FILE_CNT_PER_NODE KIB
 
 // Request Manager
-#define RECV_BUF_CNT 1
-#define RECV_BUF_LEN (MIB + 128*KIB)
-#define REQ_BUF_LEN (128*MIB + 4*KIB + 128*KIB)
+#define RECV_BUF_CNT 4
+#define RECV_BUF_LEN (8 * MIB)
+#define REQ_BUF_LEN (128 * KIB)
 #define SHM_WAIT_INTERVAL 10
 
 // Service Manager
 #define MIN_SLEEP_INTERVAL 10
 #define SLEEP_INTERVAL 100 /* unit: us */
 #define SLEEP_SLICE_PER_UNIT 10
-#define READ_BLOCK_SIZE MIB
-#define SEND_BLOCK_SIZE (MIB + 128*KIB)
+#define READ_BLOCK_SIZE (64 * MIB)
+#define SEND_BLOCK_SIZE (4 * MIB)
 #define READ_BUF_SZ GIB
-#define LARGE_BURSTY_DATA (500 * MIB)
+#define LARGE_BURSTY_DATA (512 * MIB)
 #define MAX_BURSTY_INTERVAL 10000 /* unit: us */
 
 // Request and Service Managers, Command Handler
@@ -90,12 +90,12 @@
 #define UNIFYCR_CHUNK_MEM (256 * MIB)
 #define UNIFYCR_SPILLOVER_SIZE (KIB * MIB)
 #define UNIFYCR_SUPERBLOCK_KEY 4321
-#define UNIFYCR_SHMEM_REQ_SIZE (MIB*128 + 128*KIB)
-#define UNIFYCR_SHMEM_RECV_SIZE (MIB + 128*KIB)
-#define UNIFYCR_INDEX_BUF_SIZE  (20 * MIB)
-#define UNIFYCR_FATTR_BUF_SIZE MIB
+#define UNIFYCR_SHMEM_REQ_SIZE (128 * KIB)
+#define UNIFYCR_SHMEM_RECV_SIZE (64 * MIB)
+#define UNIFYCR_INDEX_BUF_SIZE (4 * MIB)
+#define UNIFYCR_FATTR_BUF_SIZE (16 * MIB)
 #define UNIFYCR_MAX_SPLIT_CNT MIB
-#define UNIFYCR_MAX_READ_CNT MIB
+#define UNIFYCR_MAX_READ_CNT KIB
 
 // Following are not currently used:
 // #define ACK_MSG_SZ 8

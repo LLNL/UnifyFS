@@ -51,9 +51,18 @@ AC_CHECK_HEADERS([inttypes.h wchar.h wctype.h])
 AC_CHECK_HEADER([openssl/md5.h], [], [AC_MSG_FAILURE([
         *** openssl/md5.h missing, openssl-devel package required])])
 
+# PMIx support build option
+AC_ARG_ENABLE([pmix],
+              AC_HELP_STRING([--enable-pmix],
+                             [Enable PMIx build options.]))
+
+if test "x$enable_pmix" = "xyes"; then
 AC_CHECK_HEADERS([pmix.h],
                  [AM_CONDITIONAL([USE_PMIX], [true])],
                  [AM_CONDITIONAL([USE_PMIX], [false])])
+else
+AM_CONDITIONAL([USE_PMIX], [false])
+fi
 
 
 # Checks for library functions.

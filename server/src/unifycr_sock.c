@@ -44,7 +44,7 @@
 #include "unifycr_setup.h"
 #include "unifycr_sock.h"
 
-int server_rank_idx;
+char server_sock_path[UNIFYCR_MAX_FILENAME];
 int server_sockfd;
 struct sockaddr_un server_address;
 
@@ -64,21 +64,23 @@ int cur_sock_id = -1;
 * initialize the listening socket on this delegator
 * @return success/error code
 */
-int sock_init_server(void)
+int sock_init_server(int del_id)
 {
     int rc;
-    char sock_path[UNIFYCR_MAX_FILENAME];
 
-    snprintf(sock_path, sizeof(sock_path), "%s.%d",
-             SOCKET_PATH, getuid());
+    memset(server_sock_path, 0, sizeof(server_sock_path));
+    snprintf(server_sock_path, sizeof(server_sock_path), "%s.%d.%d",
+             SOCKET_PATH, getuid(), del_id);
+
+    /* remove prior domain socket, if any */
+    unlink(server_sock_path);
 
     server_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
 
     memset(&server_address, 0, sizeof(server_address));
     server_address.sun_family = AF_UNIX;
-    strcpy(server_address.sun_path, sock_path);
+    strcpy(server_address.sun_path, server_sock_path);
     int server_len = sizeof(server_address);
-    unlink(sock_path);
 
     rc = bind(server_sockfd, (struct sockaddr *)&server_address,
               (socklen_t)server_len);
@@ -92,7 +94,7 @@ int sock_init_server(void)
         close(server_sockfd);
         return -1;
     }
-    LOG(LOG_DBG, "domain socket path is %s", sock_path);
+    LOG(LOG_DBG, "domain socket path is %s", server_sock_path);
 
     int flag = fcntl(server_sockfd, F_GETFL);
     fcntl(server_sockfd, F_SETFL, flag | O_NONBLOCK);
@@ -103,7 +105,7 @@ int sock_init_server(void)
 
 #ifdef HAVE_PMIX_H
     // publish domain socket path
-    unifycr_pmix_publish(pmix_key_unifycrd_socket, sock_path);
+    unifycr_pmix_publish(pmix_key_unifycrd_socket, server_sock_path);
 #endif
 
     return 0;
@@ -262,7 +264,6 @@ int sock_get_id()
 int sock_sanitize()
 {
     int i;
-    char tmp_str[UNIFYCR_MAX_FILENAME] = {0};
 
     for (i = 0; i < num_fds; i++) {
         if (poll_set[i].fd > 0) {
@@ -270,8 +271,7 @@ int sock_sanitize()
         }
     }
 
-    snprintf(tmp_str, sizeof(tmp_str), "%s%d",
-             SOCKET_PATH, server_rank_idx);
-    unlink(tmp_str);
+    unlink(server_sock_path);
+
     return 0;
 }

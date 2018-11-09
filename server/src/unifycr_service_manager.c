@@ -61,7 +61,7 @@ int wait_time = 0;
 int dbg_rank = 0;
 int sm_rc = 0;
 
-long burst_data_sz;
+size_t burst_data_sz;
 long dbg_sending_cnt = 0;
 long dbg_sent_cnt = 0;
 
@@ -91,7 +91,7 @@ void *sm_service_reads(void *ctx)
     mem_buf = calloc(1, READ_BUF_SZ);
     if (mem_buf == NULL) {
         // TODO: we need a better way to handle this case
-        fprintf(stderr, "Error allocating buffer!!!\n");
+        fprintf(stderr, "SvcMgr: Error allocating read buffer!!!\n");
         exit(-1);
     }
 
@@ -99,38 +99,40 @@ void *sm_service_reads(void *ctx)
 
     burst_data_sz = 0;
 
-    read_task_set.read_tasks =
-        (read_task_t *)malloc(MAX_META_PER_SEND * sizeof(read_task_t));
+    read_task_set.read_tasks = (read_task_t *)
+        calloc(MAX_META_PER_SEND, sizeof(read_task_t));
     read_task_set.num = 0;
     read_task_set.cap = MAX_META_PER_SEND;
 
-    service_msgs.msg =
-        (send_msg_t *)malloc(MAX_META_PER_SEND * sizeof(send_msg_t));
+    service_msgs.msg = (send_msg_t *)
+        calloc(MAX_META_PER_SEND, sizeof(send_msg_t));
     service_msgs.num = 0;
     service_msgs.cap = MAX_META_PER_SEND;
 
     pended_reads = arraylist_create();
     if (pended_reads == NULL) {
+        LOG(LOG_ERR, "SvcMgr: failed to create pended_reads arraylist\n");
         sm_rc = (int)UNIFYCR_ERROR_NOMEM;
         return (void *)&sm_rc;
     }
 
     pended_sends = arraylist_create();
     if (pended_sends == NULL) {
+        LOG(LOG_ERR, "SvcMgr: failed to create pended_sends arraylist\n");
         sm_rc = (int)UNIFYCR_ERROR_NOMEM;
         return (void *)&sm_rc;
     }
 
     send_buf_lst = arraylist_create();
     if (send_buf_lst == NULL) {
+        LOG(LOG_ERR, "SvcMgr: failed to create send_buf_lst arraylist\n");
         sm_rc = (int)UNIFYCR_ERROR_NOMEM;
         return (void *)&sm_rc;
     }
 
     rank_ack_task.num = 0;
-    rank_ack_task.ack_metas =
-        (rank_ack_meta_t *)malloc(glb_size * MAX_NUM_CLIENTS
-                                  * sizeof(rank_ack_meta_t));
+    rank_ack_task.ack_metas = (rank_ack_meta_t *)
+        calloc(glb_size * MAX_NUM_CLIENTS, sizeof(rank_ack_meta_t));
 
     int i;
     for (i = 0; i < glb_size * MAX_NUM_CLIENTS; i++) {
@@ -141,9 +143,9 @@ void *sm_service_reads(void *ctx)
         rank_ack_task.ack_metas[i].start_cursor = 0;
     }
 
-    /*received message format: cmd, req_num, a list of read
-     * requests*/
+    /*received message format: cmd, req_num, list of read reqs */
     while (!flag) {
+        memset(req_msg_buf, 0, REQ_BUF_LEN);
         MPI_Irecv(req_msg_buf, REQ_BUF_LEN, MPI_CHAR,
                   MPI_ANY_SOURCE, CLI_DATA_TAG,
                   MPI_COMM_WORLD, &request);
@@ -151,6 +153,7 @@ void *sm_service_reads(void *ctx)
         return_code = MPI_Test(&request,
                                &irecv_flag, &status);
         if (return_code != MPI_SUCCESS) {
+            LOG(LOG_ERR, "SvcMgr: MPI_Test(Irecv request) failed\n");
             sm_rc = (int)UNIFYCR_ERROR_RECV;
             return (void *)&sm_rc;
         }
@@ -166,7 +169,6 @@ void *sm_service_reads(void *ctx)
                 wait_time += SLEEP_INTERVAL;
             }
 
-
             /* a bursty behavior is considered end when
              * wait time is larger than BURSTY_INTERVAL
              * */
@@ -175,6 +177,9 @@ void *sm_service_reads(void *ctx)
                 if (service_msgs.num != 0) {
                     rc = sm_cluster_reads(&read_task_set, &service_msgs);
                     if (rc != 0) {
+                        LOG(LOG_ERR,
+                            "SvcMgr: sm_cluster_reads() failed - rc = %d\n",
+                            rc);
                         sm_rc = rc;
                         return (void *)&sm_rc;
                     }
@@ -189,6 +194,9 @@ void *sm_service_reads(void *ctx)
                     rc = sm_read_send_pipe(&read_task_set,
                                            &service_msgs, &rank_ack_task);
                     if (rc != 0) {
+                        LOG(LOG_ERR,
+                            "SvcMgr: sm_read_send_pipe() failed - rc = %d\n",
+                            rc);
                         sm_rc = rc;
                         return (void *)&sm_rc;
                     }
@@ -206,26 +214,19 @@ void *sm_service_reads(void *ctx)
                     burst_data_sz = 0;
                 }
                 wait_time = 0;
-
-
             }
 
             return_code = MPI_Test(&request, &irecv_flag, &status);
             if (return_code != MPI_SUCCESS) {
+                LOG(LOG_ERR, "SvcMgr: MPI_Test(Irecv request) failed\n");
                 sm_rc = (int)UNIFYCR_ERROR_RECV;
                 return (void *)&sm_rc;
             }
-
         }
 
-        /*
-         * Reinterpret memory type of req_msg_buf as an integer array
-         * to extract service command from message header.
-         */
-        union rmb { int *i; char *c; };
-        cmd = *(((union rmb)req_msg_buf).i);
+        cmd = *((int *)req_msg_buf);
         if (cmd == XFER_COMM_DATA)  {
-            sm_decode_msg(req_msg_buf);
+            sm_decode_msg(req_msg_buf + sizeof(cmd));
         }
 
         wait_time = 0;
@@ -311,7 +312,7 @@ int sm_cluster_reads(task_set_t *read_task_set,
         }
     }
     read_task_set->num++;
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /**
@@ -326,17 +327,13 @@ int sm_read_send_pipe(task_set_t *read_task_set,
                       service_msgs_t *service_msgs,
                       rank_ack_task_t *rank_ack_task)
 {
-
     qsort(read_task_set->read_tasks, read_task_set->num,
           sizeof(read_task_t), compare_read_task);
 
-    int tmp_app_id, tmp_cli_id, start_idx, tmp_fd;
-
+    int tmp_app_id, tmp_cli_id, tmp_fd;
+    size_t start_idx, i;
     app_config_t *app_config;
-    long tmp_offset, buf_cursor = 0;
-
-
-    int i;
+    size_t tmp_offset, buf_cursor = 0;
 
     for (i = 0; i < read_task_set->num; i++) {
         if (buf_cursor + read_task_set->read_tasks[i].size > READ_BUF_SZ) {
@@ -371,7 +368,7 @@ int sm_read_send_pipe(task_set_t *read_task_set,
         } else {
             /*part of the requested data is in shared memory*/
             if (tmp_offset < app_config->data_size) {
-                long sz_from_mem = app_config->data_size - tmp_offset;
+                size_t sz_from_mem = app_config->data_size - tmp_offset;
                 memcpy(mem_buf + buf_cursor,
                        app_config->shm_superblocks[tmp_cli_id]
                        + app_config->data_offset + tmp_offset,
@@ -383,12 +380,12 @@ int sm_read_send_pipe(task_set_t *read_task_set,
                                      sz_from_mem - 1);
                 buf_cursor += sz_from_mem;
 
-                long sz_from_ssd = read_task_set->read_tasks[i].size - sz_from_mem;
+                size_t sz_from_ssd = read_task_set->read_tasks[i].size -
+                                     sz_from_mem;
 
                 /*post read*/
                 tmp_fd = app_config->spill_log_fds[tmp_cli_id];
-                int rc = pread(tmp_fd, mem_buf + buf_cursor, sz_from_ssd,
-                               0);
+                int rc = pread(tmp_fd, mem_buf + buf_cursor, sz_from_ssd, 0);
                 if (rc < 0) {
                     return (int)UNIFYCR_ERROR_READ;
                 }
@@ -430,7 +427,7 @@ int sm_read_send_pipe(task_set_t *read_task_set,
                            service_msgs, rank_ack_task);
     buf_cursor = 0;
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /**
@@ -494,13 +491,13 @@ int sm_wait_until_digested(task_set_t *read_task_set,
 
     /*Send back the remaining acks*/
     rank_ack_meta_t *ptr_ack_meta = NULL;
-    long tmp_sz;
+    size_t tmp_sz;
     for (i = 0; i < read_ack_task->num; i++) {
         ptr_ack_meta = &read_ack_task->ack_metas[i];
         tmp_sz = arraylist_size(ptr_ack_meta->ack_list);
         if (ptr_ack_meta->start_cursor < tmp_sz) {
             ret_code = sm_ack_remote_delegator(ptr_ack_meta);
-            if (ret_code != ULFS_SUCCESS) {
+            if (ret_code != UNIFYCR_SUCCESS) {
                 return ret_code;
             }
         }
@@ -553,26 +550,26 @@ int sm_wait_until_digested(task_set_t *read_task_set,
     read_ack_task->num = 0;
     arraylist_reset(pended_sends);
     send_buf_lst->size = 0;
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 
 
 /*
  * insert the data read for each read_task_t to ack_list,
- * data will be transferred back lafter.
+ * data will be transferred back later.
  * */
 int batch_ins_to_ack_lst(rank_ack_task_t *rank_ack_task,
                          read_task_t *read_task,
                          service_msgs_t *service_msgs,
-                         char  *mem_addr, int start_offset, int end_offset)
+                         char *mem_addr, size_t start_offset, size_t end_offset)
 {
     /* search for the starting service msgs for
      * a given region of read_task_t identified by
      * start_offset and size*/
 
-    int i = 0;
-    int cur_offset = 0;
+    size_t i = 0;
+    size_t cur_offset = 0;
 
     /*                          read_task
      *    read_task_t: -----------******************------------
@@ -591,14 +588,13 @@ int batch_ins_to_ack_lst(rank_ack_task_t *rank_ack_task,
     }
 
     // pack to a ack_meta
-    int partial_skip_len = start_offset - cur_offset;
+    size_t partial_skip_len = start_offset - cur_offset;
     /*after finding the starting service msgs and insert it to the ack list,
      * continue to add the next ones across the region of the read_task
      * */
-    int mem_pos = 0;
-
-    int first = 1, tmp_len;
-    long tmp_offset;
+    size_t tmp_offset, tmp_len;
+    size_t mem_pos = 0;
+    int first = 1;
 
     while (1) {
         if (cur_offset + service_msgs->msg[read_task->start_idx + i].length
@@ -625,90 +621,86 @@ int batch_ins_to_ack_lst(rank_ack_task_t *rank_ack_task,
         mem_pos += tmp_len;
         cur_offset += tmp_len;
         i++;
-
     }
 
     /*insert part of the last message*/
-    if (mem_pos < end_offset - start_offset + 1) {
-        long src_offset = service_msgs->msg[read_task->start_idx + i].src_offset;
-        long len = end_offset - start_offset + 1 - mem_pos;
+    if (mem_pos < (end_offset - start_offset + 1)) {
+        size_t ndx = read_task->start_idx + i;
+        size_t src_offset = service_msgs->msg[ndx].src_offset;
+        size_t len = (end_offset - start_offset + 1) - mem_pos;
         ins_to_ack_lst(rank_ack_task,
                        mem_addr + mem_pos, service_msgs,
-                       read_task->start_idx + i, src_offset, len);
+                       ndx, src_offset, len);
     }
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /*
  * send back ack to the remote delegator
  * */
 
-int sm_ack_remote_delegator(rank_ack_meta_t *ptr_ack_meta)
+int sm_ack_remote_delegator(rank_ack_meta_t *ack_meta)
 {
     long i;
     int send_sz = sizeof(int), len;
 
-    len = arraylist_size(ptr_ack_meta->ack_list)
-          - ptr_ack_meta->start_cursor;
+    len = arraylist_size(ack_meta->ack_list)
+          - ack_meta->start_cursor;
 
+    // BEGIN TODO: it's odd to directly manage arraylist_t rather than use API
     char *send_msg_buf = NULL;
     if (send_buf_lst->size == send_buf_lst->cap) {
-        send_msg_buf = (char *)malloc(SEND_BLOCK_SIZE);
+        /* grow to 2x capacity */
+        send_buf_lst->cap *= 2;
         send_buf_lst->elems = (void **)realloc(send_buf_lst->elems,
-                                               2 * sizeof(void *) * send_buf_lst->cap);
-        for (i = 0; i < 2 * send_buf_lst->cap; i++) {
+                                            sizeof(void *) * send_buf_lst->cap);
+        /* set new elems to NULL */
+        for (i = send_buf_lst->size; i < send_buf_lst->cap; i++) {
             send_buf_lst->elems[i] = NULL;
         }
-        send_buf_lst->cap = 2 * send_buf_lst->cap;
+    }
+
+    send_msg_buf = send_buf_lst->elems[send_buf_lst->size];
+    if (NULL == send_msg_buf) {
+        send_msg_buf = malloc(SEND_BLOCK_SIZE);
         send_buf_lst->elems[send_buf_lst->size] = send_msg_buf;
-        send_buf_lst->size++;
-    } else {
-        if (send_buf_lst->elems[send_buf_lst->size] == NULL) {
-            send_buf_lst->elems[send_buf_lst->size]
-                = malloc(SEND_BLOCK_SIZE);
-        }
-        send_msg_buf = send_buf_lst->elems[send_buf_lst->size];
-        send_buf_lst->size++;
     }
+    send_buf_lst->size++;
+    // END TODO
 
-    ack_meta_t *ptr_meta_cursor;
-    for (i = ptr_ack_meta->start_cursor;
-         i < arraylist_size(ptr_ack_meta->ack_list);
-         i++) {
-        ptr_meta_cursor =
-            (ack_meta_t *)arraylist_get(ptr_ack_meta->ack_list, i);
-
-        memcpy(send_msg_buf + send_sz, &(ptr_meta_cursor->src_fid),
-               sizeof(long));
-        send_sz += sizeof(long);
-
-        memcpy(send_msg_buf + send_sz, &(ptr_meta_cursor->src_offset),
-               sizeof(long));
-        send_sz += sizeof(long);
-
-        memcpy(send_msg_buf + send_sz, &(ptr_meta_cursor->length),
-               sizeof(long));
-        send_sz += sizeof(long);
-
-        memcpy(send_msg_buf + send_sz, ptr_meta_cursor->addr,
-               ptr_meta_cursor->length);
-        send_sz += ptr_meta_cursor->length;
-    }
-
+    /* copy number of messages we're sending */
     memcpy(send_msg_buf, &len, sizeof(int));
 
-    ack_stat_t *ack_stat = (ack_stat_t *)malloc(sizeof(ack_stat_t));
-    ack_stat->src_rank = ptr_ack_meta->rank_id;
-    ack_stat->src_thrd = ptr_ack_meta->thrd_id;
+    ack_meta_t *meta_cursor;
+    for (i = ack_meta->start_cursor;
+         i < arraylist_size(ack_meta->ack_list);
+         i++) {
+        meta_cursor =
+            (ack_meta_t *)arraylist_get(ack_meta->ack_list, i);
+
+        /* copy data_msg_t struct */
+        memcpy(send_msg_buf + send_sz, &(meta_cursor->msg),
+               sizeof(meta_cursor->msg));
+        send_sz += sizeof(meta_cursor->msg);
+
+        /* copy its associated data */
+        memcpy(send_msg_buf + send_sz, meta_cursor->addr,
+               meta_cursor->msg.length);
+        send_sz += meta_cursor->msg.length;
+    }
+
+    ack_stat_t *ack_stat = (ack_stat_t *) malloc(sizeof(ack_stat_t));
+    ack_stat->src_rank = ack_meta->rank_id;
+    ack_stat->src_thrd = ack_meta->thrd_id;
     MPI_Isend(send_msg_buf, send_sz, MPI_CHAR,
-              ptr_ack_meta->rank_id,
-              SER_DATA_TAG + ptr_ack_meta->thrd_id,
+              ack_meta->rank_id,
+              SER_DATA_TAG + ack_meta->thrd_id,
               MPI_COMM_WORLD, &(ack_stat->req));
     arraylist_add(pended_sends, ack_stat);
     dbg_sending_cnt++;
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 int compare_ack_stat(const void *a, const void *b)
@@ -744,19 +736,15 @@ int compare_ack_stat(const void *a, const void *b)
  * */
 int ins_to_ack_lst(rank_ack_task_t *rank_ack_task,
                    char *mem_addr, service_msgs_t *service_msgs,
-                   int index, long src_offset, long len)
+                   size_t index, size_t src_offset, size_t len)
 {
-    ack_meta_t *ptr_ack = (ack_meta_t *)malloc(sizeof(ack_meta_t));
-
     int rc = 0;
+
+    ack_meta_t *ptr_ack = (ack_meta_t *)malloc(sizeof(ack_meta_t));
     ptr_ack->addr = mem_addr;
-    ptr_ack->length = len;
-    ptr_ack->src_fid = service_msgs->msg[index].src_fid;
-
-    /*the src_offset might start from any position in the message, so
-     * make it a separate parameter*/
-    ptr_ack->src_offset = src_offset;
-
+    ptr_ack->msg.length = len;
+    ptr_ack->msg.src_fid = service_msgs->msg[index].src_fid;
+    ptr_ack->msg.src_offset = src_offset;
 
     int src_thrd = service_msgs->msg[index].src_thrd;;
     int src_rank = service_msgs->msg[index].src_delegator_rank;
@@ -769,8 +757,8 @@ int ins_to_ack_lst(rank_ack_task_t *rank_ack_task,
 
     /*find the entry with the same destination (rank, thrd) pair*/
 
-    int pos = find_ack_meta(rank_ack_task,
-                            src_rank, src_thrd);
+    size_t pos = find_ack_meta(rank_ack_task,
+                               src_rank, src_thrd);
     if (rank_ack_task->ack_metas[pos].rank_id != src_rank ||
         rank_ack_task->ack_metas[pos].thrd_id != src_thrd) {
         rc = insert_ack_meta(rank_ack_task, ptr_ack, pos,
@@ -778,12 +766,12 @@ int ins_to_ack_lst(rank_ack_task_t *rank_ack_task,
 
     } else { /*found the corresponding entry for ack*/
         ptr_ack_meta = &rank_ack_task->ack_metas[pos];
-        long num_entries = arraylist_size(ptr_ack_meta->ack_list);
-        long num_to_ack = num_entries - ptr_ack_meta->start_cursor;
+        int num_entries = arraylist_size(ptr_ack_meta->ack_list);
+        int num_to_ack = num_entries - ptr_ack_meta->start_cursor;
 
-        if (ptr_ack_meta->src_sz + ptr_ack->length
+        if (ptr_ack_meta->src_sz + ptr_ack->msg.length
             + (num_to_ack + 1) * sizeof(ack_meta_t) > SEND_BLOCK_SIZE) {
-            ptr_ack_meta->src_sz = ptr_ack->length;
+            ptr_ack_meta->src_sz = ptr_ack->msg.length;
             rc = sm_ack_remote_delegator(ptr_ack_meta);
             arraylist_add(ptr_ack_meta->ack_list, ptr_ack);
             /*start_cursor records the starting ack for the next send*/
@@ -792,45 +780,45 @@ int ins_to_ack_lst(rank_ack_task_t *rank_ack_task,
                 return (int)UNIFYCR_ERROR_SEND;
             }
         } else {
-            ptr_ack_meta->src_sz += ptr_ack->length;
+            ptr_ack_meta->src_sz += ptr_ack->msg.length;
             arraylist_add(ptr_ack_meta->ack_list, ptr_ack);
         }
     }
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 
 }
 
 int insert_ack_meta(rank_ack_task_t *rank_ack_task,
-                    ack_meta_t *ptr_ack, int pos, int rank_id, int thrd_id,
-                    int src_cli_rank)
+                    ack_meta_t *ptr_ack, size_t pos,
+                    int rank_id, int thrd_id, int src_cli_rank)
 {
-
     if (pos == rank_ack_task->num) {
-        rank_ack_task->ack_metas[rank_ack_task->num].ack_list
-            = arraylist_create();
-        rank_ack_task->ack_metas[rank_ack_task->num].rank_id = rank_id;
-        rank_ack_task->ack_metas[rank_ack_task->num].thrd_id = thrd_id;
-        rank_ack_task->ack_metas[rank_ack_task->num].src_cli_rank = src_cli_rank;
-        if (rank_ack_task->ack_metas[rank_ack_task->num].ack_list == NULL) {
+        rank_ack_task->ack_metas[pos].ack_list = arraylist_create();
+        if (rank_ack_task->ack_metas[pos].ack_list == NULL) {
             return (int)UNIFYCR_ERROR_NOMEM;
         }
+        arraylist_add(rank_ack_task->ack_metas[pos].ack_list, ptr_ack);
 
-        rank_ack_task->ack_metas[rank_ack_task->num].src_sz
-            = ptr_ack->length;
-        rank_ack_task->ack_metas[rank_ack_task->num].start_cursor = 0;
-        arraylist_add(rank_ack_task->ack_metas[rank_ack_task->num].ack_list,
-                      ptr_ack);
+        rank_ack_task->ack_metas[pos].rank_id = rank_id;
+        rank_ack_task->ack_metas[pos].thrd_id = thrd_id;
+        rank_ack_task->ack_metas[pos].src_cli_rank = src_cli_rank;
+
+        rank_ack_task->ack_metas[pos].src_sz = ptr_ack->msg.length;
+        rank_ack_task->ack_metas[pos].start_cursor = 0;
+
         rank_ack_task->num++;
-        return ULFS_SUCCESS;
+        return UNIFYCR_SUCCESS;
     }
 
-    int i;
+    size_t i;
     for (i = rank_ack_task->num - 1; i >= pos; i--) {
         rank_ack_task->ack_metas[i + 1] =  rank_ack_task->ack_metas[i];
+        if (0 == i)
+            break; // avoid unsigned wraparound
     }
-    rank_ack_task->ack_metas[pos].ack_list
-        = arraylist_create();
+    rank_ack_task->ack_metas[pos].ack_list = arraylist_create();
+
     rank_ack_task->ack_metas[pos].rank_id = rank_id;
     rank_ack_task->ack_metas[pos].thrd_id = thrd_id;
     rank_ack_task->ack_metas[pos].src_cli_rank = src_cli_rank;
@@ -839,20 +827,19 @@ int insert_ack_meta(rank_ack_task_t *rank_ack_task,
         return (int)UNIFYCR_ERROR_NOMEM;
     }
 
-    rank_ack_task->ack_metas[pos].src_sz = ptr_ack->length;
+    rank_ack_task->ack_metas[pos].src_sz = ptr_ack->msg.length;
     rank_ack_task->ack_metas[pos].start_cursor = 0;
     arraylist_add(rank_ack_task->ack_metas[pos].ack_list,
                   ptr_ack);
     rank_ack_task->num++;
-    return ULFS_SUCCESS;
-
+    return UNIFYCR_SUCCESS;
 }
 
-int find_ack_meta(rank_ack_task_t *rank_ack_task,
-                  int src_rank, int src_thrd)
+size_t find_ack_meta(rank_ack_task_t *rank_ack_task,
+                     int src_rank, int src_thrd)
 {
-    int left = 0, right = rank_ack_task->num - 1;
-    int mid = (left + right) / 2;
+    size_t left = 0, right = rank_ack_task->num - 1;
+    size_t mid = (left + right) / 2;
 
     if (rank_ack_task->num == 0) {
         return 0;
@@ -936,20 +923,18 @@ int compare_rank_thrd(int src_rank, int src_thrd,
 }
 
 void reset_read_tasks(task_set_t *read_task_set,
-                      service_msgs_t *service_msgs, int index)
+                      service_msgs_t *service_msgs,
+                      size_t index)
 {
+    read_task_t* rd_task = &(read_task_set->read_tasks[read_task_set->num]);
+    send_msg_t* msg = &(service_msgs->msg[index]);
 
-    read_task_set->read_tasks[read_task_set->num].start_idx = index;
-    read_task_set->read_tasks[read_task_set->num].size =
-        service_msgs->msg[index].length;
-    read_task_set->read_tasks[read_task_set->num].end_idx = index;
-    read_task_set->read_tasks[read_task_set->num].app_id =
-        service_msgs->msg[index].dest_app_id;
-    read_task_set->read_tasks[read_task_set->num].cli_id =
-        service_msgs->msg[index].dest_client_id;
-    read_task_set->read_tasks[read_task_set->num].arrival_time =
-        service_msgs->msg[index].arrival_time;
-
+    rd_task->start_idx = index;
+    rd_task->end_idx = index;
+    rd_task->size = msg->length;
+    rd_task->app_id = msg->dest_app_id;
+    rd_task->cli_id = msg->dest_client_id;
+    rd_task->arrival_time = msg->arrival_time;
 }
 
 /**
@@ -957,46 +942,44 @@ void reset_read_tasks(task_set_t *read_task_set,
 * @param receive buffer that contains the requests
 * @return success/error code
 */
-int sm_decode_msg(char *recv_msg_buf)
+int sm_decode_msg(char *recv_msgs)
 {
+    size_t num_msg = *(size_t *)recv_msgs;
+    send_msg_t *msgs = (send_msg_t *)(recv_msgs + sizeof(num_msg));
 
-    int num_of_msg = *((int *)recv_msg_buf + 1);
-    send_msg_t *ptr_msg = (send_msg_t *)(recv_msg_buf
-                                         + 2 * sizeof(int));
+    //LOG(LOG_DBG, "SvcMgr: processing %zu read requests\n", num_msg);
 
-    if (num_of_msg + service_msgs.num >= service_msgs.cap) {
-        service_msgs.msg = (send_msg_t *)realloc(service_msgs.msg,
-                           2 * (num_of_msg + service_msgs.num) * sizeof(send_msg_t));
+    if ((num_msg + service_msgs.num) >= service_msgs.cap) {
+        size_t new_sz = 2 * (num_msg + service_msgs.num);
+        service_msgs.msg = (send_msg_t *)
+            realloc(service_msgs.msg, new_sz * sizeof(send_msg_t));
         if (service_msgs.msg == NULL) {
             return (int)UNIFYCR_ERROR_NOMEM;
         }
+        service_msgs.cap = new_sz;
 
-        service_msgs.cap = 2 * (num_of_msg + service_msgs.num);
-
-        read_task_set.read_tasks = (read_task_t *)realloc(read_task_set.read_tasks,
-                                   2 * (num_of_msg + service_msgs.num) * sizeof(read_task_t));
+        read_task_set.read_tasks = (read_task_t *)
+            realloc(read_task_set.read_tasks, new_sz * sizeof(read_task_t));
         if (read_task_set.read_tasks == NULL) {
             return (int)UNIFYCR_ERROR_NOMEM;
         }
-
-        read_task_set.cap = 2 * (num_of_msg + service_msgs.num);
+        read_task_set.cap = new_sz;
     }
 
-    int iter = 0;
-    while (iter != num_of_msg) {
-        service_msgs.msg[service_msgs.num] = ptr_msg[iter];
-        service_msgs.msg[service_msgs.num].arrival_time
-            = (int)time(NULL);
+    for (int iter = 0; iter < num_msg; iter++) {
+        service_msgs.msg[service_msgs.num] = msgs[iter];
+        service_msgs.msg[service_msgs.num].arrival_time = (int)time(NULL);
         service_msgs.num++;
-        iter++;
     }
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 int sm_exit()
 {
-    int rc = ULFS_SUCCESS;
+    int rc = UNIFYCR_SUCCESS;
     int i;
+
+    LOG(LOG_DBG, "SvcMgr: exiting\n");
 
     arraylist_free(pended_reads);
     arraylist_free(pended_sends);
@@ -1019,7 +1002,6 @@ int sm_init_socket()
     int len;
     int result;
     struct sockaddr_un serv_addr;
-    char tmp_path[UNIFYCR_MAX_FILENAME] = {0};
 
     sm_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sm_sockfd  < 0) {
@@ -1028,12 +1010,7 @@ int sm_init_socket()
 
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sun_family = AF_UNIX;
-
-    /*which delegator I belong to*/
-    snprintf(tmp_path, sizeof(tmp_path), "%s.%d",
-             SOCKET_PATH, getuid());
-
-    strcpy(serv_addr.sun_path, tmp_path);
+    strcpy(serv_addr.sun_path, server_sock_path);
     len = sizeof(serv_addr);
     result = connect(sm_sockfd,
                      (struct sockaddr *)&serv_addr, len);
@@ -1119,37 +1096,38 @@ int compare_read_task(const void *a, const void *b)
 void print_task_set(task_set_t *read_task_set,
                     service_msgs_t *service_msgs)
 {
-    int i;
+    read_task_t *rd_task;
+    size_t i;
 
-    read_task_t *ptr_read_task;
     for (i = 0; i < read_task_set->num; i++) {
-        ptr_read_task = &read_task_set->read_tasks[i];
-        LOG(LOG_DBG, "task_set[%d]'s start_idx is %d, end_idx \
-            is %d, arrival time is %d, app_id:%d, cli_id:%d\n",
-            i, ptr_read_task->start_idx, ptr_read_task->end_idx,
-            ptr_read_task->arrival_time, ptr_read_task->app_id,
-            ptr_read_task->cli_id);
+        rd_task = &read_task_set->read_tasks[i];
+        LOG(LOG_DBG, "task_set[%zu]'s start_idx:%zu, "
+                     "end_idx:%zu, arrival time:%d, "
+                     "app_id:%d, cli_id:%d\n",
+            i, rd_task->start_idx, rd_task->end_idx,
+            rd_task->arrival_time, rd_task->app_id,
+            rd_task->cli_id);
     }
 }
 
 void print_pended_sends(arraylist_t *pended_sends)
 {
+    int arrsz = arraylist_size(pended_sends);
     ack_stat_t *all_stats =
-        (ack_stat_t *)malloc(sizeof(ack_stat_t)
-                             * pended_sends->size);
+        (ack_stat_t *)malloc(sizeof(ack_stat_t) * arrsz);
 
     ack_stat_t *ptr_stat;
-    long i;
-    for (i = 0; i < pended_sends->size; i++) {
+    int i;
+
+    for (i = 0; i < arrsz; i++) {
         ptr_stat = arraylist_get(pended_sends, i);
         all_stats[i].src_rank = ptr_stat->src_rank;
         all_stats[i].src_thrd = ptr_stat->src_thrd;
     }
 
-    qsort(all_stats, pended_sends->size,
-          sizeof(ack_stat_t), compare_ack_stat);
+    qsort(all_stats, arrsz, sizeof(ack_stat_t), compare_ack_stat);
 
-    for (i = 0; i < pended_sends->size; i++) {
+    for (i = 0; i < arrsz; i++) {
         LOG(LOG_DBG, "src_rank:%d, src_thrd:%d\n",
             all_stats[i].src_rank, all_stats[i].src_thrd);
     }
@@ -1161,44 +1139,35 @@ void print_pended_sends(arraylist_t *pended_sends)
 
 void print_pended_reads(arraylist_t *pended_reads)
 {
-    pended_read_t *ptr_pended_read;
-    long num = arraylist_size(pended_reads);
-    long i;
+    pended_read_t *pend_read;
+    int i;
+    int arrsz = arraylist_size(pended_reads);
 
-    int start_pos, end_pos, index;
-    for (i = 0; i < num; i++) {
-        ptr_pended_read =
-            (pended_read_t *)arraylist_get(pended_reads, i);
-        start_pos = ptr_pended_read->start_pos;
-        end_pos = ptr_pended_read->end_pos;
-        index = ptr_pended_read->index;
-        LOG(LOG_DBG, "pended_read:start_pos:%d, end_pos:%d, index:%d\n",
-            start_pos, end_pos, index);
+    for (i = 0; i < arrsz; i++) {
+        pend_read = (pended_read_t *)arraylist_get(pended_reads, i);
+        LOG(LOG_DBG, "pended_read: start_pos:%zu, end_pos:%zu, index:%zu\n",
+            pend_read->start_pos, pend_read->end_pos, pend_read->index);
     }
 }
 
 void print_ack_meta(rank_ack_task_t *rank_ack_tasks)
 {
-    long num = rank_ack_tasks->num;
-    long i;
+    ack_meta_t *meta;
+    size_t i, j;
+    size_t num = rank_ack_tasks->num;
 
     /* printf("printing ack_meta, num is %d########################\n",
             rank_ack_tasks->num); */
-    ack_meta_t *ptr_meta;
     for (i = 0; i < num; i++) {
-        long j;
-        for (j = 0; j < arraylist_size(rank_ack_tasks->ack_metas[i].ack_list);
-             j++) {
-            if (rank_ack_tasks->ack_metas[i].src_cli_rank == 3) {
-                ptr_meta = arraylist_get(rank_ack_tasks->ack_metas[i].ack_list, j);
-                LOG(LOG_DBG, "ack_meta:dbg_rank:%d, fid:%ld, offset:%ld, length:%ld\n",
+        if (rank_ack_tasks->ack_metas[i].src_cli_rank == 3) { /* Q: Why 3? */
+            arraylist_t* acklst = rank_ack_tasks->ack_metas[i].ack_list;
+            for (j = 0; j < arraylist_size(acklst); j++) {
+                meta = arraylist_get(acklst, j);
+                LOG(LOG_DBG, "ack_meta: rank:%d, fid:%d, offset:%zu, len:%zu\n",
                     rank_ack_tasks->ack_metas[i].src_cli_rank,
-                    ptr_meta->src_fid, ptr_meta->src_offset,
-                    ptr_meta->length);
+                    meta->msg.src_fid, meta->msg.src_offset,
+                    meta->msg.length);
             }
         }
-
     }
 }
-
-

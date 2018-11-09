@@ -257,15 +257,16 @@ typedef struct {
 } unifycr_chunkmeta_t;
 
 typedef struct {
-    off_t size;                     /* current file size */
-    off_t log_size;                 /* real size of the file for logio*/
-    int is_dir;                     /* is this file a directory */
+    size_t size;                     /* current file size */
+    size_t log_size;                 /* real size of the file for logio*/
+
     pthread_spinlock_t fspinlock;   /* file lock variable */
     enum flock_enum flock_status;   /* file lock status */
 
+    int is_dir;                     /* is this file a directory */
     int storage;                    /* FILE_STORAGE specifies file data management */
 
-    off_t chunks;                   /* number of chunks allocated to file */
+    size_t chunks;                   /* number of chunks allocated to file */
     unifycr_chunkmeta_t *chunk_meta; /* meta data for chunks */
 } unifycr_filemeta_t;
 
@@ -277,41 +278,34 @@ typedef struct {
 } unifycr_filename_t;
 
 /*unifycr structures*/
-typedef struct {
-    int fid;
-    long offset;
-    long length;
-    char *buf;
-} read_req_t;
 
 typedef struct {
-    int src_fid;
-    long offset;
-    long length;
-} shm_meta_t; /*metadata format in the shared memory*/
-
-typedef struct {
-    off_t *ptr_num_entries;
+    size_t *ptr_num_entries;
     unifycr_index_t *index_entry;
 } unifycr_index_buf_t;
 
 typedef struct {
-    off_t *ptr_num_entries;
+    size_t *ptr_num_entries;
     unifycr_file_attr_t *meta_entry;
 } unifycr_fattr_buf_t;
 
 typedef struct {
+    size_t count;
     unifycr_index_t idxes[UNIFYCR_MAX_SPLIT_CNT];
-    int count;
 } index_set_t;
 
 typedef struct {
+    int fid;
+    size_t offset;
+    size_t length;
+    char *buf;
+} read_req_t;
+
+typedef struct {
+    size_t count;
     read_req_t read_reqs[UNIFYCR_MAX_READ_CNT];
-    int count;
 } read_req_set_t;
 
-read_req_set_t read_req_set;
-read_req_set_t tmp_read_req_set;
 index_set_t tmp_index_set;
 
 extern int *local_rank_lst;
@@ -320,22 +314,22 @@ extern int local_rank_idx;
 extern int local_del_cnt;
 extern int client_sockfd;
 extern struct pollfd cmd_fd;
-extern long shm_req_size;
-extern long shm_recv_size;
-extern char *shm_recvbuf;
-extern char *shm_reqbuf;
+extern size_t shm_req_size;
+extern size_t shm_recv_size;
+extern char *shm_recv_buf;
+extern char *shm_req_buf;
 extern char cmd_buf[CMD_BUF_SIZE];
 extern char ack_msg[3];
 extern unifycr_fattr_buf_t unifycr_fattrs;
 
-extern int glb_superblock_size;
+extern size_t glb_superblock_size;
 extern int dbg_rank;
 extern int app_id;
 extern int glb_size;
 extern int reqbuf_fd;
 extern int recvbuf_fd;
 extern int superblock_fd;
-extern long unifycr_key_slice_range;
+extern size_t unifycr_key_slice_range;
 
 /* -------------------------------
  * Global varaible declarations
@@ -369,15 +363,12 @@ extern unifycr_stream_t unifycr_streams[UNIFYCR_MAX_FILEDESCS];
 extern int unifycr_use_memfs;
 extern int unifycr_use_spillover;
 
-extern int    unifycr_max_files;  /* maximum number of files to store */
-extern size_t
-unifycr_chunk_mem;  /* number of bytes in memory to be used for chunk storage */
-extern int    unifycr_chunk_bits; /* we set chunk size = 2^unifycr_chunk_bits */
-extern off_t  unifycr_chunk_size; /* chunk size in bytes */
-extern off_t
-unifycr_chunk_mask; /* mask applied to logical offset to determine physical offset within chunk */
-extern long
-unifycr_max_chunks; /* maximum number of chunks that fit in memory */
+extern int unifycr_max_files;     // maximum number of files to store
+extern int unifycr_chunk_bits;    // unifycr_chunk_size = 2 ^ unifycr_chunk_bits
+extern size_t unifycr_chunk_size; // chunk size in bytes
+extern size_t unifycr_chunk_mem;  // memory bytes for use as chunk storage
+extern size_t unifycr_chunk_mask; // chunk offset mask (logical to physical)
+extern int unifycr_max_chunks;    // maximum number of chunks to store in memory
 
 extern void *free_chunk_stack;
 extern void *free_spillchunk_stack;
@@ -511,17 +502,17 @@ int unifycr_fid_unlink(int fid);
 
 /*functions used in UnifyCR*/
 int unifycr_split_index(unifycr_index_t *cur_idx, index_set_t *index_set,
-                        long slice_range);
+                        size_t slice_range);
 int unifycr_split_read_requests(read_req_t *cur_read_req,
-                                read_req_set_t *read_req_set,
-                                long slice_range);
-int unifycr_coalesce_read_reqs(read_req_t *read_req, int count,
-                               read_req_set_t *tmp_read_req_set, long unifycr_key_slice_range,
-                               read_req_set_t *read_req_set);
-int unifycr_match_received_ack(read_req_t *read_req, int count,
+                                read_req_set_t *rd_req_set,
+                                size_t slice_range);
+int unifycr_coalesce_read_reqs(read_req_t *read_reqs, size_t count,
+                               size_t slice_range,
+                               read_req_set_t *rd_req_set);
+int unifycr_match_received_ack(read_req_t *read_reqs, size_t count,
                                read_req_t *match_req);
-int unifycr_locate_req(read_req_t *read_req, int count,
-                       read_req_t *match_req);
+ssize_t unifycr_locate_req(read_req_t *read_reqs, size_t count,
+                           read_req_t *match_req);
 
 int unifycr_generate_gfid(const char *path);
 

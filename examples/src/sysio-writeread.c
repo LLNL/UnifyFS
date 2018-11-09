@@ -49,12 +49,13 @@
 #include <mpi.h>
 #include <sys/time.h>
 #include <aio.h>
+#include <errno.h>
 
 #ifndef NO_UNIFYCR
 # include <unifycr.h>
 #endif
 
-#define GEN_STR_LEN 1024
+#define MY_STR_LEN 1024
 
 struct timeval write_start, write_end;
 double write_time;
@@ -75,7 +76,7 @@ typedef struct {
 int main(int argc, char *argv[])
 {
     static const char *opts = "b:f:m:n:p:t:u:";
-    char tmpfname[GEN_STR_LEN], fname[GEN_STR_LEN], mntpt[GEN_STR_LEN];
+    char tmpfname[MY_STR_LEN], fname[MY_STR_LEN], mntpt[MY_STR_LEN];
     size_t blk_sz = 0, num_blk = 0, tran_sz = 0, num_reqs = 0;
     size_t index, i, j, offset = 0;
     ssize_t rc;
@@ -111,8 +112,8 @@ int main(int argc, char *argv[])
         strcpy(mntpt, "/tmp");
 
     if ((pat < 0) || (pat > 1)) {
-        printf("unsupported I/O pattern");
-        fflush(stdout);
+        printf("USAGE ERROR: unsupported I/O pattern %d\n", pat);
+        fflush(NULL);
         return -1;
     }
 
@@ -125,21 +126,24 @@ int main(int argc, char *argv[])
     if (tran_sz == 0)
         tran_sz = 32768; /* 32 KiB IO operation size */
 
+    double rank_mib = (double)(blk_sz * num_blk)/1048576;
+    double total_mib = rank_mib * num_rank;
     size_t n_tran_per_blk = blk_sz / tran_sz;
 
     char *buf = malloc(tran_sz);
-
     if (buf == NULL)
         return -1;
 
     int byte = (int)'0' + rank;
-
     memset(buf, byte, tran_sz);
 
 #ifndef NO_UNIFYCR
     if (use_unifycr) {
         ret = unifycr_mount(mntpt, rank, num_rank, 0);
         if (UNIFYCR_SUCCESS != ret) {
+            fprintf(stderr, "ERROR: rank %d - unifycr_mount() failed\n",
+                    rank);
+            fflush(NULL);
             MPI_Abort(MPI_COMM_WORLD, ret);
         }
         MPI_Barrier(MPI_COMM_WORLD);
@@ -153,28 +157,31 @@ int main(int argc, char *argv[])
     }
 
     int open_flags = O_CREAT | O_RDWR;
-
     fd = open(tmpfname, open_flags, 0644);
     if (fd < 0) {
-        printf("open file failure\n");
-        fflush(stdout);
-        return -1;
+        fprintf(stderr, "ERROR: rank %d - open file failure: %s\n",
+                rank, strerror(errno));
+        fflush(NULL);
+        MPI_Abort(MPI_COMM_WORLD, ret);
     }
+
     MPI_Barrier(MPI_COMM_WORLD);
 
     gettimeofday(&write_start, NULL);
-
     for (i = 0; i < num_blk; i++) {
         for (j = 0; j < n_tran_per_blk; j++) {
-            if (pat == 0)
+            if (pat == 0) // N-1
                 offset = (i * blk_sz * num_rank)
                          + (rank * blk_sz) + (j * tran_sz);
-            else
+            else // N-N
                 offset = (i * blk_sz) + (j * tran_sz);
-            rc = pwrite(fd, buf, tran_sz, offset);
 
-            if (rc < 0)
-                perror("pwrite failed");
+            rc = pwrite(fd, buf, tran_sz, offset);
+            if (rc < 0) {
+                fprintf(stderr, "ERROR: rank %d - pwrite() failure: %s\n",
+                        rank, strerror(errno));
+                fflush(NULL);
+            }
         }
     }
 
@@ -183,17 +190,40 @@ int main(int argc, char *argv[])
 
     gettimeofday(&write_end, NULL);
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    free(buf);
+
     meta_time += 1000000 * (write_end.tv_sec - meta_start.tv_sec)
                  + write_end.tv_usec - meta_start.tv_usec;
     meta_time /= 1000000;
 
     write_time += 1000000 * (write_end.tv_sec - write_start.tv_sec)
                 + write_end.tv_usec - write_start.tv_usec;
-    write_time = write_time/1000000;
+    write_time /= 1000000;
 
-    MPI_Barrier(MPI_COMM_WORLD);
+    double write_bw = rank_mib/write_time;
 
-    free(buf);
+    double agg_write_bw, agg_read_bw;
+    double max_write_time, max_meta_time, max_read_time;
+
+    MPI_Reduce(&write_bw, &agg_write_bw, 1, MPI_DOUBLE, MPI_SUM,
+               0, MPI_COMM_WORLD);
+
+    MPI_Reduce(&write_time, &max_write_time, 1, MPI_DOUBLE, MPI_MAX,
+               0, MPI_COMM_WORLD);
+
+    MPI_Reduce(&meta_time, &max_meta_time, 1, MPI_DOUBLE, MPI_MAX,
+               0, MPI_COMM_WORLD);
+
+    double min_write_bw = total_mib/max_write_time;
+
+    if (rank == 0) {
+        printf("Aggregate Write BW is %.3lf MiB/sec\n"
+               "  Minimum Write BW is %.3lf MiB/sec\n"
+               "  Maximum Write fsync is %.6lf sec\n\n",
+               agg_write_bw, min_write_bw, max_meta_time);
+        fflush(stdout);
+    }
 
     /* read buffer */
     char *read_buf = calloc(num_blk, blk_sz);
@@ -212,51 +242,39 @@ int main(int argc, char *argv[])
 
     index = 0;
 
-    if (pat == 0) { // N-1
-        for (i = 0; i < num_blk; i++) {
-            for (j = 0; j < n_tran_per_blk; j++) {
-                aiocb_list[index].aio_fildes = fd;
-                aiocb_list[index].aio_buf = read_buf + (index * tran_sz);
-                aiocb_list[index].aio_nbytes = tran_sz;
+    for (i = 0; i < num_blk; i++) {
+        for (j = 0; j < n_tran_per_blk; j++) {
+            aiocb_list[index].aio_fildes = fd;
+            aiocb_list[index].aio_buf = read_buf + (index * tran_sz);
+            aiocb_list[index].aio_nbytes = tran_sz;
+            if (pat == 0) // N-1
                 aiocb_list[index].aio_offset = (i * blk_sz * num_rank)
                                                + (rank * blk_sz)
                                                + (j * tran_sz);
-                aiocb_list[index].aio_lio_opcode = LIO_READ;
-                cb_list[index] = &aiocb_list[index];
-                index++;
-            }
-        }
-    } else { // N-N
-        for (i = 0; i < num_blk; i++) {
-            for (j = 0; j < n_tran_per_blk; j++) {
-                aiocb_list[index].aio_fildes = fd;
-                aiocb_list[index].aio_buf = read_buf + (index * tran_sz);
-                aiocb_list[index].aio_nbytes = tran_sz;
+            else // N-N
                 aiocb_list[index].aio_offset = (i * blk_sz) + (j * tran_sz);
-                aiocb_list[index].aio_lio_opcode = LIO_READ;
-                cb_list[index] = &aiocb_list[index];
-                index++;
-            }
+            aiocb_list[index].aio_lio_opcode = LIO_READ;
+            cb_list[index] = &aiocb_list[index];
+            index++;
         }
     }
 
     gettimeofday(&read_start, NULL);
 
     ret = lio_listio(LIO_WAIT, cb_list, num_reqs, NULL);
-
-    if (ret < 0)
-        perror("lio_listio failed");
+    if (ret < 0) {
+        fprintf(stderr, "ERROR: rank %d - lio_listio() failure: %s\n",
+                rank, strerror(errno));
+        fflush(NULL);
+    }
 
     gettimeofday(&read_end, NULL);
 
-    read_time = (read_end.tv_sec - read_start.tv_sec)*1000000
-                + read_end.tv_usec - read_start.tv_usec;
-    read_time = read_time/1000000;
-
     close(fd);
-    free(read_buf);
 
     MPI_Barrier(MPI_COMM_WORLD);
+
+    free(read_buf);
 
 #ifndef NO_UNIFYCR
     if (use_unifycr) {
@@ -265,24 +283,11 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    double rank_mib = (double)(blk_sz * num_blk)/1048576;
-
-    double total_mib = rank_mib * num_rank;
-
-    double write_bw = rank_mib/write_time;
+    read_time = (read_end.tv_sec - read_start.tv_sec)*1000000
+                + read_end.tv_usec - read_start.tv_usec;
+    read_time = read_time/1000000;
 
     double read_bw = rank_mib/read_time;
-
-    double agg_write_bw, agg_read_bw;
-    double max_write_time, max_read_time;
-
-    MPI_Reduce(&write_bw, &agg_write_bw, 1, MPI_DOUBLE, MPI_SUM,
-               0, MPI_COMM_WORLD);
-
-    MPI_Reduce(&write_time, &max_write_time, 1, MPI_DOUBLE, MPI_MAX,
-               0, MPI_COMM_WORLD);
-
-    double min_write_bw = total_mib/max_write_time;
 
     MPI_Reduce(&read_bw, &agg_read_bw, 1, MPI_DOUBLE, MPI_SUM,
                0, MPI_COMM_WORLD);
@@ -293,9 +298,6 @@ int main(int argc, char *argv[])
     double min_read_bw = total_mib/max_read_time;
 
     if (rank == 0) {
-        printf("Aggregate Write BW is %.3lf MiB/s\n"
-               "  Minimum Write BW is %.3lf MiB/s\n\n",
-               agg_write_bw, min_write_bw);
         printf("Aggregate Read BW is %.3lf MiB/s\n"
                "  Minimum Read BW is %.3lf MiB/s\n\n",
                agg_read_bw, min_read_bw);

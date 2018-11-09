@@ -72,36 +72,38 @@ unifycr_cfg_t client_cfg;
 //fs_type_t fs_type = UNIFYCRFS;
 unifycr_index_buf_t unifycr_indices;
 unifycr_fattr_buf_t unifycr_fattrs;
-static size_t
-unifycr_index_buf_size;   /* size of metadata log for log-structured io*/
-static size_t unifycr_fattr_buf_size;
-unsigned long
-unifycr_max_index_entries; /*max number of metadata entries for log-structured write*/
-unsigned int unifycr_max_fattr_entries;
-int glb_superblock_size;
+
+size_t unifycr_index_buf_size; /* metadata log size for log-structured io */
+size_t unifycr_fattr_buf_size;
+size_t unifycr_max_index_entries; /* max entries for log-structured write */
+size_t unifycr_max_fattr_entries;
+size_t glb_superblock_size;
 int unifycr_spillmetablock;
 
-int *local_rank_lst = NULL;
+int *local_rank_lst;
 int local_rank_cnt;
 int local_rank_idx;
 
 int local_del_cnt = 0;
 int client_sockfd;
 struct pollfd cmd_fd;
-long shm_req_size = UNIFYCR_SHMEM_REQ_SIZE;
-long shm_recv_size = UNIFYCR_SHMEM_RECV_SIZE;
-char *shm_recvbuf;
-char *shm_reqbuf;
+size_t shm_req_size = UNIFYCR_SHMEM_REQ_SIZE;
+size_t shm_recv_size = UNIFYCR_SHMEM_RECV_SIZE;
+char *shm_recv_buf;
+char *shm_req_buf;
 char cmd_buf[CMD_BUF_SIZE] = {0};
 char ack_msg[3] = {0};
 
+/* QUESTION: what's the difference between the following two? */
+int dbgrank;
 int dbg_rank;
+
 int app_id;
 int glb_size;
 int reqbuf_fd = -1;
 int recvbuf_fd = -1;
 int superblock_fd = -1;
-long unifycr_key_slice_range;
+size_t unifycr_key_slice_range;
 
 int unifycr_use_logio = 0;
 int unifycr_use_memfs = 1;
@@ -115,18 +117,15 @@ static off_t unifycr_min_offt;
 static off_t unifycr_max_long;
 static off_t unifycr_min_long;
 
-/* TODO: moved these to fixed file */
-int dbgrank;
 int    unifycr_max_files;  /* maximum number of files to store */
-size_t unifycr_chunk_mem;  /* number of bytes in memory to be used for chunk storage */
-int    unifycr_chunk_bits; /* we set chunk size = 2^unifycr_chunk_bits */
-off_t  unifycr_chunk_size; /* chunk size in bytes */
-off_t  unifycr_chunk_mask; /* mask applied to logical offset to determine physical offset within chunk */
-long    unifycr_max_chunks; /* maximum number of chunks that fit in memory */
+int    unifycr_chunk_bits; /* unifycr_chunk_size = 2 ^ unifycr_chunk_bits */
+size_t unifycr_chunk_size; /* chunk size in bytes */
+size_t unifycr_chunk_mem;  /* memory bytes to be used for chunk storage */
+size_t unifycr_chunk_mask; /* chunk offset mask (logical to physical) */
+int    unifycr_max_chunks; /* maximum number of chunks in memory */
 
-static size_t
-unifycr_spillover_size;  /* number of bytes in spillover to be used for chunk storage */
-long    unifycr_spillover_max_chunks; /* maximum number of chunks that fit in spillover storage */
+size_t unifycr_spillover_size;    /* bytes in spillover for chunk storage */
+int unifycr_spillover_max_chunks; /* maximum number of spillover chunks */
 
 #ifdef HAVE_LIBNUMA
 static char unifycr_numa_policy[10];
@@ -423,7 +422,7 @@ inline int unifycr_intercept_fd(int *fd)
          * so intercept the call and shift the fd */
         int newfd = oldfd - unifycr_fd_limit;
         *fd = newfd;
-        DEBUG("Changing fd from exposed %d to internal %d\n", oldfd, newfd);
+        //DEBUG("Changing fd from exposed %d to internal %d\n", oldfd, newfd);
         return 1;
     }
 }
@@ -612,36 +611,38 @@ off_t unifycr_fid_size(int fid)
 }
 
 /*
- * insert file attribute to attributed share memory buffer
+ * insert file attribute to shared memory buffer
  */
 static int ins_file_meta(unifycr_fattr_buf_t *ptr_f_meta_log,
                          unifycr_file_attr_t *ins_fattr)
 {
-    int meta_cnt = *(ptr_f_meta_log->ptr_num_entries), i;
+    size_t i, ins_pos;
+    size_t meta_cnt = *(ptr_f_meta_log->ptr_num_entries);
     unifycr_file_attr_t *meta_entry = ptr_f_meta_log->meta_entry;
 
     /* TODO: Improve the search time */
     for (i = meta_cnt - 1; i >= 0; i--) {
         if (meta_entry[i].fid <= ins_fattr->fid) {
-            /* sort in acsending order */
+            /* sort in ascending order */
             break;
         }
     }
-    int ins_pos = i + 1;
-
-    if (ins_pos == meta_cnt) {
-        meta_entry[meta_cnt] = *ins_fattr;
-        (*ptr_f_meta_log->ptr_num_entries)++;
-        return 0;
-    }
-
-    for (i = meta_cnt - 1; i >= ins_pos; i--)
-        meta_entry[i + 1] = meta_entry[i];
+    ins_pos = i + 1;
 
     (*ptr_f_meta_log->ptr_num_entries)++;
-    meta_entry[ins_pos] = *ins_fattr;
-    return 0;
 
+    if (ins_pos == meta_cnt) {
+        /* easy case: insert at end */
+        meta_entry[meta_cnt] = *ins_fattr;
+    } else {
+        /* shift entries after insert position */
+        for (i = meta_cnt - 1; i >= ins_pos; i--) {
+            meta_entry[i + 1] = meta_entry[i];
+        }
+        meta_entry[ins_pos] = *ins_fattr;
+    }
+
+    return 0;
 }
 
 
@@ -790,10 +791,9 @@ int unifycr_fid_stat(int fid, struct stat *buf)
     *buf = gfattr.file_attr;
 
     /* set the file size */
-    /*
-     * FIXME: this should be set correctly in the global entry, when file is
-     * closed
-     */
+    /* TODO: size needs to be set correctly in the global entry, when file is
+     * synced/closed. The local metadata has wrong size for files written by
+     * multiple clients. */
     buf->st_size = meta->size;
 
     return 0;
@@ -931,7 +931,7 @@ int unifycr_fid_create_directory(const char *path)
          *   in other processes.
          *
          * we currently return EIO, and this needs to be addressed according to
-         * a consistency model this fs intance assumes.
+         * a consistency model this fs instance assumes.
          */
         return (int) UNIFYCR_ERROR_IO;
     }
@@ -1023,15 +1023,12 @@ int unifycr_fid_write_zero(int fid, off_t pos, off_t count)
 {
     int rc = UNIFYCR_SUCCESS;
 
-    /* allocate an aligned chunk of memory */
-    size_t buf_size = 1024 * 1024;
-    void *buf = (void *) malloc(buf_size);
+    /* allocate an aligned chunk of zeroed memory */
+    size_t buf_size = 1048576;
+    void *buf = calloc(buf_size, 1);
     if (buf == NULL) {
         return (int)UNIFYCR_ERROR_IO;
     }
-
-    /* set values in this buffer to zero */
-    memset(buf, 0, buf_size);
 
     /* write zeros to file */
     off_t written = 0;
@@ -1081,13 +1078,6 @@ int unifycr_fid_extend(int fid, off_t length)
         /* unknown storage type */
         rc = (int)UNIFYCR_ERROR_IO;
     }
-
-    /* TODO: move this statement elsewhere */
-    /* increase file size up to length */
-    if (meta->storage == FILE_STORAGE_FIXED_CHUNK)
-        if (length > meta->size) {
-            meta->size = length;
-        }
 
     return rc;
 }
@@ -1280,15 +1270,14 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
 
         /* initialize the storage for the file */
         int store_rc = unifycr_fid_store_alloc(fid);
-
         if (store_rc != UNIFYCR_SUCCESS) {
             DEBUG("Failed to create storage for file %s\n", path);
             return (int) UNIFYCR_ERROR_IO;
         }
 
+        /* create a file and send its attributes to key-value store */
         unifycr_init_file_attr(&sb, gfid);
 
-        /*create a file and send its attribute to key-value store*/
         ret = unifycr_set_global_file_meta(path, fid, gfid, &sb);
         if (ret) {
             DEBUG("Failed to populate the global meta entry for %s (fid:%d)\n",
@@ -1339,7 +1328,7 @@ int unifycr_fid_unlink(int fid)
  * --------------------------------------- */
 
 /* initialize our global pointers into the given superblock */
-static void *unifycr_init_pointers(void *superblock)
+static void unifycr_init_pointers(void *superblock)
 {
     char *ptr = (char *)superblock;
 
@@ -1353,19 +1342,20 @@ static void *unifycr_init_pointers(void *superblock)
 
     /* record list of file names */
     unifycr_filelist = (unifycr_filename_t *)ptr;
-    ptr += unifycr_max_files * sizeof(unifycr_filename_t);
+    ptr += (size_t)unifycr_max_files * sizeof(unifycr_filename_t);
 
     /* array of file meta data structures */
     unifycr_filemetas = (unifycr_filemeta_t *)ptr;
-    ptr += unifycr_max_files * sizeof(unifycr_filemeta_t);
+    ptr += (size_t)unifycr_max_files * sizeof(unifycr_filemeta_t);
 
     /* array of chunk meta data strucutres for each file */
     unifycr_chunkmetas = (unifycr_chunkmeta_t *)ptr;
-    ptr += unifycr_max_files * unifycr_max_chunks * sizeof(unifycr_chunkmeta_t);
+    ptr += (size_t)unifycr_max_files * (size_t)unifycr_max_chunks
+           * sizeof(unifycr_chunkmeta_t);
 
     if (unifycr_use_spillover)
-        ptr += unifycr_max_files * unifycr_spillover_max_chunks *
-               sizeof(unifycr_chunkmeta_t);
+        ptr += (size_t)unifycr_max_files * (size_t)unifycr_spillover_max_chunks
+               * sizeof(unifycr_chunkmeta_t);
 
     /* stack to manage free memory data chunks */
     free_chunk_stack = ptr;
@@ -1388,25 +1378,21 @@ static void *unifycr_init_pointers(void *superblock)
 
         /* pointer to start of memory data chunks */
         unifycr_chunks = ptr;
-        ptr += unifycr_max_chunks * unifycr_chunk_size;
+        ptr += (size_t)unifycr_max_chunks * unifycr_chunk_size;
     } else {
         unifycr_chunks = NULL;
     }
 
     /* pointer to the log-structured metadata structures*/
-    unifycr_indices.ptr_num_entries = (off_t *)ptr;
-
+    unifycr_indices.ptr_num_entries = (size_t *)ptr;
     ptr += unifycr_page_size;
     unifycr_indices.index_entry = (unifycr_index_t *)ptr;
-
-
-    /*data structures  to record the global metadata*/
     ptr += unifycr_max_index_entries * sizeof(unifycr_index_t);
-    unifycr_fattrs.ptr_num_entries = (off_t *)ptr;
+
+    /* data structures to record the global metadata*/
+    unifycr_fattrs.ptr_num_entries = (size_t *)ptr;
     ptr += unifycr_page_size;
     unifycr_fattrs.meta_entry = (unifycr_file_attr_t *)ptr;
-
-    return ptr;
 }
 
 /* initialize data structures for first use */
@@ -1479,7 +1465,7 @@ static int unifycr_get_spillblock(size_t size, const char *path)
  * block if available */
 static void *unifycr_superblock_shmget(size_t size, key_t key)
 {
-    void *scr_shmblock = NULL;
+    void *shmblock = NULL;
     int ret = -1;
     char shm_name[GEN_STR_LEN] = {0};
 
@@ -1504,18 +1490,18 @@ static void *unifycr_superblock_shmget(size_t size, key_t key)
         return NULL;
 #endif
 
-    scr_shmblock = mmap(NULL, size, PROT_WRITE | PROT_READ, MAP_SHARED,
-                        superblock_fd, 0);
-    if (scr_shmblock == NULL)
+    shmblock = mmap(NULL, size, PROT_WRITE | PROT_READ, MAP_SHARED,
+                    superblock_fd, 0);
+    if (shmblock == NULL)
         return NULL;
 
     /* init our global variables to point to spots in superblock */
-    if (scr_shmblock != NULL) {
-        unifycr_init_pointers(scr_shmblock);
+    if (shmblock != NULL) {
+        unifycr_init_pointers(shmblock);
         unifycr_init_structures();
     }
 
-    return scr_shmblock;
+    return shmblock;
 }
 
 #if 0 // NO LONGER USED
@@ -1984,9 +1970,8 @@ static int unifycr_sync_to_del(void)
 {
     // the client side context information
     unifycr_client_context_t client_ctx;
-    off_t offset;
+    size_t cmd_len;
     int cmd = COMM_MOUNT;
-
 
     client_ctx.app_id = app_id;
     client_ctx.local_rank_index = local_rank_idx;
@@ -1995,19 +1980,16 @@ static int unifycr_sync_to_del(void)
     client_ctx.req_buf_sz = shm_req_size;
     client_ctx.recv_buf_sz = shm_recv_size;
     client_ctx.superblock_sz = glb_superblock_size;
-    client_ctx.meta_offset = (void *)unifycr_indices.ptr_num_entries -
-        unifycr_superblock; // TODO: have a function to set this
+    client_ctx.meta_offset = (char *)unifycr_indices.ptr_num_entries -
+                             (char *)unifycr_superblock;
     client_ctx.meta_size = unifycr_max_index_entries * sizeof(unifycr_index_t);
-    client_ctx.fmeta_offset = (void *)unifycr_fattrs.ptr_num_entries -
-        unifycr_superblock;  // TODO: have a function to set this
+    client_ctx.fmeta_offset = (char *)unifycr_fattrs.ptr_num_entries -
+                              (char *)unifycr_superblock;
     client_ctx.fmeta_size = unifycr_max_fattr_entries *
                             sizeof(unifycr_file_attr_t);
-    client_ctx.data_offset = (void *)unifycr_chunks - unifycr_superblock;
-    client_ctx.data_size = (long)unifycr_max_chunks * unifycr_chunk_size;
-    /*
-     * TODO: determian if a pointer to the string will be fine, since it will
-     * be copied
-     */
+    client_ctx.data_offset = (char *)unifycr_chunks -
+                             (char *)unifycr_superblock;
+    client_ctx.data_size = unifycr_max_chunks * unifycr_chunk_size;
     strcpy(client_ctx.external_spill_dir, external_data_dir);
 
     /*
@@ -2017,19 +1999,18 @@ static int unifycr_sync_to_del(void)
      * the spill log file based on this information.
      */
 
-    offset = 0;
     /*
      * TODO: might want to allocate this (probably from a memory pool)
      */
     memset(cmd_buf, 0, sizeof(cmd_buf));
     *(int *)cmd_buf = cmd;
-    offset += sizeof(cmd);
+    cmd_len = sizeof(cmd);
 
     // pack the client context into the command buffer
-    unifycr_pack_client_context(client_ctx, cmd_buf, &offset);
+    unifycr_pack_client_context(&client_ctx, cmd_buf + cmd_len);
+    cmd_len += sizeof(client_ctx);
 
-    int res = __real_write(client_sockfd,
-                           cmd_buf, sizeof(cmd_buf));
+    int res = __real_write(client_sockfd, cmd_buf, cmd_len);
     if (res != 0) {
         int bytes_read = 0;
         int rc = -1;
@@ -2059,7 +2040,7 @@ static int unifycr_sync_to_del(void)
                                 return rc;
 
                             unifycr_key_slice_range =
-                                *((long *)(cmd_buf + 2 * sizeof(int)));
+                                *(size_t *)(cmd_buf + 2 * sizeof(int));
                         }
                     } else {
                         /*encounter connection error*/
@@ -2118,12 +2099,12 @@ static int unifycr_init_recv_shm(int local_rank_idx, int app_id)
         return UNIFYCR_FAILURE;
 #endif
 
-    shm_recvbuf = mmap(NULL, shm_recv_size, PROT_WRITE | PROT_READ,
-                       MAP_SHARED, recvbuf_fd, 0);
-    if (shm_recvbuf == NULL)
+    shm_recv_buf = mmap(NULL, shm_recv_size, PROT_WRITE | PROT_READ,
+                        MAP_SHARED, recvbuf_fd, 0);
+    if (shm_recv_buf == NULL)
         return UNIFYCR_FAILURE;
 
-    *((int *)shm_recvbuf) = app_id + 3;
+    *((int *)shm_recv_buf) = app_id + 3; // TODO: + 3 ?? Why ??
     return 0;
 }
 
@@ -2172,9 +2153,9 @@ static int unifycr_init_req_shm(int local_rank_idx, int app_id)
 #endif
 
 
-    shm_reqbuf = mmap(NULL, shm_req_size, PROT_WRITE | PROT_READ,
-                      MAP_SHARED, reqbuf_fd, 0);
-    if (shm_reqbuf == NULL)
+    shm_req_buf = mmap(NULL, shm_req_size, PROT_WRITE | PROT_READ,
+                       MAP_SHARED, reqbuf_fd, 0);
+    if (shm_req_buf == NULL)
         return UNIFYCR_FAILURE;
 
     return 0;
@@ -2265,9 +2246,26 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
     int result;
     int flag;
     struct sockaddr_un serv_addr;
-    char tmp_path[UNIFYCR_MAX_FILENAME] = {0};
+    char tmp_path[UNIFYCR_MAX_FILENAME];
 #ifdef HAVE_PMIX_H
     char *pmix_path = NULL;
+#endif
+
+    memset(tmp_path, 0, sizeof(tmp_path));
+
+#ifdef HAVE_PMIX_H
+    // lookup domain socket path in PMIx
+    if (unifycr_pmix_lookup(pmix_key_unifycrd_socket, 0, &pmix_path) == 0) {
+        snprintf(tmp_path, sizeof(tmp_path), "%s", pmix_path);
+        free(pmix_path);
+    }
+#else
+    /* calculate delegator assignment */
+    nprocs_per_del = l_num_procs_per_node / l_num_del_per_node;
+    if ((l_num_procs_per_node % l_num_del_per_node) != 0)
+        nprocs_per_del++;
+    snprintf(tmp_path, sizeof(tmp_path), "%s.%d.%d",
+             SOCKET_PATH, getuid(), proc_id / nprocs_per_del);
 #endif
 
     client_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -2276,31 +2274,6 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
 
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sun_family = AF_UNIX;
-
-    if ((proc_id == 0) &&
-        (l_num_procs_per_node == 1) &&
-        (l_num_del_per_node == 1)) {
-        // use zero-index domain socket path
-        snprintf(tmp_path, sizeof(tmp_path), "%s.%d",
-                 SOCKET_PATH, getuid());
-
-#ifdef HAVE_PMIX_H
-        // lookup domain socket path in PMIx
-        if (unifycr_pmix_lookup(pmix_key_unifycrd_socket, 0, &pmix_path) == 0) {
-            memset(tmp_path, 0, sizeof(tmp_path));
-            snprintf(tmp_path, sizeof(tmp_path), "%s", pmix_path);
-            free(pmix_path);
-        }
-#endif
-    } else {
-        /* calculate delegator assignment */
-        nprocs_per_del = l_num_procs_per_node / l_num_del_per_node;
-        if ((l_num_procs_per_node % l_num_del_per_node) != 0)
-            nprocs_per_del++;
-        snprintf(tmp_path, sizeof(tmp_path), "%s%d",
-                 SOCKET_PATH, proc_id / nprocs_per_del);
-    }
-
     strcpy(serv_addr.sun_path, tmp_path);
     len = sizeof(serv_addr);
     result = connect(client_sockfd, (struct sockaddr *)&serv_addr, len);
@@ -2325,27 +2298,25 @@ int compare_fattr(const void *a, const void *b)
     const unifycr_file_attr_t *ptr_a = a;
     const unifycr_file_attr_t *ptr_b = b;
 
-    if (ptr_a->fid > ptr_b->fid)
-        return 1;
-
+    if (ptr_a->fid == ptr_b->fid)
+        return 0;
     if (ptr_a->fid < ptr_b->fid)
         return -1;
-
-    return 0;
+    else
+        return 1;
 }
 
 static int compare_int(const void *a, const void *b)
 {
-    const int *ptr_a = a;
-    const int *ptr_b = b;
+    const int ia = *(const int *)a;
+    const int ib = *(const int *)b;
 
-    if (*ptr_a - *ptr_b > 0)
-        return 1;
-
-    if (*ptr_a - *ptr_b < 0)
+    if (ia == ib)
+        return 0;
+    else if (ia < ib)
         return -1;
-
-    return 0;
+    else
+        return 1;
 }
 
 static int compare_name_rank_pair(const void *a, const void *b)
@@ -2353,13 +2324,7 @@ static int compare_name_rank_pair(const void *a, const void *b)
     const name_rank_pair_t *pair_a = a;
     const name_rank_pair_t *pair_b = b;
 
-    if (strcmp(pair_a->hostname, pair_b->hostname) > 0)
-        return 1;
-
-    if (strcmp(pair_a->hostname, pair_b->hostname) < 0)
-        return -1;
-
-    return 0;
+    return strcmp(pair_a->hostname, pair_b->hostname);
 }
 
 /**
@@ -2411,8 +2376,6 @@ static int CountTasksPerNode(int rank, int numTasks)
                                            * sizeof(name_rank_pair_t));
             /*
              * MPI_receive all hostnames, and compare to local hostname
-             * TODO: handle the case when the length of hostname is larger
-             * than 30
              */
             for (i = 1; i < numTasks; i++) {
                 rc = MPI_Recv(hostname, HOST_NAME_MAX,
@@ -2550,8 +2513,6 @@ static int CountTasksPerNode(int rank, int numTasks)
 
         qsort(local_rank_lst, local_rank_cnt, sizeof(int),
               compare_int);
-
-        // scatter ranks out
     } else {
         DEBUG("number of tasks is smaller than 0");
         return -1;
@@ -2611,8 +2572,10 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     /* get the number of collocated delegators*/
     if (local_rank_idx == 0) {
         rc = unifycr_init_socket(0, 1, 1);
-        if (rc < 0)
-            return -1;
+        if (rc < 0) {
+            DEBUG("rank:%d, failed to init socket.", dbg_rank);
+            return UNIFYCR_FAILURE;
+        }
 
         local_del_cnt = get_del_cnt();
         if (local_del_cnt > 0) {
@@ -2643,13 +2606,13 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
             return UNIFYCR_FAILURE;
         }
         if (local_del_cnt < 0 || rc < 0) {
-            DEBUG("rank:%d, fail to initialize socket.", dbg_rank);
+            DEBUG("rank:%d, failed to init socket.", dbg_rank);
             return UNIFYCR_FAILURE;
         } else  {
             rc = unifycr_init_socket(local_rank_idx,
                                      local_rank_cnt, local_del_cnt);
             if (rc < 0) {
-                DEBUG("rank:%d, fail to initialize socket.", dbg_rank);
+                DEBUG("rank:%d, failed to init socket.", dbg_rank);
                 return UNIFYCR_FAILURE;
             }
         }
