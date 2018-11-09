@@ -19,7 +19,7 @@ clustering and pipelining.
 ## Documentation
 Full UnifyCR documentation is contained [here](https://unifycr.readthedocs.io).
 
-Use [Build & I/O Interception](http://unifycr.readthedocs.io/en/latest/build-intercept.html)
+Use [Build & I/O Interception](http://unifycr.readthedocs.io/en/dev/build-intercept.html)
 for instructions on how to build and install UnifyCR.
 
 ## Build Status
