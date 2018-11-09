@@ -30,6 +30,7 @@
 #ifndef UNIFYCR_METADATA_H
 #define UNIFYCR_METADATA_H
 
+#include <assert.h>
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -49,30 +50,41 @@ typedef struct {
     unsigned long offset;
 } unifycr_key_t;
 
-typedef struct {
-    unsigned long delegator_id;
-    unsigned long len;
-    unsigned long addr;
-    unsigned long app_rank_id; /*include both app and rank id*/
-} unifycr_val_t;
+#define UNIFYCR_KEY_SZ (sizeof(unifycr_key_t))
+
+#define UNIFYCR_KEY_FID(keyp) (((unifycr_key_t *)keyp)->fid)
+#define UNIFYCR_KEY_OFF(keyp) (((unifycr_key_t *)keyp)->offset)
+
+int unifycr_key_compare(unifycr_key_t *a, unifycr_key_t *b);
 
 typedef struct {
-    int fid;
-    long offset;
-    long length;
-} cli_req_t;
+    unsigned long addr;
+    unsigned long len;
+    int delegator_id;
+    int app_id;
+    int rank;
+} unifycr_val_t;
+
+#define UNIFYCR_VAL_SZ (sizeof(unifycr_val_t))
+
+#define UNIFYCR_VAL_ADDR(valp) (((unifycr_val_t *)valp)->addr)
+#define UNIFYCR_VAL_LEN(valp) (((unifycr_val_t *)valp)->len)
 
 extern arraylist_t *ulfs_keys;
 extern arraylist_t *ulfs_vals;
 extern arraylist_t *ulfs_metas;
+
+void debug_log_key_val(const char* ctx,
+                       unifycr_key_t *key,
+                       unifycr_val_t *val);
 
 int meta_sanitize();
 int meta_init_store(unifycr_cfg_t *cfg);
 void print_bget_indices(int app_id, int cli_id,
                         send_msg_t *index_set, int tot_num);
 int meta_process_fsync(int sock_id);
-int meta_batch_get(int app_id, int client_id,
-                   int thrd_id, int dbg_rank, char *shm_reqbuf, int num,
+int meta_batch_get(int app_id, int client_id, int thrd_id, int dbg_rank,
+                   shm_meta_t *meta_reqs, size_t req_cnt,
                    msg_meta_t *del_req_set);
 int meta_init_indices();
 int meta_free_indices();

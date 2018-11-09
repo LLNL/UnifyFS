@@ -15,31 +15,35 @@
 #ifndef UNIFYCR_CLIENT_CONTEXT_H
 #define UNIFYCR_CLIENT_CONTEXT_H
 
+#include <stddef.h>
+#include <sys/types.h>
+
+#include "unifycr_const.h"
+
 /*
  * Structure that contains the client side context information.
  */
-struct unifycr_client_context_s {
-    int app_id;
-    int local_rank_index;
-    int dbg_rank;
-    int num_procs_per_node;
-    int req_buf_sz; // should probably be a size_t
-    int recv_buf_sz; // should probably be a size_t
-    long superblock_sz; // should probably be a size_t
-    long meta_offset; // off_t?
-    long meta_size; // size_t?
-    long fmeta_offset; // off_t?
-    long fmeta_size; // size_t?
-    long data_offset; // off_t
-    long data_size; // size_t;
-    char external_spill_dir[UNIFYCR_MAX_FILENAME];
-} typedef unifycr_client_context_t;
+typedef struct unifycr_client_context_s {
+    int    app_id;
+    int    local_rank_index;
+    int    dbg_rank;
+    int    num_procs_per_node;
+    size_t req_buf_sz;
+    size_t recv_buf_sz;
+    size_t superblock_sz;
+    size_t meta_offset;
+    size_t meta_size;
+    size_t fmeta_offset;
+    size_t fmeta_size;
+    size_t data_offset;
+    size_t data_size;
+    char   external_spill_dir[UNIFYCR_MAX_FILENAME];
+} unifycr_client_context_t;
 
+int unifycr_pack_client_context(unifycr_client_context_t *ctx,
+                                char *buffer);
 
-int unifycr_pack_client_context(unifycr_client_context_t ctx, char *buffer,
-                                off_t *offset);
-
-int unifycr_unpack_client_context(char *buffer, off_t *offset,
+int unifycr_unpack_client_context(char *buffer,
                                   unifycr_client_context_t *ctx);
 
 #endif // UNIFYCR_CLIENT_CONTEXT_H

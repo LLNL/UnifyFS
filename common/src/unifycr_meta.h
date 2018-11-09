@@ -36,15 +36,28 @@ typedef enum {
 typedef struct {
     int fid;
     int gfid;
-    char filename[UNIFYCR_MAX_FILENAME];
     struct stat file_attr;
+    char filename[UNIFYCR_MAX_FILENAME];
 } unifycr_file_attr_t;
 
 typedef struct {
-    off_t file_pos;
-    off_t mem_pos;
+    size_t file_pos;
+    size_t mem_pos;
     size_t length;
     int fid;
 } unifycr_index_t;
+
+/* file metadata format in the shared memory */
+typedef struct {
+    int src_fid;
+    size_t offset;
+    size_t length;
+} shm_meta_t;
+
+/* header for contents of recv/req shmem buffers */
+typedef struct {
+    size_t sz;
+    size_t cnt;
+} shm_hdr_t;
 
 #endif /* UNIFYCR_META_H */

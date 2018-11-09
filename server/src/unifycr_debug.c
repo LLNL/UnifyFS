@@ -32,7 +32,6 @@
 #include "unifycr_const.h"
 
 FILE *dbg_stream = NULL;
-char dbg_line[GEN_STR_LEN] = {0};
 
 int dbg_open(char *fname)
 {
@@ -40,21 +39,18 @@ int dbg_open(char *fname)
     if (dbg_stream == NULL) {
         dbg_stream = stderr;
         return (int)UNIFYCR_ERROR_DBG;
-    } else {
-        return ULFS_SUCCESS;
     }
-
+    return UNIFYCR_SUCCESS;
 }
 
 int dbg_close()
 {
     if (dbg_stream == NULL) {
         return (int)UNIFYCR_ERROR_DBG;
-    } else {
-        if (fclose(dbg_stream) == 0) {
-            return ULFS_SUCCESS;
+    } else if (dbg_stream != stderr) {
+        if (fclose(dbg_stream) != 0) {
+            return (int)UNIFYCR_ERROR_DBG;
         }
-        return (int)UNIFYCR_ERROR_DBG;
-
     }
+    return UNIFYCR_SUCCESS;
 }

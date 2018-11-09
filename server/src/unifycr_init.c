@@ -60,10 +60,6 @@ int log_print_level = 5;
 
 unifycr_cfg_t server_cfg;
 
-#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
-extern int local_rank_idx;
-#endif
-
 /*
  * Perform steps to create a daemon process:
  *
@@ -124,6 +120,7 @@ int main(int argc, char *argv[])
 {
     int provided;
     int rc;
+    int local_rank_idx = 0;
     bool daemon = true;
     char dbg_fname[UNIFYCR_MAX_FILENAME] = {0};
 
@@ -136,10 +133,6 @@ int main(int argc, char *argv[])
         exit(1);
     if (daemon)
         daemonize();
-
-    rc = unifycr_write_runstate(&server_cfg);
-    if (rc != (int)UNIFYCR_SUCCESS)
-        exit(1);
 
     rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
 
@@ -154,20 +147,23 @@ int main(int argc, char *argv[])
     if (rc != MPI_SUCCESS)
         exit(1);
 
-    rc = CountTasksPerNode(glb_rank, glb_size);
-    if (rc < 0)
+    MPI_Barrier(MPI_COMM_WORLD);
+    rc = unifycr_write_runstate(&server_cfg);
+    if (rc != (int)UNIFYCR_SUCCESS)
         exit(1);
 
-#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
-    local_rank_idx = find_rank_idx(glb_rank, local_rank_lst,
-                                   local_rank_cnt);
-#endif
     snprintf(dbg_fname, sizeof(dbg_fname), "%s/%s.%d",
             server_cfg.log_dir, server_cfg.log_file, glb_rank);
     rc = dbg_open(dbg_fname);
-    if (rc != ULFS_SUCCESS)
-        LOG(LOG_ERR, "%s",
-            unifycr_error_enum_description((unifycr_error_e)rc));
+    if (rc != UNIFYCR_SUCCESS)
+        exit(1);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    rc = CountTasksPerNode(glb_rank, glb_size);
+    if (rc < 0) {
+        LOG(LOG_ERR, "CountTasksPerNode() failed");
+        exit(1);
+    }
 
     app_config_list = arraylist_create();
     if (app_config_list == NULL) {
@@ -183,7 +179,11 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    rc = sock_init_server();
+#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
+    local_rank_idx = find_rank_idx(glb_rank, local_rank_lst,
+                                   local_rank_cnt);
+#endif
+    rc = sock_init_server(local_rank_idx);
     if (rc != 0) {
         LOG(LOG_ERR, "%s",
             unifycr_error_enum_description(UNIFYCR_ERROR_SOCKET));
@@ -202,7 +202,7 @@ int main(int argc, char *argv[])
      *request manager so that they can exchange control
      *information*/
     rc = sock_wait_cli_cmd();
-    if (rc != ULFS_SUCCESS) {
+    if (rc != UNIFYCR_SUCCESS) {
         int ret = sock_handle_error(rc);
         if (ret != 0) {
             LOG(LOG_ERR, "%s",
@@ -227,7 +227,7 @@ int main(int argc, char *argv[])
     MPI_Barrier(MPI_COMM_WORLD);
     while (1) {
         rc = sock_wait_cli_cmd();
-        if (rc != ULFS_SUCCESS) {
+        if (rc != UNIFYCR_SUCCESS) {
             int sock_id = sock_get_error_id();
             if (sock_id == 1) {
                 /* received exit command from the
@@ -252,7 +252,7 @@ int main(int argc, char *argv[])
                 char *cmd = sock_get_cmd_buf(sock_id);
                 int ret = delegator_handle_command(cmd, sock_id);
 
-                if (ret != ULFS_SUCCESS) {
+                if (ret != UNIFYCR_SUCCESS) {
                     LOG(LOG_ERR, "%s",
                         unifycr_error_enum_description((unifycr_error_e)ret));
                     return ret;
@@ -267,6 +267,8 @@ int main(int argc, char *argv[])
 
     LOG(LOG_DBG, "terminating service");
     rc = unifycr_clean_runstate(&server_cfg);
+
+    dbg_close();
 
     return 0;
 }
@@ -472,7 +474,7 @@ static int compare_name_rank_pair(const void *a, const void *b)
 
 static int unifycr_exit()
 {
-    int rc = ULFS_SUCCESS;
+    int rc = UNIFYCR_SUCCESS;
 
     /* notify the threads of request manager to exit*/
     int i, j;
@@ -516,37 +518,45 @@ static int unifycr_exit()
         app_config_t *tmp_app_config =
             (app_config_t *)arraylist_get(app_config_list, i);
 
+        if (tmp_app_config == NULL)
+            continue;
+
+        LOG(LOG_DBG, "processing app_config %d\n", i);
+
         for (j = 0; j < MAX_NUM_CLIENTS; j++) {
-            if (tmp_app_config != NULL &&
-                tmp_app_config->shm_req_fds[j] != -1) {
+            if (tmp_app_config->shm_req_fds[j] != -1) {
+                LOG(LOG_DBG, "shm_unlink(%s) req buf\n",
+                    tmp_app_config->req_buf_name[j]);
                 shm_unlink(tmp_app_config->req_buf_name[j]);
             }
 
-            if (tmp_app_config != NULL &&
-                tmp_app_config->shm_recv_fds[j] != -1) {
+            if (tmp_app_config->shm_recv_fds[j] != -1) {
+                LOG(LOG_DBG, "shm_unlink(%s) recv buf\n",
+                    tmp_app_config->recv_buf_name[j]);
                 shm_unlink(tmp_app_config->recv_buf_name[j]);
-
             }
 
-            if (tmp_app_config != NULL &&
-                tmp_app_config->shm_superblock_fds[j] != -1) {
+            if (tmp_app_config->shm_superblock_fds[j] != -1) {
+                LOG(LOG_DBG, "shm_unlink(%s) super buf\n",
+                    tmp_app_config->super_buf_name[j]);
                 shm_unlink(tmp_app_config->super_buf_name[j]);
             }
 
-            if (tmp_app_config != NULL &&
-                tmp_app_config->spill_log_fds[j] > 0) {
+            if (tmp_app_config->spill_log_fds[j] != -1) {
                 close(tmp_app_config->spill_log_fds[j]);
+                LOG(LOG_DBG, "unlink(%s) spill data\n",
+                    tmp_app_config->spill_log_name[j]);
                 unlink(tmp_app_config->spill_log_name[j]);
-
             }
 
-            if (tmp_app_config != NULL &&
-                tmp_app_config->spill_index_log_fds[j] > 0) {
+            if (tmp_app_config->spill_index_log_fds[j] != -1) {
                 close(tmp_app_config->spill_index_log_fds[j]);
+                LOG(LOG_DBG, "unlink(%s) spill index\n",
+                    tmp_app_config->spill_index_log_name[j]);
                 unlink(tmp_app_config->spill_index_log_name[j]);
-
             }
         }
+        fflush(stdout);
     }
 
     /* shutdown the metadata service*/
@@ -557,5 +567,4 @@ static int unifycr_exit()
      * for acks*/
     sock_sanitize();
     return rc;
-
 }

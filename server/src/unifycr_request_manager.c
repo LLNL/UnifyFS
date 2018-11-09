@@ -27,6 +27,7 @@
  * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
+#include <assert.h>
 #include <mpi.h>
 #include <poll.h>
 #include <time.h>
@@ -43,16 +44,14 @@
 struct timespec shm_wait_tm;
 
 /**
-* send the read requests to the
-* remote delegators
+* send the read requests to the remote delegators
 * @param sock_id: which socket in the poll_set received
 * the application's requests
-* @param req_num: number of read requests
+* @param req_cnt: number of read requests
 * @return success/error code
 */
-int rm_read_remote_data(int sock_id, int req_num)
+int rm_read_remote_data(int sock_id, size_t req_cnt)
 {
-
     int rc;
 
     int app_id = invert_sock_ids[sock_id];
@@ -67,9 +66,13 @@ int rm_read_remote_data(int sock_id, int req_num)
 
     pthread_mutex_lock(&thrd_ctrl->thrd_lock);
 
-    /* get the locations of all the read requests from the key-value store*/
+    /* get the locations of all the read requests from the key-value store */
+    char *shm_req_buf = app_config->shm_req_bufs[client_id];
+    shm_hdr_t *req_hdr = (shm_hdr_t *)shm_req_buf;
+    assert((shm_req_buf != NULL) && (req_hdr->cnt == req_cnt));
+    shm_meta_t *meta_reqs = (shm_meta_t *)(shm_req_buf + sizeof(shm_hdr_t));
     rc = meta_batch_get(app_id, client_id, thrd_id, dbg_rank,
-                        app_config->shm_req_bufs[client_id], req_num,
+                        meta_reqs, req_cnt,
                         thrd_ctrl->del_req_set);
 
     /*
@@ -81,31 +84,29 @@ int rm_read_remote_data(int sock_id, int req_num)
           sizeof(send_msg_t), compare_delegators);
 //  print_send_msgs(thrd_ctrl->del_req_set->msg_meta,
 //  thrd_ctrl->del_req_set->num, dbg_rank);
+
+    /* calculate the number of read requests
+     * to be sent to each delegator */
+
     thrd_ctrl->del_req_stat->req_stat[0].req_cnt = 1;
-
-
-
-    int i, del_cnt = 0;
     thrd_ctrl->del_req_stat->req_stat[0].del_id =
         thrd_ctrl->del_req_set->msg_meta[0].dest_delegator_rank;
 
-    /* calculate the number of read requests
-     * to be sent to each delegator*/
+    int i, del_ndx = 0;
     for (i = 1; i < thrd_ctrl->del_req_set->num; i++) {
         if (thrd_ctrl->del_req_set->msg_meta[i].dest_delegator_rank
             == thrd_ctrl->del_req_set->msg_meta[i - 1].dest_delegator_rank) {
-            thrd_ctrl->del_req_stat->req_stat[del_cnt].req_cnt++;
+            thrd_ctrl->del_req_stat->req_stat[del_ndx].req_cnt++;
         } else {
-            del_cnt++;
-            thrd_ctrl->del_req_stat->req_stat[del_cnt].req_cnt = 1;
-            thrd_ctrl->del_req_stat->req_stat[del_cnt].del_id =
+            del_ndx++;
+            thrd_ctrl->del_req_stat->req_stat[del_ndx].req_cnt = 1;
+            thrd_ctrl->del_req_stat->req_stat[del_ndx].del_id =
                 thrd_ctrl->del_req_set->msg_meta[i].dest_delegator_rank;
 
         }
     }
-    del_cnt++;
 
-    thrd_ctrl->del_req_stat->del_cnt = del_cnt;
+    thrd_ctrl->del_req_stat->del_cnt = del_ndx + 1;
 
     // print_remote_del_reqs(app_id, client_id, dbg_rank,
     //thrd_ctrl->del_req_stat);
@@ -131,41 +132,43 @@ int rm_read_remote_data(int sock_id, int req_num)
 * total request sizes is larger than REQ_BUF_LEN
 * @param rank: source rank that sends the requests
 * @param req_msg_buf: request buffer
-* @param req_num: number of read requests
+* @param req_cnt: number of read requests
 * @param *tot_sz: the total data size to read in these
 *  packed read requests
 * @return success/error code
 */
 int rm_pack_send_requests(char *req_msg_buf,
-                          send_msg_t *send_metas, int req_num,
-                          long *tot_sz)
+                          send_msg_t *send_metas,
+                          size_t req_cnt,
+                          size_t *tot_sz)
 {
 
     /* tot_sz records the aggregate data size
      * requested in this transfer */
+
     char *ptr = req_msg_buf;
+    memset(ptr, 0, REQ_BUF_LEN);
 
-    /*send format: cmd, req_num*/
+    /*send format: cmd, req_cnt*/
     int cmd = XFER_COMM_DATA;
-    memcpy(ptr, &cmd, sizeof(int));
-    memcpy(ptr + sizeof(int), &(req_num),
-           sizeof(int));
+    memcpy(ptr, &cmd, sizeof(cmd));
+    ptr += sizeof(cmd);
+    memcpy(ptr, &req_cnt, sizeof(req_cnt));
+    ptr += sizeof(req_cnt);
 
-    long send_size = 0;
-    ptr += 2 * sizeof(int);
-
-    int i;
-    for (i = 0; i < req_num; i++) {
+    size_t send_size = 0;
+    size_t i;
+    for (i = 0; i < req_cnt; i++) {
         send_size += send_metas[i].length;
-        memcpy(ptr, &(send_metas[i]), sizeof(send_msg_t));
-        ptr += sizeof(send_msg_t);
-
     }
+    *tot_sz += send_size;
 
-    /*note: copy tot_size*/
-    (*tot_sz) += send_size;
+    memcpy(ptr, send_metas, (req_cnt * sizeof(send_msg_t)));
+    ptr += (req_cnt * sizeof(send_msg_t));
 
-    return (int)(ptr - req_msg_buf);
+    size_t msg_size = ptr - req_msg_buf;
+    assert(msg_size <= REQ_BUF_LEN);
+    return (int)msg_size;
 }
 
 /**
@@ -174,10 +177,10 @@ int rm_pack_send_requests(char *req_msg_buf,
 * @return success/error code
 */
 int rm_send_remote_requests(thrd_ctrl_t *thrd_ctrl,
-                            int thrd_tag, long *tot_sz)
+                            int thrd_tag,
+                            size_t *tot_sz)
 {
 
-    int i = 0;
     /* ToDo: Transfer the message in multiple
      * rounds when total size > the size of
      * send_msg_buf
@@ -185,22 +188,23 @@ int rm_send_remote_requests(thrd_ctrl_t *thrd_ctrl,
 
     *tot_sz = 0;
 
+    int i = 0;
     int msg_cursor = 0;
+
     while (i < thrd_ctrl->del_req_stat->del_cnt) {
+        size_t cnt = thrd_ctrl->del_req_stat->req_stat[i].req_cnt;
+
         int packed_size = rm_pack_send_requests(thrd_ctrl->del_req_msg_buf,
                                                 &(thrd_ctrl->del_req_set->msg_meta[msg_cursor]),
-                                                thrd_ctrl->del_req_stat->req_stat[i].req_cnt,
-                                                tot_sz);
+                                                cnt, tot_sz);
         MPI_Send(thrd_ctrl->del_req_msg_buf, packed_size, MPI_CHAR,
                  thrd_ctrl->del_req_stat->req_stat[i].del_id,
                  CLI_DATA_TAG, MPI_COMM_WORLD);
-        msg_cursor +=
-            thrd_ctrl->del_req_stat->req_stat[i].req_cnt;
+        msg_cursor += cnt;
         i++;
-
     }
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /**
@@ -240,10 +244,9 @@ void *rm_delegate_request_thread(void *arg)
             break;
         }
 
-        long tot_sz = 0;
-        rc = rm_send_remote_requests(thrd_ctrl,
-                                     thrd_id, &tot_sz);
-        if (rc != ULFS_SUCCESS) {
+        size_t tot_sz;
+        rc = rm_send_remote_requests(thrd_ctrl, thrd_id, &tot_sz);
+        if (rc != UNIFYCR_SUCCESS) {
             pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
             return NULL;
         }
@@ -268,12 +271,12 @@ void *rm_delegate_request_thread(void *arg)
 * @return success/error code
 */
 int rm_receive_remote_message(int app_id,
-                              int sock_id, long tot_sz)
+                              int sock_id,
+                              size_t tot_sz)
 {
 
-    int rc = ULFS_SUCCESS;
+    int rc = UNIFYCR_SUCCESS;
 
-    long dbg_tot_recv = 0;
     app_config_t *app_config =
         (app_config_t *)arraylist_get(app_config_list, app_id);
     int thrd_id = app_config->thrd_idxs[sock_id];
@@ -281,9 +284,15 @@ int rm_receive_remote_message(int app_id,
         (thrd_ctrl_t *)arraylist_get(thrd_list, thrd_id);
 
 
-    int irecv_flag[RECV_BUF_CNT] = {0};
-    MPI_Request recv_req[RECV_BUF_CNT] = {0};
+    int irecv_flag[RECV_BUF_CNT];
+    MPI_Request recv_req[RECV_BUF_CNT];
     MPI_Status status;
+
+    int i;
+    for (i = 0; i < RECV_BUF_CNT; i++) {
+        irecv_flag[i] = 0;
+        recv_req[i] = 0;
+    }
 
     /*
      * ToDo: something wrong happens and tot_sz keeps larger
@@ -294,9 +303,8 @@ int rm_receive_remote_message(int app_id,
     shm_wait_tm.tv_nsec = SHM_WAIT_INTERVAL;
 
     while (tot_sz > 0) {
-        int i, return_code;
-
         for (i = 0; i < RECV_BUF_CNT; i++) {
+            memset(thrd_ctrl->del_recv_msg_buf[i], 0, RECV_BUF_LEN);
             MPI_Irecv(thrd_ctrl->del_recv_msg_buf[i], RECV_BUF_LEN,
                       MPI_CHAR, MPI_ANY_SOURCE,
                       SER_DATA_TAG + thrd_id,
@@ -307,23 +315,20 @@ int rm_receive_remote_message(int app_id,
         while (tot_sz > 0) {
             for (i = 0; i < RECV_BUF_CNT; i++) {
                 if (irecv_flag[i] == 0) {
-                    return_code = MPI_Test(&recv_req[i],
-                                           &irecv_flag[i], &status);
+                    int return_code = MPI_Test(&recv_req[i],
+                                               &irecv_flag[i], &status);
                     if (return_code != MPI_SUCCESS) {
                         return (int)UNIFYCR_ERROR_RM_RECV;
                     }
 
                     if (irecv_flag[i] != 0) {
-
-                        rc = rm_process_received_msg(app_id,
-                                                     sock_id, thrd_ctrl->del_recv_msg_buf[i],
+                        rc = rm_process_received_msg(app_id, sock_id,
+                                                 thrd_ctrl->del_recv_msg_buf[i],
                                                      &tot_sz);
-                        if (rc != ULFS_SUCCESS) {
+                        if (rc != UNIFYCR_SUCCESS) {
                             return rc;
                         }
                         recv_counter++;
-                        dbg_tot_recv++;
-
                     }
                 }
             }
@@ -335,41 +340,36 @@ int rm_receive_remote_message(int app_id,
                 recv_counter = 0;
                 break;
             }
-
         }
-
     }
 
-    /*purify shared receive buffer*/
+    /* notify client it's time to consume received data */
     rc = sock_notify_cli(sock_id, COMM_DIGEST);
     if (rc != 0) {
         return rc;
     }
 
+    /* wait for client to consume all received data */
     int client_id = app_config->client_ranks[sock_id];
-
-    int *ptr_size = (int *)app_config->shm_recv_bufs[client_id];
-    while (*ptr_size != 0) {
+    shm_hdr_t *recv_hdr = (shm_hdr_t *)(app_config->shm_recv_bufs[client_id]);
+    while (recv_hdr->sz != 0) {
         nanosleep(&shm_wait_tm, NULL);
     }
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /**
 *
-* parse the received message, and deliver to the
-* client
+* parse the received message, and deliver to the client
 * @param app_id: client's application id
-* @param sock_id: socket index in the poll_set
-* for that client
-* @param recv_msg_buf: buffer for received message
-*  packed read requests
+* @param sock_id: socket index in the poll_set for that client
+* @param recv_msg_buf: buffer of packed read requests and data
 * @param ptr_tot_sz: total data size to receive
 * @return success/error code
 */
 int rm_process_received_msg(int app_id, int sock_id,
-                            char *recv_msg_buf, long *ptr_tot_sz)
+                            char *recv_msg_buf, size_t *tot_sz)
 {
 
     int rc;
@@ -378,94 +378,55 @@ int rm_process_received_msg(int app_id, int sock_id,
     int client_id = app_config->client_ranks[sock_id];
 
     /*
-     * format of recv_msg_buf: num,
-     * src_app_id, src_cli_id,
-     * src_fid, src_offset, src_length
+     * format of recv_msg_buf:
+     *   msg_cnt, data_msg_t, msg_data[] [, data_msg_t, msg_data[], ...]
      */
-    int num = *(int *)recv_msg_buf;
     int recv_cursor = 0;
+    int msg_cnt = *(int *)recv_msg_buf;
+    recv_cursor += sizeof(msg_cnt);
+    data_msg_t *recv_msg = (data_msg_t *)(recv_msg_buf + recv_cursor);
 
-    /*
-     * ptr_size and ptr_num point to the
-     * size and num information of the
-     * client-side shared memory
-     * */
-    int *ptr_size = NULL;
-    int *ptr_num = NULL;
+    char* shm_recv_buf = app_config->shm_recv_bufs[client_id];
+    shm_hdr_t *shm_recv_hdr = (shm_hdr_t *) shm_recv_buf;
 
-    recv_msg_t *tmp_recv_msg =
-        (recv_msg_t *)(recv_msg_buf + sizeof(int));
-
-    shm_meta_t *tmp_sh_msg;
-    ptr_size =
-        (int *)app_config->shm_recv_bufs[client_id];
-    ptr_num =
-        (int *)(app_config->shm_recv_bufs[client_id]
-                + sizeof(int));
+    char* shm_msg_base = shm_recv_buf + sizeof(shm_hdr_t);
+    shm_meta_t *shm_msg;
 
     int j;
-    for (j = 0; j < num; j++) {
-
-        if (*ptr_size + tmp_recv_msg->length + sizeof(shm_meta_t)
-            + 2 * sizeof(int) > app_config->recv_buf_sz) {
-            /*client-side receive buffer is full,
-             * wait until the client reads all the
-             * data*/
+    for (j = 0; j < msg_cnt; j++) {
+        size_t used_sz = sizeof(shm_hdr_t) + shm_recv_hdr->sz;
+        size_t data_sz = sizeof(shm_meta_t) + recv_msg->length;
+        assert(data_sz < app_config->recv_buf_sz);
+        if ((used_sz + data_sz) > app_config->recv_buf_sz) {
+            /* client-side receive buffer is full,
+             * wait until the client reads all the data */
             rc = sock_notify_cli(sock_id, COMM_READ);
-
             if (rc != 0) {
                 return rc;
             }
-            while (*ptr_size != 0) {
+            while (shm_recv_hdr->sz != 0) {
                 nanosleep(&shm_wait_tm, NULL);
-            }/*wait until client digest the data*/
+            } /* wait until client digests the data */
         }
 
-        /*fill the next message in the shared buffer*/
-        tmp_sh_msg =
-            (shm_meta_t *)(((char *)app_config->shm_recv_bufs[client_id]
-                            + *ptr_size) + 2 * sizeof(int));
+        /* fill the next message in the shared buffer */
+        shm_msg = (shm_meta_t *)(shm_msg_base + shm_recv_hdr->sz);
+        shm_msg->src_fid = recv_msg->src_fid;
+        shm_msg->offset = recv_msg->src_offset;
+        shm_msg->length = recv_msg->length;
+        memcpy((void *)(shm_msg + 1), (void *)(recv_msg + 1),
+               recv_msg->length);
 
-        tmp_sh_msg->src_fid = tmp_recv_msg->src_fid;
-        tmp_sh_msg->offset = tmp_recv_msg->src_offset;
-        tmp_sh_msg->length = tmp_recv_msg->length;
+        *tot_sz -= recv_msg->length;
+        shm_recv_hdr->sz += data_sz;
+        shm_recv_hdr->cnt++;
 
-        app_config_t *app_config =
-            (app_config_t *)arraylist_get(app_config_list, app_id);
-        int client_id = app_config->client_ranks[sock_id];
-
-        recv_cursor += sizeof(recv_msg_t);
-        *ptr_size += sizeof(shm_meta_t);
-
-        memcpy(2 * sizeof(int)
-               + app_config->shm_recv_bufs[client_id] + *ptr_size,
-               (void *)(tmp_recv_msg + 1),
-               tmp_recv_msg->length);
-
-        *ptr_tot_sz -= tmp_recv_msg->length;
-        recv_cursor += tmp_recv_msg->length;
-        *ptr_size = tmp_recv_msg->length + *ptr_size;
-        (*ptr_num)++;
-
-        /*the message buffer may contain a list of messages*/
-        tmp_recv_msg = (recv_msg_t *)(recv_msg_buf
-                                      + sizeof(int) + recv_cursor);
-
+        /* the message buffer may contain a list of messages */
+        recv_cursor += sizeof(data_msg_t) + recv_msg->length;
+        recv_msg = (data_msg_t *)(recv_msg_buf + recv_cursor);
     }
 
-    return ULFS_SUCCESS;
-
-}
-
-int rm_init(int size)
-{
-    /*
-    req_dels_stat.stat =
-            (delegator_stat_t *)malloc(sizeof(delegator_stat_t));
-    if (!req_dels_stat.stat)
-        return (int)UNIFYCR_ERROR_RM_INIT;
-        */
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 int compare_delegators(const void *a, const void *b)
@@ -483,35 +444,34 @@ int compare_delegators(const void *a, const void *b)
 }
 
 void print_send_msgs(send_msg_t *send_metas,
-                     long msg_cnt, int dbg_rank)
+                     size_t msg_cnt, int dbg_rank)
 {
-    long i;
+    size_t i;
     for (i = 0; i < msg_cnt; i++) {
-        LOG(LOG_DBG, "print_send_msgs:dbg_rank:%d, \
-            src_offset:%ld, msg_cnt:%ld\n",
-            dbg_rank, send_metas[i].src_offset, msg_cnt);
+        LOG(LOG_DBG,
+            "print_send_msgs: rank:%d, msg_cnt:%zu src_offset[%zu]:%zu\n",
+            dbg_rank, msg_cnt, i, send_metas[i].src_offset);
     }
 }
 
-void print_remote_del_reqs(int app_id, int cli_id,
-                           int dbg_rank, del_req_stat_t *del_req_stat)
+void print_remote_del_reqs(int app_id, int cli_id, int dbg_rank,
+                           del_req_stat_t *del_req_stat)
 {
     int i;
     for (i = 0; i < del_req_stat->del_cnt; i++) {
-        LOG(LOG_DBG, "remote:dbg_rank:%d, remote_delegator:%d, req_cnt:%d===\n",
+        /* TODO - this is probably missing an array reference based on i */
+        LOG(LOG_DBG, "remote: rank:%d, remote_delegator:%d, req_cnt:%d===\n",
             dbg_rank, del_req_stat->req_stat->del_id,
             del_req_stat->req_stat->req_cnt);
         fflush(stdout);
-
     }
-
 }
 
-void print_recv_msg(int app_id,
-                    int cli_id, int dbg_rank, int thrd_id, shm_meta_t *msg)
+void print_recv_msg(int app_id, int cli_id, int dbg_rank,
+                    int thrd_id, shm_meta_t *msg)
 {
-    LOG(LOG_DBG, "recv_msg:dbg_rank:%d, app_id:%d, cli_id:%d, thrd_id:%d, \
-        fid:%d, offset:%ld, len:%ld\n",
-        dbg_rank, app_id, cli_id,  thrd_id, msg->src_fid,
-        msg->offset, msg->length);
+    LOG(LOG_DBG, "recv_msg: rank:%d, app_id:%d, client:%d, thrd:%d, "
+        "shm_meta(fid=%d, offset=%zu, len=%zu)\n",
+        dbg_rank, app_id, cli_id, thrd_id,
+        msg->src_fid, msg->offset, msg->length);
 }

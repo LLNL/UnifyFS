@@ -48,41 +48,40 @@ typedef enum {
 typedef struct {
     int dest_app_id;
     int dest_client_id; /*note: the id is the app-side rank on the remote node*/
-    long dest_offset;
+    off_t dest_offset;
     int dest_delegator_rank;
-    long length;
+    size_t length;
     int src_delegator_rank;
     int src_cli_id;
     int src_app_id;
     int src_fid;
-    long src_offset;
+    off_t src_offset;
     int src_thrd;
     int src_dbg_rank;
     int arrival_time;
 } send_msg_t;
 
 typedef struct {
-    long src_fid;
-    long src_offset;
-    long length;
-} recv_msg_t;
-
+    int src_fid;
+    size_t src_offset;
+    size_t length;
+} data_msg_t;
 
 typedef struct {
-    int num;
+    size_t num;
     send_msg_t msg_meta[MAX_META_PER_SEND];
 } msg_meta_t;
 
 typedef struct {
-    long superblock_sz;
-    long meta_offset;
-    long meta_size;
-    long fmeta_offset;
-    long fmeta_size;
-    long data_offset;
-    long data_size;
-    int req_buf_sz;
-    int recv_buf_sz;
+    size_t superblock_sz;
+    size_t meta_offset;
+    size_t meta_size;
+    size_t fmeta_offset;
+    size_t fmeta_size;
+    size_t data_offset;
+    size_t data_size;
+    size_t req_buf_sz;
+    size_t recv_buf_sz;
     int num_procs_per_node;
     int client_ranks[MAX_NUM_CLIENTS];
     int thrd_idxs[MAX_NUM_CLIENTS];
@@ -141,8 +140,8 @@ typedef struct {
 typedef int fattr_key_t;
 
 typedef struct {
-    char fname[UNIFYCR_MAX_FILENAME];
     struct stat file_attr;
+    char fname[UNIFYCR_MAX_FILENAME];
 } fattr_val_t;
 
 extern arraylist_t *app_config_list;
@@ -154,10 +153,6 @@ extern pthread_t data_thrd;
 extern int glb_rank, glb_size;
 extern int *local_rank_lst;
 extern int local_rank_cnt;
-extern long max_recs_per_slice;
-
-#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
-extern int local_rank_idx;
-#endif
+extern size_t max_recs_per_slice;
 
 #endif

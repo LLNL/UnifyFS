@@ -92,7 +92,7 @@
     ENUMITEM(SOCKET, "Error creating/open socket.")                     \
     ENUMITEM(SOCKET_FD_EXCEED, "Exceeded max number of connections.")   \
     ENUMITEM(SOCK_CMD, "Unknown exception on the remote peer.")         \
-    ENUMITEM(SOCK_DISCONNECT, "Remote peer disconnected.")              \
+    ENUMITEM(SOCK_DISCONNECT, "Socket disconnected.")                   \
     ENUMITEM(SOCK_LISTEN, "Exception on listening socket.")             \
     ENUMITEM(SOCK_OTHER, "Unknown socket error.")                       \
     ENUMITEM(THRDINIT, "Thread initialization failure.")                \

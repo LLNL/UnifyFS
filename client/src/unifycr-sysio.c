@@ -51,6 +51,19 @@ extern int unifycr_spilloverblock;
 extern int unifycr_use_spillover;
 extern int dbgrank;
 
+
+void debug_log_client_req(const char* ctx,
+                          read_req_t *req)
+{
+    if (req != NULL) {
+        fprintf(stderr,
+                "[UNIFYCR DEBUG] @%s - "
+                "read_req(fid=%d, offset=%zu, length=%zu, buf=%p)\n",
+                ctx, req->fid, req->offset, req->length, req->buf);
+        fflush(stderr);
+    }
+}
+
 /* ---------------------------------------
  * POSIX wrappers: paths
  * --------------------------------------- */
@@ -604,7 +617,6 @@ int unifycr_fd_write(int fd, off_t pos, const void *buf, size_t count)
         return UNIFYCR_ERROR_BADF;
     }
 
-    /* TODO: is it safe to assume that off_t is bigger than size_t? */
     /* check that our write won't overflow the length */
     if (unifycr_would_overflow_offt(pos, (off_t) count)) {
         /* TODO: want to return EFBIG here for streams */
@@ -614,46 +626,33 @@ int unifycr_fd_write(int fd, off_t pos, const void *buf, size_t count)
     /* TODO: check that file is open for writing */
 
     /* get current file size before extending the file */
-    off_t filesize = unifycr_fid_size(fid);
     unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
-    off_t newpos;
+    off_t filesize = meta->size;
+    off_t newend = pos + (off_t)count;
 
-    if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-        /* extend file size and allocate chunks if needed */
-        newpos = pos + (off_t) count;
-        int extend_rc = unifycr_fid_extend(fid, newpos);
-        if (extend_rc != UNIFYCR_SUCCESS) {
-            return extend_rc;
-        }
-
-        /* fill any new bytes between old size and pos with zero values */
-        if (filesize < pos) {
-            off_t gap_size = pos - filesize;
-            int zero_rc = unifycr_fid_write_zero(fid, filesize, gap_size);
-            if (zero_rc != UNIFYCR_SUCCESS) {
-                return zero_rc;
-            }
-        }
-    }
-
-    else if (meta->storage == FILE_STORAGE_LOGIO) {
-        newpos = filesize + (off_t)count;
-        int extend_rc = unifycr_fid_extend(fid, newpos);
-        if (extend_rc != UNIFYCR_SUCCESS) {
-            return extend_rc;
-        }
-    } else {
-        return UNIFYCR_ERROR_IO;
+    /* extend file size and allocate chunks if needed */
+    int extend_rc = unifycr_fid_extend(fid, newend);
+    if (extend_rc != UNIFYCR_SUCCESS) {
+        return extend_rc;
     }
 
     /* finally write specified data to file */
     int write_rc = unifycr_fid_write(fid, pos, buf, count);
-
-    if (meta->storage == FILE_STORAGE_LOGIO) {
-        unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
-        if (write_rc == 0) {
-            meta->size = newpos;
+    if (write_rc == 0) {
+        if (newend > filesize) {
+            meta->size = newend;
+        }
+        if (meta->storage == FILE_STORAGE_LOGIO) {
             meta->log_size = pos + count;
+        } else if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
+            /* fill any new bytes between old size and pos with zero values */
+            if (filesize < pos) {
+                off_t gap_size = pos - filesize;
+                int zero_rc = unifycr_fid_write_zero(fid, filesize, gap_size);
+                if (zero_rc != UNIFYCR_SUCCESS) {
+                    return zero_rc;
+                }
+            }
         }
     }
     return write_rc;
@@ -735,9 +734,9 @@ int UNIFYCR_WRAP(open)(const char *path, int flags, ...)
         /* TODO: allocate a free file descriptor and associate it with fid */
         /* set in_use flag and file pointer */
         unifycr_fd_t *filedesc = &(unifycr_fds[fid]);
-        filedesc->pos   = pos;
-        filedesc->read  = ((flags & O_RDONLY) == O_RDONLY)
-                          || ((flags & O_RDWR) == O_RDWR);
+        filedesc->pos = pos;
+        filedesc->read = ((flags & O_RDONLY) == O_RDONLY)
+                         || ((flags & O_RDWR) == O_RDWR);
         filedesc->write = ((flags & O_WRONLY) == O_WRONLY)
                           || ((flags & O_RDWR) == O_RDWR);
         DEBUG("UNIFYCR_open generated fd %d for file %s\n", fid, path);
@@ -930,20 +929,17 @@ ssize_t UNIFYCR_WRAP(read)(int fd, void *buf, size_t count)
             return 0;   /* EOF */
 
         /* read data from file */
-        size_t retcount;
-
         read_req_t tmp_req;
-
         tmp_req.buf = buf;
-        tmp_req.fid = fd + unifycr_fd_limit;
+        tmp_req.fid = fd;
         tmp_req.length = count;
-        tmp_req.offset = filedesc->pos;
+        tmp_req.offset = (size_t) filedesc->pos;
 
         /*
          * this returns error code, which is zero for successful cases.
          */
+        size_t retcount;
         int ret = unifycr_fd_logreadlist(&tmp_req, 1);
-
         if (ret)
             retcount = 0;
         else
@@ -1029,24 +1025,47 @@ ssize_t UNIFYCR_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
 int UNIFYCR_WRAP(lio_listio)(int mode, struct aiocb *const aiocb_list[],
                              int nitems, struct sigevent *sevp)
 {
-
-    int ret = 0, i;
-    read_req_t *glb_read_reqs = malloc(nitems * sizeof(read_req_t));
-
-    for (i = 0; i < nitems; i++) {
-        if (aiocb_list[i]->aio_lio_opcode != LIO_READ) {
-            //does not support write operation currently
-            return -1;
-        }
-        glb_read_reqs[i].fid = aiocb_list[i]->aio_fildes;
-        glb_read_reqs[i].buf = (char *)aiocb_list[i]->aio_buf;
-        glb_read_reqs[i].length = aiocb_list[i]->aio_nbytes;
-        glb_read_reqs[i].offset = aiocb_list[i]->aio_offset;
-
+    int ret, i;
+    read_req_t *read_reqs = calloc(nitems, sizeof(read_req_t));
+    if (NULL == read_reqs) {
+        errno = ENOMEM;
+        return -1;
     }
 
-    ret = unifycr_fd_logreadlist(glb_read_reqs, nitems);
-    free(glb_read_reqs);
+    size_t unifycr_fd_cnt = 0;
+    for (i = 0; i < nitems; i++) {
+        int fd = aiocb_list[i]->aio_fildes;
+        if (unifycr_intercept_fd(&fd)) {
+            if ((aiocb_list[i]->aio_lio_opcode != LIO_READ) ||
+                (mode != LIO_WAIT)) {
+                //does not support write operation currently
+                free(read_reqs);
+                errno = ENOTSUP;
+                return -1;
+            }
+            read_req_t *req = read_reqs + unifycr_fd_cnt;
+            req->fid = fd;
+            req->buf = (char *)aiocb_list[i]->aio_buf;
+            req->length = aiocb_list[i]->aio_nbytes;
+            req->offset = (size_t) aiocb_list[i]->aio_offset;
+            unifycr_fd_cnt++;
+        }
+    }
+
+    if (unifycr_fd_cnt > 0) {
+        if (unifycr_fd_cnt < (size_t)nitems) {
+            // TODO: handle subset of list that were not UnifyCR fds
+        }
+        ret = unifycr_fd_logreadlist(read_reqs, unifycr_fd_cnt);
+    } else {
+        MAP_OR_FAIL(lio_listio);
+        ret = UNIFYCR_REAL(lio_listio)(mode, aiocb_list, nitems, sevp);
+    }
+
+    free(read_reqs);
+    if (ret) {
+        errno = EIO;
+    }
     return ret;
 }
 
@@ -1055,19 +1074,19 @@ int compare_index_entry(const void *a, const void *b)
     const unifycr_index_t *ptr_a = a;
     const unifycr_index_t *ptr_b = b;
 
-    if (ptr_a->fid - ptr_b->fid > 0)
-        return 1;
+    if (ptr_a->fid != ptr_b->fid) {
+        if (ptr_a->fid < ptr_b->fid)
+            return -1;
+        else
+            return 1;
+    }
 
-    if (ptr_a->fid - ptr_b->fid < 0)
+    if (ptr_a->file_pos == ptr_b->file_pos)
+        return 0;
+    else if (ptr_a->file_pos < ptr_b->file_pos)
         return -1;
-
-    if (ptr_a->file_pos - ptr_b->file_pos > 0)
+    else
         return 1;
-
-    if (ptr_a->file_pos - ptr_b->file_pos < 0)
-        return -1;
-
-    return 0;
 }
 
 int compare_read_req(const void *a, const void *b)
@@ -1075,144 +1094,125 @@ int compare_read_req(const void *a, const void *b)
     const read_req_t *ptr_a = a;
     const read_req_t *ptr_b = b;
 
-    if (ptr_a->fid - ptr_b->fid > 0)
-        return 1;
+    if (ptr_a->fid != ptr_b->fid) {
+        if (ptr_a->fid < ptr_b->fid)
+            return -1;
+        else
+            return 1;
+    }
 
-    if (ptr_a->fid - ptr_b->fid < 0)
+    if (ptr_a->offset == ptr_b->offset)
+        return 0;
+    else if (ptr_a->offset < ptr_b->offset)
         return -1;
-
-    if (ptr_a->offset - ptr_b->offset > 0)
+    else
         return 1;
-
-    if (ptr_a->offset - ptr_b->offset < 0)
-        return -1;
-
-    return 0;
 }
 
-int unifycr_locate_req(read_req_t *read_req, int count,
-                       read_req_t *match_req)
+ssize_t unifycr_locate_req(read_req_t *read_reqs, size_t count,
+                           read_req_t *match_req)
 {
     if (count == 0) {
         return -1;
-    }
-
-    if (count == 1) {
+    } else if (count == 1) {
         return 0;
-    }
-
-    if (count == 2) {
-        if (compare_read_req(match_req, &read_req[1]) < 0) {
+    } else if (count == 2) {
+        if (compare_read_req(match_req, &read_reqs[1]) < 0) {
             return 0;
         }
-
         return 1;
     }
 
-    int left = 0;
-    int right = count - 1;
-    int mid = (left + right) / 2;
+    ssize_t left = 0;
+    ssize_t right = count - 1;
+    ssize_t mid = count / 2;
 
+    // simple binary search
+    int cmp;
     int found = 0;
-    while (left + 1 < right) {
-        if (compare_read_req(match_req, &read_req[mid]) == 0) {
-            found = 1;
-            break;
-        }
-
-        if (compare_read_req(match_req, &read_req[mid]) > 0) {
+    while ((left + 1) < right) {
+        cmp = compare_read_req(match_req, &read_reqs[mid]);
+        if (cmp == 0)
+            return mid;
+        else if (cmp > 0)
             left = mid;
-        }
-
-        if (compare_read_req(match_req, &read_req[mid]) < 0) {
+        else
             right = mid;
-        }
-
         mid = (left + right) / 2;
-
     }
 
-    if (found == 1) {
-        return mid;
-    }
-
-    if (compare_read_req(match_req, &read_req[left]) < 0) {
-        if (left == 0) {
+    if (compare_read_req(match_req, &read_reqs[left]) < 0) {
+        if (left == 0)
             return 0;
-        }
-        return left - 1;
+        else
+            return left - 1;
+    } else if (compare_read_req(match_req, &read_reqs[right]) < 0) {
+        return right - 1;
     } else {
-        if (compare_read_req(match_req, &read_req[right]) < 0) {
-            return right - 1;
-        } else {
-            return right;
-        }
+        return right;
     }
-
 }
 
 /*
- * given an read request, split it into multiple indices whose range is equal or smaller
- * than slice_range size
+ * given a read request, split it into multiple indices whose range is equal or
+ * smaller than slice_range size
  * @param cur_read_req: the read request to split
  * @param slice_range: the slice size of the key-value store
- * @return read_req_set: the set of split read requests
+ * @return rd_req_set: the set of split read requests
  * */
 int unifycr_split_read_requests(read_req_t *cur_read_req,
-                                read_req_set_t *read_req_set,
-                                long slice_range)
+                                read_req_set_t *rd_req_set,
+                                size_t slice_range)
 {
-    long cur_read_start = cur_read_req->offset;
-    long cur_read_end = cur_read_req->offset + cur_read_req->length - 1;
+    size_t cur_read_start = cur_read_req->offset;
+    size_t cur_read_end = cur_read_req->offset + cur_read_req->length - 1;
 
-    long cur_slice_start = cur_read_req->offset / slice_range * slice_range;
-    long cur_slice_end = cur_slice_start + slice_range - 1;
+    size_t cur_slice_start = (cur_read_req->offset / slice_range) * slice_range;
+    size_t cur_slice_end = cur_slice_start + slice_range - 1;
 
-    read_req_set->count = 0;
+    memset(rd_req_set, 0, sizeof(read_req_set_t));
+    // previous memset has side effect of: rd_req_set->count = 0;
 
     if (cur_read_end <= cur_slice_end) {
         /*
-        cur_slice_start                                  cur_slice_end
+        cur_slice_start                                   cur_slice_end
                          cur_read_start     cur_read_end
-
         */
-        read_req_set->read_reqs[read_req_set->count]
-            = *cur_read_req;
-        read_req_set->count++;
+        rd_req_set->read_reqs[rd_req_set->count] = *cur_read_req;
+        rd_req_set->count++;
     } else {
         /*
-        cur_slice_start                     cur_slice_endnext_slice_start                   next_slice_end
-                         cur_read_start                                     cur_read_end
-
+        cur_slice_s          cur_slice_e|next_slice_s          next_slice_e
+                   cur_read_s                        cur_read_e
         */
-        read_req_set->read_reqs[read_req_set->count] = *cur_read_req;
-        read_req_set->read_reqs[read_req_set->count].length =
+
+        // debug_log_client_req("splitting current request", cur_read_req);
+
+        // add first portion (tail of current slice)
+        rd_req_set->read_reqs[rd_req_set->count] = *cur_read_req;
+        rd_req_set->read_reqs[rd_req_set->count].length =
             cur_slice_end - cur_read_start + 1;
-        read_req_set->count++;
+        rd_req_set->count++;
 
-        cur_slice_start = cur_slice_end + 1;
-        cur_slice_end = cur_slice_start + slice_range - 1;
-
-        while (1) {
-            if (cur_read_end <= cur_slice_end) {
-                break;
-            }
-
-            read_req_set->read_reqs[read_req_set->count].fid = cur_read_req->fid;
-            read_req_set->read_reqs[read_req_set->count].offset = cur_slice_start;
-            read_req_set->read_reqs[read_req_set->count].length = slice_range;
-
+        do {
             cur_slice_start = cur_slice_end + 1;
             cur_slice_end = cur_slice_start + slice_range - 1;
-            read_req_set->count++;
+            if (cur_read_end <= cur_slice_end)
+                break;
 
-        }
+            // add full slice
+            rd_req_set->read_reqs[rd_req_set->count].fid = cur_read_req->fid;
+            rd_req_set->read_reqs[rd_req_set->count].offset = cur_slice_start;
+            rd_req_set->read_reqs[rd_req_set->count].length = slice_range;
+            rd_req_set->count++;
+        } while (1);
 
-        read_req_set->read_reqs[read_req_set->count].fid = cur_read_req->fid;
-        read_req_set->read_reqs[read_req_set->count].offset = cur_slice_start;
-        read_req_set->read_reqs[read_req_set->count].length =
+        // add last portion (head of current slice)
+        rd_req_set->read_reqs[rd_req_set->count].fid = cur_read_req->fid;
+        rd_req_set->read_reqs[rd_req_set->count].offset = cur_slice_start;
+        rd_req_set->read_reqs[rd_req_set->count].length =
             cur_read_end - cur_slice_start + 1;
-        read_req_set->count++;
+        rd_req_set->count++;
     }
 
     return 0;
@@ -1223,43 +1223,38 @@ int unifycr_split_read_requests(read_req_t *cur_read_req,
  * split the read requests whose size is larger than
  * unifycr_key_slice_range into the ones smaller
  * than unifycr_key_slice range
- * @param read_req: a list of read requests
+ * @param read_reqs: a list of read requests
  * @param count: number of read requests
- * @param tmp_read_req_set: a temporary read requests buffer
- * to hold the intermediate result
  * @param unifycr_key_slice_range: slice size of distributed
  * key-value store
- * @return read_req_set: the coalesced read requests
+ * @return rd_req_set: the coalesced read requests
  *
  * */
-int unifycr_coalesce_read_reqs(read_req_t *read_req, int count,
-                               read_req_set_t *tmp_read_req_set, long unifycr_key_slice_range,
-                               read_req_set_t *read_req_set)
+int unifycr_coalesce_read_reqs(read_req_t *read_reqs, size_t count,
+                               size_t slice_range,
+                               read_req_set_t *rd_req_set)
 {
+    size_t i, j;
+    read_req_set_t tmp_req_set;
 
-    read_req_set->count = 0;
-    tmp_read_req_set->count = 0;
+    rd_req_set->count = 0;
 
-    int cursor = 0;
-    int i, j;
     for (i = 0; i < count; i++) {
+        unifycr_split_read_requests(read_reqs+i, &tmp_req_set,
+                                    slice_range);
+
         j = 0;
-        unifycr_split_read_requests(&read_req[i], tmp_read_req_set,
-                                    unifycr_key_slice_range);
-        if (cursor != 0) {
-            if (read_req_set->read_reqs[cursor - 1].fid
-                == tmp_read_req_set->read_reqs[0].fid) {
-                if (read_req_set->read_reqs[cursor - 1].offset
-                    + read_req_set->read_reqs[cursor - 1].length ==
-                    tmp_read_req_set->read_reqs[0].offset) {
-                    /*
-                     * if not within the same slice, then don't coalesce
-                     *
-                     * */
-                    if (read_req_set->read_reqs[cursor - 1].offset / unifycr_key_slice_range ==
-                        tmp_read_req_set->read_reqs[0].offset / unifycr_key_slice_range) {
-                        read_req_set->read_reqs[cursor - 1].length
-                        += tmp_read_req_set->read_reqs[0].length;
+        if (rd_req_set->count > 0) {
+            read_req_t *first = &(tmp_req_set.read_reqs[0]);
+            read_req_t *prev = &(rd_req_set->read_reqs[rd_req_set->count - 1]);
+            if (prev->fid == first->fid) {
+                if ((prev->offset + prev->length) == first->offset) {
+                    /* only coalesce when in same slice */
+                    if ((prev->offset / slice_range)
+                        == (first->offset / slice_range)) {
+                        // debug_log_client_req("coalesce to", prev);
+                        // debug_log_client_req("coalesce from", first);
+                        prev->length += first->length;
                         j++;
                     }
 
@@ -1267,161 +1262,141 @@ int unifycr_coalesce_read_reqs(read_req_t *read_req, int count,
             }
         }
 
-        for (; j < tmp_read_req_set->count; j++) {
-            read_req_set->read_reqs[cursor] = tmp_read_req_set->read_reqs[j];
-            read_req_set->count++;
-            cursor++;
+        for (; j < tmp_req_set.count; j++) {
+            rd_req_set->read_reqs[rd_req_set->count] = tmp_req_set.read_reqs[j];
+            rd_req_set->count++;
         }
-
     }
 
     return 0;
 }
 
 /*
- * match the received read_requests with the
- * client's read requests
- * @param read_req: a list of read requests
+ * match the received read request with the client's read requests
+ * @param read_reqs: a list of read requests
  * @param count: number of read requests
  * @param match_req: received read request to match
  * @return error code
  *
  * */
 
-int unifycr_match_received_ack(read_req_t *read_req, int count,
+int unifycr_match_received_ack(read_req_t *read_reqs, size_t count,
                                read_req_t *match_req)
 {
-
     read_req_t match_start = *match_req;
     read_req_t match_end = *match_req;
-    read_req_t tmp_req_start, tmp_req_end;
     match_end.offset += match_end.length - 1;
 
-    int start_pos = unifycr_locate_req(read_req, count, &match_start);
-    int end_pos = unifycr_locate_req(read_req, count, &match_end);
+    ssize_t first_pos = unifycr_locate_req(read_reqs, count, &match_start);
+    ssize_t last_pos = unifycr_locate_req(read_reqs, count, &match_end);
 
-    if (start_pos == -1) {
+    if (first_pos == -1)
         return -1;
-    }
 
-    /*s: start of match_req, e: end of match_req*/
-    if (start_pos == 0) {
-        if (compare_read_req(&match_start, &read_req[0]) < 0) {
+    /* NOTE: 's' is start of match_req, 'e' is end of match_req */
+    if (first_pos == 0) {
+        if (compare_read_req(&match_start, &read_reqs[0]) < 0) {
+            // match starts before first client request
             /*
-             *                      ************    ***********         *************
-             *                  s
+             *               ************       ***********
+             *       s
              * */
             return -1;
         }
     }
 
-    tmp_req_start = read_req[start_pos];
-    tmp_req_end = read_req[start_pos];
-    tmp_req_end.offset += tmp_req_end.length - 1;
+    read_req_t first_req_start, first_req_end;
 
-    /*              tmp_s       tmp_e
-     *              *****************           *************
-     *                     s  e
-     * */
-    if (compare_read_req(&match_start, &tmp_req_start) >= 0 &&
-        compare_read_req(&match_end, &tmp_req_end) <= 0) {
+    first_req_start = read_reqs[first_pos];
+    first_req_end = read_reqs[first_pos];
+    first_req_end.offset += first_req_end.length - 1;
 
-
-        int copy_offset = match_start.offset - tmp_req_start.offset;
-        memcpy(tmp_req_start.buf + copy_offset, match_req->buf,
+    if (compare_read_req(&match_start, &first_req_start) >= 0 &&
+        compare_read_req(&match_end, &first_req_end) <= 0) {
+        // match is fully within first client request
+        /*              req_s       req_e
+         *              *****************           *************
+         *                     s  e
+         * */
+        off_t copy_offset = match_start.offset - first_req_start.offset;
+        memcpy(first_req_start.buf + copy_offset, match_req->buf,
                match_req->length);
-
         return 0;
     }
 
-    /*  tmp_s       tmp_e   req_s   req_endreq_s    req_endreq_s            req_e
-     *  *************************************************************************
-     *          s                                                       e
-     * */
+    read_req_t last_req_start, last_req_end;
 
+    last_req_start = read_reqs[last_pos];
+    last_req_end = read_reqs[last_pos];
+    last_req_end.offset += last_req_end.length - 1;
 
-    read_req_t tmp_start_req_start, tmp_start_req_end,
-               tmp_end_req_start, tmp_end_req_end;
+    if (compare_read_req(&match_start, &first_req_start) >= 0 &&
+        compare_read_req(&match_end, &last_req_end) <= 0) {
+        // match starts after first client req and ends before last client req
 
-    tmp_start_req_start = read_req[start_pos];
-    tmp_start_req_end = read_req[start_pos];
-    tmp_start_req_end.offset += tmp_start_req_end.length - 1;
-
-    tmp_end_req_start = read_req[end_pos];
-    tmp_end_req_end = read_req[end_pos];
-    tmp_end_req_end.offset += tmp_end_req_end.length - 1;
-
-
-    if (compare_read_req(&match_start, &tmp_start_req_start) >= 0 &&
-        compare_read_req(&match_end, &tmp_end_req_end) <= 0) {
-
-        /*read requests are noncontiguous, so we returned more
-         * data, error*/
-        int i;
-        for (i = start_pos + 1; i <= end_pos; i++) {
-            if (read_req[i - 1].offset + read_req[i - 1].length != read_req[i].offset) {
+        size_t i;
+        for (i = first_pos + 1; i <= last_pos; i++) {
+            if ((read_reqs[i - 1].offset + read_reqs[i - 1].length)
+                != read_reqs[i].offset) {
+                /* TODO: noncontiguous read requests not yet supported */
                 return -1;
             }
         }
 
-        /*read requests are contiguous, so we fill all req buffers in the
-         * middle*/
-        long copy_offset = match_start.offset - tmp_start_req_start.offset;
-        long copy_length = tmp_start_req_end.offset - match_start.offset + 1;
-        memcpy(tmp_start_req_start.buf + copy_offset, match_req->buf,
-               copy_length);
+        /* fill covered portion of first client req */
+        off_t copy_offset = match_start.offset - first_req_start.offset;
+        size_t len = (size_t)(first_req_end.offset - match_start.offset + 1);
+        memcpy(first_req_start.buf + copy_offset, match_req->buf, len);
 
-
-        long cursor = copy_length;
-        for (i = start_pos + 1; i < end_pos; i++) {
-            memcpy(read_req[i].buf, match_req->buf + cursor,
-                   read_req[i].length);
-            cursor += read_req[i].length;
+        /* fill all req buffers in the middle */
+        for (i = first_pos + 1; i < last_pos; i++) {
+            memcpy(read_reqs[i].buf, match_req->buf + len, read_reqs[i].length);
+            len += read_reqs[i].length;
         }
 
-        copy_offset = 0;
-        copy_length = match_end.offset - tmp_end_req_start.offset + 1;
-        memcpy(tmp_end_req_start.buf + copy_offset, match_req->buf,
-               copy_length);
+        /* fill covered portion of last client req */
+        len = (size_t)(match_end.offset - last_req_start.offset + 1);
+        memcpy(last_req_start.buf, match_req->buf, len);
 
         return 0;
     }
 
+    /* TODO: unhandled case */
     return -1;
-
 }
 
 /*
- * get data for a list of read requests from the
- * delegator
- * @param read_req: a list of read requests
+ * get data for a list of read requests from the delegator
+ * @param read_req: a list of read requests (with internal fids)
  * @param count: number of read requests
  * @return error code
  *
  * */
-int unifycr_fd_logreadlist(read_req_t *read_req, int count)
+int unifycr_fd_logreadlist(read_req_t *read_reqs, size_t count)
 {
-    int i;
-    int tot_sz = 0;
-    int rc = UNIFYCR_SUCCESS;
-    int num = 0;
-    int *ptr_size = NULL;
-    int *ptr_num = NULL;
+    size_t i;
+    size_t tot_sz = 0;
+    int rc;
 
+#if 0 // TODO - revisit when we have a valid global view of file size
     /*
      * Adjust length for fitting the EOF.
      */
     for (i = 0; i < count; i++) {
-        read_req_t *req = &read_req[i];
+        read_req_t *req = read_reqs + i;
         unifycr_filemeta_t *meta = NULL;
-
-        meta = unifycr_get_meta_from_fid(req->fid - unifycr_fd_limit);
-        if (!meta)
+        meta = unifycr_get_meta_from_fid(req->fid);
+        if (NULL == meta)
             return -1;
 
-        if (req->offset + req->length > meta->size)
+        /* TODO - The following is broken, local meta doesn't
+         * have correct size to compute EOF */
+        if ((req->offset + req->length) > meta->size) {
             req->length = meta->size - req->offset;
+            assert((req->length > 0) && (req->length <= meta->size));
+        }
     }
+#endif
 
     /*
      * Todo: When the number of read requests exceed the
@@ -1433,109 +1408,105 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
     unifycr_file_attr_t tmp_meta_entry;
     unifycr_file_attr_t *ptr_meta_entry;
     for (i = 0; i < count; i++) {
-        read_req[i].fid -= unifycr_fd_limit;
-        tmp_meta_entry.fid = read_req[i].fid;
+        tmp_meta_entry.fid = read_reqs[i].fid;
 
-        ptr_meta_entry = (unifycr_file_attr_t *)bsearch(&tmp_meta_entry,
-                         unifycr_fattrs.meta_entry, *unifycr_fattrs.ptr_num_entries,
-                         sizeof(unifycr_file_attr_t), compare_fattr);
+        ptr_meta_entry = (unifycr_file_attr_t *)
+            bsearch(&tmp_meta_entry, unifycr_fattrs.meta_entry,
+                    *unifycr_fattrs.ptr_num_entries,
+                    sizeof(unifycr_file_attr_t), compare_fattr);
         if (ptr_meta_entry != NULL) {
-            read_req[i].fid = ptr_meta_entry->gfid;
+            read_reqs[i].fid = ptr_meta_entry->gfid;
         }
     }
 
-    qsort(read_req, count, sizeof(read_req_t), compare_read_req);
-
     /*coalesce the contiguous read requests*/
-    unifycr_coalesce_read_reqs(read_req, count,
-                               &tmp_read_req_set, unifycr_key_slice_range,
+    read_req_set_t read_req_set;
+    memset(&read_req_set, 0, sizeof(read_req_set_t));
+    qsort(read_reqs, count, sizeof(read_req_t), compare_read_req);
+    unifycr_coalesce_read_reqs(read_reqs, count, unifycr_key_slice_range,
                                &read_req_set);
 
+    shm_hdr_t *req_hdr = (shm_hdr_t *) shm_req_buf;
+    req_hdr->cnt = read_req_set.count;
+    req_hdr->sz = (req_hdr->cnt * sizeof(shm_meta_t));
 
-    shm_meta_t *tmp_sh_meta;
+    shm_meta_t *meta_req_base = (shm_meta_t *)
+        (shm_req_buf + sizeof(shm_hdr_t));
+
+    for (i = 0; i < read_req_set.count; i++) {
+        shm_meta_t *meta_req = meta_req_base + i;
+        size_t len = read_req_set.read_reqs[i].length;
+        meta_req->src_fid = read_req_set.read_reqs[i].fid;
+        meta_req->offset = read_req_set.read_reqs[i].offset;
+        meta_req->length = len;
+        tot_sz += len;
+    }
+
+    shm_hdr_t *recv_hdr = (shm_hdr_t *) shm_recv_buf;
+    recv_hdr->sz = 0;
+    recv_hdr->cnt = 0;
 
     int cmd = COMM_READ;
 
     memset(cmd_buf, 0, sizeof(cmd_buf));
-    memcpy(cmd_buf, &cmd, sizeof(int));
-    memcpy(cmd_buf + sizeof(int), &(read_req_set.count), sizeof(int));
+    memcpy(cmd_buf, &cmd, sizeof(cmd));
+    memcpy(cmd_buf + sizeof(cmd), &(read_req_set.count),
+           sizeof(read_req_set.count));
 
-    *((int *)shm_recvbuf) = 0;
-    *((int *)shm_recvbuf + 1) = 0;
-
-    for (i = 0; i < read_req_set.count; i++) {
-        tot_sz += read_req_set.read_reqs[i].length;
-
-        tmp_sh_meta = (shm_meta_t *)(shm_reqbuf + i * sizeof(shm_meta_t));
-        tmp_sh_meta->src_fid = read_req_set.read_reqs[i].fid;
-        tmp_sh_meta->offset = read_req_set.read_reqs[i].offset;
-        tmp_sh_meta->length = read_req_set.read_reqs[i].length;
-
-        memcpy(shm_reqbuf + i * sizeof(shm_meta_t),
-               tmp_sh_meta, sizeof(shm_meta_t));
-    }
     __real_write(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
 
-    /*
-     * ToDo: Exception handling when some of the requests
-     * are missed
-     * */
     while (tot_sz > 0) {
         cmd_fd.events = POLLIN | POLLPRI;
         cmd_fd.revents = 0;
 
         rc = poll(&cmd_fd, 1, -1);
-        if (rc == 0) {
-            /*time out event*/
-        } else if (rc > 0) {
-            read_req_t tmp_read_req;
-            shm_meta_t *tmp_req;
+        if (rc > 0) {
+            if (cmd_fd.revents == POLLIN) {
+                ssize_t rret = __real_read(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
+                if (rret < 0)
+                    return UNIFYCR_ERROR_READ;
+                else if (rret == 0) /* domain socket was closed */
+                    return UNIFYCR_ERROR_SOCK_DISCONNECT;
 
-            if (cmd_fd.revents != 0) {
-                if (cmd_fd.revents == POLLIN) {
-                    int sh_cursor = 0;
+                /* QUESTION: do we need to check contents of cmd_buf? */
 
-                    (void) __real_read(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
-                    ptr_size = (int *)shm_recvbuf;
-                    num = *((int *)shm_recvbuf + 1); /*The first int spared out for size*/
-                    ptr_num = (int *)((char *)shm_recvbuf + sizeof(int));
+                int sh_cursor = sizeof(shm_hdr_t);
+                shm_meta_t *shm_req;
+                size_t j;
+                size_t cnt = recv_hdr->cnt; /* must cache, modified in loop */
+                int error_cnt = 0;
+                for (j = 0; j < cnt; j++) {
+                    shm_req = (shm_meta_t *)(shm_recv_buf + sh_cursor);
+                    sh_cursor += sizeof(shm_meta_t);
 
-                    int j;
-                    for (j = 0; j < num; j++) {
-                        tmp_req = (shm_meta_t *)(shm_recvbuf
-                                                 + 2 * sizeof(int) + sh_cursor);
+                    size_t len = shm_req->length;
 
-                        sh_cursor += sizeof(shm_meta_t);
-                        *ptr_size -= sizeof(shm_meta_t);
+                    read_req_t rreq;
+                    rreq.fid = shm_req->src_fid;
+                    rreq.offset = shm_req->offset;
+                    rreq.length = len;
+                    rreq.buf = shm_recv_buf + sh_cursor;
 
-                        tmp_read_req.fid = tmp_req->src_fid;
-                        tmp_read_req.offset = tmp_req->offset;
-                        tmp_read_req.length = tmp_req->length;
-                        tmp_read_req.buf = shm_recvbuf + 2 * sizeof(int) + sh_cursor;
-
-                        rc = unifycr_match_received_ack(read_req,
-                                                        count, &tmp_read_req);
-                        if (rc == 0) {
-                            sh_cursor += tmp_req->length;
-                            tot_sz -= tmp_req->length;
-                            *ptr_size -= tmp_req->length;
-                            (*ptr_num)--;
-                        } else {
-                            rc = -1;
-                            return rc;
-                        }
+                    rc = unifycr_match_received_ack(read_reqs, count, &rreq);
+                    if (rc == 0) {
+                        sh_cursor += len;
+                        tot_sz -= len;
+                        recv_hdr->sz -= (sizeof(shm_meta_t) + len);
+                        recv_hdr->cnt--;
+                    } else {
+                        /* no match, update error count and continue */
+                        error_cnt++;
                     }
-                } else {
-
+                }
+                if (error_cnt > 0) {
+                    /* TODO: Exception handling when requests are missed */
+                    return -1;
                 }
             }
-
-        } else {
-
         }
     }
 
-    return rc;
+    return (int)UNIFYCR_SUCCESS;
 }
 
 ssize_t UNIFYCR_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
@@ -1562,7 +1533,7 @@ ssize_t UNIFYCR_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
         read_req_t tmp_req;
 
         tmp_req.buf = buf;
-        tmp_req.fid = fd + unifycr_fd_limit;
+        tmp_req.fid = fd;
         tmp_req.length = count;
         tmp_req.offset = offset;
 
@@ -1905,6 +1876,8 @@ void *UNIFYCR_WRAP(mmap64)(void *addr, size_t length, int prot, int flags,
 
 int UNIFYCR_WRAP(close)(int fd)
 {
+    int user_fd = fd;
+
     /* check whether we should intercept this file descriptor */
     if (unifycr_intercept_fd(&fd)) {
         DEBUG("closing fd %d\n", fd);
@@ -1919,9 +1892,8 @@ int UNIFYCR_WRAP(close)(int fd)
         }
 
         unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
-
         if (filedesc->write)
-            fsync(fd + unifycr_fd_limit);
+            fsync(user_fd);
 
         /* close the file id */
         int close_rc = unifycr_fid_close(fid);
