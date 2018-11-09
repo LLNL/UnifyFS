@@ -38,6 +38,34 @@
 #include "unifycr_metadata.h"
 #include "unifycr_sock.h"
 
+/* One request manager thread is created for each client that a
+ * delegator serves.  The main thread of the delegator assigns
+ * work to the request manager thread to retrieve data and send
+ * it back to the client.
+ *
+ * To start, given a read request from the client (via rpc)
+ * the handler function on the main delegator first queries the
+ * key/value store using the given file id and byte range to obtain
+ * the meta data on the physical location of the file data.  This
+ * meta data provides the host delegator rank, the app/client
+ * ids that specify the log file on the remote delegator, the
+ * offset within the log file and the length of data.  The rpc
+ * handler function sorts the meta data by host delegator rank,
+ * generates read requests, and inserts those into a list on a
+ * data structure shared with the request manager (del_req_set).
+ *
+ * The request manager thread coordinates with the main thread
+ * using a lock and a condition variable to protect the shared data
+ * structure and impose flow control.  When assigned work, the
+ * request manager thread packs and sends request messages to
+ * service manager threads on remote delegators via MPI send.
+ * It waits for data to be sent back, and unpacks the read replies
+ * in each message into a shared memory buffer for the client.
+ * When the shared memory is full or all data has been received,
+ * it signals the client process to process the read replies.
+ * It iterates with the client until all incoming read replies
+ * have been transferred. */
+
 /* defines header for read reply as written by request manager
  * back to application client via shared memory, the data
  * payload of length bytes immediately follows the header */
@@ -93,6 +121,11 @@ static int compare_delegators(const void *a, const void *b)
 
     return 0;
 }
+
+/************************
+ * These functions are called by the rpc handler to assign work
+ * to the request manager thread
+ ***********************/
 
 /* read function for one requested extent,
  * called from rpc handler to fill shared data structures
@@ -380,6 +413,10 @@ int rm_read_remote_data(int app_id, int thrd_id, int gfid, int req_num)
 }
 #endif
 
+/************************
+ * These functions define the logic of the request manager thread
+ ***********************/
+
 /**
 * pack the the requests to be sent to the same
 * delegator.
@@ -588,6 +625,9 @@ static int rm_process_received_msg(
      *   (int) num  - number of read replies
      *   {sequence of shm_meta_t} - read replies */
 
+    /* number of bytes in header (3 ints right now) */
+    size_t header_size = 3 * sizeof(int);
+
     /* get pointer to shared memory buffer for this client */
     char *shmbuf = (char *) app_config->shm_recv_bufs[client_id];
 
@@ -632,7 +672,7 @@ static int rm_process_received_msg(
         /* compute max byte that will be consumed by copying
          * data for this message into shared memory buffer */
         size_t msg_size  = sizeof(shm_meta_t) + msg->length;
-        size_t need_size = 2 * sizeof(int) + shm_offset + msg_size;
+        size_t need_size = header_size + shm_offset + msg_size;
 
         /* check that there is space for this message */
         if (need_size > app_config->recv_buf_sz) {
