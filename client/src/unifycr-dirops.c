@@ -106,7 +106,7 @@ DIR *UNIFYCR_WRAP(opendir)(const char *name)
          */
         meta->size = sb->st_size;
         meta->chunks = sb->st_blocks;
-        meta->real_size = sb->st_size;
+        meta->log_size = 0; /* no need of local storage for dir operations */
     } else {
         fid = unifycr_fid_create_file(name);
         if (fid < 0) {
@@ -118,7 +118,7 @@ DIR *UNIFYCR_WRAP(opendir)(const char *name)
         meta->is_dir = 1;
         meta->size = sb->st_size;
         meta->chunks = sb->st_blocks;
-        meta->real_size = sb->st_size;
+        meta->log_size = 0;
     }
 
     _dirp = unifycr_dirstream_alloc(fid);

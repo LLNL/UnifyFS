@@ -37,8 +37,8 @@ static int rank;
 static int total_ranks;
 static int debug;
 
-static char *mountpoint = "/tmp";  /* unifycr mountpoint */
-static char *filename = "/tmp";
+static char *mountpoint = "/unifycr";  /* unifycr mountpoint */
+static char *filename = "/unifycr";
 static int unmount;                /* unmount unifycr after running the test */
 
 #define FP_SPECIAL 1
@@ -109,27 +109,24 @@ static void dump_stat(int rank, const struct stat *sb)
 
 static struct option const long_opts[] = {
     { "debug", 0, 0, 'd' },
-    { "filename", 1, 0, 'f' },
     { "help", 0, 0, 'h' },
     { "mount", 1, 0, 'm' },
     { "unmount", 0, 0, 'u' },
     { 0, 0, 0, 0},
 };
 
-static char *short_opts = "df:hm:u";
+static char *short_opts = "dhm:u";
 
 static const char *usage_str =
 "\n"
-"Usage: %s [options...]\n"
+"Usage: %s [options...] <filename>\n"
 "\n"
 "Available options:\n"
 " -d, --debug                      pause before running test\n"
 "                                  (handy for attaching in debugger)\n"
-" -f, --filename=<filename>        filename of the target entry\n"
-"                                  (default: /tmp)\n"
 " -h, --help                       help message\n"
 " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-"                                  (default: /tmp)\n"
+"                                  (default: /unifycr)\n"
 " -u, --unmount                    unmount the filesystem after test\n"
 "\n";
 
@@ -161,10 +158,6 @@ int main(int argc, char **argv)
             debug = 1;
             break;
 
-        case 'f':
-            filename = strdup(optarg);
-            break;
-
         case 'm':
             mountpoint = strdup(optarg);
             break;
@@ -179,6 +172,11 @@ int main(int argc, char **argv)
             break;
         }
     }
+
+    if (argc - optind != 1)
+        print_usage();
+
+    filename = argv[optind];
 
     if (debug)
         test_pause(rank, "Attempting to mount");

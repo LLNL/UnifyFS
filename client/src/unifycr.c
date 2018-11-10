@@ -786,7 +786,7 @@ int unifycr_fid_create_file(const char *path)
     meta->size    = 0;
     meta->chunks  = 0;
     meta->is_dir  = 0;
-    meta->real_size = 0;
+    meta->log_size = 0;
     meta->storage = FILE_STORAGE_NULL;
     meta->flock_status = UNLOCKED;
 
@@ -1345,7 +1345,7 @@ int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
 
         meta = unifycr_get_meta_from_fid(fid);
 
-        meta->real_size = gfattr.file_attr.st_size;
+        meta->size = gfattr.file_attr.st_size;
         gfattr.fid = fid;
         gfattr.gfid = gfid;
 

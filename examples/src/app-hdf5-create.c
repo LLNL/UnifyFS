@@ -48,11 +48,12 @@
 
 static int rank;
 static int total_ranks;
+static int write_data;
 
 static int debug;           /* pause for attaching debugger */
 static int standard;        /* not mounting unifycr when set */
 static int unmount;         /* unmount unifycr after running the test */
-static char *mountpoint = "/tmp";   /* unifycr mountpoint */
+static char *mountpoint = "/unifycr";   /* unifycr mountpoint */
 static char *filename = "test.h5";  /* testfile name under mountpoint */
 static char targetfile[NAME_MAX];   /* target file name */
 
@@ -63,10 +64,11 @@ static struct option const long_opts[] = {
     { "mount", 1, 0, 'm' },
     { "standard", 0, 0, 's' },
     { "unmount", 0, 0, 'u' },
+    { "write", 0, 0, 'w' },
     { 0, 0, 0, 0},
 };
 
-static char *short_opts = "df:hm:su";
+static char *short_opts = "df:hm:suw";
 
 static const char *usage_str =
 "\n"
@@ -76,12 +78,13 @@ static const char *usage_str =
 " -d, --debug                      pause before running test\n"
 "                                  (handy for attaching in debugger)\n"
 " -f, --filename=<filename>        target file name under mountpoint\n"
-"                                  (default: testfile)\n"
+"                                  (default: test.h5)\n"
 " -h, --help                       help message\n"
 " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-"                                  (default: /tmp)\n"
+"                                  (default: /unifycr)\n"
 " -s, --standard                   do not use unifycr but run standard I/O\n"
 " -u, --unmount                    unmount the filesystem after test\n"
+" -w, --write                      populate the dataset\n"
 "\n";
 
 static char *program;
@@ -131,6 +134,10 @@ int main(int argc, char **argv)
             unmount = 1;
             break;
 
+        case 'w':
+            write_data = 1;
+            break;
+
         case 'h':
         default:
             print_usage();
@@ -167,6 +174,20 @@ int main(int argc, char **argv)
         dataset_id = H5Dcreate2(file_id, "/dset", H5T_STD_I32BE, dataspace_id,
                                 H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         printf("H5Dcreate2: %d\n", dataset_id);
+
+        if (write_data) {
+            int i, j;
+            int dset_data[4][6];
+
+            for (i = 0; i < 4; i++)
+                for (j = 0; j < 6; j++)
+                    dset_data[i][j] = i * 6 + j + 1;
+
+            /* Write the dataset. */
+            status = H5Dwrite(dataset_id, H5T_NATIVE_INT, H5S_ALL, H5S_ALL,
+                              H5P_DEFAULT, dset_data);
+            printf("H5Dwrite: %d\n", status);
+        }
 
         /* End access to the dataset and release resources used by it. */
         status = H5Dclose(dataset_id);

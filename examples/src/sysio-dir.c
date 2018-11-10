@@ -41,7 +41,7 @@ static int total_ranks;
 static int debug;           /* pause for attaching debugger */
 static int unmount;         /* unmount unifycr after running the test */
 static uint64_t count = 10; /* number of directories each rank creates */
-static char *mountpoint = "/tmp";  /* unifycr mountpoint */
+static char *mountpoint = "/unifycr";  /* unifycr mountpoint */
 static char *testdir = "testdir";  /* test directory under mountpoint */
 static char targetdir[NAME_MAX];   /* target file name */
 
@@ -205,7 +205,7 @@ static const char *usage_str =
 "                                  (default: testdir)\n"
 " -h, --help                       help message\n"
 " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-"                                  (default: /tmp)\n"
+"                                  (default: /unifycr)\n"
 " -n, --count=<NUM>                number of directories that each rank will\n"
 "                                  create (default: 10)\n"
 " -S, --synchronous                sync metadata on each write\n"

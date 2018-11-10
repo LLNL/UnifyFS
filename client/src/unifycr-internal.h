@@ -258,7 +258,7 @@ typedef struct {
 
 typedef struct {
     off_t size;                     /* current file size */
-    off_t real_size;                                /* real size of the file for logio*/
+    off_t log_size;                 /* real size of the file for logio*/
     int is_dir;                     /* is this file a directory */
     pthread_spinlock_t fspinlock;   /* file lock variable */
     enum flock_enum flock_status;   /* file lock status */
@@ -267,7 +267,6 @@ typedef struct {
 
     off_t chunks;                   /* number of chunks allocated to file */
     unifycr_chunkmeta_t *chunk_meta; /* meta data for chunks */
-
 } unifycr_filemeta_t;
 
 /* struct used to map a full path to its local file id,

@@ -4,6 +4,7 @@ libexec_PROGRAMS = sysio-write-gotcha sysio-write-static \
                   sysio-writeread2-gotcha sysio-writeread2-static \
                   sysio-dir-gotcha sysio-dir-static \
                   sysio-stat-gotcha sysio-stat-static \
+                  sysio-cp-gotcha sysio-cp-static \
                   app-mpiio-gotcha app-mpiio-static \
                   app-btio-gotcha app-btio-static \
                   app-tileio-gotcha app-tileio-static
@@ -79,6 +80,16 @@ sysio_stat_static_SOURCES = sysio-stat.c
 sysio_stat_static_CPPFLAGS = $(test_cppflags)
 sysio_stat_static_LDADD   = $(test_static_ldadd)
 sysio_stat_static_LDFLAGS = $(test_static_ldflags)
+
+sysio_cp_gotcha_SOURCES = sysio-cp.c
+sysio_cp_gotcha_CPPFLAGS = $(test_cppflags)
+sysio_cp_gotcha_LDADD = $(test_gotcha_ldadd)
+sysio_cp_gotcha_LDFLAGS = $(AM_LDFLAGS)
+
+sysio_cp_static_SOURCES = sysio-cp.c
+sysio_cp_static_CPPFLAGS = $(test_cppflags)
+sysio_cp_static_LDADD   = $(test_static_ldadd)
+sysio_cp_static_LDFLAGS = $(test_static_ldflags)
 
 app_mpiio_gotcha_SOURCES = app-mpiio.c
 app_mpiio_gotcha_CPPFLAGS = $(test_cppflags)
