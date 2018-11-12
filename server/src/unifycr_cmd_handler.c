@@ -326,6 +326,10 @@ static thrd_ctrl_t *unifycr_rm_thrd_create(int app_id, int client_id)
         return NULL;
     }
 
+    /* record app and client id this thread will be serving */
+    thrd_ctrl->app_id    = app_id;
+    thrd_ctrl->client_id = client_id;
+
     /* initialize flow control flags */
     thrd_ctrl->exit_flag              = 0;
     thrd_ctrl->has_waiting_delegator  = 0;
@@ -346,17 +350,9 @@ static thrd_ctrl_t *unifycr_rm_thrd_create(int app_id, int client_id)
         return NULL;
     }
 
-    /* TODO: this should be attached to the thread structure so
-     * it can be freed later */
-    /* prepare input arguments for request manager thread */
-    cli_signature_t *cli_signature =
-        (cli_signature_t *)malloc(sizeof(cli_signature_t));
-    cli_signature->app_id  = app_id;
-    cli_signature->sock_id = client_id;
-
     /* launch request manager thread */
     rc = pthread_create(&(thrd_ctrl->thrd), NULL,
-        rm_delegate_request_thread, cli_signature);
+        rm_delegate_request_thread, (void *)thrd_ctrl);
     if (rc != 0) {
         LOGERR("pthread_create failed for request "
             "manager thread app_id=%d client_id=%d rc=%d (%s)",
