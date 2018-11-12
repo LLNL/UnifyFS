@@ -31,8 +31,12 @@
 #define UNIFYCR_DEBUG_H
 #include <unistd.h>
 
+/* open specified file as debug file stream,
+ * returns UNIFYCR_SUCCESS on success */
 int dbg_open(char *fname);
 
+/* close our debug file stream,
+ * returns UNIFYCR_SUCCESS on success */
 int dbg_close();
 
 #endif

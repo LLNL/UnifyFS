@@ -36,7 +36,6 @@
 #include <sys/time.h>
 
 extern FILE *dbg_stream;
-extern char dbg_line[1024];
 extern int glb_rank;
 
 typedef enum {
