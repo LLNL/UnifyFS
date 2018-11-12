@@ -150,13 +150,13 @@ typedef struct {
     /* flag set by main thread indicating whether request
      * manager thread should exit */
     int exit_flag;
-} thrd_ctrl_t;
 
-/* structure passed to request manager thread when it starts */
-typedef struct {
-    int app_id;  /* app id of client we'll be serving */
-    int sock_id; /* socket id for client we'll be serving */
-} cli_signature_t;
+    /* app_id this thread is serving */
+    int app_id;
+
+    /* client_id this thread is serving */
+    int client_id;
+} thrd_ctrl_t;
 
 /* one of these structures is created for each app id,
  * it contains info for each client like names, file descriptors,

@@ -244,7 +244,7 @@ int rm_read_remote_data(
 /**
 * send the read requests to the
 * remote delegators
-* @param sock_id: which socket in the poll_set received
+* @param client_id: which socket in the poll_set received
 * the application's requests
 * @param req_num: number of read requests
 * @return success/error code
@@ -533,18 +533,15 @@ static int rm_send_remote_requests(
 
 /* signal the client process for it to start processing read
  * data in shared memory */
-static int client_signal(int app_id, int sock_id, int flag)
+static int client_signal(int app_id, int client_id, int flag)
 {
     /* signal client on socket */
-//    int rc = sock_notify_cli(sock_id, COMM_DIGEST);
+//    int rc = sock_notify_cli(client_id, COMM_DIGEST);
 //    return rc;
 
     /* lookup our data structure for this app id */
     app_config_t *app_config =
         (app_config_t *)arraylist_get(app_config_list, app_id);
-
-    /* get local rank of client based on socket */
-    int client_id = app_config->client_ranks[sock_id];
 
     /* get pointer to flag in shared memory */
     volatile int *ptr_flag =
@@ -559,7 +556,7 @@ static int client_signal(int app_id, int sock_id, int flag)
 }
 
 /* wait until client has processed all read data in shared memory */
-static int client_wait(int app_id, int sock_id)
+static int client_wait(int app_id, int client_id)
 {
     /* specify time to sleep between checking flag in shared
      * memory indicating client has processed data */
@@ -570,9 +567,6 @@ static int client_wait(int app_id, int sock_id)
     /* lookup our data structure for this app id */
     app_config_t *app_config =
         (app_config_t *)arraylist_get(app_config_list, app_id);
-
-    /* get local rank of client based on socket */
-    int client_id = app_config->client_ranks[sock_id];
 
     /* get pointer to flag in shared memory */
     volatile int *ptr_flag =
@@ -596,7 +590,7 @@ static int client_wait(int app_id, int sock_id)
 * deliver replies back to client
 *
 * @param app_id: client's application id
-* @param sock_id: socket index in the poll_set
+* @param client_id: socket index in the poll_set
 * for that client
 * @param recv_msg_buf: buffer for received message
 *  packed read requests
@@ -605,7 +599,7 @@ static int client_wait(int app_id, int sock_id)
 */
 static int rm_process_received_msg(
   int app_id,         /* client app id to get shared memory */
-  int sock_id,        /* sock_id to client, to get client_id */
+  int client_id,      /* client_id to client */
   char *recv_msg_buf, /* pointer to receive buffer */
   long *ptr_tot_sz)   /* decrements total data received */
 {
@@ -615,9 +609,6 @@ static int rm_process_received_msg(
     /* look up client app config based on client id */
     app_config_t *app_config =
         (app_config_t *)arraylist_get(app_config_list, app_id);
-
-    /* get client id of app process */
-    int client_id = app_config->client_ranks[sock_id];
 
     /* format of read replies in shared memory
      *   (int) flag - used for signal between delegator and client
@@ -678,10 +669,10 @@ static int rm_process_received_msg(
         if (need_size > app_config->recv_buf_sz) {
             /* client-side receive buffer is full,
              * inform client to start reading */
-            client_signal(app_id, sock_id, 1);
+            client_signal(app_id, client_id, 1);
 
             /* wait for client to read data */
-            client_wait(app_id, sock_id);
+            client_wait(app_id, client_id);
 
             /* TODO: MEM_FETCH */
 
@@ -724,29 +715,34 @@ static int rm_process_received_msg(
 }
 
 /**
-* receive the requested data returned as a result of
-* the delegated read requests
-* @param app_id:
-* @param sock_id:
-* @param tot_sz: the total data size to receive
+* receive the requested data returned from service managers
+* as a result of the read requests we sent to them
+*
+* @param app_id: app id for incoming data
+* @param client_id: client id for incoming data
+* @param tot_sz: total data size to receive (excludes header bytes)
 * @return success/error code
 */
 static int rm_receive_remote_message(
-    int app_id,  /* client app id for incoming message */
-    int sock_id, /* socket id used to refer to client */
-    long tot_sz) /* */
+    thrd_ctrl_t *thrd_ctrl, /* contains pointer to receive buffer */
+    long tot_sz)            /* number of incoming data payload bytes */
 {
     /* assume we'll succeed */
     int rc = ULFS_SUCCESS;
+
+    /* get app id and client id that we'll be serving,
+     * app id associates thread with a namespace (mountpoint)
+     * the client id associates the thread with a particular
+     * client process id */
+    int app_id    = thrd_ctrl->app_id;
+    int client_id = thrd_ctrl->client_id;
 
     /* lookup our data structure for this app id */
     app_config_t *app_config =
         (app_config_t *)arraylist_get(app_config_list, app_id);
 
-    /* get thread control structure for this socket */
-    int thrd_id = app_config->thrd_idxs[sock_id];
-    thrd_ctrl_t *thrd_ctrl =
-        (thrd_ctrl_t *)arraylist_get(thrd_list, thrd_id);
+    /* get thread id for this client (used for MPI tags) */
+    int thrd_id = app_config->thrd_idxs[client_id];
 
     int irecv_flag[RECV_BUF_CNT] = {0};
     MPI_Request recv_req[RECV_BUF_CNT] = {0};
@@ -779,7 +775,7 @@ static int rm_receive_remote_message(
                     /* receive pending, test this flag */
                     MPI_Status status;
                     int mpi_rc = MPI_Test(&recv_req[i],
-                                           &irecv_flag[i], &status);
+                                          &irecv_flag[i], &status);
                     if (mpi_rc != MPI_SUCCESS) {
                         return (int)UNIFYCR_ERROR_RM_RECV;
                     }
@@ -792,7 +788,7 @@ static int rm_receive_remote_message(
 
                         /* unpack the data into client shared memory */
                         int tmp_rc = rm_process_received_msg(
-                            app_id, sock_id, buf, &tot_sz);
+                            app_id, client_id, buf, &tot_sz);
                         if (tmp_rc != ULFS_SUCCESS) {
                             rc = tmp_rc;
                         }
@@ -816,10 +812,10 @@ static int rm_receive_remote_message(
     }
 
     /* signal client that we're now done writing data (flag=2) */
-    client_signal(app_id, sock_id, 2);
+    client_signal(app_id, client_id, 2);
 
     /* wait for client to read data */
-    client_wait(app_id, sock_id);
+    client_wait(app_id, client_id);
 
     return rc;
 }
@@ -831,30 +827,16 @@ static int rm_receive_remote_message(
 * when data is ready
 *
 * delegate the read requests for the delegator thread's client. Each
-* delegator thread handles one connection to * one client-side rank.
+* delegator thread handles one connection to one client-side rank.
 *
-* @param arg: the signature of the delegator thread,
-* marked by its client's app_id and the socket id.
+* @param arg: pointer to control structure for the delegator thread
+*
 * @return NULL
 */
 void *rm_delegate_request_thread(void *arg)
 {
-    /* get app id and sock id from argument,
-     * app id associates thread with a namespace
-     * the sock id associates the thread with a particular
-     * client process id */
-    cli_signature_t *my_sig = arg;
-    int app_id  = my_sig->app_id;
-    int sock_id = my_sig->sock_id;
-
-    /* look up app config data structures based on app id */
-    app_config_t *app_config =
-        (app_config_t *)arraylist_get(app_config_list, app_id);
-
-    /* get thread data structures for thils client */
-    int thrd_id = app_config->thrd_idxs[sock_id];
-    thrd_ctrl_t *thrd_ctrl =
-        (thrd_ctrl_t *)arraylist_get(thrd_list, thrd_id);
+    /* get pointer to our thread control structure */
+    thrd_ctrl_t *thrd_ctrl = (thrd_ctrl_t *) arg;
 
     /* loop forever to handle read requests from the client,
      * new requests are added to a list on a shared data structure
@@ -903,7 +885,7 @@ void *rm_delegate_request_thread(void *arg)
         }
 
         /* wait for data to come back from servers */
-        rc = rm_receive_remote_message(app_id, sock_id, tot_sz);
+        rc = rm_receive_remote_message(thrd_ctrl, tot_sz);
         if (rc != UNIFYCR_SUCCESS) {
             /* release lock and exit if we hit an error */
             pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
