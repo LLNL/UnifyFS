@@ -192,9 +192,6 @@ typedef struct {
     int dbg_ranks[MAX_NUM_CLIENTS];    /* map to client rank */
 
     /* file descriptors */
-    int shm_superblock_fds[MAX_NUM_CLIENTS];  /* data shm file */
-    int shm_req_fds[MAX_NUM_CLIENTS];         /* request shm file */
-    int shm_recv_fds[MAX_NUM_CLIENTS];        /* reply shm file */
     int spill_log_fds[MAX_NUM_CLIENTS];       /* spillover data */
     int spill_index_log_fds[MAX_NUM_CLIENTS]; /* spillover index */
 

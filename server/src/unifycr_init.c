@@ -843,18 +843,18 @@ static int unifycr_exit()
 
         for (j = 0; j < MAX_NUM_CLIENTS; j++) {
             if (tmp_app_config != NULL &&
-                tmp_app_config->shm_req_fds[j] != -1) {
+                tmp_app_config->shm_req_bufs[j] != NULL) {
                 shm_unlink(tmp_app_config->req_buf_name[j]);
             }
 
             if (tmp_app_config != NULL &&
-                tmp_app_config->shm_recv_fds[j] != -1) {
+                tmp_app_config->shm_recv_bufs[j] != NULL) {
                 shm_unlink(tmp_app_config->recv_buf_name[j]);
 
             }
 
             if (tmp_app_config != NULL &&
-                tmp_app_config->shm_superblock_fds[j] != -1) {
+                tmp_app_config->shm_superblocks[j] != NULL) {
                 shm_unlink(tmp_app_config->super_buf_name[j]);
             }
 
