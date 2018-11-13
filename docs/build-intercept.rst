@@ -94,9 +94,11 @@ If you use Dotkit then replace ``spack load`` with ``spack use``.
 
 .. code-block:: Bash
 
+    $ spack install environment-modules
+    $
     $ spack install leveldb
     $ spack install gotcha@0.0.2
-    $ spack install environment-modules
+    $ spack install flatcc
     $ 
     $ git clone https://xgitlab.cels.anl.gov/sds/sds-repo.git sds-repo.git
     $ cd sds-repo.git
@@ -104,12 +106,6 @@ If you use Dotkit then replace ``spack load`` with ``spack use``.
     $ cd ..
     $ spack install margo
     $ spack install argobots
-    $
-    $ git clone https://github.com/dvidelabs/flatcc flatcc.git
-    $ cd flatcc.git
-    $   cmake -DCMAKE_INSTALL_PREFIX=/path/to/flatbuffers -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Debug -DFLATCC_INSTALL=on
-    $   make install
-    $ cd ..
 
 .. tip::
 
@@ -126,12 +122,13 @@ Then to build UnifyCR:
 
     $ spack load leveldb
     $ spack load gotcha@0.0.2
+    $ spack load flatcc
     $ spack load mercury
     $ spack load argobots
     $ spack load margo
     $
     $ ./autogen.sh
-    $ ./configure --prefix=/path/to/install --enable-debug --with-flatbuffers=/path/to/flatbuffers
+    $ ./configure --prefix=/path/to/install --enable-debug
     $ make
     $ make install
 
@@ -147,13 +144,13 @@ And leveldb (if not already installed on your system):
 To download and install Margo and its dependencies (Mercury and Argobots)
 follow the instructions here: `Margo <https://xgitlab.cels.anl.gov/sds/margo>`_
 
-To get flat buffers: `flatbuffers <https://github.com/dvidelabs/flatcc>`_
+To get flatcc `flatcc <https://github.com/dvidelabs/flatcc>`_
 
 Then to build UnifyCR:
 
 .. code-block:: Bash
 
-    $ ./configure --prefix=/path/to/install --enable-debug --with-gotcha=/path/to/gotcha --with-leveldb=/path/to/leveldb --with-mercury=/path/to/mercury --with-argobots=/path/to/argobots --with-margo=/path/to/margo --with-flatbuffers=/path/to/flatbuffers
+    $ ./configure --prefix=/path/to/install --enable-debug --with-gotcha=/path/to/gotcha --with-leveldb=/path/to/leveldb --with-mercury=/path/to/mercury --with-argobots=/path/to/argobots --with-margo=/path/to/margo --with-flatcc=/path/to/flatcc
     $ make
     $ make install
 

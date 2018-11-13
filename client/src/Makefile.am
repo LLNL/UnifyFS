@@ -37,8 +37,8 @@ libunifycr_la_CPPFLAGS = \
   -I$(top_builddir)/client \
   -I$(top_srcdir)/common/src
 
-libunifycr_la_CFLAGS = $(MPI_CFLAGS) $(MERCURY_CFLAGS) $(ARGOBOTS_CFLAGS) $(MARGO_CFLAGS) $(FLATBUFFERS_CFLAGS)
-libunifycr_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION) $(MPI_CLDFLAGS) $(MERCURY_LDFLAGS) $(MERCURY_LIBS) $(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) $(MARGO_LDFLAGS) $(MARGO_LIBS) $(FLATBUFFERS_LDFLAGS) $(FLATBUFFERS_LIBS)
+libunifycr_la_CFLAGS = $(MPI_CFLAGS) $(MERCURY_CFLAGS) $(ARGOBOTS_CFLAGS) $(MARGO_CFLAGS) $(FLATCC_CFLAGS)
+libunifycr_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION) $(MPI_CLDFLAGS) $(MERCURY_LDFLAGS) $(MERCURY_LIBS) $(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) $(MARGO_LDFLAGS) $(MARGO_LIBS) $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 libunifycr_la_LIBADD = $(top_builddir)/common/src/libunifycr_common.la \
 					   -lcrypto -lrt -lpthread
 
@@ -74,8 +74,8 @@ libunifycr_gotcha_la_CPPFLAGS = \
   -I$(top_builddir)/client \
   -I$(top_srcdir)/common/src
 
-libunifycr_gotcha_la_CFLAGS = $(GOTCHA_CFLAGS) $(MPI_CFLAGS) $(MERCURY_CFLAGS) $(ARGOBOTS_CFLAGS) $(MARGO_CFLAGS) $(FLATBUFFERS_CFLAGS)
-libunifycr_gotcha_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION) $(GOTCHA_LDFLAGS) $(MPI_CLDFLAGS) $(MERCURY_LDFLAGS) $(MERCURY_LIBS) $(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) $(MARGO_LDFLAGS) $(MARGO_LIBS) $(FLATBUFFERS_LDFLAGS) $(FLATBUFFERS_LIBS)
+libunifycr_gotcha_la_CFLAGS = $(GOTCHA_CFLAGS) $(MPI_CFLAGS) $(MERCURY_CFLAGS) $(ARGOBOTS_CFLAGS) $(MARGO_CFLAGS) $(FLATCC_CFLAGS)
+libunifycr_gotcha_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION) $(GOTCHA_LDFLAGS) $(MPI_CLDFLAGS) $(MERCURY_LDFLAGS) $(MERCURY_LIBS) $(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) $(MARGO_LDFLAGS) $(MARGO_LIBS) $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 libunifycr_gotcha_la_LIBADD = $(top_builddir)/common/src/libunifycr_common.la \
                               -lgotcha -lcrypto -lrt -lpthread
 
