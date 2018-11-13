@@ -90,6 +90,7 @@ typedef struct {
     long src_fid;    /* global file id of file */
     long src_offset; /* offset in file */
     long length;     /* length of data */
+    int  errcode;    /* error code to be returned (pass/fail) */
     char *addr;      /* address of data in read buffer */
 } ack_meta_t;
 
@@ -141,6 +142,7 @@ typedef struct {
  * which are later waited on before sending data back to requesting
  * delegators */
 typedef struct {
+    int err_submit;       /* indicates whether read was submitted */
     struct aiocb read_cb; /* structure for outstanding aio read */
     int index;            /* index in read task list for this read */
     int start_pos;        /* starting byte offset into read request */
@@ -564,7 +566,9 @@ static int sm_ack_remote_delegator(rank_ack_meta_t *ack_meta)
         memcpy(send_msg_buf + send_sz, &(meta->length), sizeof(long));
         send_sz += sizeof(long);
 
-        /* TODO: copy in error status */
+        /* copy in error status */
+        memcpy(send_msg_buf + send_sz, &(meta->errcode), sizeof(int));
+        send_sz += sizeof(int);
 
         /* copy file data to send buffer */
         memcpy(send_msg_buf + send_sz, meta->addr, meta->length);
@@ -613,7 +617,8 @@ static int insert_to_ack_list(
     service_msgs_t *service_msgs,
     int index,
     long src_offset,
-    long len)
+    long len,
+    int errcode)
 {
     int rc = 0;
 
@@ -628,6 +633,7 @@ static int insert_to_ack_list(
     ack->src_fid    = msg->src_fid; /* global file id */
     ack->src_offset = src_offset;   /* offset in file */
     ack->length     = len;          /* length of data */
+    ack->errcode    = errcode;      /* error code for read (pass/fail) */
     ack->addr       = mem_addr;     /* pointer to data in read buffer */
 
     /* after setting the ack for this message, link it
@@ -699,7 +705,8 @@ static int batch_insert_to_ack_list(
     service_msgs_t *service_msgs,   /* read requests */
     char *mem_addr,                 /* memory loc to copy read data */
     int start_offset,               /* first offset in read task */
-    int end_offset)                 /* last offset in read task */
+    int end_offset,                 /* last offset in read task */
+    int errcode)                    /* error code on read (pass/fail) */
 {
     /* search for the starting read request in service msgs for
      * a given region of read_task_t identified by start_offset
@@ -767,7 +774,7 @@ static int batch_insert_to_ack_list(
 
         /* add entry to read reply list */
         insert_to_ack_list(rank_ack_task, mem_addr + mem_pos,
-            service_msgs, idx, offset, length);
+            service_msgs, idx, offset, length, errcode);
 
         /* update our offset into read reply buffer */ 
         mem_pos += length;
@@ -789,7 +796,7 @@ static int batch_insert_to_ack_list(
 
         /* add entry to read reply list */
         insert_to_ack_list(rank_ack_task, mem_addr + mem_pos,
-            service_msgs, idx, offset, length);
+            service_msgs, idx, offset, length, errcode);
     }
 
     return ULFS_SUCCESS;
@@ -807,7 +814,7 @@ static int sm_wait_until_digested(task_set_t *read_task_set,
                            service_msgs_t *service_msgs,
                            rank_ack_task_t *read_ack_task)
 {
-    int i, ret_code;
+    int i;
 
     /* pointer to array of boolean flags for whether we need to test
      * outstanding operations */
@@ -838,6 +845,28 @@ static int sm_wait_until_digested(task_set_t *read_task_set,
             pended_read_t *pendread =
                 (pended_read_t *)arraylist_get(pended_reads, i);
 
+            /* don't need to check if we failed to even submit
+             * the read operation */
+            if (flags[i] != 1 && pendread->err_submit) {
+                /* mark that this read operation has completed */
+                flags[i] = 1;
+                counter++;
+
+                /* failed to submit, so we failed to read */
+                int errcode = (int)UNIFYCR_ERROR_READ;
+
+                /* add read reply to ack_list as failed */
+                batch_insert_to_ack_list(read_ack_task,
+                    &read_task_set->read_tasks[pendread->index],
+                    service_msgs,
+                    pendread->mem_pos,
+                    pendread->start_pos,
+                    pendread->end_pos,
+                    errcode);
+
+                continue;
+            }
+
             /* check whether this read has completed */
             if (flags[i] != 1 &&
                 aio_error(&pendread->read_cb) != EINPROGRESS)
@@ -846,19 +875,27 @@ static int sm_wait_until_digested(task_set_t *read_task_set,
                 flags[i] = 1;
                 counter++;
 
+                /* assume that we succeeded */
+                int errcode = UNIFYCR_SUCCESS;
+
+                /* get return code for read operation */
+                ssize_t ret_code = aio_return(&pendread->read_cb);
+
                 /* check that read completed without error */
-                ret_code = aio_return(&pendread->read_cb);
-                if (ret_code > 0) {
-                    // add to ack_list
-                    batch_insert_to_ack_list(read_ack_task,
-                        &read_task_set->read_tasks[pendread->index],
-                        service_msgs,
-                        pendread->mem_pos,
-                        pendread->start_pos,
-                        pendread->end_pos);
-                } else {
-                    // error reading data ?
+                if (ret_code != (ssize_t)pendread->read_cb.aio_nbytes) {
+                    /* read error or short read,
+                     * consider either case as a read error */
+                    errcode = (int)UNIFYCR_ERROR_READ;
                 }
+
+                /* add read reply to ack_list */
+                batch_insert_to_ack_list(read_ack_task,
+                    &read_task_set->read_tasks[pendread->index],
+                    service_msgs,
+                    pendread->mem_pos,
+                    pendread->start_pos,
+                    pendread->end_pos,
+                    errcode);
             }
         }
     }
@@ -887,7 +924,7 @@ static int sm_wait_until_digested(task_set_t *read_task_set,
          * send them now */
         if (ack_meta->start_cursor < tmp_sz) {
             /* got some read replies, send them */
-            ret_code = sm_ack_remote_delegator(ack_meta);
+            int ret_code = sm_ack_remote_delegator(ack_meta);
             if (ret_code != ULFS_SUCCESS) {
                 return ret_code;
             }
@@ -924,7 +961,7 @@ static int sm_wait_until_digested(task_set_t *read_task_set,
                 ack_stat_t *ack_stat = arraylist_get(pended_sends, i);
 
                 /* test whether send is complete */
-                ret_code = MPI_Test(&ack_stat->req, &flags[i],
+                int ret_code = MPI_Test(&ack_stat->req, &flags[i],
                                     &ack_stat->stat);
                 if (ret_code != MPI_SUCCESS) {
                     return (int)UNIFYCR_ERROR_RECV;
@@ -1057,9 +1094,12 @@ static int sm_read_send_pipe(task_set_t *read_task_set,
             memcpy(buf_ptr, log_ptr, size);
             buf_cursor += size;
         	
+            /* we assume memcpy worked */
+            int errcode = UNIFYCR_SUCCESS;
+
             /* prepare read reply meta data */
             batch_insert_to_ack_list(rank_ack_task, read_task,
-                service_msgs, buf_ptr, 0, size - 1);
+                service_msgs, buf_ptr, 0, size - 1, errcode);
         } else if (offset < app_config->data_size) {
             /* part of the requested data is in shared memory,
              * compute size in shared memory */
@@ -1074,6 +1114,9 @@ static int sm_read_send_pipe(task_set_t *read_task_set,
             memcpy(buf_ptr, log_ptr, sz_from_mem);
             buf_cursor += sz_from_mem;
 
+            /* we assume memcpy worked */
+            int errcode = UNIFYCR_SUCCESS;
+
             /* compute size in spillover file */
             long sz_from_ssd = size - sz_from_mem;
 
@@ -1081,14 +1124,16 @@ static int sm_read_send_pipe(task_set_t *read_task_set,
             int fd = app_config->spill_log_fds[cli_id];
             ssize_t nread = pread(fd, read_buf + buf_cursor,
                 sz_from_ssd, 0);
-            if (nread < 0) {
-                return (int)UNIFYCR_ERROR_READ;
+            if (nread != (ssize_t)sz_from_ssd) {
+                /* read error or short read,
+                 * consider either case to be an error */
+                errcode = (int)UNIFYCR_ERROR_READ;
             }
-            buf_cursor += nread;
+            buf_cursor += sz_from_ssd;
 
             /* prepare read reply meta data */
             batch_insert_to_ack_list(rank_ack_task, read_task,
-                service_msgs, buf_ptr, 0, size - 1);
+                service_msgs, buf_ptr, 0, size - 1, errcode);
         } else {
             /* all requested data in the current read task
              * are in spillover files */
@@ -1115,15 +1160,17 @@ static int sm_read_send_pipe(task_set_t *read_task_set,
             /* send buffer location to copy data when complete */
             ptr->mem_pos = read_buf + buf_cursor;
 
-            /* enqueue entry in our list of pending reads */
-            arraylist_add(pended_reads, ptr);
-
             /* submit read as aio operation */
+            ptr->err_submit = 0;
             int rc = aio_read(&ptr->read_cb);
             if (rc < 0) {
-                return (int)UNIFYCR_ERROR_READ;
+                /* remember that we failed to submit this read */
+                ptr->err_submit = 1;
             }
             buf_cursor += size;
+
+            /* enqueue entry in our list of pending reads */
+            arraylist_add(pended_reads, ptr);
         }
 
         /* update accounting for burst size */

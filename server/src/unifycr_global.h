@@ -87,6 +87,7 @@ typedef struct {
     long src_fid;    /* global file id */
     long src_offset; /* logical offset in file */
     long length;     /* number of bytes */
+    int  errcode;    /* indicates whether read was successful */
 } recv_msg_t;
 
 /* defines a fixed-length list of read requests */

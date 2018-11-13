@@ -73,6 +73,7 @@ typedef struct {
     int src_fid; /* global file id */
     long offset; /* offset within file */
     long length; /* number of bytes */
+    int errcode; /* indicates whether read encountered error */
 } shm_meta_t;
 
 static void print_send_msgs(send_msg_t *send_metas,
@@ -735,6 +736,7 @@ static int rm_process_received_msg(
         shmmsg->src_fid = msg->src_fid;
         shmmsg->offset  = msg->src_offset;
         shmmsg->length  = msg->length;
+        shmmsg->errcode = msg->errcode;
         shm_offset += sizeof(shm_meta_t);
 
         /* copy data for this read request */
