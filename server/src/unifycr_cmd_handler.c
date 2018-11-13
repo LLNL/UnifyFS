@@ -520,7 +520,7 @@ static void unifycr_read_rpc(hg_handle_t handle)
 
     /* read data for a single read request from client,
      * returns data to client through shared memory */
-    ret = rm_read_remote_data(in.app_id, in.local_rank_idx,
+    ret = rm_cmd_read(in.app_id, in.local_rank_idx,
         in.gfid, in.offset, in.length);
 
     /* build our output values */
@@ -571,7 +571,7 @@ static void unifycr_mread_rpc(hg_handle_t handle)
     assert(hret == HG_SUCCESS);
 
     /* initiate read operations to fetch data for read requests */
-    ret = rm_mread_remote_data(in.app_id, in.local_rank_idx,
+    ret = rm_cmd_mread(in.app_id, in.local_rank_idx,
         in.gfid, in.read_count, buffer);
 
     /* build our output values */

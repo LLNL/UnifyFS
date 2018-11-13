@@ -132,7 +132,7 @@ static int compare_delegators(const void *a, const void *b)
  * with read requests to be handled by the delegator thread
  * returns before requests are handled
  */
-int rm_read_remote_data(
+int rm_cmd_read(
   int app_id,    /* app_id for requesting client */
   int client_id, /* client_id for requesting client */
   int gfid,      /* global file id of read request */
@@ -215,7 +215,7 @@ int rm_read_remote_data(
                           thrd_ctrl->del_req_stat);
 
     /* wake up the request manager thread for the requesting client */
-    if (! thrd_ctrl->has_waiting_delegator) {
+    if (!thrd_ctrl->has_waiting_delegator) {
         /* delegator thread is not waiting, but we are in critical
          * section, we just added requests so we must wait for delegator
          * to signal us that it's reached the critical section before
@@ -249,7 +249,7 @@ int rm_read_remote_data(
 * @param req_num: number of read requests
 * @return success/error code
 */
-int rm_mread_remote_data(int app_id, int client_id, int gfid, int req_num, void* buffer)
+int rm_cmd_mread(int app_id, int client_id, int gfid, int req_num, void *buffer)
 {
     int rc;
 
@@ -413,6 +413,47 @@ int rm_read_remote_data(int app_id, int thrd_id, int gfid, int req_num)
 }
 #endif
 
+/* function called by main thread to instruct
+ * resource manager thread to exit,
+ * returns UNIFYCR_SUCCESS on success */
+int rm_cmd_exit(thrd_ctrl_t *thrd_ctrl)
+{
+    /* grab the lock */
+    pthread_mutex_lock(&thrd_ctrl->thrd_lock);
+
+    /* if delegator thread is not waiting in critical
+     * section, let's wait on it to come back */
+    if (!thrd_ctrl->has_waiting_delegator) {
+        /* delegator thread is not in critical section,
+         * tell it we've got something and signal it */
+        thrd_ctrl->has_waiting_dispatcher = 1;
+        pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
+
+        /* we're no longer waiting */
+        thrd_ctrl->has_waiting_dispatcher = 0;
+    }
+
+    /* inform delegator thread that it's time to exit */
+    thrd_ctrl->exit_flag = 1;
+
+    /* free storage holding shared data structures */
+    free(thrd_ctrl->del_req_set);
+    free(thrd_ctrl->del_req_stat->req_stat);
+    free(thrd_ctrl->del_req_stat);
+
+    /* signal delegator thread */
+    pthread_cond_signal(&thrd_ctrl->thrd_cond);
+
+    /* release the lock */
+    pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
+
+    /* wait for delegator thread to exit */
+    void *status;
+    pthread_join(thrd_ctrl->thrd, &status);
+
+    return UNIFYCR_SUCCESS;
+}
+
 /************************
  * These functions define the logic of the request manager thread
  ***********************/
@@ -504,7 +545,7 @@ static int rm_send_remote_requests(
         printf("request data transfer for client_id: %d, src_fid: %d, dest_offset %ld, src_offset %ld, length %ld\n", thrd_ctrl->del_req_set->msg_meta[msg_cursor].dest_client_id, thrd_ctrl->del_req_set->msg_meta[msg_cursor].src_fid, thrd_ctrl->del_req_set->msg_meta[msg_cursor].dest_offset, thrd_ctrl->del_req_set->msg_meta[msg_cursor].src_offset, thrd_ctrl->del_req_set->msg_meta[msg_cursor].length);
 
         /* get pointer to send buffer */
-        char* sendbuf = thrd_ctrl->del_req_msg_buf;
+        char *sendbuf = thrd_ctrl->del_req_msg_buf;
 
         /* pointer to start of requests for this delegator */
         send_msg_t *req = &(msgs[msg_cursor]);
@@ -784,7 +825,7 @@ static int rm_receive_remote_message(
                     if (irecv_flag[i] != 0) {
                         /* got a new message, get pointer
                          * to message buffer */
-                        char* buf = thrd_ctrl->del_recv_msg_buf[i];
+                        char *buf = thrd_ctrl->del_recv_msg_buf[i];
 
                         /* unpack the data into client shared memory */
                         int tmp_rc = rm_process_received_msg(

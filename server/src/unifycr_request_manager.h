@@ -38,7 +38,19 @@ void *rm_delegate_request_thread(void *arg);
 
 /* functions called by rpc handlers to assign work
  * to request managre threads */
-int rm_mread_remote_data(int app_id, int client_id, int gfid, int req_num, void* buffer);
-int rm_read_remote_data(int app_id, int client_id, int gfid,  long offset, long length);
+int rm_cmd_mread(
+    int app_id,
+    int client_id,
+    int gfid,
+    int req_num,
+    void *buffer
+);
+
+int rm_cmd_read(int app_id, int client_id, int gfid,  long offset, long length);
+
+/* function called by main thread to instruct
+ * resource manager thread to exit,
+ * returns UNIFYCR_SUCCESS on success */
+int rm_cmd_exit(thrd_ctrl_t *thrd_ctrl);
 
 #endif
