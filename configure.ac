@@ -136,13 +136,8 @@ AC_CHECK_HEADERS(mntent.h sys/mount.h)
 # look for MPI and set flags
 LX_FIND_MPI
 
-# check leveldb
-PKG_CHECK_MODULES([LEVELDB], [leveldb], ,
-    AC_CHECK_LIB([leveldb], [leveldb_create_default_env],
-        [AC_SUBST([LEVELDB_LIBS], [-lleveldb])
-         AC_SUBST([LEVELDB_CFLAGS], [-I/usr/include/leveldb])
-        ],
-        AC_MSG_ERROR(['leveldb is required to build unifycr.'])))
+# look for leveldb library, sets LEVELDB_CFLAGS/LDFLAGS/LIBS
+UNIFYCR_AC_LEVELDB
 
 # look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
 UNIFYCR_AC_GOTCHA

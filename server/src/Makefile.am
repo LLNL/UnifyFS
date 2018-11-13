@@ -25,7 +25,7 @@ unifycrd_LDFLAGS = -static
 
 unifycrd_LDADD = $(top_builddir)/common/src/libunifycr_common.la \
                  $(top_builddir)/meta/src/libmdhim.a \
-                 $(LEVELDB_LIBS) \
+                 $(LEVELDB_LDFLAGS) $(LEVELDB_LIBS) \
                  $(MPI_CLDFLAGS) \
                  $(MERCURY_LDFLAGS) $(MERCURY_LIBS) \
                  $(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) \
