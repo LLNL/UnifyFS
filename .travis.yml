@@ -11,7 +11,7 @@ before_install:
   - sudo apt-get install --yes -qq libhdf5-openmpi-dev
   - (cd $HOME/spack; git describe) || git clone https://github.com/spack/spack $HOME/spack
   - $HOME/spack/bin/spack install leveldb
-  - $HOME/spack/bin/spack install gotcha
+  - $HOME/spack/bin/spack install gotcha@0.0.2
   - $HOME/spack/bin/spack install environment-modules
   # insall margo with spack
   - git config --global http.sslVerify false
@@ -29,7 +29,7 @@ before_install:
   # prepare build environment
   - . $HOME/spack/share/spack/setup-env.sh
   - spack load environment-modules
-  - source <(spack module loads gotcha leveldb mercury argobots margo)
+  - source <(spack module tcl loads gotcha@0.0.2 leveldb mercury argobots margo)
   - eval $(./scripts/git_log_test_env.sh)
   - export TEST_CHECKPATCH_SKIP_FILES
 
@@ -44,7 +44,9 @@ before_cache:
 script:
   # Force git to update the shallow clone and include tags so git-describe works
   - git fetch --unshallow --tags
-  - sh autogen.sh && ./configure --with-flatbuffers=$HOME/flatbuffers && make -k && make DISTCHECK_CONFIGURE_FLAGS="--with-flatbuffers=$HOME/flatbuffers" distcheck
+  - sh autogen.sh
+  - ./configure --with-flatbuffers=$HOME/flatbuffers || cat config.log
+  - make -k && make DISTCHECK_CONFIGURE_FLAGS="--with-flatbuffers=$HOME/flatbuffers" distcheck
   - ./scripts/checkpatch.sh || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
 
 after_failure:

@@ -149,32 +149,11 @@ follow the instructions here: `Margo <https://xgitlab.cels.anl.gov/sds/margo>`_
 
 To get flat buffers: `flatbuffers <https://github.com/dvidelabs/flatcc>`_
 
-If you installed leveldb from source then you may have to add the pkgconfig file
-for leveldb manually. This is assuming your install of leveldb does not contain
-a .pc file (it usually doesn't). Then, add the path to that file to
-PKG_CONFIG_PATH.
-
-.. code-block:: Bash
-
-    $ cat leveldb.pc
-    #leveldb.pc
-    prefix=/path/to/leveldb/install
-    exec_prefix=/path/to/leveldb/install
-    libdir=/path/to/leveldb/install/lib64
-    includedir=/path/to/leveldb/install/include
-    Name: leveldb
-    Description: a fast key-value storage library
-    Version: 1.20
-    Cflags: -I${includedir}
-    Libs: -L${libdir} -lleveldb
-
-    $ export PKG_CONFIG_PATH=/path/to/leveldb/pkgconfig
-
 Then to build UnifyCR:
 
 .. code-block:: Bash
 
-    $ ./configure --prefix=/path/to/install --enable-debug --with-gotcha=/path/to/gotcha --with-mercury=/path/to/mercury --with-argobots=/path/to/argobots --with-margo=/path/to/margo --with-flatbuffers=/path/to/flatbuffers
+    $ ./configure --prefix=/path/to/install --enable-debug --with-gotcha=/path/to/gotcha --with-leveldb=/path/to/leveldb --with-mercury=/path/to/mercury --with-argobots=/path/to/argobots --with-margo=/path/to/margo --with-flatbuffers=/path/to/flatbuffers
     $ make
     $ make install
 
