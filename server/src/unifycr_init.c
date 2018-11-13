@@ -793,41 +793,10 @@ static int unifycr_exit()
     /* notify the threads of request manager to exit*/
     int i, j;
     for (i = 0; i < arraylist_size(thrd_list); i++) {
-        thrd_ctrl_t *tmp_ctrl =
+        /* wait for resource manager thread to exit */
+        thrd_ctrl_t *thrd_ctrl =
             (thrd_ctrl_t *)arraylist_get(thrd_list, i);
-
-        /* grab the lock */
-        pthread_mutex_lock(&tmp_ctrl->thrd_lock);
-
-        /* if delegator thread is not waiting in critical
-         * section, let's wait on it to come back */
-        if (! tmp_ctrl->has_waiting_delegator) {
-            /* delegator thread is not in critical section,
-             * tell it we've got something and signal it */
-            tmp_ctrl->has_waiting_dispatcher = 1;
-            pthread_cond_wait(&tmp_ctrl->thrd_cond, &tmp_ctrl->thrd_lock);
-
-            /* we're no longer waiting */
-            tmp_ctrl->has_waiting_dispatcher = 0;
-        }
-
-        /* inform delegator thread that it's time to exit */
-        tmp_ctrl->exit_flag = 1;
-
-        /* free storage holding shared data structures */
-        free(tmp_ctrl->del_req_set);
-        free(tmp_ctrl->del_req_stat->req_stat);
-        free(tmp_ctrl->del_req_stat);
-
-        /* signal delegator thread */
-        pthread_cond_signal(&tmp_ctrl->thrd_cond);
-
-        /* release the lock */
-        pthread_mutex_unlock(&tmp_ctrl->thrd_lock);
-
-        /* wait for delegator thread to exit */
-        void *status;
-        pthread_join(tmp_ctrl->thrd, &status);
+        rm_cmd_exit(thrd_ctrl);
     }
 
     /* all threads have joined back, so release our control strucutres */
