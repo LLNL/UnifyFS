@@ -292,6 +292,7 @@ typedef struct {
     int src_fid;
     long offset;
     long length;
+    int errcode;
 } shm_meta_t; /*metadata format in the shared memory*/
 
 typedef struct {
