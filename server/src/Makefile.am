@@ -30,7 +30,7 @@ unifycrd_LDADD = $(top_builddir)/common/src/libunifycr_common.la \
                  $(MERCURY_LDFLAGS) $(MERCURY_LIBS) \
                  $(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) \
                  $(MARGO_LDFLAGS) $(MARGO_LIBS) \
-                 $(FLATBUFFERS_LDFLAGS) $(FLATBUFFERS_LIBS) \
+                 $(FLATCC_LDFLAGS) $(FLATCC_LIBS) \
                  -lpthread -lm -lstdc++ -lrt
 
 AM_CPPFLAGS = -I$(top_srcdir)/common/src \
@@ -38,6 +38,6 @@ AM_CPPFLAGS = -I$(top_srcdir)/common/src \
               -I$(top_srcdir)/meta/src/uthash \
               -I$(top_srcdir)/meta/src/Mlog2
 
-AM_CFLAGS = -Wall $(MPI_CFLAGS) $(MERCURY_CFLAGS) $(ARGOBOTS_CFLAGS) $(MARGO_CFLAGS) $(FLATBUFFERS_CFLAGS)
+AM_CFLAGS = -Wall $(MPI_CFLAGS) $(MERCURY_CFLAGS) $(ARGOBOTS_CFLAGS) $(MARGO_CFLAGS) $(FLATCC_CFLAGS)
 
 CLEANFILES = $(bin_PROGRAMS)
