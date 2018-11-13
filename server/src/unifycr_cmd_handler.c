@@ -48,75 +48,8 @@
 #include "unifycr_sock.h"
 #include "unifycr_metadata.h"
 #include "unifycr_client_context.h"
+#include "unifycr_shm.h"
 #include "../../client/src/unifycr_clientcalls_rpc.h"
-
-/* TODO: same function exists in client code, move this to common */
-/* hack until we can define common error reporting */
-#define LOGERR(...) LOG(LOG_ERR, __VA_ARGS__)
-
-/* TODO: same function exists in client code, move this to common */
-/* creates a shared memory of given size under specified name,
- * returns address of new shared memory if successful,
- * returns NULL on error  */
-static void *shm_alloc(const char *name, size_t size)
-{
-    int ret;
-
-    /* open shared memory file */
-    int fd = shm_open(name, MMAP_OPEN_FLAG, MMAP_OPEN_MODE);
-    if (fd == -1) {
-        /* failed to open shared memory */
-        LOGERR("Failed to open shared memory %s errno=%d (%s)",
-            name, errno, strerror(errno));
-        return NULL;
-    }
-
-    /* set size of shared memory region */
-#ifdef HAVE_POSIX_FALLOCATE
-    ret = posix_fallocate(fd, 0, size);
-    if (ret != 0) {
-        /* failed to set size shared memory */
-        errno = ret;
-        LOGERR("posix_fallocate failed for %s errno=%d (%s)",
-            name, errno, strerror(errno));
-        close(fd);
-        return NULL;
-    }
-#else
-    ret = ftruncate(fd, size);
-    if (ret == -1) {
-        /* failed to set size of shared memory */
-        LOGERR("ftruncate failed for %s errno=%d (%s)",
-            name, errno, strerror(errno));
-        close(fd);
-        return NULL;
-    }
-#endif
-
-    /* map shared memory region into address space */
-    void *addr = mmap(NULL, size, PROT_WRITE | PROT_READ, MAP_SHARED,
-                      fd, 0);
-    if (addr == MAP_FAILED) {
-        /* failed to open shared memory */
-        LOGERR("Failed to mmap shared memory %s errno=%d (%s)",
-            name, errno, strerror(errno));
-        close(fd);
-        return NULL;
-    }
-
-    /* safe to close file descriptor now */
-    ret = close(fd);
-    if (ret == -1) {
-        /* failed to open shared memory */
-        LOGERR("Failed to mmap shared memory %s errno=%d (%s)",
-            name, errno, strerror(errno));
-
-        /* not fatal, so keep going */
-    }
-
-    /* return address */
-    return addr;
-}
 
 /**
  * attach to the client-side shared memory
@@ -143,7 +76,7 @@ static int attach_to_shm(
     strcpy(app_config->super_buf_name[client_side_id], shm_name);
 
     /* attach to superblock */
-    void *addr = shm_alloc(shm_name, app_config->superblock_sz);
+    void *addr = unifycr_shm_alloc(shm_name, app_config->superblock_sz);
     if (addr == NULL) {
         LOGERR("Failed to attach to superblock %s", shm_name);
         return (int)UNIFYCR_ERROR_SHMEM;
@@ -160,7 +93,7 @@ static int attach_to_shm(
     strcpy(app_config->req_buf_name[client_side_id], shm_name);
 
     /* attach to request buffer region */
-    addr = shm_alloc(shm_name, app_config->req_buf_sz);
+    addr = unifycr_shm_alloc(shm_name, app_config->req_buf_sz);
     if (addr == NULL) {
         LOGERR("Failed to attach to request buffer %s", shm_name);
         return (int)UNIFYCR_ERROR_SHMEM;
@@ -178,7 +111,7 @@ static int attach_to_shm(
     strcpy(app_config->recv_buf_name[client_side_id], shm_name);
 
     /* attach to request buffer region */
-    addr = shm_alloc(shm_name, app_config->recv_buf_sz);
+    addr = unifycr_shm_alloc(shm_name, app_config->recv_buf_sz);
     if (addr == NULL) {
         LOGERR("Failed to attach to receive buffer %s", shm_name);
         return (int)UNIFYCR_ERROR_SHMEM;

@@ -837,49 +837,59 @@ static int unifycr_exit()
      * */
     int app_sz = arraylist_size(app_config_list);
 
+    /* iterate over each active application and free resources */
     for (i = 0; i < app_sz; i++) {
-        app_config_t *tmp_app_config =
+        /* get pointer to app config for this app_id */
+        app_config_t *app =
             (app_config_t *)arraylist_get(app_config_list, i);
 
+        /* skip to next app_id if this is empty */
+        if (app == NULL) {
+            continue;
+        }
+
+        /* free resources allocate for each client */
         for (j = 0; j < MAX_NUM_CLIENTS; j++) {
-            if (tmp_app_config != NULL &&
-                tmp_app_config->shm_req_bufs[j] != NULL) {
-                shm_unlink(tmp_app_config->req_buf_name[j]);
+            /* release request buffer shared memory region */
+            if (app->shm_req_bufs[j] != NULL) {
+                unifycr_shm_free(app->req_buf_name[j],
+                    app->req_buf_sz, &(app->shm_req_bufs[j]));
             }
 
-            if (tmp_app_config != NULL &&
-                tmp_app_config->shm_recv_bufs[j] != NULL) {
-                shm_unlink(tmp_app_config->recv_buf_name[j]);
-
+            /* release receive buffer shared memory region */
+            if (app->shm_recv_bufs[j] != NULL) {
+                unifycr_shm_free(app->recv_buf_name[j],
+                    app->recv_buf_sz, &(app->shm_recv_bufs[j]));
             }
 
-            if (tmp_app_config != NULL &&
-                tmp_app_config->shm_superblocks[j] != NULL) {
-                shm_unlink(tmp_app_config->super_buf_name[j]);
+            /* release super block shared memory region */
+            if (app->shm_superblocks[j] != NULL) {
+                unifycr_shm_free(app->super_buf_name[j],
+                    app->superblock_sz, &(app->shm_superblocks[j]));
             }
 
-            if (tmp_app_config != NULL &&
-                tmp_app_config->spill_log_fds[j] > 0) {
-                close(tmp_app_config->spill_log_fds[j]);
-                unlink(tmp_app_config->spill_log_name[j]);
-
+            /* close spill log file and delete it */
+            if (app->spill_log_fds[j] > 0) {
+                close(app->spill_log_fds[j]);
+                unlink(app->spill_log_name[j]);
             }
 
-            if (tmp_app_config != NULL &&
-                tmp_app_config->spill_index_log_fds[j] > 0) {
-                close(tmp_app_config->spill_index_log_fds[j]);
-                unlink(tmp_app_config->spill_index_log_name[j]);
-
+            /* close spill log index file and delete it */
+            if (app->spill_index_log_fds[j] > 0) {
+                close(app->spill_index_log_fds[j]);
+                unlink(app->spill_index_log_name[j]);
             }
         }
     }
 
     /* shutdown the metadata service*/
     meta_sanitize();
-    /* notify the service threads to exit*/
+
+    /* TODO: notify the service threads to exit*/
 
     /* destroy the sockets except for the ones
      * for acks*/
     sock_sanitize();
+
     return rc;
 }

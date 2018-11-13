@@ -78,4 +78,7 @@ extern int log_print_level;
                     gettimeofday(&logend, NULL); \
                     mlogtm += 1000000*(logend.tv_sec-logstart.tv_sec)+logend.tv_usec-logstart.tv_usec; \
                         }
+
+#define LOGERR(...) LOG(LOG_ERR, __VA_ARGS__)
+
 #endif /* LOG_H */
