@@ -773,9 +773,9 @@ int UNIFYCR_WRAP(open64)(const char *path, int flags, ...)
     if (unifycr_intercept_path(path)) {
         /* Call open wrapper with LARGEFILE flag set*/
         if (flags & O_CREAT) {
-            ret = UNIFYCR_REAL(open)(path, flags | O_LARGEFILE, mode);
+            ret = UNIFYCR_WRAP(open)(path, flags | O_LARGEFILE, mode);
         } else {
-            ret = UNIFYCR_REAL(open)(path, flags | O_LARGEFILE);
+            ret = UNIFYCR_WRAP(open)(path, flags | O_LARGEFILE);
         }
     } else {
         MAP_OR_FAIL(open64);
