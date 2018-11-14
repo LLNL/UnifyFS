@@ -787,71 +787,60 @@ static int rm_receive_remote_message(
     /* get thread id for this client (used for MPI tags) */
     int thrd_id = app_config->thrd_idxs[client_id];
 
-    int irecv_flag[RECV_BUF_CNT] = {0};
-    MPI_Request recv_req[RECV_BUF_CNT] = {0};
-
     /*
      * ToDo: something wrong happens and tot_sz keeps larger
      * than 0, handle this exception.
      * */
 
+    /* service manager will incorporate our thread id in tag,
+     * to distinguish between target request manager threads */
+    int tag = SER_DATA_TAG + thrd_id;
+
+    /* array of MPI_Request objects for window of posted receives */
+    MPI_Request recv_req[RECV_BUF_CNT] = {MPI_REQUEST_NULL};
+
+    /* get number of receives to post and size of each buffer */
+    int recv_buf_cnt = RECV_BUF_CNT;
+    int recv_buf_len = (int) RECV_BUF_LEN;
+
+    /* post a window of receive buffers for incoming data */
+    int i;
+    for (i = 0; i < recv_buf_cnt; i++) {
+        /* post buffer for incoming receive */
+        MPI_Irecv(thrd_ctrl->del_recv_msg_buf[i], recv_buf_len, MPI_BYTE,
+            MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &recv_req[i]);
+    }
+
+    /* spin until we have received all incoming data */
     while (tot_sz > 0) {
-        /* post a receive for each thread? */
-        /* read reply messages sent to us from service managers
-         * will refer to our request manager thread id in the tag
-         * to distinguish between request manager threads */
-        int i;
-        for (i = 0; i < RECV_BUF_CNT; i++) {
-            MPI_Irecv(thrd_ctrl->del_recv_msg_buf[i], RECV_BUF_LEN,
-                      MPI_BYTE, MPI_ANY_SOURCE,
-                      SER_DATA_TAG + thrd_id,
-                      MPI_COMM_WORLD, &recv_req[i]);
+        /* wait for any receive to come in */
+        int index;
+        MPI_Status status;
+        MPI_Waitany(recv_buf_cnt, recv_req, &index, &status);
+
+        /* got a new message, get pointer to message buffer */
+        char *buf = thrd_ctrl->del_recv_msg_buf[index];
+
+        /* unpack the data into client shared memory,
+         * this will internally signal client and wait
+         * for data to be processed if shared memory
+         * buffer is filled */
+        int tmp_rc = rm_process_received_msg(
+            app_id, client_id, buf, &tot_sz);
+        if (tmp_rc != ULFS_SUCCESS) {
+            rc = tmp_rc;
         }
 
-        /* spin waiting for outstanding receives to finish */
-        int recv_counter = 0;
-        while (tot_sz > 0) {
-            for (i = 0; i < RECV_BUF_CNT; i++) {
-                /* if this receive is still outstanding,
-                 * check whether it's done */
-                if (irecv_flag[i] == 0) {
-                    /* receive pending, test this flag */
-                    MPI_Status status;
-                    int mpi_rc = MPI_Test(&recv_req[i],
-                                          &irecv_flag[i], &status);
-                    if (mpi_rc != MPI_SUCCESS) {
-                        return (int)UNIFYCR_ERROR_RM_RECV;
-                    }
+        /* done processing, repost this receive buffer */
+        MPI_Irecv(thrd_ctrl->del_recv_msg_buf[index], recv_buf_len, MPI_BYTE,
+            MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &recv_req[index]);
+    }
 
-                    /* check whether it has come in */
-                    if (irecv_flag[i] != 0) {
-                        /* got a new message, get pointer
-                         * to message buffer */
-                        char *buf = thrd_ctrl->del_recv_msg_buf[i];
-
-                        /* unpack the data into client shared memory */
-                        int tmp_rc = rm_process_received_msg(
-                            app_id, client_id, buf, &tot_sz);
-                        if (tmp_rc != ULFS_SUCCESS) {
-                            rc = tmp_rc;
-                        }
-
-                        /* update count of received messages */
-                        recv_counter++;
-                    }
-                }
-            }
-
-            if (recv_counter == RECV_BUF_CNT) {
-                /* all outstanding receives accounted for,
-                 * reset flags and escape to issue a new
-                 * set of receives */
-                for (i = 0; i < RECV_BUF_CNT; i++) {
-                    irecv_flag[i] = 0;
-                }
-                break;
-            }
-        }
+    /* cancel posted MPI receives */
+    for (i = 0; i < recv_buf_cnt; i++) {
+        MPI_Status status;
+        MPI_Cancel(&recv_req[i]);
+        MPI_Wait(&recv_req[i], &status);
     }
 
     /* signal client that we're now done writing data (flag=2) */
