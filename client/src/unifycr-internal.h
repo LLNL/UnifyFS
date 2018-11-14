@@ -285,6 +285,7 @@ typedef struct {
     int fid;
     long offset;
     long length;
+    int errcode;
     char *buf;
 } read_req_t;
 
