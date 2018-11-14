@@ -930,27 +930,33 @@ ssize_t UNIFYCR_WRAP(read)(int fd, void *buf, size_t count)
         if (filedesc->pos >= meta->size)
             return 0;   /* EOF */
 
-        /* read data from file */
-        size_t retcount;
+        /* assume we'll succeed in read */
+        size_t retcount = count;
 
         read_req_t tmp_req;
-        tmp_req.fid    = fd + unifycr_fd_limit;
-        tmp_req.offset = filedesc->pos;
-        tmp_req.length = count;
-        tmp_req.buf    = buf;
+        tmp_req.fid     = fd + unifycr_fd_limit;
+        tmp_req.offset  = filedesc->pos;
+        tmp_req.length  = count;
+        tmp_req.errcode = UNIFYCR_SUCCESS;
+        tmp_req.buf     = buf;
 
         /*
          * this returns error code, which is zero for successful cases.
          */
         int ret = unifycr_fd_logreadlist(&tmp_req, 1);
 
-        if (ret)
-            retcount = 0;
-        else
-            retcount = tmp_req.length;
-
-        /* update position */
-        filedesc->pos += (off_t) retcount;
+        if (ret != UNIFYCR_SUCCESS) {
+            /* error reading data */
+            errno = EIO;
+            retcount = -1;
+        } else if (tmp_req.errcode != UNIFYCR_SUCCESS) {
+            /* error reading data */
+            errno = EIO;
+            retcount = -1;
+        } else {
+            /* success, update position */
+            filedesc->pos += (off_t) retcount;
+        }
 
         /* return number of bytes read */
         return (ssize_t) retcount;
@@ -1038,15 +1044,24 @@ int UNIFYCR_WRAP(lio_listio)(int mode, struct aiocb *const aiocb_list[],
     for (i = 0; i < nitems; i++) {
         if (aiocb_list[i]->aio_lio_opcode != LIO_READ) {
             //does not support write operation currently
+            free(reqs);
+            errno = EIO;
             return -1;
         }
-        reqs[i].fid    = aiocb_list[i]->aio_fildes;
-        reqs[i].buf    = (char *)aiocb_list[i]->aio_buf;
-        reqs[i].length = aiocb_list[i]->aio_nbytes;
-        reqs[i].offset = aiocb_list[i]->aio_offset;
+        reqs[i].fid     = aiocb_list[i]->aio_fildes;
+        reqs[i].offset  = aiocb_list[i]->aio_offset;
+        reqs[i].length  = aiocb_list[i]->aio_nbytes;
+        reqs[i].errcode = UNIFYCR_SUCCESS;
+        reqs[i].buf     = (char *)aiocb_list[i]->aio_buf;
     }
 
     int ret = unifycr_fd_logreadlist(reqs, nitems);
+
+    for (i = 0; i < nitems; i++) {
+        /* TODO: update fields to record error status
+         * see /usr/include/aio.h,
+         * update __error_code and __return_val fields? */
+    }
 
     free(reqs);
 
@@ -1203,7 +1218,7 @@ static int unifycr_split_read_requests(read_req_t *req,
 
     if (req_end <= slice_end) {
         /* slice fully contains request
-         * 
+         *
          * slice_start                         slice_end
          *                req_start     req_end
          *
@@ -1212,7 +1227,7 @@ static int unifycr_split_read_requests(read_req_t *req,
         count++;
     } else {
         /* read request spans multiple slices
-         * 
+         *
          * slice_start       slice_end  next_slice_start      next_slice_end
          *           req_start                          req_end
          *
@@ -1235,9 +1250,10 @@ static int unifycr_split_read_requests(read_req_t *req,
             }
 
             /* full slice is contained in read request */
-            out_set->read_reqs[count].fid    = req->fid;
-            out_set->read_reqs[count].offset = slice_start;
-            out_set->read_reqs[count].length = slice_range;
+            out_set->read_reqs[count].fid     = req->fid;
+            out_set->read_reqs[count].offset  = slice_start;
+            out_set->read_reqs[count].length  = slice_range;
+            out_set->read_reqs[count].errcode = UNIFYCR_SUCCESS;
             count++;
 
             /* advance to next slice */
@@ -1246,9 +1262,10 @@ static int unifycr_split_read_requests(read_req_t *req,
         }
 
         /* account for bytes in final slice */
-        out_set->read_reqs[count].fid    = req->fid;
-        out_set->read_reqs[count].offset = slice_start;
-        out_set->read_reqs[count].length = req_end - slice_start + 1;
+        out_set->read_reqs[count].fid     = req->fid;
+        out_set->read_reqs[count].offset  = slice_start;
+        out_set->read_reqs[count].length  = req_end - slice_start + 1;
+        out_set->read_reqs[count].errcode = UNIFYCR_SUCCESS;
         count++;
     }
 
@@ -1363,7 +1380,7 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
 
     /* could not find a valid read request in read_req array */
     if (start_pos == -1) {
-        return -1;
+        return UNIFYCR_FAILURE;
     }
 
     /* s: start of match_req, e: end of match_req */
@@ -1377,7 +1394,7 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
              * s
              *
              * */
-            return -1;
+            return UNIFYCR_FAILURE;
         }
     }
 
@@ -1393,21 +1410,29 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
         compare_read_req(&match_end,   &first_end)   <= 0)
     {
        /* read reply is fully contained within first read request
-        * 
+        *
         * first_s   first_e
         * *****************           *************
         *        s  e
         *
         * */
 
-        /* compute buffer location to copy data */
-        size_t offset = (size_t) (match_start.offset - first_start.offset);
-        char* buf = first_start.buf + offset; 
+        /* copy data to user buffer if no error */
+        if (match_req->errcode == UNIFYCR_SUCCESS) {
+            /* compute buffer location to copy data */
+            size_t offset = (size_t) (match_start.offset - first_start.offset);
+            char* buf = first_start.buf + offset;
 
-        /* copy data to user buffer */
-        memcpy(buf, match_req->buf, match_req->length);
+            /* copy data to user buffer */
+            memcpy(buf, match_req->buf, match_req->length);
 
-        return 0;
+            return UNIFYCR_SUCCESS;
+        } else {
+            /* hit an error during read, so record this fact
+             * in user's original read request */
+            read_req[start_pos].errcode = match_req->errcode;
+            return UNIFYCR_FAILURE;
+        }
     }
 
     /* define read request for offset of first byte in last read request */
@@ -1422,7 +1447,7 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
         compare_read_req(&match_end,   &last_end)    <= 0)
     {
         /* read reply spans multiple read requests
-         * 
+         *
          *  first_s   first_e  req_s req_e  req_s req_e  last_s    last_e
          *  *****************  ***********  ***********  ****************
          *          s                                              e
@@ -1436,44 +1461,54 @@ int unifycr_match_received_ack(read_req_t *read_req, int count,
             if (read_req[i - 1].offset + read_req[i - 1].length != read_req[i].offset) {
                 /* read requests are noncontiguous, so we returned data
                  * covering a hole in the original array of read requests, error */
-                return -1;
+                return UNIFYCR_FAILURE;
             }
         }
 
         /* read requests are contiguous, fill all buffers in middle */
 
-        /* get pointer to start of read reply data */
-        char* ptr = match_req->buf;
+        if (match_req->errcode == UNIFYCR_SUCCESS) {
+            /* get pointer to start of read reply data */
+            char* ptr = match_req->buf;
 
-        /* compute position in user buffer to copy data */
-        size_t offset = (size_t) (match_start.offset - first_start.offset);
-        char* buf = first_start.buf + offset;
+            /* compute position in user buffer to copy data */
+            size_t offset = (size_t) (match_start.offset - first_start.offset);
+            char* buf = first_start.buf + offset;
 
-        /* compute number of bytes to copy into first read request */
-        size_t length = (size_t) (first_end.offset - match_start.offset + 1);
+            /* compute number of bytes to copy into first read request */
+            size_t length =
+                (size_t) (first_end.offset - match_start.offset + 1);
 
-        /* copy data into user buffer for first read request */
-        memcpy(buf, ptr, length);
-        ptr += length;
+            /* copy data into user buffer for first read request */
+            memcpy(buf, ptr, length);
+            ptr += length;
 
-        /* copy data for middle read requests */
-        for (i = start_pos + 1; i < end_pos; i++) {
-            memcpy(read_req[i].buf, ptr, read_req[i].length);
-            ptr += read_req[i].length;
+            /* copy data for middle read requests */
+            for (i = start_pos + 1; i < end_pos; i++) {
+                memcpy(read_req[i].buf, ptr, read_req[i].length);
+                ptr += read_req[i].length;
+            }
+
+            /* compute bytes for last read request */
+            length = (size_t) (match_end.offset - last_start.offset + 1);
+
+            /* copy data into user buffer for last read request */
+            memcpy(last_start.buf, ptr, length);
+            ptr += length;
+
+            return UNIFYCR_SUCCESS;
+        } else {
+            /* hit an error during read, update errcode in user's
+             * original read request from start to end inclusive */
+            for (i = start_pos; i <= end_pos; i++) {
+                read_req[i].errcode = match_req->errcode;
+            }
+            return UNIFYCR_FAILURE;
         }
-
-        /* compute bytes for last read request */
-        length = (size_t) (match_end.offset - last_start.offset + 1);
-
-        /* copy data into user buffer for last read request */
-        memcpy(last_start.buf, ptr, length);
-        ptr += length;
-
-        return 0;
     }
 
     /* could not find a matching read request, return an error */
-    return -1;
+    return UNIFYCR_FAILURE;
 }
 
 /* notify our delegator that the shared memory buffer
@@ -1535,7 +1570,7 @@ static int delegator_wait()
         /* TODO: MEM_FETCH */
     }
 
-    return UNIFYCR_FAILURE;
+    return UNIFYCR_SUCCESS;
 }
 
 /* copy read data from shared memory buffer to user buffers from read
@@ -1571,9 +1606,10 @@ static int process_read_data(read_req_t *read_req, int count, int *done)
 
         /* define request object */
         read_req_t req;
-        req.fid    = msg->src_fid;
-        req.offset = msg->offset;
-        req.length = msg->length;
+        req.fid     = msg->src_fid;
+        req.offset  = msg->offset;
+        req.length  = msg->length;
+        req.errcode = msg->errcode;
 
         /* get pointer to data */
         req.buf = shmptr;
@@ -1625,7 +1661,7 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
 
         meta = unifycr_get_meta_from_fid(req->fid - unifycr_fd_limit);
         if (!meta)
-            return -1;
+            return UNIFYCR_FAILURE;
 
         if (req->offset + req->length > meta->size)
             req->length = meta->size - req->offset;
@@ -1670,7 +1706,7 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
          * build up a flat buffer to include them all */
         flatcc_builder_t builder;
         flatcc_builder_init(&builder);
-        
+
         unifycr_Extent_vec_start(&builder);
 
         /* allocate an entry for each request, get pointer to array */
@@ -1685,9 +1721,9 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
                 read_req_set.read_reqs[i].length);
             v[i] = ext;
         }
-    
+
         /* complete the array */
-        unifycr_Extent_vec_ref_t extents = unifycr_Extent_vec_end(&builder); 
+        unifycr_Extent_vec_ref_t extents = unifycr_Extent_vec_end(&builder);
         unifycr_ReadRequest_create_as_root(&builder, extents);
         //unifycr_ReadRequest_end_as_root(&builder);
 
@@ -1695,9 +1731,9 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
         size_t size;
         void* buffer = flatcc_builder_finalize_buffer(&builder, &size);
         assert(buffer);
-        	
+
         flatcc_builder_clear(&builder);
-        
+
         /* invoke read rpc here */
         unifycr_client_mread_rpc_invoke(&unifycr_rpc_context, app_id, local_rank_idx,
             ptr_meta_entry->gfid, read_req_set.count, size, buffer);
@@ -1710,7 +1746,7 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
         unifycr_client_read_rpc_invoke(&unifycr_rpc_context, app_id, local_rank_idx,
             ptr_meta_entry->gfid, offset, length);
     }
-	
+
     /*
      * ToDo: Exception handling when some of the requests
      * are missed
@@ -1719,7 +1755,12 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
     int done = 0;
     while (! done) {
         delegator_wait();
-        process_read_data(read_req, count, &done);
+
+        int tmp_rc = process_read_data(read_req, count, &done);
+        if (tmp_rc != UNIFYCR_SUCCESS) {
+            rc = UNIFYCR_FAILURE;
+        }
+
         delegator_signal();
     }
 
@@ -1746,20 +1787,27 @@ ssize_t UNIFYCR_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
         if (offset >= meta->size)
             return 0;
 
-        size_t retcount;
-        read_req_t tmp_req;
+        /* assume we'll succeed in read */
+        size_t retcount = count;
 
-        tmp_req.buf = buf;
-        tmp_req.fid = fd + unifycr_fd_limit;
-        tmp_req.length = count;
-        tmp_req.offset = offset;
+        read_req_t tmp_req;
+        tmp_req.fid     = fd + unifycr_fd_limit;
+        tmp_req.offset  = offset;
+        tmp_req.length  = count;
+        tmp_req.errcode = UNIFYCR_SUCCESS;
+        tmp_req.buf     = buf;
 
         int ret = unifycr_fd_logreadlist(&tmp_req, 1);
 
-        if (ret)
-            retcount = 0;
-        else
-            retcount = tmp_req.length;
+        if (ret != UNIFYCR_SUCCESS) {
+            /* error reading data */
+            errno = EIO;
+            retcount = -1;
+        } else if (tmp_req.errcode != UNIFYCR_SUCCESS) {
+            /* error reading data */
+            errno = EIO;
+            retcount = -1;
+        }
 
         /* return number of bytes read */
         return (ssize_t) retcount;
