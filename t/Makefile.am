@@ -41,6 +41,7 @@ test_ldadd = \
 test_cppflags = \
 	-I$(top_srcdir) \
 	-I$(top_srcdir)/client/src \
+	-I$(top_srcdir)/common/src \
 	-D_GNU_SOURCE \
 	$(AM_CPPFLAGS) \
         $(MPI_CFLAGS)

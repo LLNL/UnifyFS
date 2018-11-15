@@ -47,6 +47,9 @@
 #include <sys/types.h>   // off_t
 
 #include <limits.h>
+
+#include "unifycr_const.h"
+
 #ifndef HOST_NAME_MAX
 # define HOST_NAME_MAX 256
 #endif

@@ -79,6 +79,7 @@ int main(int argc, char *argv[])
     size_t blk_sz = 0, num_blk = 0, tran_sz = 0, num_reqs = 0;
     size_t index, i, j, offset = 0;
     ssize_t rc;
+    int ret;
     int pat = 0, c, num_rank, rank, fd, use_unifycr = 0;
 
     MPI_Init(&argc, &argv);
@@ -137,7 +138,10 @@ int main(int argc, char *argv[])
 
 #ifndef NO_UNIFYCR
     if (use_unifycr) {
-        unifycr_mount(mntpt, rank, num_rank, 0);
+        ret = unifycr_mount(mntpt, rank, num_rank, 0);
+        if (UNIFYCR_SUCCESS != ret) {
+            MPI_Abort(MPI_COMM_WORLD, ret);
+        }
         MPI_Barrier(MPI_COMM_WORLD);
     }
 #endif
@@ -238,7 +242,7 @@ int main(int argc, char *argv[])
 
     gettimeofday(&read_start, NULL);
 
-    int ret = lio_listio(LIO_WAIT, cb_list, num_reqs, NULL);
+    ret = lio_listio(LIO_WAIT, cb_list, num_reqs, NULL);
 
     if (ret < 0)
         perror("lio_listio failed");
