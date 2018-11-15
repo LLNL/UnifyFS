@@ -14,6 +14,7 @@ int unifycr_read_runstate(unifycr_cfg_t *cfg,
 {
     int rc = (int)UNIFYCR_SUCCESS;
     int have_path = 0;
+    int uid = (int)getuid();
     char runstate_fname[UNIFYCR_MAX_FILENAME] = {0};
 #ifdef HAVE_PMIX_H
     char *pmix_path = NULL;
@@ -43,7 +44,7 @@ int unifycr_read_runstate(unifycr_cfg_t *cfg,
                 return (int)UNIFYCR_ERROR_APPCONFIG;
             }
             snprintf(runstate_fname, sizeof(runstate_fname),
-                     "%s/%s", cfg->runstate_dir, runstate_file);
+                     "%s/%s.%d", cfg->runstate_dir, runstate_file, uid);
         }
     } else {
         snprintf(runstate_fname, sizeof(runstate_fname),
@@ -63,6 +64,7 @@ int unifycr_read_runstate(unifycr_cfg_t *cfg,
 int unifycr_write_runstate(unifycr_cfg_t *cfg)
 {
     int rc = (int)UNIFYCR_SUCCESS;
+    int uid = (int)getuid();
     FILE *runstate_fp = NULL;
     char runstate_fname[UNIFYCR_MAX_FILENAME] = {0};
 
@@ -72,7 +74,7 @@ int unifycr_write_runstate(unifycr_cfg_t *cfg)
     }
 
     snprintf(runstate_fname, sizeof(runstate_fname),
-             "%s/%s", cfg->runstate_dir, runstate_file);
+             "%s/%s.%d", cfg->runstate_dir, runstate_file, uid);
 
     runstate_fp = fopen(runstate_fname, "w");
     if (runstate_fp == NULL) {
