@@ -42,7 +42,7 @@ unifycrd_start_daemon
 # Make sure the unifycrd process starts.
 #
 if ! process_is_running unifycrd 5 ; then
-    echo not ok 1 - unifycrd running
+    echo not ok 1 - unifycrd started
     exit 1
 fi
 
@@ -58,8 +58,9 @@ fi
 #
 # Make sure unifycrd successfully generated client runstate file
 #
-if ! test -f $UNIFYCR_META_DB_PATH/unifycr-runstate.conf ; then
-    echo not ok 1 - unifycrd running
+uid=$(id -u)
+if ! test -f $UNIFYCR_META_DB_PATH/unifycr-runstate.conf.$uid ; then
+    echo not ok 1 - unifycrd runstate
     exit 1
 fi
 
