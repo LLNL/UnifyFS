@@ -49,7 +49,6 @@
 
 int *local_rank_lst;
 int local_rank_cnt;
-int local_rank_idx;
 int glb_rank, glb_size;
 
 arraylist_t *app_config_list;
@@ -60,6 +59,10 @@ int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
 int log_print_level = 5;
 
 unifycr_cfg_t server_cfg;
+
+#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
+extern int local_rank_idx;
+#endif
 
 /*
  * Perform steps to create a daemon process:
@@ -155,9 +158,10 @@ int main(int argc, char *argv[])
     if (rc < 0)
         exit(1);
 
+#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
     local_rank_idx = find_rank_idx(glb_rank, local_rank_lst,
                                    local_rank_cnt);
-
+#endif
     snprintf(dbg_fname, sizeof(dbg_fname), "%s/%s.%d",
             server_cfg.log_dir, server_cfg.log_file, glb_rank);
     rc = dbg_open(dbg_fname);
@@ -179,7 +183,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    rc = sock_init_server(local_rank_idx);
+    rc = sock_init_server();
     if (rc != 0) {
         LOG(LOG_ERR, "%s",
             unifycr_error_enum_description(UNIFYCR_ERROR_SOCKET));
@@ -423,6 +427,7 @@ static int CountTasksPerNode(int rank, int numTasks)
     return 0;
 }
 
+#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
 static int find_rank_idx(int my_rank,
                          int *local_rank_lst, int local_rank_cnt)
 {
@@ -435,6 +440,7 @@ static int find_rank_idx(int my_rank,
     return -1;
 
 }
+#endif
 
 static int compare_int(const void *a, const void *b)
 {
