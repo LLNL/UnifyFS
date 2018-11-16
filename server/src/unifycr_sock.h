@@ -33,7 +33,7 @@
 #include <poll.h>
 #include "unifycr_const.h"
 
-int sock_init_server(int local_rank_idx);
+int sock_init_server(void);
 int sock_add(int fd);
 void sock_reset();
 int sock_wait_cli_cmd();

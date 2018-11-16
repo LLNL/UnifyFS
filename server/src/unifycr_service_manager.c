@@ -1030,8 +1030,8 @@ int sm_init_socket()
     serv_addr.sun_family = AF_UNIX;
 
     /*which delegator I belong to*/
-    snprintf(tmp_path, sizeof(tmp_path), "%s%d",
-             SOCKET_PATH, local_rank_idx);
+    snprintf(tmp_path, sizeof(tmp_path), "%s.%d",
+             SOCKET_PATH, getuid());
 
     strcpy(serv_addr.sun_path, tmp_path);
     len = sizeof(serv_addr);

@@ -152,9 +152,12 @@ int invert_sock_ids[MAX_NUM_CLIENTS];
 
 extern pthread_t data_thrd;
 extern int glb_rank, glb_size;
-extern int local_rank_idx;
 extern int *local_rank_lst;
 extern int local_rank_cnt;
 extern long max_recs_per_slice;
+
+#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
+extern int local_rank_idx;
+#endif
 
 #endif
