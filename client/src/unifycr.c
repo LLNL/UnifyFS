@@ -166,6 +166,29 @@ rlim_t unifycr_fd_limit;
 /* array of file streams */
 unifycr_stream_t unifycr_streams[UNIFYCR_MAX_FILEDESCS];
 
+/*
+ * TODO: the number of open directories clearly won't exceed the number of file
+ * descriptors. however, the current UNIFYCR_MAX_FILEDESCS value of 256 will
+ * quickly run out. if this value is fixed to be reasonably larger, then we
+ * would need a way to dynamically allocate the dirstreams instead of the
+ * following fixed size array.
+ */
+
+/* array of DIR* streams to be used */
+unifycr_dirstream_t unifycr_dirstreams[UNIFYCR_MAX_FILEDESCS];
+
+/* stack to track free file descriptor values,
+ * each is an index into unifycr_fds array */
+void *unifycr_fd_stack;
+
+/* stack to track free file streams,
+ * each is an index into unifycr_streams array */
+void *unifycr_stream_stack;
+
+/* stack to track free directory streams,
+ * each is an index into unifycr_dirstreams array */
+void *unifycr_dirstream_stack;
+
 /* mount point information */
 char  *unifycr_mount_prefix = NULL;
 size_t unifycr_mount_prefixlen = 0;
@@ -397,7 +420,7 @@ inline int unifycr_stack_unlock()
 inline int unifycr_intercept_path(const char *path)
 {
     /* don't intecept anything until we're initialized */
-    if (! unifycr_initialized) {
+    if (!unifycr_initialized) {
         return 0;
     }
 
@@ -415,7 +438,7 @@ inline int unifycr_intercept_fd(int *fd)
     int oldfd = *fd;
 
     /* don't intecept anything until we're initialized */
-    if (! unifycr_initialized) {
+    if (!unifycr_initialized) {
         return 0;
     }
 
@@ -440,7 +463,7 @@ inline int unifycr_intercept_fd(int *fd)
 inline int unifycr_intercept_stream(FILE *stream)
 {
     /* don't intecept anything until we're initialized */
-    if (! unifycr_initialized) {
+    if (!unifycr_initialized) {
         return 0;
     }
 
@@ -449,6 +472,27 @@ inline int unifycr_intercept_stream(FILE *stream)
     unifycr_stream_t *ptr   = (unifycr_stream_t *) stream;
     unifycr_stream_t *start = &(unifycr_streams[0]);
     unifycr_stream_t *end   = &(unifycr_streams[UNIFYCR_MAX_FILEDESCS]);
+    if (ptr >= start && ptr < end) {
+        return 1;
+    }
+
+    return 0;
+}
+
+/* given an directory stream, return 1 if we should intercept this
+ * fdirecotry, 0 otherwise */
+inline int unifycr_intercept_dirstream(DIR *dirp)
+{
+    /* don't intecept anything until we're initialized */
+    if (!unifycr_initialized) {
+        return 0;
+    }
+
+    /* check whether this pointer lies within range of our
+     * directory stream array */
+    unifycr_dirstream_t *ptr   = (unifycr_dirstream_t *) dirp;
+    unifycr_dirstream_t *start = &(unifycr_dirstreams[0]);
+    unifycr_dirstream_t *end   = &(unifycr_dirstreams[UNIFYCR_MAX_FILEDESCS]);
     if (ptr >= start && ptr < end) {
         return 1;
     }
@@ -475,6 +519,58 @@ inline int unifycr_get_fid_from_path(const char *path)
     return -1;
 }
 
+/* initialize file descriptor structure for given fd value */
+int unifycr_fd_init(int fd)
+{
+    /* get pointer to file descriptor struct for this fd value */
+    unifycr_fd_t *filedesc = &(unifycr_fds[fd]);
+
+    /* set fid to -1 to indicate fd is not active,
+     * set file position to max value,
+     * disable read and write flags */
+    filedesc->fid   = -1;
+    filedesc->pos   = (off_t)-1;
+    filedesc->read  = 0;
+    filedesc->write = 0;
+
+    return UNIFYCR_SUCCESS;
+}
+
+/* initialize file streams structure for given sid value */
+int unifycr_stream_init(int sid)
+{
+    /* get pointer to file stream struct for this id value */
+    unifycr_stream_t *s = &(unifycr_streams[sid]);
+
+    /* record our id so when given a pointer to the stream
+     * struct we can easily recover our id value */
+    s->sid = sid;
+
+    /* set fd to -1 to indicate stream is not active */
+    s->fd = -1;
+
+    return UNIFYCR_SUCCESS;
+}
+
+/* initialize directory streams structure for given dirid value */
+int unifycr_dirstream_init(int dirid)
+{
+    /* get pointer to directory stream struct for this id value */
+    unifycr_dirstream_t *dirp = &(unifycr_dirstreams[dirid]);
+
+    /* initialize fields in structure */
+    memset((void *) dirp, 0, sizeof(*dirp));
+
+    /* record our id so when given a pointer to the stream
+     * struct we can easily recover our id value */
+    dirp->dirid = dirid;
+
+    /* set fid to -1 to indicate stream is not active */
+    dirp->fid = -1;
+
+    return UNIFYCR_SUCCESS;
+}
+
 /* given a file descriptor, return the file id */
 inline int unifycr_get_fid_from_fd(int fd)
 {
@@ -483,8 +579,10 @@ inline int unifycr_get_fid_from_fd(int fd)
         return -1;
     }
 
-    /* right now, the file descriptor is equal to the file id */
-    return fd;
+    /* get local file id that file descriptor is assocated with,
+     * will be -1 if not active */
+    int fid = unifycr_fds[fd].fid;
+    return fid;
 }
 
 /* return address of file descriptor structure or NULL if fd is out
@@ -1795,12 +1893,13 @@ static void *unifycr_superblock_shmget(size_t size, key_t key)
 static int unifycr_init(int rank)
 {
     int rc;
+    int i;
     bool b;
     long l;
     unsigned long long bits;
     char *cfgval;
 
-    if (! unifycr_initialized) {
+    if (!unifycr_initialized) {
         /* unifycr debug level default is zero */
         unifycr_debug_level = 0;
         cfgval = client_cfg.log_verbosity;
@@ -1818,7 +1917,6 @@ static int unifycr_init(int rank)
             DEBUG("gotcha_wrap returned %d\n", (int) result);
         }
 
-        int i;
         for (i = 0; i < GOTCHA_NFUNCS; i++) {
             if (*(void **)(wrap_unifycr_list[i].function_address_pointer) == 0) {
                 DEBUG("This function name failed to be wrapped: %s\n",
@@ -1954,6 +2052,39 @@ static int unifycr_init(int rank)
         }
         unifycr_fd_limit = r_limit.rlim_cur;
         DEBUG("FD limit for system = %ld\n", unifycr_fd_limit);
+
+        /* initialize file descriptor structures */
+        int num_fds = UNIFYCR_MAX_FILEDESCS;
+        for (i = 0; i < num_fds; i++) {
+            unifycr_fd_init(i);
+        }
+
+        /* initialize file stream structures */
+        int num_streams = UNIFYCR_MAX_FILEDESCS;
+        for (i = 0; i < num_streams; i++) {
+            unifycr_stream_init(i);
+        }
+
+        /* initialize directory stream structures */
+        int num_dirstreams = UNIFYCR_MAX_FILEDESCS;
+        for (i = 0; i < num_dirstreams; i++) {
+            unifycr_dirstream_init(i);
+        }
+
+        /* initialize stack of free fd values */
+        size_t free_fd_size = unifycr_stack_bytes(num_fds);
+        unifycr_fd_stack = malloc(free_fd_size);
+        unifycr_stack_init(unifycr_fd_stack, num_fds);
+
+        /* initialize stack of free stream values */
+        size_t free_stream_size = unifycr_stack_bytes(num_streams);
+        unifycr_stream_stack = malloc(free_stream_size);
+        unifycr_stack_init(unifycr_stream_stack, num_streams);
+
+        /* initialize stack of free directory stream values */
+        size_t free_dirstream_size = unifycr_stack_bytes(num_dirstreams);
+        unifycr_dirstream_stack = malloc(free_dirstream_size);
+        unifycr_stack_init(unifycr_dirstream_stack, num_dirstreams);
 
         /* determine the size of the superblock */
         glb_superblock_size = unifycr_superblock_size();
@@ -2119,6 +2250,24 @@ int unifycr_unmount(void)
             return UNIFYCR_FAILURE;
     }
 #endif
+
+    /* free directory stream stack */
+    if (unifycr_dirstream_stack != NULL) {
+        free(unifycr_dirstream_stack);
+        unifycr_dirstream_stack = NULL;
+    }
+
+    /* free file stream stack */
+    if (unifycr_stream_stack != NULL) {
+        free(unifycr_stream_stack);
+        unifycr_stream_stack = NULL;
+    }
+
+    /* free file descriptor stack */
+    if (unifycr_fd_stack != NULL) {
+        free(unifycr_fd_stack);
+        unifycr_fd_stack = NULL;
+    }
 
     return UNIFYCR_SUCCESS;
 }
