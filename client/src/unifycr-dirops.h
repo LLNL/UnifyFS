@@ -20,14 +20,6 @@
 #include <dirent.h>
 #include <pthread.h>
 
-struct _unifycr_dirstream {
-    int fid;
-    unifycr_fd_t fd;
-    off_t filepos;
-};
-
-typedef struct _unifycr_dirstream unifycr_dirstream_t;
-
 /*
  * FIXME: is this portable to use the linux dirent structure?
  */

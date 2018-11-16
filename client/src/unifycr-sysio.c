@@ -48,6 +48,7 @@
 /* -------------------
  * define external variables
  * --------------------*/
+
 extern int unifycr_spilloverblock;
 extern int unifycr_use_spillover;
 extern int dbgrank;
@@ -96,11 +97,16 @@ int UNIFYCR_WRAP(mkdir)(const char *path, mode_t mode)
         }
 
         /* add directory to file list */
-        int fid = unifycr_fid_create_directory(path);
-        if (fid < 0)
+        int ret = unifycr_fid_create_directory(path);
+        if (ret != UNIFYCR_SUCCESS) {
+            /* failed to create the directory,
+             * set errno and return */
+            errno = unifycr_err_map_to_errno(ret);
             return -1;
-        else
-            return 0;
+        }
+
+        /* success */
+        return 0;
     } else {
         MAP_OR_FAIL(mkdir);
         int ret = UNIFYCR_REAL(mkdir)(path, mode);
@@ -113,7 +119,7 @@ int UNIFYCR_WRAP(rmdir)(const char *path)
     /* determine whether we should intercept this path */
     if (unifycr_intercept_path(path)) {
         /* check if the mount point itself is being deleted */
-        if (! strcmp(path, unifycr_mount_prefix)) {
+        if (!strcmp(path, unifycr_mount_prefix)) {
             errno = EBUSY;
             return -1;
         }
@@ -126,23 +132,28 @@ int UNIFYCR_WRAP(rmdir)(const char *path)
         }
 
         /* is it a directory? */
-        if (! unifycr_fid_is_dir(fid)) {
+        if (!unifycr_fid_is_dir(fid)) {
             errno = ENOTDIR;
             return -1;
         }
 
         /* is it empty? */
-        if (! unifycr_fid_is_dir_empty(path)) {
+        if (!unifycr_fid_is_dir_empty(path)) {
             errno = ENOTEMPTY;
             return -1;
         }
 
         /* remove the directory from the file list */
         int ret = unifycr_fid_unlink(fid);
-        if (ret < 0)
+        if (ret != UNIFYCR_SUCCESS) {
+            /* failed to remove the directory,
+             * set errno and return */
+            errno = unifycr_err_map_to_errno(ret);
             return -1;
-        else
-            return 0;
+        }
+
+        /* success */
+        return 0;
     } else {
         MAP_OR_FAIL(rmdir);
         int ret = UNIFYCR_REAL(rmdir)(path);
@@ -158,7 +169,7 @@ int UNIFYCR_WRAP(rename)(const char *oldpath, const char *newpath)
     /* check whether the old path is in our file system */
     if (unifycr_intercept_path(oldpath)) {
         /* for now, we can only rename within our file system */
-        if (! unifycr_intercept_path(newpath)) {
+        if (!unifycr_intercept_path(newpath)) {
             /* ERROR: can't yet rename across file systems */
             errno = EXDEV;
             return -1;
@@ -166,33 +177,41 @@ int UNIFYCR_WRAP(rename)(const char *oldpath, const char *newpath)
 
         /* verify that we really have a file by the old name */
         int fid = unifycr_get_fid_from_path(oldpath);
-        DEBUG("orig file in position %d\n", fid);
         if (fid < 0) {
             /* ERROR: oldname does not exist */
             DEBUG("Couldn't find entry for %s in UNIFYCR\n", oldpath);
             errno = ENOENT;
             return -1;
         }
+        DEBUG("orig file in position %d\n", fid);
 
-        /* verify that we don't already have a file by the new name */
-        if (unifycr_get_fid_from_path(newpath) < 0) {
-            /* check that new name is within bounds */
-            size_t newpathlen = strlen(newpath) + 1;
-            if (newpathlen > UNIFYCR_MAX_FILENAME) {
-                errno = ENAMETOOLONG;
-                return -1;
-            }
-
-            /* finally overwrite the old name with the new name */
-            DEBUG("Changing %s to %s\n",
-                  (char *)&unifycr_filelist[fid].filename, newpath);
-            strcpy((void *)&unifycr_filelist[fid].filename, newpath);
-        } else {
-            /* ERROR: new name already exists */
-            DEBUG("File %s exists\n", newpath);
-            errno = EEXIST;
+        /* check that new name is within bounds */
+        size_t newpathlen = strlen(newpath) + 1;
+        if (newpathlen > UNIFYCR_MAX_FILENAME) {
+            errno = ENAMETOOLONG;
             return -1;
         }
+
+        /* TODO: rename should replace existing file atomically */
+
+        /* verify that we don't already have a file by the new name */
+        int newfid = unifycr_get_fid_from_path(newpath);
+        if (newfid >= 0) {
+            /* something exists in newpath, need to delete it */
+            int ret = UNIFYCR_WRAP(unlink)(newpath);
+            if (ret == -1) {
+                /* failed to unlink */
+                errno = EBUSY;
+                return -1;
+            }
+        }
+
+        /* finally overwrite the old name with the new name */
+        DEBUG("Changing %s to %s\n",
+              (char *)&unifycr_filelist[fid].filename, newpath);
+        strcpy((void *)&unifycr_filelist[fid].filename, newpath);
+
+        /* success */
         return 0;
     } else {
         /* for now, we can only rename within our file system */
@@ -213,9 +232,8 @@ int UNIFYCR_WRAP(truncate)(const char *path, off_t length)
 {
     /* determine whether we should intercept this path or not */
     if (unifycr_intercept_path(path)) {
-        /* lookup the fd for the path */
+        /* lookup the fid for the path */
         int fid = unifycr_get_fid_from_path(path);
-
         if (fid < 0) {
             /* ERROR: file does not exist */
             DEBUG("Couldn't find entry for %s in UNIFYCR\n", path);
@@ -231,6 +249,7 @@ int UNIFYCR_WRAP(truncate)(const char *path, off_t length)
             return -1;
         }
 
+        /* success */
         return 0;
     } else {
         MAP_OR_FAIL(truncate);
@@ -261,8 +280,13 @@ int UNIFYCR_WRAP(unlink)(const char *path)
         }
 
         /* delete the file */
-        unifycr_fid_unlink(fid);
+        int ret = unifycr_fid_unlink(fid);
+        if (ret != UNIFYCR_SUCCESS) {
+            errno = unifycr_err_map_to_errno(ret);
+            return -1;
+        }
 
+        /* success */
         return 0;
     } else {
         MAP_OR_FAIL(unlink);
@@ -295,8 +319,13 @@ int UNIFYCR_WRAP(remove)(const char *path)
 
         /* shall be equivalent to unlink(path) */
         /* delete the file */
-        unifycr_fid_unlink(fid);
+        int ret = unifycr_fid_unlink(fid);
+        if (ret != UNIFYCR_SUCCESS) {
+            errno = unifycr_err_map_to_errno(ret);
+            return -1;
+        }
 
+        /* success */
         return 0;
     } else {
         MAP_OR_FAIL(remove);
@@ -307,43 +336,53 @@ int UNIFYCR_WRAP(remove)(const char *path)
 
 int UNIFYCR_WRAP(stat)(const char *path, struct stat *buf)
 {
-    int ret = 0;
-    int fid = -1;
-    int gfid = -1;
-    int found_local = 0;
-    int found_global = 0;
-    unifycr_file_attr_t gfattr = { 0, };
 
     DEBUG("stat was called for %s....\n", path);
 
     if (unifycr_intercept_path(path)) {
+        /* check that caller gave us a buffer to write to */
         if (!buf) {
             errno = EFAULT;
             return -1;
         }
 
-        gfid = unifycr_generate_gfid(path);
-        fid = unifycr_get_fid_from_path(path);
+        /* look for local file id for path */
+        int fid = unifycr_get_fid_from_path(path);
+        int found_local = (fid >= 0);
 
-        found_global =
-            (unifycr_get_global_file_meta(fid, gfid, &gfattr) == UNIFYCR_SUCCESS);
-        found_local = (fid >= 0);
+        /* get global file id for path */
+        int gfid = unifycr_generate_gfid(path);
+
+        /* look for stat struct on global file */
+        unifycr_file_attr_t gfattr = { 0, };
+        int ret = unifycr_get_global_file_meta(fid, gfid, &gfattr);
+        int found_global = (ret == UNIFYCR_SUCCESS);
 
         if (!found_global) {
             /* the local entry is obsolete and should be discarded. */
-            if (found_local)
-                unifycr_fid_unlink(fid); /* this always returns success */
+            if (found_local) {
+                /* delete local file */
+                ret = unifycr_fid_unlink(fid);
+                if (ret != UNIFYCR_SUCCESS) {
+                    /* failed to delete local copy */
+                    errno = unifycr_err_map_to_errno(ret);
+                    return -1;
+                }
+            }
 
+            /* no stat structure exists for global file */
             errno = ENOENT;
             return -1;
         }
 
+        /* copy stat structure to user's buffer */
         *buf = gfattr.file_attr;
 
+        /* success */
         return 0;
     } else {
         MAP_OR_FAIL(stat);
-        ret = UNIFYCR_REAL(stat)(path, buf);
+        int ret = UNIFYCR_REAL(stat)(path, buf);
         return ret;
     }
 }
@@ -361,7 +400,6 @@ int UNIFYCR_WRAP(fstat)(int fd, struct stat *buf)
 
     /* get the file id for this file descriptor */
     int fid = unifycr_get_fid_from_fd(fd);
-
     if (fid < 0) {
         errno = EBADF;
         return -1;
@@ -391,7 +429,6 @@ int UNIFYCR_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
     int found_local = 0;
     int found_global = 0;
     unifycr_file_attr_t gfattr = { 0, };
-
 
     DEBUG("xstat was called for %s....\n", path);
     if (unifycr_intercept_path(path)) {
@@ -517,7 +554,6 @@ int UNIFYCR_WRAP(__fxstat)(int vers, int fd, struct stat *buf)
     }
 }
 
-
 /* ---------------------------------------
  * POSIX wrappers: file descriptors
  * --------------------------------------- */
@@ -543,7 +579,7 @@ int unifycr_fd_read(int fd, off_t pos, void *buf, size_t count,
 
     /* check that file descriptor is open for read */
     unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
-    if (! filedesc->read) {
+    if (!filedesc->read) {
         return UNIFYCR_ERROR_BADF;
     }
 
@@ -587,7 +623,6 @@ int unifycr_fd_read(int fd, off_t pos, void *buf, size_t count,
  * fills any gaps with zeros */
 int unifycr_fd_write(int fd, off_t pos, const void *buf, size_t count)
 {
-
     /* get the file id for this file descriptor */
     int fid = unifycr_get_fid_from_fd(fd);
     if (fid < 0) {
@@ -601,7 +636,7 @@ int unifycr_fd_write(int fd, off_t pos, const void *buf, size_t count)
 
     /* check that file descriptor is open for write */
     unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
-    if (! filedesc->write) {
+    if (!filedesc->write) {
         return UNIFYCR_ERROR_BADF;
     }
 
@@ -616,9 +651,10 @@ int unifycr_fd_write(int fd, off_t pos, const void *buf, size_t count)
 
     /* get current file size before extending the file */
     off_t filesize = unifycr_fid_size(fid);
-    unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
-    off_t newpos;
 
+    /* compute new position based on storage type */
+    off_t newpos;
+    unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
     if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
         /* extend file size and allocate chunks if needed */
         newpos = pos + (off_t) count;
@@ -635,9 +671,7 @@ int unifycr_fd_write(int fd, off_t pos, const void *buf, size_t count)
                 return zero_rc;
             }
         }
-    }
-
-    else if (meta->storage == FILE_STORAGE_LOGIO) {
+    } else if (meta->storage == FILE_STORAGE_LOGIO) {
         newpos = filesize + (off_t)count;
         int extend_rc = unifycr_fid_extend(fid, newpos);
         if (extend_rc != UNIFYCR_SUCCESS) {
@@ -677,16 +711,24 @@ int UNIFYCR_WRAP(creat)(const char *path, mode_t mode)
             return -1;
         }
 
-        /* TODO: allocate a free file descriptor and associate it with fid */
-        /* set in_use flag and file pointer, flags include O_WRONLY */
-        unifycr_fd_t *filedesc = &(unifycr_fds[fid]);
+        /* allocate a free file descriptor value */
+        int fd = unifycr_stack_pop(unifycr_fd_stack);
+        if (fd < 0) {
+            /* ran out of file descriptors */
+            errno = EMFILE;
+            return -1;
+        }
+
+        /* set file id and file pointer, flags include O_WRONLY */
+        unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
+        filedesc->fid   = fid;
         filedesc->pos   = pos;
         filedesc->read  = 0;
         filedesc->write = 1;
-        DEBUG("UNIFYCR_open generated fd %d for file %s\n", fid, path);
+        DEBUG("UNIFYCR_open generated fd %d for file %s\n", fd, path);
 
         /* don't conflict with active system fds that range from 0 - (fd_limit) */
-        int ret = fid + unifycr_fd_limit;
+        int ret = fd + unifycr_fd_limit;
         return ret;
     } else {
         MAP_OR_FAIL(creat);
@@ -711,7 +753,6 @@ int UNIFYCR_WRAP(creat64)(const char *path, mode_t mode)
 
 int UNIFYCR_WRAP(open)(const char *path, int flags, ...)
 {
-    int ret;
     /* if O_CREAT is set, we should also have some mode flags */
     int mode = 0;
     if (flags & O_CREAT) {
@@ -720,7 +761,9 @@ int UNIFYCR_WRAP(open)(const char *path, int flags, ...)
         mode = va_arg(arg, int);
         va_end(arg);
     }
+
     /* determine whether we should intercept this path */
+    int ret;
     if (unifycr_intercept_path(path)) {
         /* TODO: handle relative paths using current working directory */
 
@@ -733,18 +776,26 @@ int UNIFYCR_WRAP(open)(const char *path, int flags, ...)
             return -1;
         }
 
-        /* TODO: allocate a free file descriptor and associate it with fid */
-        /* set in_use flag and file pointer */
-        unifycr_fd_t *filedesc = &(unifycr_fds[fid]);
+        /* allocate a free file descriptor value */
+        int fd = unifycr_stack_pop(unifycr_fd_stack);
+        if (fd < 0) {
+            /* ran out of file descriptors */
+            errno = EMFILE;
+            return -1;
+        }
+
+        /* set file id and file pointer */
+        unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
+        filedesc->fid   = fid;
         filedesc->pos   = pos;
         filedesc->read  = ((flags & O_RDONLY) == O_RDONLY)
                           || ((flags & O_RDWR) == O_RDWR);
         filedesc->write = ((flags & O_WRONLY) == O_WRONLY)
                           || ((flags & O_RDWR) == O_RDWR);
-        DEBUG("UNIFYCR_open generated fd %d for file %s\n", fid, path);
+        DEBUG("UNIFYCR_open generated fd %d for file %s\n", fd, path);
 
         /* don't conflict with active system fds that range from 0 - (fd_limit) */
-        ret = fid + unifycr_fd_limit;
+        ret = fd + unifycr_fd_limit;
         return ret;
     } else {
         MAP_OR_FAIL(open);
@@ -759,8 +810,6 @@ int UNIFYCR_WRAP(open)(const char *path, int flags, ...)
 
 int UNIFYCR_WRAP(open64)(const char *path, int flags, ...)
 {
-    int ret;
-
     /* if O_CREAT is set, we should also have some mode flags */
     int mode = 0;
     if (flags & O_CREAT) {
@@ -771,6 +820,7 @@ int UNIFYCR_WRAP(open64)(const char *path, int flags, ...)
     }
 
     /* check whether we should intercept this path */
+    int ret;
     if (unifycr_intercept_path(path)) {
         /* Call open wrapper with LARGEFILE flag set*/
         if (flags & O_CREAT) {
@@ -798,8 +848,13 @@ off_t UNIFYCR_WRAP(lseek)(int fd, off_t offset, int whence)
 
         /* get the file id for this file descriptor */
         int fid = unifycr_get_fid_from_fd(fd);
+        if (fid < 0) {
+            /* bad file descriptor */
+            errno = EBADF;
+            return (off_t) (-1);
+        }
 
-        /* check that file descriptor is good */
+        /* lookup meta to get file size */
         unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
         if (meta == NULL) {
             /* bad file descriptor */
@@ -812,6 +867,8 @@ off_t UNIFYCR_WRAP(lseek)(int fd, off_t offset, int whence)
 
         /* get current file position */
         off_t current_pos = filedesc->pos;
+
+        /* TODO: support SEEK_DATA and SEEK_HOLE? */
 
         /* compute final file position */
         DEBUG("seeking from %ld\n", current_pos);
@@ -846,13 +903,16 @@ off_t UNIFYCR_WRAP(lseek)(int fd, off_t offset, int whence)
 
 off64_t UNIFYCR_WRAP(lseek64)(int fd, off64_t offset, int whence)
 {
-    int tmpfd = fd;
-
     /* check whether we should intercept this file descriptor */
-    if (unifycr_intercept_fd(&tmpfd)) {
-        if (sizeof(off_t) == sizeof(off64_t))
-            return (off64_t) UNIFYCR_WRAP(lseek) (fd, (off_t) offset, whence);
-        else {
+    int origfd = fd;
+    if (unifycr_intercept_fd(&fd)) {
+        if (sizeof(off_t) == sizeof(off64_t)) {
+            /* off_t and off64_t are the same size,
+             * delegate to lseek warpper */
+            off64_t ret = (off64_t)UNIFYCR_WRAP(lseek)(
+                origfd, (off_t) offset, whence);
+            return ret;
+        } else {
             /* ERROR: fn not yet supported */
             fprintf(stderr, "Function not yet supported @ %s:%d\n",
                     __FILE__, __LINE__);
@@ -917,24 +977,39 @@ ssize_t UNIFYCR_WRAP(read)(int fd, void *buf, size_t count)
 {
     /* check whether we should intercept this file descriptor */
     if (unifycr_intercept_fd(&fd)) {
-        /* get pointer to file descriptor structure */
-        unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fd);
-        unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
-
-        if (meta == NULL || filedesc == NULL) {
+        /* get file id */
+        int fid = unifycr_get_fid_from_fd(fd);
+        if (fid < 0) {
             /* ERROR: invalid file descriptor */
             errno = EBADF;
             return (ssize_t) (-1);
         }
 
-        if (filedesc->pos >= meta->size)
+        /* get pointer to file descriptor structure */
+        unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
+        if (filedesc == NULL) {
+            /* ERROR: invalid file descriptor */
+            errno = EBADF;
+            return (ssize_t) (-1);
+        }
+
+        unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
+        if (meta == NULL) {
+            /* ERROR: invalid file descriptor */
+            errno = EBADF;
+            return (ssize_t) (-1);
+        }
+
+        /* check for end of file */
+        if (filedesc->pos >= meta->size) {
             return 0;   /* EOF */
+        }
 
         /* assume we'll succeed in read */
         size_t retcount = count;
 
         read_req_t tmp_req;
-        tmp_req.fid     = fd + unifycr_fd_limit;
+        tmp_req.fid     = fid;
         tmp_req.offset  = filedesc->pos;
         tmp_req.length  = count;
         tmp_req.errcode = UNIFYCR_SUCCESS;
@@ -986,7 +1061,6 @@ ssize_t UNIFYCR_WRAP(write)(int fd, const void *buf, size_t count)
 
         /* write data to file */
         int write_rc = unifycr_fd_write(fd, filedesc->pos, buf, count);
-
         if (write_rc != UNIFYCR_SUCCESS) {
             errno = unifycr_err_map_to_errno(write_rc);
             return (ssize_t) (-1);
@@ -1038,6 +1112,8 @@ int UNIFYCR_WRAP(lio_listio)(int mode, struct aiocb *const aiocb_list[],
 {
     /* TODO: missing pass through for non-intercepted lio_listio */
 
+    /* TODO: require all elements in list to refer to unify files? */
+
     read_req_t *reqs = malloc(nitems * sizeof(read_req_t));
 
     int i;
@@ -1048,11 +1124,24 @@ int UNIFYCR_WRAP(lio_listio)(int mode, struct aiocb *const aiocb_list[],
             errno = EIO;
             return -1;
         }
-        reqs[i].fid     = aiocb_list[i]->aio_fildes;
-        reqs[i].offset  = aiocb_list[i]->aio_offset;
-        reqs[i].length  = aiocb_list[i]->aio_nbytes;
-        reqs[i].errcode = UNIFYCR_SUCCESS;
-        reqs[i].buf     = (char *)aiocb_list[i]->aio_buf;
+
+        int fd = aiocb_list[i]->aio_fildes;
+        if (unifycr_intercept_fd(&fd)) {
+            /* get local file id for this request */
+            int fid = unifycr_get_fid_from_fd(fd);
+            if (fid < 0) {
+                /* TODO: need to set error code on each element */
+                errno = EIO;
+                free(reqs);
+                return -1;
+            }
+
+            reqs[i].fid     = fid;
+            reqs[i].offset  = aiocb_list[i]->aio_offset;
+            reqs[i].length  = aiocb_list[i]->aio_nbytes;
+            reqs[i].errcode = UNIFYCR_SUCCESS;
+            reqs[i].buf     = (char *)aiocb_list[i]->aio_buf;
+        }
     }
 
     int ret = unifycr_fd_logreadlist(reqs, nitems);
@@ -1358,7 +1447,7 @@ static int unifycr_coalesce_read_reqs(read_req_t *read_req, int count,
  * @return error code
  *
  * */
-int unifycr_match_received_ack(read_req_t *read_req, int count,
+static int unifycr_match_received_ack(read_req_t *read_req, int count,
                                read_req_t *match_req)
 {
     /* given fid, offset, and length of match_req that holds read reply,
@@ -1652,19 +1741,23 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
     int *ptr_size = NULL;
     int *ptr_num = NULL;
 
-    /*
-     * Adjust length for fitting the EOF.
-     */
+    /* Adjust length for fitting the EOF. */
     for (i = 0; i < count; i++) {
+        /* get pointer to read request */
         read_req_t *req = &read_req[i];
-        unifycr_filemeta_t *meta = NULL;
 
-        meta = unifycr_get_meta_from_fid(req->fid - unifycr_fd_limit);
-        if (!meta)
-            return UNIFYCR_FAILURE;
+        /* get metadata for this file */
+        unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(req->fid);
+        if (meta == NULL) {
+            return UNIFYCR_ERROR_BADF;
+        }
 
-        if (req->offset + req->length > meta->size)
+        /* compute last byte of read request */
+        off_t last_offset = (off_t)req->offset + (off_t)req->length;
+        if (last_offset > meta->size) {
+            /* shorten the request to read just up to end */
             req->length = meta->size - req->offset;
+        }
     }
 
     /*
@@ -1673,18 +1766,22 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
      * sends and transfer in bulks
      * */
 
-    /*convert local fid to global fid*/
+    /* convert local fid to global fid */
     unifycr_file_attr_t tmp_meta_entry;
     unifycr_file_attr_t *ptr_meta_entry;
     for (i = 0; i < count; i++) {
-        read_req[i].fid -= unifycr_fd_limit;
+        /* look for global meta data for this local file id */
         tmp_meta_entry.fid = read_req[i].fid;
-
         ptr_meta_entry = (unifycr_file_attr_t *)bsearch(&tmp_meta_entry,
                          unifycr_fattrs.meta_entry, *unifycr_fattrs.ptr_num_entries,
                          sizeof(unifycr_file_attr_t), compare_fattr);
+
+        /* replace local file id with global file id in request */
         if (ptr_meta_entry != NULL) {
             read_req[i].fid = ptr_meta_entry->gfid;
+        } else {
+            /* failed to find gfid for this request */
+            return UNIFYCR_ERROR_BADF;
         }
     }
 
@@ -1741,10 +1838,11 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
         free(buffer);
     } else {
         /* got a single read request */
+        int gfid = ptr_meta_entry->gfid;
         uint64_t offset = read_req_set.read_reqs[0].offset;
         uint64_t length = read_req_set.read_reqs[0].length;
         unifycr_client_read_rpc_invoke(&unifycr_rpc_context, app_id, local_rank_idx,
-            ptr_meta_entry->gfid, offset, length);
+            gfid, offset, length);
     }
 
     /*
@@ -1753,7 +1851,7 @@ int unifycr_fd_logreadlist(read_req_t *read_req, int count)
      * */
 
     int done = 0;
-    while (! done) {
+    while (!done) {
         delegator_wait();
 
         int tmp_rc = process_read_data(read_req, count, &done);
@@ -1774,24 +1872,40 @@ ssize_t UNIFYCR_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
 
     /* check whether we should intercept this file descriptor */
     if (unifycr_intercept_fd(&fd)) {
-        /* get pointer to file descriptor structure */
-        unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fd);
-        unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
-
-        if (meta == NULL || filedesc == NULL) {
+        /* get file id */
+        int fid = unifycr_get_fid_from_fd(fd);
+        if (fid < 0) {
             /* ERROR: invalid file descriptor */
             errno = EBADF;
             return (ssize_t) (-1);
         }
 
-        if (offset >= meta->size)
+        /* get file descriptor structure */
+        unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
+        if (filedesc == NULL) {
+            /* ERROR: invalid file descriptor */
+            errno = EBADF;
+            return (ssize_t) (-1);
+        }
+
+        /* get pointer to file descriptor structure */
+        unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
+        if (meta == NULL) {
+            /* ERROR: invalid file descriptor */
+            errno = EBADF;
+            return (ssize_t) (-1);
+        }
+
+        /* check for end of file */
+        if (offset >= meta->size) {
             return 0;
+        }
 
         /* assume we'll succeed in read */
         size_t retcount = count;
 
         read_req_t tmp_req;
-        tmp_req.fid     = fd + unifycr_fd_limit;
+        tmp_req.fid     = fid;
         tmp_req.offset  = offset;
         tmp_req.length  = count;
         tmp_req.errcode = UNIFYCR_SUCCESS;
@@ -1892,7 +2006,7 @@ int UNIFYCR_WRAP(ftruncate)(int fd, off_t length)
 
         /* check that file descriptor is open for write */
         unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
-        if (! filedesc->write) {
+        if (!filedesc->write) {
             errno = EBADF;
             return -1;
         }
@@ -1914,21 +2028,24 @@ int UNIFYCR_WRAP(ftruncate)(int fd, off_t length)
 
 /* get the gfid for use in fsync wrapper
  * TODO: maybe move this somewhere else */
-uint32_t get_gfid(int fd)
+uint32_t get_gfid(int fid)
 {
+    unifycr_file_attr_t target;
+    target.fid = fid;
+
+    const void *entries = unifycr_fattrs.meta_entry;
+    size_t num  = *unifycr_fattrs.ptr_num_entries;
+    size_t size = sizeof(unifycr_file_attr_t);
+
+    unifycr_file_attr_t *entry = (unifycr_file_attr_t *)bsearch(
+        &target, entries, num, size, compare_fattr);
+
     uint32_t gfid;
-    unifycr_file_attr_t tmp_meta_entry;
-    tmp_meta_entry.fid = fd;
-    unifycr_file_attr_t *ptr_meta_entry = (unifycr_file_attr_t *)bsearch(&tmp_meta_entry,
-                                                                 unifycr_fattrs.meta_entry,
-                                                                 *unifycr_fattrs.ptr_num_entries,
-                                                                 sizeof(unifycr_file_attr_t),
-                                                                 compare_fattr);
-    if (ptr_meta_entry != NULL) {
-        gfid = (uint32_t)ptr_meta_entry->gfid;
-    } else {
+    if (entry != NULL)
+        gfid = (uint32_t)entry->gfid;
+    else
         return -1;
-    }
+
     return gfid;
 }
 
@@ -1958,7 +2075,7 @@ int UNIFYCR_WRAP(fsync)(int fd)
         unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
         if (meta->storage == FILE_STORAGE_LOGIO) {
             /* invoke fsync rpc to register index metadata with server */
-            uint32_t gfid = get_gfid(fd);
+            uint32_t gfid = get_gfid(fid);
             unifycr_client_fsync_rpc_invoke(&unifycr_rpc_context,
                                             app_id,
                                             local_rank_idx,
@@ -2049,7 +2166,7 @@ void *UNIFYCR_WRAP(mmap)(void *addr, size_t length, int prot, int flags,
         /* allocate memory required to mmap the data if addr is NULL;
          * using posix_memalign instead of malloc to align mmap'ed area
          * to page size */
-        if (! addr) {
+        if (!addr) {
             int ret = posix_memalign(&addr, sysconf(_SC_PAGE_SIZE), length);
             if (ret) {
                 /* posix_memalign does not set errno */
@@ -2127,6 +2244,7 @@ void *UNIFYCR_WRAP(mmap64)(void *addr, size_t length, int prot, int flags,
 int UNIFYCR_WRAP(close)(int fd)
 {
     /* check whether we should intercept this file descriptor */
+    int origfd = fd;
     if (unifycr_intercept_fd(&fd)) {
         DEBUG("closing fd %d\n", fd);
 
@@ -2139,10 +2257,17 @@ int UNIFYCR_WRAP(close)(int fd)
             return -1;
         }
 
+        /* get file descriptor for this file */
         unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
+        if (filedesc == NULL) {
+            errno = EBADF;
+            return -1;
+        }
 
-        if (filedesc->write)
-            fsync(fd + unifycr_fd_limit);
+        /* if file was opened for writing, fsync it */
+        if (filedesc->write) {
+            UNIFYCR_WRAP(fsync)(origfd);
+        }
 
         /* close the file id */
         int close_rc = unifycr_fid_close(fid);
@@ -2151,7 +2276,13 @@ int UNIFYCR_WRAP(close)(int fd)
             return -1;
         }
 
-        /* TODO: free file descriptor */
+        /* reinitialize file descriptor to indicate that
+         * it is no longer associated with a file,
+         * not technically needed but may help catch bugs */
+        unifycr_fd_init(fd);
+
+        /* add file descriptor back to free stack */
+        unifycr_stack_push(unifycr_fd_stack, fd);
 
         return 0;
     } else {

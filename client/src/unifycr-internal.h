@@ -81,6 +81,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <wchar.h>
+#include <dirent.h>
 
 #define _GNU_SOURCE
 #include <pthread.h>
@@ -197,9 +198,9 @@ do { \
 
 #endif
 
-
 /* structure to represent file descriptors */
 typedef struct {
+    int   fid;   /* local file id associated with fd */
     off_t pos;   /* current file pointer */
     int   read;  /* whether file is opened for read */
     int   write; /* whether file is opened for write */
@@ -213,6 +214,7 @@ enum unifycr_stream_orientation {
 
 /* structure to represent FILE* streams */
 typedef struct {
+    int    sid;      /* index within unifycr_streams */
     int    err;      /* stream error indicator flag */
     int    eof;      /* stream end-of-file indicator flag */
     int    fd;       /* file descriptor associated with stream */
@@ -234,6 +236,14 @@ typedef struct {
     unsigned char *_p; /* pointer to character in buffer */
     size_t         _r; /* number of bytes left at pointer */
 } unifycr_stream_t;
+
+/* structure to represent DIR* streams */
+typedef struct {
+    int dirid; /* index within unifycr_dirstreams */
+    int fid;   /* local file id of directory for this stream */
+    int fd;    /* file descriptor associated with stream */
+    off_t pos; /* position within directory stream */
+} unifycr_dirstream_t;
 
 enum flock_enum {
     UNLOCKED,
@@ -372,6 +382,21 @@ extern rlim_t unifycr_fd_limit;
 /* array of file streams */
 extern unifycr_stream_t unifycr_streams[UNIFYCR_MAX_FILEDESCS];
 
+/* array of directory streams */
+extern unifycr_dirstream_t unifycr_dirstreams[UNIFYCR_MAX_FILEDESCS];
+
+/* stack of free file descriptor values,
+ * each is an index into unifycr_fds array */
+extern void *unifycr_fd_stack;
+
+/* stack of free streams,
+ * each is an index into unifycr_streams array */
+extern void *unifycr_stream_stack;
+
+/* stack of directory streams,
+ * each is an index into unifycr_dirstreams array */
+extern void *unifycr_dirstream_stack;
+
 extern int unifycr_use_memfs;
 extern int unifycr_use_spillover;
 
@@ -425,11 +450,25 @@ int unifycr_intercept_fd(int *fd);
  * 0 otherwise */
 int unifycr_intercept_stream(FILE *stream);
 
+/* given a DIR*, returns 1 if we should intercept this directory,
+ * 0 otherwise */
+int unifycr_intercept_dirstream(DIR *dirp);
+
 /* given a path, return the file id */
 int unifycr_get_fid_from_path(const char *path);
 
 /* given a file descriptor, return the file id */
 int unifycr_get_fid_from_fd(int fd);
+
+/* initialze file descriptor structure corresponding to fd value */
+int unifycr_fd_init(int fd);
+
+/* initialze file stream structure corresponding to id value */
+int unifycr_stream_init(int sid);
+
+/* initialze directory stream descriptor structure
+ * corresponding to id value */
+int unifycr_dirstream_init(int dirid);
 
 /* return address of file descriptor structure or NULL if fd is out
  * of range */

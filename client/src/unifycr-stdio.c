@@ -335,10 +335,40 @@ static int unifycr_fopen(
     }
 
     /* allocate a stream for this file */
-    unifycr_stream_t *s = &(unifycr_streams[fid]);
+    int sid = unifycr_stack_pop(unifycr_stream_stack);
+    if (sid < 0) {
+        /* TODO: would like to return EMFILE to indicate
+         * process has hit file stream limit, not the OS */
+
+        /* exhausted our file streams */
+        return UNIFYCR_ERROR_NFILE;
+    }
+
+    /* get stream structure corresponding to stream id */
+    unifycr_stream_t *s = &(unifycr_streams[sid]);
 
     /* allocate a file descriptor for this file */
-    int fd = fid;
+    int fd = unifycr_stack_pop(unifycr_fd_stack);
+    if (fd < 0) {
+        /* TODO: would like to return EMFILE to indicate
+         * process has hit file descriptor limit, not the OS */
+
+        /* put back our stream id */
+        unifycr_stack_push(unifycr_stream_stack, sid);
+
+        /* exhausted our file descriptors */
+        return UNIFYCR_ERROR_NFILE;
+    }
+
+    /* set file pointer and read/write mode in file descriptor */
+    unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
+    filedesc->fid   = fid;
+    filedesc->pos   = pos;
+    filedesc->read  = read  || plus;
+    filedesc->write = write || plus;
+
+    /* record our stream id value */
+    s->sid = sid;
 
     /* clear error and eof indicators and record file descriptor */
     s->err = 0;
@@ -368,12 +398,6 @@ static int unifycr_fopen(
 
     s->_p = NULL;
     s->_r = 0;
-
-    /* set file pointer and read/write mode in file descriptor */
-    unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
-    filedesc->pos   = pos;
-    filedesc->read  = read  || plus;
-    filedesc->write = write || plus;
 
     /* set return parameter and return */
     *outstream = (FILE *)s;
@@ -1642,10 +1666,10 @@ int UNIFYCR_WRAP(fflush)(FILE *stream)
         int ret = UNIFYCR_REAL(fflush)(NULL);
 
         /* flush each active unifycr stream */
-        int fid;
-        for (fid = 0; fid < UNIFYCR_MAX_FILEDESCS; fid++) {
+        int i;
+        for (i = 0; i < UNIFYCR_MAX_FILEDESCS; i++) {
             /* get stream and check whether it's active */
-            unifycr_stream_t *s = &(unifycr_streams[fid]);
+            unifycr_stream_t *s = &(unifycr_streams[i]);
             if (s->fd >= 0) {
                 /* attempt to flush stream */
                 int flush_rc = unifycr_stream_flush((FILE *)s);
@@ -1801,8 +1825,19 @@ int UNIFYCR_WRAP(fclose)(FILE *stream)
             return EOF;
         }
 
+        /* reinitialize file descriptor to indicate that
+         * it is no longer associated with a file,
+         * not technically needed but may help catch bugs */
+        unifycr_fd_init(s->fd);
+
+        /* add file descriptor back to free stack */
+        unifycr_stack_push(unifycr_fd_stack, s->fd);
+
         /* set file descriptor to -1 to indicate stream is invalid */
-        s->fd = -1;
+        unifycr_stream_init(s->sid);
+
+        /* add stream back to free stack */
+        unifycr_stack_push(unifycr_stream_stack, s->sid);
 
         /* currently a no-op */
         return 0;
