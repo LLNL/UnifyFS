@@ -65,14 +65,13 @@ int cur_sock_id = 1;
 * initialize the listening socket on this delegator
 * @return success/error code
 */
-int sock_init_server(int local_rank_idx)
+int sock_init_server(void)
 {
     int rc;
     char sock_path[UNIFYCR_MAX_FILENAME];
 
-    server_rank_idx = local_rank_idx;
-    snprintf(sock_path, sizeof(sock_path), "%s%d",
-             SOCKET_PATH, server_rank_idx);
+    snprintf(sock_path, sizeof(sock_path), "%s.%d",
+             SOCKET_PATH, getuid());
 
     server_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
 

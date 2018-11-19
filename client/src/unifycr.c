@@ -2337,8 +2337,8 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
         (l_num_procs_per_node == 1) &&
         (l_num_del_per_node == 1)) {
         // use zero-index domain socket path
-        snprintf(tmp_path, sizeof(tmp_path), "%s0",
-                 SOCKET_PATH);
+        snprintf(tmp_path, sizeof(tmp_path), "%s.%d",
+                 SOCKET_PATH, getuid());
 
 #ifdef HAVE_PMIX_H
         // lookup domain socket path in PMIx
