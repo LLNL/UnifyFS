@@ -14,7 +14,7 @@ noinst_HEADERS = testlib.h
 test_gotcha_ldadd = $(top_builddir)/client/src/libunifycr_gotcha.la -lrt -lm $(MPI_CLDFLAGS) $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 test_static_ldadd = $(top_builddir)/client/src/libunifycr.la -lrt -lm
 test_static_ldflags = -static $(CP_WRAPPERS) $(AM_LDFLAGS) $(MPI_CLDFLAGS) $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
-test_cppflags = $(AM_CPPFLAGS) -I$(top_srcdir)/client/src $(MPI_CFLAGS)
+test_cppflags = $(AM_CPPFLAGS) -I$(top_srcdir)/client/src -I$(top_srcdir)/common/src $(MPI_CFLAGS)
 
 sysio_write_gotcha_SOURCES = sysio-write.c
 sysio_write_gotcha_CPPFLAGS = $(test_cppflags)
