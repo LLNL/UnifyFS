@@ -68,11 +68,6 @@ typedef struct {
 
 /*data structures defined for unifycr********************/
 
-typedef struct {
-    char hostname[HOST_NAME_MAX];
-    int rank;
-} name_rank_pair_t;
-
 #if 0
 int unifycr_mount(const char prefix[], int rank, size_t size,
                   int l_app_id, int subtype);

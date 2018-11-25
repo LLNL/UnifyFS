@@ -89,9 +89,8 @@ unsigned int unifycr_max_fattr_entries;
 int glb_superblock_size;
 int unifycr_spillmetablock;
 
-int *local_rank_lst = NULL;
-int local_rank_cnt;
-int local_rank_idx;
+int local_rank_cnt = -1; /* number of processes on the same node */
+int local_rank_idx = -1; /* rank of this process within its node */
 
 int local_del_cnt = 1;
 int client_sockfd;
@@ -2392,230 +2391,36 @@ int compare_fattr(const void *a, const void *b)
     return 0;
 }
 
-static int compare_int(const void *a, const void *b)
-{
-    const int *ptr_a = a;
-    const int *ptr_b = b;
-
-    if (*ptr_a - *ptr_b > 0)
-        return 1;
-
-    if (*ptr_a - *ptr_b < 0)
-        return -1;
-
-    return 0;
-}
-
-static int compare_name_rank_pair(const void *a, const void *b)
-{
-    const name_rank_pair_t *pair_a = a;
-    const name_rank_pair_t *pair_b = b;
-
-    if (strcmp(pair_a->hostname, pair_b->hostname) > 0)
-        return 1;
-
-    if (strcmp(pair_a->hostname, pair_b->hostname) < 0)
-        return -1;
-
-    return 0;
-}
-
 /**
- * find the local index of a given rank among all ranks
- * collocated on the same node
- * @param local_rank_lst: a list of local ranks
- * @param local_rank_cnt: number of local ranks
- * @return index of rank in local_rank_lst
- */
-static int find_rank_idx(int rank, int *local_rank_lst, int local_rank_cnt)
-{
-    int i;
-
-    for (i = 0; i < local_rank_cnt; i++) {
-        if (local_rank_lst[i] == rank)
-            return i;
-    }
-
-    return -1;
-}
-
-
-/**
- * calculate the number of ranks per node,
+ * calculate the number of ranks sharing the node with
+ * the calling process and the rank of the calling process
+ * within its node
  *
- * @param numTasks: number of tasks in the application
+ * @return prank: rank of calling process within its node
+ * @return psize: number of processes on same node as calling process
  * @return success/error code
- * @return local_rank_lst: a list of local ranks
- * @return local_rank_cnt: number of local ranks
  */
-static int CountTasksPerNode(int rank, int numTasks)
+static int CountTasksPerNode(int *prank, int *psize)
 {
-    char hostname[HOST_NAME_MAX];
-    char localhost[HOST_NAME_MAX];
-    int resultsLen = 30;
-    MPI_Status status;
-    int rc;
+    /* split comm world into comm where all ranks can create a shared
+     * memory segment, assume this to be all ranks on the same node,
+     * using the same key value will order procs on the same node by
+     * their rank in comm_world */
+    int key = 0;
+    MPI_Comm comm_node;
+    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, key,
+        MPI_INFO_NULL, &comm_node);
 
-    rc = MPI_Get_processor_name(localhost, &resultsLen);
-    if (rc != 0)
-        DEBUG("failed to get the processor's name");
+    /* get our local rank */
+    MPI_Comm_rank(comm_node, prank);
 
-    if (numTasks > 0) {
-        if (rank == 0) {
-            int i;
-            /* a container of (rank, host) mappings*/
-            name_rank_pair_t *host_set =
-                (name_rank_pair_t *)malloc(numTasks
-                                           * sizeof(name_rank_pair_t));
-            /*
-             * MPI_receive all hostnames, and compare to local hostname
-             * TODO: handle the case when the length of hostname is larger
-             * than 30
-             */
-            for (i = 1; i < numTasks; i++) {
-                rc = MPI_Recv(hostname, HOST_NAME_MAX,
-                              MPI_CHAR, MPI_ANY_SOURCE,
-                              MPI_ANY_TAG, MPI_COMM_WORLD,
-                              &status);
+    /* get number of ranks on our node */
+    MPI_Comm_size(comm_node, psize);
 
-                if (rc != 0) {
-                    DEBUG("cannot receive hostnames");
-                    return -1;
-                }
-                strcpy(host_set[i].hostname, hostname);
-                host_set[i].rank = status.MPI_SOURCE;
-            }
-            strcpy(host_set[0].hostname, localhost);
-            host_set[0].rank = 0;
+    /* free our nod communicator */
+    MPI_Comm_free(&comm_node);
 
-            /*sort according to the hostname*/
-            qsort(host_set, numTasks, sizeof(name_rank_pair_t),
-                  compare_name_rank_pair);
-
-            /*
-             * rank_cnt: records the number of processes on each node
-             * rank_set: the list of ranks for each node
-             */
-            int **rank_set = (int **)malloc(numTasks * sizeof(int *));
-            int *rank_cnt = (int *)malloc(numTasks * sizeof(int));
-            int cursor = 0, set_counter = 0;
-
-            for (i = 1; i < numTasks; i++) {
-                if (strcmp(host_set[i].hostname,
-                           host_set[i - 1].hostname) == 0) {
-                    /*do nothing*/
-                } else {
-                    // find a different rank, so switch to a new set
-                    int j, k = 0;
-
-                    rank_set[set_counter] =
-                        (int *)malloc((i - cursor) * sizeof(int));
-                    rank_cnt[set_counter] = i - cursor;
-                    for (j = cursor; j <= i - 1; j++) {
-
-                        rank_set[set_counter][k] =  host_set[j].rank;
-                        k++;
-                    }
-
-                    set_counter++;
-                    cursor = i;
-                }
-
-            }
-
-            /* fill rank_cnt and rank_set entry for the last node */
-            int j = 0;
-
-            rank_set[set_counter] = malloc((i - cursor) * sizeof(int));
-            rank_cnt[set_counter] = numTasks - cursor;
-            for (i = cursor; i <= numTasks - 1; i++) {
-                rank_set[set_counter][j] = host_set[i].rank;
-                j++;
-            }
-            set_counter++;
-
-            /* broadcast the rank_cnt and rank_set information to each rank */
-            int root_set_no = -1;
-
-            for (i = 0; i < set_counter; i++) {
-                for (j = 0; j < rank_cnt[i]; j++) {
-                    if (rank_set[i][j] != 0) {
-                        rc = MPI_Send(&rank_cnt[i], 1, MPI_INT, rank_set[i][j],
-                                      0, MPI_COMM_WORLD);
-                        if (rc != 0) {
-                            DEBUG("cannot send local rank cnt");
-                            return -1;
-                        }
-
-                        /*send the local rank set to the corresponding rank*/
-                        rc = MPI_Send(rank_set[i], rank_cnt[i], MPI_INT,
-                                      rank_set[i][j], 0, MPI_COMM_WORLD);
-                        if (rc != 0) {
-                            DEBUG("cannot send local rank list");
-                            return -1;
-                        }
-                    } else {
-                        root_set_no = i;
-                    }
-                }
-            }
-
-
-            /* root process set its own local rank set and rank_cnt*/
-            if (root_set_no >= 0) {
-                local_rank_lst = malloc(rank_cnt[root_set_no] * sizeof(int));
-                for (i = 0; i < rank_cnt[root_set_no]; i++)
-                    local_rank_lst[i] = rank_set[root_set_no][i];
-
-                local_rank_cnt = rank_cnt[root_set_no];
-            }
-
-            for (i = 0; i < set_counter; i++)
-                free(rank_set[i]);
-
-            free(rank_cnt);
-            free(host_set);
-            free(rank_set);
-        } else {
-            /*
-             * non-root process performs MPI_send to send hostname to root node
-             */
-            rc = MPI_Send(localhost, HOST_NAME_MAX, MPI_CHAR,
-                          0, 0, MPI_COMM_WORLD);
-            if (rc != 0) {
-                DEBUG("cannot send host name");
-                return -1;
-            }
-            /*receive the local rank count */
-            rc = MPI_Recv(&local_rank_cnt, 1, MPI_INT,
-                          0, 0, MPI_COMM_WORLD, &status);
-            if (rc != 0) {
-                DEBUG("cannot receive local rank cnt");
-                return -1;
-            }
-
-            /* receive the the local rank list */
-            local_rank_lst = (int *)malloc(local_rank_cnt * sizeof(int));
-            rc = MPI_Recv(local_rank_lst, local_rank_cnt, MPI_INT,
-                          0, 0, MPI_COMM_WORLD, &status);
-            if (rc != 0) {
-                free(local_rank_lst);
-                DEBUG("cannot receive local rank list");
-                return -1;
-            }
-
-        }
-
-        qsort(local_rank_lst, local_rank_cnt, sizeof(int),
-              compare_int);
-
-        // scatter ranks out
-    } else {
-        DEBUG("number of tasks is smaller than 0");
-        return -1;
-    }
-
-    return 0;
+    return UNIFYCR_SUCCESS;
 }
 
 /* returns server rpc address in newly allocated string
@@ -2674,14 +2479,13 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
             unifycr_use_single_shm = 1;
     }
 
-    // note: the following call initializes local_rank_{lst,cnt}
-    rc = CountTasksPerNode(rank, size);
-    if (rc < 0) {
+    /* get our rank and size of group on the same node */
+    rc = CountTasksPerNode(&local_rank_idx, &local_rank_cnt);
+    if (rc != UNIFYCR_SUCCESS) {
         DEBUG("rank:%d, cannot get the local rank list.", dbg_rank);
         return -1;
     }
-    local_rank_idx = find_rank_idx(rank,
-                                   local_rank_lst, local_rank_cnt);
+
     unifycr_mount_shmget_key = local_rank_idx;
 
     /* initialize our library */

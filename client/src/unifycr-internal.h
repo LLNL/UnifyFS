@@ -318,7 +318,6 @@ read_req_set_t read_req_set;
 read_req_set_t tmp_read_req_set;
 index_set_t tmp_index_set;
 
-extern int *local_rank_lst;
 extern int local_rank_cnt;
 extern int local_rank_idx;
 extern int local_del_cnt;
