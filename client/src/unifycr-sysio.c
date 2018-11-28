@@ -792,6 +792,8 @@ int UNIFYCR_WRAP(open64)(const char *path, int flags, ...)
 
 int UNIFYCR_WRAP(__open_2)(const char *path, int flags, ...)
 {
+    DEBUG("__open_2 was called for fd %d....\n", fd);
+
     int ret;
 
     /* if O_CREAT is set, we should also have some mode flags */
@@ -805,6 +807,9 @@ int UNIFYCR_WRAP(__open_2)(const char *path, int flags, ...)
 
     /* check whether we should intercept this path */
     if (unifycr_intercept_path(path)) {
+
+        DEBUG("__open_2 was intercepted for fd %d....\n", fd);
+
         /* Call open wrapper with LARGEFILE flag set*/
         if (flags & O_CREAT) {
             ret = UNIFYCR_WRAP(open)(path, flags | O_LARGEFILE, mode);
