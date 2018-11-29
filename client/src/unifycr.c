@@ -47,6 +47,7 @@
 #include "unifycr_runstate.h"
 #include "unifycr_client_context.h"
 
+#include <unistd.h>
 #include <time.h>
 #include <mpi.h>
 #include <openssl/md5.h>
@@ -63,6 +64,8 @@
 
 #include "unifycr_client.h"
 #include "unifycr_clientcalls_rpc.h"
+
+#include "rankstr_mpi.h"
 
 /* hack until we can define common error reporting */
 #define LOGERR(...) fprintf(stderr, __VA_ARGS__);
@@ -2402,14 +2405,17 @@ int compare_fattr(const void *a, const void *b)
  */
 static int CountTasksPerNode(int *prank, int *psize)
 {
+    /* get our hostname */
+    char hostname[1024];
+    gethostname(hostname, sizeof(hostname));
+
     /* split comm world into comm where all ranks can create a shared
      * memory segment, assume this to be all ranks on the same node,
      * using the same key value will order procs on the same node by
      * their rank in comm_world */
     int key = 0;
     MPI_Comm comm_node;
-    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, key,
-        MPI_INFO_NULL, &comm_node);
+    rankstr_mpi_comm_split(MPI_COMM_WORLD, hostname, key, 1, 2, &comm_node);
 
     /* get our local rank */
     MPI_Comm_rank(comm_node, prank);

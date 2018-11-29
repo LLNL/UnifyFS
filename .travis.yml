@@ -14,6 +14,7 @@ before_install:
   - $HOME/spack/bin/spack install leveldb
   - $HOME/spack/bin/spack install gotcha@0.0.2
   - $HOME/spack/bin/spack install flatcc
+  - $HOME/spack/bin/spack install rankstr
   # insall margo with spack
   - git config --global http.sslVerify false
   - git clone https://xgitlab.cels.anl.gov/sds/sds-repo.git $HOME/sds-repo.git
@@ -24,7 +25,7 @@ before_install:
   # prepare build environment
   - . $HOME/spack/share/spack/setup-env.sh
   - spack load environment-modules
-  - source <(spack module tcl loads leveldb gotcha@0.0.2 flatcc mercury argobots margo)
+  - source <(spack module tcl loads leveldb gotcha@0.0.2 flatcc rankstr mercury argobots margo)
   - eval $(./scripts/git_log_test_env.sh)
   - export TEST_CHECKPATCH_SKIP_FILES
 

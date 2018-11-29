@@ -99,6 +99,7 @@ If you use Dotkit then replace ``spack load`` with ``spack use``.
     $ spack install leveldb
     $ spack install gotcha@0.0.2
     $ spack install flatcc
+    $ spack install rankstr
     $ 
     $ git clone https://xgitlab.cels.anl.gov/sds/sds-repo.git sds-repo.git
     $ cd sds-repo.git
@@ -123,6 +124,7 @@ Then to build UnifyCR:
     $ spack load leveldb
     $ spack load gotcha@0.0.2
     $ spack load flatcc
+    $ spack load rankstr
     $ spack load mercury
     $ spack load argobots
     $ spack load margo
@@ -146,11 +148,13 @@ follow the instructions here: `Margo <https://xgitlab.cels.anl.gov/sds/margo>`_
 
 To get flatcc `flatcc <https://github.com/dvidelabs/flatcc>`_
 
+To get rankstr, download and install from: `rankstr <https://github.com/ECP-VeloC/rankstr>`_
+
 Then to build UnifyCR:
 
 .. code-block:: Bash
 
-    $ ./configure --prefix=/path/to/install --enable-debug --with-gotcha=/path/to/gotcha --with-leveldb=/path/to/leveldb --with-mercury=/path/to/mercury --with-argobots=/path/to/argobots --with-margo=/path/to/margo --with-flatcc=/path/to/flatcc
+    $ ./configure --prefix=/path/to/install --enable-debug --with-gotcha=/path/to/gotcha --with-leveldb=/path/to/leveldb --with-mercury=/path/to/mercury --with-argobots=/path/to/argobots --with-margo=/path/to/margo --with-flatcc=/path/to/flatcc --with-rankstr=/path/to/rankstr
     $ make
     $ make install
 
