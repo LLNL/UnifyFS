@@ -3810,10 +3810,20 @@ sub process {
 			#print "BB<$1>\n";
 			my ($match, $from, $to, $ident) = ($1, $2, $2, $3);
 
+			# Change to enforce char* <name> instead of char *<name>
+
 			# Should start with a space.
-			$to =~ s/^(\S)/ $1/;
+			# $to =~ s/^(\S)/ $1/;
+
+			# Should not start with a space.
+			$to =~ s/^\s+//;
+
 			# Should not end with a space.
-			$to =~ s/\s+$//;
+			# $to =~ s/\s+$//;
+
+			# Should end with a space.
+			$to =~ s/(\S)$/$1 /;
+
 			# '*'s should not have spaces between.
 			while ($to =~ s/\*\s+\*/\*\*/) {
 			}
@@ -5108,7 +5118,9 @@ sub process {
 
 					substr($block, 0, length($cond), '');
 
-					$seen++ if ($block =~ /^\s*{/);
+					# Changed what is seen to blocks that don't start with an
+					# open brace {
+					$seen++ if ($block !~ /^\s*{/);
 
 					#print "cond<$cond> block<$block> allowed<$allowed[$allow]>\n";
 					if (statement_lines($cond) > 1) {
@@ -5130,14 +5142,34 @@ sub process {
 					foreach (@allowed) {
 						$sum_allowed += $_;
 					}
-					if ($sum_allowed == 0) {
+# Changed what is seen above so this block is only entered when blocks of code
+# are seen that don't start with an open brace {.
+#
+# Now this will catch:
+#                     if (foo == bar)
+#                         do this;
+#                     else
+#                         do that;
+# as well as:
+#            if (foo == bar) {
+#                do this;
+#                and do that;
+#            } else
+#                do that;
+#
+					if ($sum_allowed == 0 || ($sum_allowed != $allow &&
+						$seen != $allow)) {
 						WARN("BRACES",
-						     "braces {} are not necessary for any arm of this statement\n" . $herectx);
-					} elsif ($sum_allowed != $allow &&
-						 $seen != $allow) {
-						CHK("BRACES",
 						    "braces {} should be used on all arms of this statement\n" . $herectx);
 					}
+#					if ($sum_allowed == 0) {
+#						WARN("BRACES",
+#						     "braces {} are not necessary for any arm of this statement\n" . $herectx);
+#					} elseif ($sum_allowed != $allow &&
+#					          seen != $allow) {
+#					         CHK("BRACES",
+#					             "braces {} should be used on all arms of this statement\n" . $herectx);
+#					}
 				}
 			}
 		}
@@ -5170,7 +5202,9 @@ sub process {
 			}
 			if (statement_block_size($block) > 1) {
 				#print "APW: ALLOWED: lines block<$block>\n";
-				$allowed = 1;
+				# Changed to not make an exception for single statement blocks
+				# with additional single statement blocks inside of them.
+				$allowed = 0;
 			}
 			# Check the post-context.
 			if (defined $chunks[1]) {
@@ -5178,26 +5212,22 @@ sub process {
 				if (defined $cond) {
 					substr($block, 0, length($cond), '');
 				}
-				if ($block =~ /^\s*\{/) {
+				if ($block !~ /^\s*\{/) {
 					#print "APW: ALLOWED: chunk-1 block<$block>\n";
 					$allowed = 1;
 				}
 			}
-			if ($level == 0 && $block =~ /^\s*\{/ && !$allowed) {
+			# Changed what is looked for here and above in order to enforce all
+			# single statement blocks having braces {}
+			if ($level == 0 && $block !~ /^\s*\{/ && !$allowed) {
 				my $herectx = $here . "\n";
 				my $cnt = statement_rawlines($block);
 
 				for (my $n = 0; $n < $cnt; $n++) {
 					$herectx .= raw_line($linenr, $n) . "\n";
 				}
-
-# ATM: allow braces around single line blocks
-#   if (foo) {
-#     function();
-#   }
-#
-#				WARN("BRACES",
-#				     "braces {} are not necessary for single statement blocks\n" . $herectx);
+				WARN("BRACES",
+				     "braces {} are necessary for single statement blocks\n" . $herectx);
 			}
 		}
 
