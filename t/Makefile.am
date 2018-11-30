@@ -6,16 +6,16 @@ T_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) $(top_srcdir)/t/tap-driver.sh
 TESTS = \
 	0001-setup.t \
 	0100-sys-open.t \
+	9005-unifycr-unmount.t \
 	9010-stop-unifycrd.t \
 	9020-mountpoint-empty.t
-#	9005-unifycr-unmount.t \
 
 check_SCRIPTS = \
 	0001-setup.t \
 	0100-sys-open.t \
+	9005-unifycr-unmount.t \
 	9010-stop-unifycrd.t \
 	9020-mountpoint-empty.t
-#	9005-unifycr-unmount.t \
 
 EXTRA_DIST = \
 	$(check_SCRIPTS) \
