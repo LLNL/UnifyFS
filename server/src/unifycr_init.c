@@ -86,10 +86,10 @@ static void addr_publish_server_rpc(const char* addr)
      * read from */
     FILE *fp = fopen("/dev/shm/svr_id", "w+");
     if (fp != NULL) {
-        fprintf(fp, addr);
+        fprintf(fp, "%s", addr);
         fclose(fp);
     } else {
-        fprintf(stderr, "Error writing server rpc addr to file `/dev/shm/svr_id'\n");
+        LOGERR("Error writing server rpc addr to file `/dev/shm/svr_id'");
     }
 }
 
@@ -103,7 +103,7 @@ static int find_address(hg_class_t* hg_class,
     hg_addr_t addr_self;
     int ret = HG_Addr_self(hg_class, &addr_self);
     if ( ret != HG_SUCCESS ) {
-        fprintf(stderr, "Error: HG_Addr_self()\n");
+        LOGERR("HG_Addr_self()");
         HG_Context_destroy(hg_context);
         HG_Finalize(hg_class);
         return(-1);
@@ -113,7 +113,7 @@ static int find_address(hg_class_t* hg_class,
     ret = HG_Addr_to_string(hg_class, addr_self_string,
                             &addr_self_string_sz, addr_self);
     if ( ret != HG_SUCCESS ) {
-        fprintf(stderr, "Error: HG_Addr_self()\n");
+        LOGERR("HG_Addr_self()");
         HG_Context_destroy(hg_context);
         HG_Finalize(hg_class);
         return(-1);
@@ -143,12 +143,12 @@ static margo_instance_id setup_sm_target()
     /*
     hg_class_t* hg_class = HG_Init(SMSVR_ADDR_STR, HG_TRUE);
     if ( !hg_class ) {
-        fprintf(stderr, "Error: HG_Init() for sm_target\n");
+        LOGERR("HG_Init() for sm_target");
         assert(false);
     }
     hg_context_t* hg_context = HG_Context_create(hg_class);
     if ( !hg_context ) {
-        fprintf(stderr, "Error: HG_Context_create() for sm_target\n");
+        LOGERR("HG_Context_create() for sm_target");
         HG_Finalize(hg_class);
         assert(false);
     }*/
@@ -164,7 +164,7 @@ static margo_instance_id setup_sm_target()
         int ret = ABT_snoozer_xstream_create(1, &handler_pool,
                                              &handler_xstream);
         if ( ret != 0 ) {
-                fprintf(stderr, "Error: ABT_snoozer_xstream_create()\n");
+                LOGERR("ABT_snoozer_xstream_create()");
                 assert(false);
         }*/
         /* initialize margo */
@@ -183,7 +183,7 @@ static margo_instance_id setup_sm_target()
     hret = margo_addr_self(mid, &addr_self);
     if(hret != HG_SUCCESS)
     {
-        fprintf(stderr, "Error: margo_addr_self()\n");
+        LOGERR("margo_addr_self()");
         margo_finalize(mid);
         return(NULL);
         }
@@ -191,7 +191,7 @@ static margo_instance_id setup_sm_target()
                                &addr_self_string_sz, addr_self);
     if(hret != HG_SUCCESS)
     {
-        fprintf(stderr, "Error: margo_addr_to_string()\n");
+        LOGERR("margo_addr_to_string()");
         margo_addr_free(mid, addr_self);
         margo_finalize(mid);
         return(NULL);
@@ -247,12 +247,12 @@ static margo_instance_id setup_verbs_target(ABT_pool& progress_pool)
         hg_class = HG_Init(VERBSVR_ADDR_STR, HG_TRUE);
 
     if ( !hg_class ) {
-        fprintf(stderr, "Error: HG_Init() for verbs_target\n");
+        LOGERR("HG_Init() for verbs_target");
         assert(false);
     }
     hg_context_t* hg_context = HG_Context_create(hg_class);
     if ( !hg_context ) {
-        fprintf(stderr, "Error: HG_Context_create() for verbs_target\n");
+        LOGERR("HG_Context_create() for verbs_target");
         HG_Finalize(hg_class);
         assert(false);
     }
@@ -274,7 +274,7 @@ static margo_instance_id setup_verbs_target(ABT_pool& progress_pool)
     ABT_pool handler_pool;
     int ret = ABT_snoozer_xstream_create(1, &handler_pool, &handler_xstream);
     if ( ret != 0 ) {
-        fprintf(stderr, "Error: ABT_snoozer_xstream_create()\n");
+        LOGERR("ABT_snoozer_xstream_create()");
         assert(false);
     }
     printf("finished handler create\n");
@@ -341,7 +341,7 @@ margo_instance_id unifycr_server_rpc_init()
     /* set up argobots */
     /*int ret = ABT_init(0, NULL);
     if ( ret != 0 ) {
-        fprintf(stderr, "Error: ABT_init()\n");
+        LOGERR("ABT_init()");
         assert(false);
     }*/
 
@@ -349,7 +349,7 @@ margo_instance_id unifycr_server_rpc_init()
     /*
     ret = ABT_snoozer_xstream_self_set();
     if ( ret != 0 ) {
-        fprintf(stderr, "Error: ABT_snoozer_xstream_self_set()\n");
+        LOGERR("ABT_snoozer_xstream_self_set()");
         assert(false);
     }
 
@@ -368,14 +368,14 @@ margo_instance_id unifycr_server_rpc_init()
     ABT_xstream progress_xstream;
     ret = ABT_xstream_self(&progress_xstream);
     if ( ret != 0 ) {
-        fprintf(stderr, "Error: ABT_xstream_self()\n");
+        LOGERR("ABT_xstream_self()");
         assert(false);
     }
     ABT_pool progress_pool;
 
     ret = ABT_xstream_get_main_pools(progress_xstream, 1, &progress_pool);
     if ( ret != 0 ) {
-        fprintf(stderr, "Error: ABT_xstream_get_main_pools()\n");
+        LOGERR("ABT_xstream_get_main_pools()");
         assert(false);
     }
 
@@ -383,7 +383,7 @@ margo_instance_id unifycr_server_rpc_init()
     ABT_pool progress_pool;
     ret = ABT_snoozer_xstream_create(1, &progress_pool, &progress_xstream);
     if ( ret != 0 ) {
-        fprintf(stderr, "Error: ABT_snoozer_xstream_create()\n");
+        LOGERR("ABT_snoozer_xstream_create()");
         assert(false);
     }*/
     return setup_sm_target();
@@ -392,7 +392,7 @@ margo_instance_id unifycr_server_rpc_init()
     ABT_pool progress_pool2;
     ret = ABT_snoozer_xstream_create(1, &progress_pool2, &progress_xstream2);
     if ( ret != 0 ) {
-        fprintf(stderr, "Error: ABT_snoozer_xstream_create()\n");
+        LOGERR("ABT_snoozer_xstream_create()");
         assert(false);
     }
     return setup_verbs_target(progress_pool2);
@@ -426,7 +426,7 @@ static void daemonize(void)
     pid = fork();
 
     if (pid < 0) {
-        fprintf(stderr, "fork failed: %s\n", strerror(errno));
+        LOGERR("fork failed: %s", strerror(errno));
         exit(1);
     }
 
@@ -437,13 +437,13 @@ static void daemonize(void)
 
     sid = setsid();
     if (sid < 0) {
-        fprintf(stderr, "setsid failed: %s\n", strerror(errno));
+        LOGERR("setsid failed: %s", strerror(errno));
         exit(1);
     }
 
     rc = chdir("/");
     if (rc < 0) {
-        fprintf(stderr, "chdir failed: %s\n", strerror(errno));
+        LOGERR("chdir failed: %s", strerror(errno));
         exit(1);
     }
 
@@ -453,7 +453,7 @@ static void daemonize(void)
 
     pid = fork();
     if (pid < 0) {
-        fprintf(stderr, "fork failed: %s\n", strerror(errno));
+        LOGERR("fork failed: %s", strerror(errno));
         exit(1);
     } else if (pid > 0)
         exit(0);
