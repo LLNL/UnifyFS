@@ -521,6 +521,7 @@ static int unifycr_fid_store_alloc(int fid)
     /* get meta data for this file */
     unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
 
+    /* indicate that we're using LOGIO to store data for this file */
     meta->storage = FILE_STORAGE_LOGIO;
 
     return UNIFYCR_SUCCESS;
@@ -529,6 +530,12 @@ static int unifycr_fid_store_alloc(int fid)
 /* free data management resource for file */
 static int unifycr_fid_store_free(int fid)
 {
+    /* get meta data for this file */
+    unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
+
+    /* set storage type back to NULL */
+    meta->storage = FILE_STORAGE_NULL;
+
     return UNIFYCR_SUCCESS;
 }
 
@@ -1434,16 +1441,36 @@ int unifycr_fid_close(int fid)
 int unifycr_fid_unlink(int fid)
 {
     /* return data to free pools */
-    unifycr_fid_truncate(fid, 0);
+    int rc = unifycr_fid_truncate(fid, 0);
+    if (rc != UNIFYCR_SUCCESS) {
+        /* failed to release storage for the file,
+         * so bail out to keep its file id active */
+        return rc;
+    }
 
     /* finalize the storage we're using for this file */
-    unifycr_fid_store_free(fid);
+    rc = unifycr_fid_store_free(fid);
+    if (rc != UNIFYCR_SUCCESS) {
+        /* released strorage for file, but failed to release
+         * structures tracking storage, again bail out to keep
+         * its file id active */
+        return rc;
+    }
+
+    /* at this point, we have released all storage for the file,
+     * and data structures that track its storage, so we can
+     * release the file id itself */
 
     /* set this file id as not in use */
     unifycr_filelist[fid].in_use = 0;
 
     /* add this id back to the free stack */
-    unifycr_fid_free(fid);
+    rc = unifycr_fid_free(fid);
+    if (rc != UNIFYCR_SUCCESS) {
+        /* storage for the file was released, but we hit
+         * an error while freeing the file id */
+        return rc;
+    }
 
     return UNIFYCR_SUCCESS;
 }
