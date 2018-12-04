@@ -70,6 +70,42 @@ uint32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t** unifycr_
     return out.ret;
 }
 
+/* function invokes the unmount rpc
+ * TODO: Need secondary function to do actual cleanup */
+uint32_t unifycr_client_unmount_rpc_invoke(unifycr_client_rpc_context_t**
+                                           unifycr_rpc_context)
+{
+    hg_handle_t handle;
+    unifycr_unmount_in_t in;
+    unifycr_unmount_out_t out;
+    hg_return_t hret;
+    int ret;
+
+    printf("invoking the unmount rpc function in client\n");
+
+    hret = margo_create((*unifycr_rpc_context)->mid,
+                            (*unifycr_rpc_context)->svr_addr,
+                            (*unifycr_rpc_context)->unifycr_unmount_rpc_id,
+                            &handle);
+    assert(hret == HG_SUCCESS);
+
+    /* fill in input struct */
+    in.app_id = app_id;
+    in.local_rank_idx = local_rank_idx;
+
+    hret = margo_forward(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* decode response */
+    hret = margo_get_output(handle, &out);
+    assert(hret == HG_SUCCESS);
+    ret = out.ret;
+
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+    return ret;
+}
+
 /* invokes the client metaset rpc function by calling set_global_file_meta */
 uint32_t unifycr_client_metaset_rpc_invoke(unifycr_client_rpc_context_t**
                                                 unifycr_rpc_context,

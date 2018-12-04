@@ -267,6 +267,14 @@ int sock_get_id()
     return 0;
 }
 
+void sock_sanitize_cli(int client_id)
+{
+    /* close socket for this client id
+     * and set fd back to -1 */
+    close(poll_set[client_id].fd);
+    poll_set[client_id].fd = -1;
+}
+
 int sock_sanitize()
 {
     int i;
