@@ -1831,7 +1831,7 @@ static int unifycr_init(int rank)
          * a void* in an fpos_t so check that there's room and at least
          * print a message if this won't work */
         if (sizeof(fpos_t) < sizeof(void *)) {
-            fprintf(stderr, "ERROR: fgetpos/fsetpos will not work correctly.\n");
+            LOGERR("fgetpos/fsetpos will not work correctly");
             unifycr_fpos_enabled = 0;
         }
 
@@ -1937,8 +1937,9 @@ static int unifycr_init(int rank)
             if (val >= 0) {
                 unifycr_numa_bank = val;
             } else {
-                fprintf(stderr, "Incorrect NUMA bank specified in UNIFYCR_USE_NUMA_BANK."
-                        "Proceeding with default allocation policy!\n");
+                LOGERR("Incorrect NUMA bank specified in "
+                    "UNIFYCR_USE_NUMA_BANK.  "
+                    "Proceeding with default allocation policy.");
             }
         }
 #endif
