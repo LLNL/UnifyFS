@@ -2268,6 +2268,11 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
                        unifycr_mount_in_t,
                        unifycr_mount_out_t, NULL);
 
+    (*unifycr_rpc_context)->unifycr_unmount_rpc_id   =
+        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_unmount_rpc",
+                       unifycr_unmount_in_t,
+                       unifycr_unmount_out_t, NULL);
+
     (*unifycr_rpc_context)->unifycr_metaget_rpc_id =
         MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_metaget_rpc",
                        unifycr_metaget_in_t, unifycr_metaget_out_t,

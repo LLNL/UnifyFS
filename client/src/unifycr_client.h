@@ -21,6 +21,7 @@
     hg_addr_t svr_addr;
     hg_id_t unifycr_read_rpc_id;
     hg_id_t unifycr_mount_rpc_id;
+    hg_id_t unifycr_unmount_rpc_id;
     hg_id_t unifycr_metaget_rpc_id;
     hg_id_t unifycr_metaset_rpc_id;
     hg_id_t unifycr_fsync_rpc_id;
@@ -36,6 +37,9 @@ int unifycr_client_rpc_init(char* svr_addr_str,
 */
 
 uint32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t**
+                                                unifycr_rpc_context);
+
+uint32_t unifycr_client_unmount_rpc_invoke(unifycr_client_rpc_context_t**
                                                 unifycr_rpc_context);
 
 uint32_t unifycr_client_metaset_rpc_invoke(unifycr_client_rpc_context_t**
