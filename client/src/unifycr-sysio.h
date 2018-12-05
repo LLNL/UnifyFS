@@ -68,6 +68,7 @@ UNIFYCR_DECL(creat, int, (const char *path, mode_t mode));
 UNIFYCR_DECL(creat64, int, (const char *path, mode_t mode));
 UNIFYCR_DECL(open, int, (const char *path, int flags, ...));
 UNIFYCR_DECL(open64, int, (const char *path, int flags, ...));
+UNIFYCR_DECL(__open_2, int, (const char* path, int flags, ...));
 UNIFYCR_DECL(read, ssize_t, (int fd, void *buf, size_t count));
 UNIFYCR_DECL(write, ssize_t, (int fd, const void *buf, size_t count));
 UNIFYCR_DECL(readv, ssize_t, (int fd, const struct iovec *iov, int iovcnt));
