@@ -183,9 +183,11 @@ do { \
 
 /* we don't need a variable to record the address of the real function,
  * just declare the existence of __real_open so the compiler knows the
- * prototype of this function (linker will provide it) */
+ * prototype of this function (linker will provide it), also need to
+ * declare prototype for __wrap_open */
 #define UNIFYCR_DECL(name,ret,args) \
       extern ret __real_ ## name args;  \
+      ret __wrap_ ## name args;
 
 /* we define our wrapper function as __wrap_open instead of open */
 #define UNIFYCR_WRAP(name) __wrap_ ## name
