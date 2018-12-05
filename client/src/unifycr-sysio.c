@@ -789,6 +789,43 @@ int UNIFYCR_WRAP(open64)(const char *path, int flags, ...)
     return ret;
 }
 
+int UNIFYCR_WRAP(__open_2)(const char* path, int flags, ...)
+{
+    int ret;
+
+    DEBUG("__open_2 was called for path %s....\n", path);
+
+    /* if O_CREAT is set, we should also have some mode flags */
+    int mode = 0;
+    if (flags & O_CREAT) {
+        va_list arg;
+        va_start(arg, flags);
+        mode = va_arg(arg, int);
+        va_end(arg);
+    }
+
+    /* check whether we should intercept this path */
+    if (unifycr_intercept_path(path)) {
+        DEBUG("__open_2 was intercepted for path %s....\n", path);
+
+        /* Call open wrapper */
+        if (flags & O_CREAT) {
+            ret = UNIFYCR_WRAP(open)(path, flags, mode);
+        } else {
+            ret = UNIFYCR_WRAP(open)(path, flags);
+        }
+    } else {
+        MAP_OR_FAIL(open);
+        if (flags & O_CREAT) {
+            ret = UNIFYCR_REAL(open)(path, flags, mode);
+        } else {
+            ret = UNIFYCR_REAL(open)(path, flags);
+        }
+    }
+
+    return ret;
+}
+
 off_t UNIFYCR_WRAP(lseek)(int fd, off_t offset, int whence)
 {
     /* check whether we should intercept this file descriptor */

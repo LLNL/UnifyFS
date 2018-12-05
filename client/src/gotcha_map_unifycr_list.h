@@ -17,6 +17,7 @@ UNIFYCR_DEF(creat, int, (const char *path, mode_t mode));
 UNIFYCR_DEF(creat64, int, (const char *path, mode_t mode));
 UNIFYCR_DEF(open, int, (const char *path, int flags, ...));
 UNIFYCR_DEF(open64, int, (const char *path, int flags, ...));
+UNIFYCR_DEF(__open_2, int, (const char* path, int flags, ...));
 UNIFYCR_DEF(lio_listio, int, (int mode, struct aiocb *const aiocb_list[],
                               int nitems, struct sigevent *sevp));
 UNIFYCR_DEF(lseek, off_t, (int fd, off_t offset, int whence));
@@ -117,6 +118,7 @@ struct gotcha_binding_t wrap_unifycr_list[] = {
     { "creat64", UNIFYCR_WRAP(creat64), &UNIFYCR_REAL(creat64) },
     { "open", UNIFYCR_WRAP(open), &UNIFYCR_REAL(open) },
     { "open64", UNIFYCR_WRAP(open64), &UNIFYCR_REAL(open64) },
+    { "__open_2", UNIFYCR_WRAP(__open_2), &UNIFYCR_REAL(__open_2) },
     { "lio_listio", UNIFYCR_WRAP(lio_listio), &UNIFYCR_REAL(lio_listio) },
     { "lseek", UNIFYCR_WRAP(lseek), &UNIFYCR_REAL(lseek) },
     { "lseek64", UNIFYCR_WRAP(lseek64), &UNIFYCR_REAL(lseek64) },
