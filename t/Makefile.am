@@ -50,6 +50,7 @@ sys_sysio_t_SOURCES = sys/sysio_suite.h \
 					  sys/sysio_suite.c \
 					  sys/creat-close.c \
 					  sys/creat64.c \
+					  sys/mkdir-rmdir.c \
 					  sys/open.c \
 					  sys/open64.c
 sys_sysio_t_CPPFLAGS = $(test_cppflags)

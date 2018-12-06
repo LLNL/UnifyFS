@@ -36,6 +36,9 @@ int creat_close_test(char* unifycr_root);
 /* Tests for UNIFYCR_WRAP(creat64) */
 int creat64_test(char* unifycr_root);
 
+/* Tests for UNIFYCR_WRAP(mkdir) and UNIFYCR_WRAP(rmdir) */
+int mkdir_rmdir_test(char* unifycr_root);
+
 /* Tests for UNIFYCR_WRAP(open) */
 int open_test(char* unifycr_root);
 
