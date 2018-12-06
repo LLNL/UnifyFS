@@ -40,16 +40,21 @@ int open_test(char* unifycr_root)
     /* Create a random file name at the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifycr_root);
 
+    /* Verify opening a non-existent file without O_CREAT fails with
+     * errno=ENOENT */
+    errno = 0;
+    fd = open(path, O_RDWR, mode);
+    ok(fd < 0 && errno == ENOENT,
+       "open non-existing file %s w/out O_CREATE fails (fd=%d, errno=%d): %s",
+       path, fd, errno, strerror(errno));
+
     /* Verify we can create a new file. */
     errno = 0;
     fd = open(path, O_CREAT|O_EXCL, mode);
     ok(fd >= 0, "open non-existing file %s flags O_CREAT|O_EXCL (fd=%d): %s",
        path, fd, strerror(errno));
 
-    /* Verify close succeeds. */
-    errno = 0;
     rc = close(fd);
-    ok(rc == 0, "close new file %s (rc=%d): %s", path, rc, strerror(errno));
 
     /* Verify opening an existing file with O_CREAT|O_EXCL fails with
      * errno=EEXIST. */
@@ -65,10 +70,7 @@ int open_test(char* unifycr_root)
     ok(fd >= 0, "open existing file %s O_RDWR (fd=%d): %s",
        path, fd, strerror(errno));
 
-    /* Verify close succeeds. */
-    errno = 0;
     rc = close(fd);
-    ok(rc == 0, "close %s (rc=%d): %s", path, rc, strerror(errno));
 
     diag("Finished UNIFYCR_WRAP(open) tests");
 

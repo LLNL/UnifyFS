@@ -48,6 +48,7 @@ test_cppflags = \
 
 sys_sysio_t_SOURCES = sys/sysio_suite.h \
 					  sys/sysio_suite.c \
+					  sys/creat-close.c \
 					  sys/open.c
 sys_sysio_t_CPPFLAGS = $(test_cppflags)
 sys_sysio_t_LDADD = $(test_ldadd)

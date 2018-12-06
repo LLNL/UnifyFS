@@ -63,6 +63,8 @@ int main(int argc, char* argv[])
 
     /* Add tests for new functions below in the order desired for testing. */
 
+    creat_close_test(unifycr_root);
+
     open_test(unifycr_root);
 
     done_testing();
