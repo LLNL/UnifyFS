@@ -30,6 +30,6 @@
 #ifndef UNIFYCR_SERVICE_MANAGER_H
 #define UNIFYCR_SERVICE_MANAGER_H
 
-void *sm_service_reads(void *ctx);
+void* sm_service_reads(void* ctx);
 
 #endif

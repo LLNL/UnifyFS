@@ -30,8 +30,8 @@
 #ifndef UNIFYCR_SETUP_H
 #define UNIFYCR_SETUP_H
 #include "unifycr_const.h"
-extern int *local_rank_lst;
+extern int* local_rank_lst;
 extern int rank, size;
-extern arraylist_t *app_config_list;
+extern arraylist_t* app_config_list;
 extern int invert_sock_ids[MAX_NUM_CLIENTS];
 #endif

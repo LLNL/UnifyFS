@@ -17,8 +17,7 @@
 #include <abt.h>
 #include <margo.h>
 
-typedef struct ServerRpcContext
-{
+typedef struct ServerRpcContext {
     margo_instance_id mid;
     hg_context_t* hg_context;
     hg_class_t* hg_class ;
@@ -47,8 +46,7 @@ extern bool usetcp;
 extern uint16_t total_rank;
 extern uint16_t my_rank;
 
-typedef struct ServerAddress
-{
+typedef struct ServerAddress {
     char* string_address;
     hg_addr_t svr_addr;
 } ServerAddress_t;

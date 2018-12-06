@@ -35,7 +35,7 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 
-extern FILE *dbg_stream;
+extern FILE* dbg_stream;
 extern int glb_rank;
 
 typedef enum {
@@ -50,17 +50,17 @@ char timestamp[256];
 time_t ltime;
 
 // add and change all
-struct tm *ttime;
+struct tm* ttime;
 struct timeval logstart, logend;
 double mlogtm;
 
 extern int log_print_level;
 #if defined(__NR_gettid)
-    #define gettid() syscall(__NR_gettid)
+#define gettid() syscall(__NR_gettid)
 #elif defined(SYS_gettid)
-    #define gettid() syscall(SYS_gettid)
+#define gettid() syscall(SYS_gettid)
 #else
-    #error gettid syscal is not defined
+#error gettid syscal is not defined
 #endif
 #define LOG(level, ...) \
                 if(level <= log_print_level) { \

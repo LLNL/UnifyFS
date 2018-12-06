@@ -37,19 +37,19 @@
 #include "unifycr_global.h"
 #include "../../client/src/ucr_read_builder.h"
 
-unifycr_key_t **unifycr_keys;
-unifycr_val_t **unifycr_vals;
+unifycr_key_t** unifycr_keys;
+unifycr_val_t** unifycr_vals;
 
-fattr_key_t **fattr_keys;
-fattr_val_t **fattr_vals;
+fattr_key_t** fattr_keys;
+fattr_val_t** fattr_vals;
 
-char *manifest_path;
+char* manifest_path;
 
-struct mdhim_brm_t *brm, *brmp;
-struct mdhim_bgetrm_t *bgrm, *bgrmp;
+struct mdhim_brm_t* brm, *brmp;
+struct mdhim_bgetrm_t* bgrm, *bgrmp;
 
-mdhim_options_t *db_opts;
-struct mdhim_t *md;
+mdhim_options_t* db_opts;
+struct mdhim_t* md;
 
 int md_size;
 int unifycr_key_lens[MAX_META_PER_SEND] = {0};
@@ -58,29 +58,32 @@ int unifycr_val_lens[MAX_META_PER_SEND] = {0};
 int fattr_key_lens[MAX_FILE_CNT_PER_NODE] = {0};
 int fattr_val_lens[MAX_FILE_CNT_PER_NODE] = {0};
 
-struct index_t *unifycr_indexes[2];
+struct index_t* unifycr_indexes[2];
 long max_recs_per_slice;
 /**
 * initialize the key-value store
 */
-int meta_init_store(unifycr_cfg_t *cfg)
+int meta_init_store(unifycr_cfg_t* cfg)
 {
     int rc, ser_ratio;
     size_t path_len;
     long svr_ratio, range_sz;
     MPI_Comm comm = MPI_COMM_WORLD;
 
-    if (cfg == NULL)
+    if (cfg == NULL) {
         return -1;
+    }
 
     db_opts = calloc(1, sizeof(struct mdhim_options_t));
-    if (db_opts == NULL)
+    if (db_opts == NULL) {
         return -1;
+    }
 
     /* UNIFYCR_META_DB_PATH: file that stores the key value pair*/
     db_opts->db_path = strdup(cfg->meta_db_path);
-    if (db_opts->db_path == NULL)
+    if (db_opts->db_path == NULL) {
         return -1;
+    }
 
     db_opts->manifest_path = NULL;
     db_opts->db_type = LEVELDB;
@@ -90,8 +93,9 @@ int meta_init_store(unifycr_cfg_t *cfg)
         number of processes/META_SERVER_RATIO */
     svr_ratio = 0;
     rc = configurator_int_val(cfg->meta_server_ratio, &svr_ratio);
-    if (rc != 0)
+    if (rc != 0) {
         return -1;
+    }
     ser_ratio = (int) svr_ratio;
     db_opts->rserver_factor = ser_ratio;
 
@@ -101,14 +105,16 @@ int meta_init_store(unifycr_cfg_t *cfg)
 
     path_len = strlen(db_opts->db_path) + strlen(MANIFEST_FILE_NAME) + 1;
     manifest_path = malloc(path_len);
-    if (manifest_path == NULL)
+    if (manifest_path == NULL) {
         return -1;
+    }
     sprintf(manifest_path, "%s/%s", db_opts->db_path, MANIFEST_FILE_NAME);
     db_opts->manifest_path = manifest_path;
 
     db_opts->db_name = strdup(cfg->meta_db_name);
-    if (db_opts->db_name == NULL)
+    if (db_opts->db_name == NULL) {
         return -1;
+    }
 
     db_opts->db_key_type = MDHIM_UNIFYCR_KEY;
     db_opts->debug_level = MLOG_CRIT;
@@ -118,8 +124,9 @@ int meta_init_store(unifycr_cfg_t *cfg)
      */
     range_sz = 0;
     rc = configurator_int_val(cfg->meta_range_size, &range_sz);
-    if (rc != 0)
+    if (rc != 0) {
         return -1;
+    }
     max_recs_per_slice = range_sz;
     db_opts->max_recs_per_slice = (uint64_t) range_sz;
 
@@ -135,8 +142,9 @@ int meta_init_store(unifycr_cfg_t *cfg)
     MPI_Comm_size(md->mdhim_comm, &md_size);
 
     rc = meta_init_indices();
-    if (rc != 0)
+    if (rc != 0) {
         return -1;
+    }
 
     return 0;
 
@@ -153,44 +161,48 @@ int meta_init_indices()
     int i;
 
     /*init index metadata*/
-    unifycr_keys = (unifycr_key_t **)malloc(MAX_META_PER_SEND
-                                            * sizeof(unifycr_key_t *));
+    unifycr_keys = (unifycr_key_t**)malloc(MAX_META_PER_SEND
+                                           * sizeof(unifycr_key_t*));
 
-    unifycr_vals = (unifycr_val_t **)malloc(MAX_META_PER_SEND
-                                            * sizeof(unifycr_val_t *));
+    unifycr_vals = (unifycr_val_t**)malloc(MAX_META_PER_SEND
+                                           * sizeof(unifycr_val_t*));
 
     for (i = 0; i < MAX_META_PER_SEND; i++) {
-        unifycr_keys[i] = (unifycr_key_t *)malloc(sizeof(unifycr_key_t));
-        if (unifycr_keys[i] == NULL)
+        unifycr_keys[i] = (unifycr_key_t*)malloc(sizeof(unifycr_key_t));
+        if (unifycr_keys[i] == NULL) {
             return (int)UNIFYCR_ERROR_NOMEM;
+        }
         memset(unifycr_keys[i], 0, sizeof(unifycr_key_t));
     }
 
     for (i = 0; i < MAX_META_PER_SEND; i++) {
-        unifycr_vals[i] = (unifycr_val_t *)malloc(sizeof(unifycr_val_t));
-        if (unifycr_vals[i] == NULL)
+        unifycr_vals[i] = (unifycr_val_t*)malloc(sizeof(unifycr_val_t));
+        if (unifycr_vals[i] == NULL) {
             return (int)UNIFYCR_ERROR_NOMEM;
+        }
         memset(unifycr_vals[i], 0, sizeof(unifycr_val_t));
     }
 
     /*init attribute metadata*/
-    fattr_keys = (fattr_key_t **)malloc(MAX_FILE_CNT_PER_NODE
-                                        * sizeof(fattr_key_t *));
+    fattr_keys = (fattr_key_t**)malloc(MAX_FILE_CNT_PER_NODE
+                                       * sizeof(fattr_key_t*));
 
-    fattr_vals = (fattr_val_t **)malloc(MAX_FILE_CNT_PER_NODE
-                                        * sizeof(fattr_val_t *));
+    fattr_vals = (fattr_val_t**)malloc(MAX_FILE_CNT_PER_NODE
+                                       * sizeof(fattr_val_t*));
 
     for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
-        fattr_keys[i] = (fattr_key_t *)malloc(sizeof(fattr_key_t));
-        if (fattr_keys[i] == NULL)
+        fattr_keys[i] = (fattr_key_t*)malloc(sizeof(fattr_key_t));
+        if (fattr_keys[i] == NULL) {
             return (int)UNIFYCR_ERROR_NOMEM;
+        }
         memset(fattr_keys[i], 0, sizeof(fattr_key_t));
     }
 
     for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
-        fattr_vals[i] = (fattr_val_t *)malloc(sizeof(fattr_val_t));
-        if (fattr_vals[i] == NULL)
+        fattr_vals[i] = (fattr_val_t*)malloc(sizeof(fattr_val_t));
+        if (fattr_vals[i] == NULL) {
             return (int)UNIFYCR_ERROR_NOMEM;
+        }
         memset(fattr_vals[i], 0, sizeof(fattr_val_t));
     }
 
@@ -215,15 +227,18 @@ int meta_process_attr_set(int gfid, const char* filename)
     strcpy(fattr_vals_local.fname, filename);
 
     printf("Setting Attribute -- rank:%d, setting fattr key:%d, value:%s\n",
-                glb_rank, gfid, fattr_vals_local.fname);
+           glb_rank, gfid, fattr_vals_local.fname);
     md->primary_index = unifycr_indexes[1];
     brm = mdhimPut(md, &gfid, sizeof(fattr_key_t),
                    &fattr_vals_local, sizeof(fattr_val_t),
                    NULL, NULL);
-    if (!brm || brm->error)
+    if (!brm || brm->error) {
         rc = (int)UNIFYCR_ERROR_MDHIM;
-    else
+    }
+
+    else {
         rc = ULFS_SUCCESS;
+    }
 
     mdhim_full_release_msg(brm);
 
@@ -239,7 +254,7 @@ int meta_process_attr_set(int gfid, const char* filename)
 int meta_process_attr_get(int gfid, unifycr_file_attr_t* ptr_attr_val)
 {
     fattr_key_t fattr_keys_local = gfid;
-    fattr_val_t *tmp_ptr_attr;
+    fattr_val_t* tmp_ptr_attr;
 
     int rc;
 
@@ -247,14 +262,16 @@ int meta_process_attr_get(int gfid, unifycr_file_attr_t* ptr_attr_val)
     bgrm = mdhimGet(md, md->primary_index, &fattr_keys_local,
                     sizeof(fattr_key_t), MDHIM_GET_EQ);
 
-    if (!bgrm || bgrm->error)
+    if (!bgrm || bgrm->error) {
         rc = (int)UNIFYCR_ERROR_MDHIM;
+    }
+
     else {
-        tmp_ptr_attr = (fattr_val_t *)bgrm->values[0];
+        tmp_ptr_attr = (fattr_val_t*)bgrm->values[0];
         ptr_attr_val->gfid = fattr_keys_local;
 
         printf("getting File Attribute: rank:%d, getting fattr key:%d\n",
-                    glb_rank, fattr_keys_local); 
+               glb_rank, fattr_keys_local);
         ptr_attr_val->file_attr = tmp_ptr_attr->file_attr;
         strcpy(ptr_attr_val->filename, tmp_ptr_attr->fname);
 
@@ -275,38 +292,42 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
 {
     int ret = 0;
 
-    app_config_t *app_config = (app_config_t *)arraylist_get(app_config_list,
+    app_config_t* app_config = (app_config_t*)arraylist_get(app_config_list,
                                app_id);
 
     // int client_side_id = app_config->client_ranks[sock_id];
 
     unsigned long num_entries =
-        *((unsigned long *)(app_config->shm_superblocks[client_side_id]
-                            + app_config->meta_offset));
+        *((unsigned long*)(app_config->shm_superblocks[client_side_id]
+                           + app_config->meta_offset));
 
     /* indices are stored in the superblock shared memory
      *  created by the client*/
     int page_sz = getpagesize();
-    unifycr_index_t *meta_payload =
-        (unifycr_index_t *)(app_config->shm_superblocks[client_side_id]
-                            + app_config->meta_offset + page_sz);
+    unifycr_index_t* meta_payload =
+        (unifycr_index_t*)(app_config->shm_superblocks[client_side_id]
+                           + app_config->meta_offset + page_sz);
 
     md->primary_index = unifycr_indexes[0];
 
     int used_entries = 0;
     int i;
     for (i = 0; i < num_entries; i++) {
-        if ( meta_payload[i].fid == gfid ) {
-			printf("setting mdata for gfid: %d, file_pos: %lu, mem_pos: %lu, length: %lu\n", meta_payload[i].fid, meta_payload[i].file_pos, meta_payload[i].mem_pos, meta_payload[i].length); 
+        if (meta_payload[i].fid == gfid) {
+            printf("setting mdata for gfid: %d, file_pos: %lu, mem_pos: %lu, "
+                   "length: %lu\n",
+                   meta_payload[i].fid, meta_payload[i].file_pos,
+                   meta_payload[i].mem_pos, meta_payload[i].length);
             unifycr_keys[used_entries]->fid = meta_payload[i].fid;
             unifycr_keys[used_entries]->offset = meta_payload[i].file_pos;
             unifycr_vals[used_entries]->addr = meta_payload[i].mem_pos;
             unifycr_vals[used_entries]->len = meta_payload[i].length;
             unifycr_vals[used_entries]->delegator_id = glb_rank;
-            memcpy((char *) & (unifycr_vals[i]->app_rank_id), &app_id, sizeof(int));
-            memcpy((char *) & (unifycr_vals[i]->app_rank_id) + sizeof(int),
+            memcpy((char*) &(unifycr_vals[i]->app_rank_id),
+                &app_id, sizeof(int));
+            memcpy((char*) &(unifycr_vals[i]->app_rank_id) + sizeof(int),
                 &client_side_id, sizeof(int));
-    
+
             unifycr_key_lens[used_entries] = sizeof(unifycr_key_t);
             unifycr_val_lens[used_entries] = sizeof(unifycr_val_t);
             used_entries++;
@@ -315,8 +336,8 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
 
     // print_fsync_indices(unifycr_keys, unifycr_vals, num_entries);
 
-    brm = mdhimBPut(md, (void **)(&unifycr_keys[0]), unifycr_key_lens,
-                    (void **)(&unifycr_vals[0]), unifycr_val_lens, used_entries,
+    brm = mdhimBPut(md, (void**)(&unifycr_keys[0]), unifycr_key_lens,
+                    (void**)(&unifycr_vals[0]), unifycr_val_lens, used_entries,
                     NULL, NULL);
     brmp = brm;
     if (!brmp || brmp->error) {
@@ -340,23 +361,23 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
     md->primary_index = unifycr_indexes[1];
 
     num_entries =
-        *((unsigned long *)(app_config->shm_superblocks[client_side_id]
-                            + app_config->fmeta_offset));
+        *((unsigned long*)(app_config->shm_superblocks[client_side_id]
+                           + app_config->fmeta_offset));
 
     /* file attributes are stored in the superblock shared memory
      * created by the client*/
-    unifycr_file_attr_t *attr_payload =
-        (unifycr_file_attr_t *)(app_config->shm_superblocks[client_side_id]
-                                + app_config->fmeta_offset + page_sz);
+    unifycr_file_attr_t* attr_payload =
+        (unifycr_file_attr_t*)(app_config->shm_superblocks[client_side_id]
+                               + app_config->fmeta_offset + page_sz);
 
 
     used_entries = 0;
     for (i = 0; i < num_entries; i++) {
-        if ( attr_payload[i].gfid == gfid ) {
+        if (attr_payload[i].gfid == gfid) {
             *fattr_keys[used_entries] = attr_payload[i].gfid;
             fattr_vals[used_entries]->file_attr = attr_payload[i].file_attr;
             strcpy(fattr_vals[used_entries]->fname, attr_payload[i].filename);
-    
+
             fattr_key_lens[used_entries] = sizeof(fattr_key_t);
             fattr_val_lens[used_entries] = sizeof(fattr_val_t);
             used_entries++;
@@ -365,8 +386,8 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
     assert(used_entries == 1);
 
     // should be changed to mdhimPut once assertion is validated
-    brm = mdhimBPut(md, (void **)(&fattr_keys[0]), fattr_key_lens,
-                    (void **)(&fattr_vals[0]), fattr_val_lens, used_entries,
+    brm = mdhimBPut(md, (void**)(&fattr_keys[0]), fattr_key_lens,
+                    (void**)(&fattr_vals[0]), fattr_val_lens, used_entries,
                     NULL, NULL);
     brmp = brm;
     if (!brmp || brmp->error) {
@@ -398,12 +419,13 @@ int meta_read_get(
     int gfid,
     long offset,
     long length,
-    msg_meta_t *del_req_set)
+    msg_meta_t* del_req_set)
 {
     /* assume we'll succeed, set to error otherwise */
     int rc = (int)UNIFYCR_SUCCESS;
 
-    printf("in meta_read_get for app_id: %d, client_id: %d, thrd_id: %d\n", app_id, client_id, thrd_id);
+    printf("in %s for app_id: %d, client_id: %d, thrd_id: %d\n",
+           __func__, app_id, client_id, thrd_id);
     printf("fid: %d, offset: %d, length: %d\n", gfid, offset, length);
 
     /* create key to describe first byte we'll read */
@@ -419,7 +441,7 @@ int meta_read_get(
     md->primary_index = unifycr_indexes[0];
 
     /* get list of values for these keys */
-    bgrm = mdhimBGet(md, md->primary_index, (void **)unifycr_keys,
+    bgrm = mdhimBGet(md, md->primary_index, (void**)unifycr_keys,
                      unifycr_key_lens, 2, MDHIM_RANGE_BGET);
 
     /* track number of items we got */
@@ -437,12 +459,12 @@ int meta_read_get(
         int i;
         for (i = 0; i < bgrmp->num_keys; i++) {
             /* get pointer to key and value */
-            unifycr_key_t *key = (unifycr_key_t *)bgrm->keys[i];
-            unifycr_val_t *val = (unifycr_val_t *)bgrm->values[i];
+            unifycr_key_t* key = (unifycr_key_t*)bgrm->keys[i];
+            unifycr_val_t* val = (unifycr_val_t*)bgrm->values[i];
 
             /* extract dest_app_id from value */
             int dest_app;
-            char* ptr = (char *) &(val->app_rank_id);
+            char* ptr = (char*) &(val->app_rank_id);
             memcpy(&dest_app, ptr, sizeof(int));
             ptr += sizeof(int);
 
@@ -452,7 +474,7 @@ int meta_read_get(
             ptr += sizeof(int);
 
             /* get pointer to next send_msg structure */
-            send_msg_t *msg = &(del_req_set->msg_meta[tot_num]);
+            send_msg_t* msg = &(del_req_set->msg_meta[tot_num]);
 
             /* dest_client_id and dest_app_id uniquely identifies the remote physical
              * log file that contains the requested segments */
@@ -513,33 +535,36 @@ int meta_read_get(
 */
 int meta_batch_get(int app_id, int client_id,
                    int thrd_id, int dbg_rank, void* reqbuf, int num,
-                   msg_meta_t *del_req_set)
+                   msg_meta_t* del_req_set)
 {
-	printf("in meta_batch_get for app_id: %d, client_id: %d, thrd_id: %d\n", app_id, client_id, thrd_id);
+    printf("in %s for app_id: %d, client_id: %d, thrd_id: %d\n",
+           __func__, app_id, client_id, thrd_id);
     //cli_req_t *tmp_cli_req = (cli_req_t *) shm_reqbuf;
     unifycr_ReadRequest_table_t readRequest = unifycr_ReadRequest_as_root(reqbuf);
-	unifycr_Extent_vec_t extents = unifycr_ReadRequest_extents(readRequest);
-	size_t extents_len = unifycr_Extent_vec_len(extents);
-	assert(extents_len == num);
+    unifycr_Extent_vec_t extents = unifycr_ReadRequest_extents(readRequest);
+    size_t extents_len = unifycr_Extent_vec_len(extents);
+    assert(extents_len == num);
     int i, rc = 0;
     for (i = 0; i < num; i++) {
-		printf("fid: %d, offset: %d, length: %d\n",
-                unifycr_Extent_fid(unifycr_Extent_vec_at(extents,i)),
-            unifycr_Extent_offset(unifycr_Extent_vec_at(extents,i)),
-			unifycr_Extent_length(unifycr_Extent_vec_at(extents,i)));
-        unifycr_keys[2 * i]->fid = unifycr_Extent_fid(unifycr_Extent_vec_at(extents,i));
+        printf("fid: %d, offset: %d, length: %d\n",
+               unifycr_Extent_fid(unifycr_Extent_vec_at(extents, i)),
+               unifycr_Extent_offset(unifycr_Extent_vec_at(extents, i)),
+               unifycr_Extent_length(unifycr_Extent_vec_at(extents, i)));
+        unifycr_keys[2 * i]->fid = unifycr_Extent_fid(
+                                       unifycr_Extent_vec_at(extents, i));
         unifycr_keys[2 * i]->offset =
-			unifycr_Extent_offset(unifycr_Extent_vec_at(extents,i));
+            unifycr_Extent_offset(unifycr_Extent_vec_at(extents, i));
         unifycr_key_lens[2 * i] = sizeof(unifycr_key_t);
         unifycr_keys[2 * i + 1]->fid =
-			unifycr_Extent_fid(unifycr_Extent_vec_at(extents,i));
+            unifycr_Extent_fid(unifycr_Extent_vec_at(extents, i));
         unifycr_keys[2 * i + 1]->offset =
-			unifycr_Extent_offset(unifycr_Extent_vec_at(extents,i)) + unifycr_Extent_length(unifycr_Extent_vec_at(extents,i)) - 1;
+            unifycr_Extent_offset(unifycr_Extent_vec_at(extents, i)) +
+            unifycr_Extent_length(unifycr_Extent_vec_at(extents, i)) - 1;
         unifycr_key_lens[2 * i + 1] = sizeof(unifycr_key_t);
     }
 
     md->primary_index = unifycr_indexes[0];
-    bgrm = mdhimBGet(md, md->primary_index, (void **)unifycr_keys,
+    bgrm = mdhimBGet(md, md->primary_index, (void**)unifycr_keys,
                      unifycr_key_lens, 2 * num, MDHIM_RANGE_BGET);
 
     int tot_num = 0;
@@ -547,15 +572,16 @@ int meta_batch_get(int app_id, int client_id,
 
     bgrmp = bgrm;
     while (bgrmp) {
-        if (bgrmp->error < 0)
+        if (bgrmp->error < 0) {
             rc = (int)UNIFYCR_ERROR_MDHIM;
+        }
 
         for (i = 0; i < bgrmp->num_keys; i++) {
-            unifycr_key_t *tmp_key = (unifycr_key_t *)bgrm->keys[i];
-            unifycr_val_t *tmp_val = (unifycr_val_t *)bgrm->values[i];
+            unifycr_key_t* tmp_key = (unifycr_key_t*)bgrm->keys[i];
+            unifycr_val_t* tmp_val = (unifycr_val_t*)bgrm->values[i];
 
-            memcpy(&dest_app, (char *) & (tmp_val->app_rank_id), sizeof(int));
-            memcpy(&dest_client, (char *) & (tmp_val->app_rank_id)
+            memcpy(&dest_app, (char*) &(tmp_val->app_rank_id), sizeof(int));
+            memcpy(&dest_client, (char*) &(tmp_val->app_rank_id)
                    + sizeof(int), sizeof(int));
 
             /* physical offset of the requested file segment on the log file*/
@@ -594,7 +620,7 @@ int meta_batch_get(int app_id, int client_id,
 }
 
 void print_bget_indices(int app_id, int cli_id,
-                        send_msg_t *index_set, int tot_num)
+                        send_msg_t* index_set, int tot_num)
 {
     int i;
 
@@ -639,8 +665,8 @@ void print_bget_indices(int app_id, int cli_id,
 
 }
 
-void print_fsync_indices(unifycr_key_t **unifycr_keys,
-                         unifycr_val_t **unifycr_vals, long num_entries)
+void print_fsync_indices(unifycr_key_t** unifycr_keys,
+                         unifycr_val_t** unifycr_vals, long num_entries)
 {
     long i;
     for (i = 0; i < num_entries; i++) {
@@ -655,20 +681,24 @@ void print_fsync_indices(unifycr_key_t **unifycr_keys,
 int meta_free_indices()
 {
     int i;
-    for (i = 0; i < MAX_META_PER_SEND; i++)
+    for (i = 0; i < MAX_META_PER_SEND; i++) {
         free(unifycr_keys[i]);
+    }
     free(unifycr_keys);
 
-    for (i = 0; i < MAX_META_PER_SEND; i++)
+    for (i = 0; i < MAX_META_PER_SEND; i++) {
         free(unifycr_vals[i]);
+    }
     free(unifycr_vals);
 
-    for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++)
+    for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
         free(fattr_keys[i]);
+    }
     free(fattr_keys);
 
-    for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++)
+    for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
         free(fattr_vals[i]);
+    }
     free(fattr_vals);
 
     return 0;

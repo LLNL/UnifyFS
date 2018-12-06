@@ -32,16 +32,16 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-arraylist_t *arraylist_create()
+arraylist_t* arraylist_create(void)
 {
-    arraylist_t *arr = (arraylist_t *)malloc(sizeof(arraylist_t));
+    arraylist_t* arr = (arraylist_t*)malloc(sizeof(arraylist_t));
     if (!arr) {
         return NULL;
     }
 
     arr->cap = DEF_ARR_CAP;
     arr->size = 0;
-    arr->elems = (void **)malloc(arr->cap * sizeof(void *));
+    arr->elems = (void**)malloc(arr->cap * sizeof(void*));
 
     if (!arr->elems) {
         return NULL;
@@ -55,17 +55,17 @@ arraylist_t *arraylist_create()
     return arr;
 }
 
-int arraylist_capacity(arraylist_t *arr)
+int arraylist_capacity(arraylist_t* arr)
 {
     return arr->cap;
 }
 
-int arraylist_size(arraylist_t *arr)
+int arraylist_size(arraylist_t* arr)
 {
     return arr->size;
 }
 
-void *arraylist_get(arraylist_t *arr, int pos)
+void* arraylist_get(arraylist_t* arr, int pos)
 {
     if (pos >= arr->size) {
         return NULL;
@@ -73,11 +73,11 @@ void *arraylist_get(arraylist_t *arr, int pos)
     return arr->elems[pos];
 };
 
-int arraylist_insert(arraylist_t *arr, int pos, void *elem)
+int arraylist_insert(arraylist_t* arr, int pos, void* elem)
 {
     if (pos >= arr->cap) {
-        arr->elems = (void **)realloc(arr->elems,
-                                      2 * pos * sizeof(void *));
+        arr->elems = (void**)realloc(arr->elems,
+                                     2 * pos * sizeof(void*));
         if (!arr->elems) {
             return -1;
         }
@@ -94,18 +94,17 @@ int arraylist_insert(arraylist_t *arr, int pos, void *elem)
     }
     arr->elems[pos] = elem;
 
-    if (pos + 1 > arr->size)
+    if (pos + 1 > arr->size) {
         arr->size = pos + 1;
+    }
 
     return 0;
-
 }
 
-
-int arraylist_add(arraylist_t *arr, void *elem)
+int arraylist_add(arraylist_t* arr, void* elem)
 {
     if (arr->size == arr->cap) {
-        arr->elems = (void **)realloc(arr->elems, 2 * arr->cap * sizeof(void *));
+        arr->elems = (void**)realloc(arr->elems, 2 * arr->cap * sizeof(void*));
         if (!arr->elems) {
             return -1;
         }
@@ -123,10 +122,9 @@ int arraylist_add(arraylist_t *arr, void *elem)
     arr->elems[arr->size] = elem;
     arr->size = arr->size + 1;
     return 0;
-
 }
 
-int arraylist_reset(arraylist_t *arr)
+int arraylist_reset(arraylist_t* arr)
 {
     if (!arr) {
         return -1;
@@ -136,7 +134,7 @@ int arraylist_reset(arraylist_t *arr)
     return 0;
 }
 
-int arraylist_free(arraylist_t *arr)
+int arraylist_free(arraylist_t* arr)
 {
     long i;
     for (i = 0; i < arr->cap; i++) {

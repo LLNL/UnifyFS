@@ -81,7 +81,7 @@ int sock_init_server(void)
     int server_len = sizeof(server_address);
     unlink(sock_path);
 
-    rc = bind(server_sockfd, (struct sockaddr *)&server_address,
+    rc = bind(server_sockfd, (struct sockaddr*)&server_address,
               (socklen_t)server_len);
     if (rc != 0) {
         close(server_sockfd);
@@ -101,7 +101,7 @@ int sock_init_server(void)
     poll_set[0].events = POLLIN | POLLHUP;
     poll_set[0].revents = 0;
     num_fds++;
-	printf("completed sock init server\n");
+    printf("completed sock init server\n");
 
 #ifdef HAVE_PMIX_H
     // publish domain socket path
@@ -113,7 +113,7 @@ int sock_init_server(void)
 
 int sock_add(int fd)
 {
-	printf("sock_adding fd: %d\n");
+    printf("sock_adding fd: %d\n");
     if (num_fds == MAX_NUM_CLIENTS) {
         return -1;
     }
@@ -155,7 +155,7 @@ int sock_notify_cli(int sock_id, int cmd)
 {
     memset(ack_buf[sock_id], 0, sizeof(ack_buf[sock_id]));
 
-	printf("sock notifying fd: %d\n", client_sockfd);
+    printf("sock notifying fd: %d\n", client_sockfd);
 
     memcpy(ack_buf[sock_id], &cmd, sizeof(int));
     int rc = write(client_sockfd,
@@ -181,7 +181,7 @@ int sock_wait_cli_cmd()
     if (rc <= 0) {
         return (int)UNIFYCR_ERROR_POLL;
     } else {
-		printf("in wait_cli_cmd\n");
+        printf("in wait_cli_cmd\n");
         for (i = 0; i < num_fds; i++) {
             if (poll_set[i].fd != -1 && poll_set[i].revents != 0) {
                 if (i == 0 && poll_set[i].revents == POLLIN) {
@@ -189,9 +189,9 @@ int sock_wait_cli_cmd()
 
                     struct sockaddr_un client_address;
                     client_sockfd = accept(server_sockfd,
-                                               (struct sockaddr *)&client_address,
-                                               (socklen_t *)&client_len);
-					printf("calling sock_add for sock_id: %d\n", i);
+                                           (struct sockaddr*)&client_address,
+                                           (socklen_t*)&client_len);
+                    printf("calling sock_add for sock_id: %d\n", i);
                     rc = sock_add(client_sockfd);
                     if (rc < 0) {
                         return (int)UNIFYCR_ERROR_SOCKET_FD_EXCEED;
@@ -252,14 +252,14 @@ int sock_get_error_id()
     return detached_sock_id;
 }
 
-char *sock_get_cmd_buf(int sock_id)
+char* sock_get_cmd_buf(int sock_id)
 {
     return cmd_buf[sock_id];
 }
 
-char *sock_get_ack_buf(int sock_id)
+char* sock_get_ack_buf(int sock_id)
 {
-    return (char *)ack_buf[sock_id];
+    return (char*)ack_buf[sock_id];
 }
 
 int sock_get_id()

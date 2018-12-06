@@ -28,7 +28,7 @@
 /* creates a shared memory of given size under specified name,
  * returns address of new shared memory if successful,
  * returns NULL on error  */
-void *unifycr_shm_alloc(const char *name, size_t size)
+void* unifycr_shm_alloc(const char* name, size_t size)
 {
     int ret;
 
@@ -38,7 +38,7 @@ void *unifycr_shm_alloc(const char *name, size_t size)
     if (fd == -1) {
         /* failed to open shared memory */
         LOGERR("Failed to open shared memory %s errno=%d (%s)",
-            name, errno, strerror(errno));
+               name, errno, strerror(errno));
         return NULL;
     }
 
@@ -49,7 +49,7 @@ void *unifycr_shm_alloc(const char *name, size_t size)
         /* failed to set size shared memory */
         errno = ret;
         LOGERR("posix_fallocate failed for %s errno=%d (%s)",
-            name, errno, strerror(errno));
+               name, errno, strerror(errno));
         close(fd);
         return NULL;
     }
@@ -59,7 +59,7 @@ void *unifycr_shm_alloc(const char *name, size_t size)
     if (ret == -1) {
         /* failed to set size of shared memory */
         LOGERR("ftruncate failed for %s errno=%d (%s)",
-            name, errno, strerror(errno));
+               name, errno, strerror(errno));
         close(fd);
         return NULL;
     }
@@ -67,12 +67,12 @@ void *unifycr_shm_alloc(const char *name, size_t size)
 
     /* map shared memory region into address space */
     errno = 0;
-    void *addr = mmap(NULL, size, PROT_WRITE | PROT_READ, MAP_SHARED,
+    void* addr = mmap(NULL, size, PROT_WRITE | PROT_READ, MAP_SHARED,
                       fd, 0);
     if (addr == MAP_FAILED) {
         /* failed to open shared memory */
         LOGERR("Failed to mmap shared memory %s errno=%d (%s)",
-            name, errno, strerror(errno));
+               name, errno, strerror(errno));
         close(fd);
         return NULL;
     }
@@ -83,7 +83,7 @@ void *unifycr_shm_alloc(const char *name, size_t size)
     if (ret == -1) {
         /* failed to open shared memory */
         LOGERR("Failed to mmap shared memory %s errno=%d (%s)",
-            name, errno, strerror(errno));
+               name, errno, strerror(errno));
 
         /* not fatal, so keep going */
     }
@@ -96,7 +96,7 @@ void *unifycr_shm_alloc(const char *name, size_t size)
  * caller should povider the address of a pointer to the region
  * in paddr, sets paddr to NULL on return,
  * returns UNIFYCR_SUCCESS on success */
-int unifycr_shm_free(const char *name, size_t size, void **paddr)
+int unifycr_shm_free(const char* name, size_t size, void** paddr)
 {
     /* check that we got an address (to something) */
     if (paddr == NULL) {
@@ -104,7 +104,7 @@ int unifycr_shm_free(const char *name, size_t size, void **paddr)
     }
 
     /* get address of shared memory region */
-    void *addr = *paddr;
+    void* addr = *paddr;
 
     /* if we have a pointer, try to munmap and unlink it */
     if (addr == NULL) {
@@ -114,7 +114,7 @@ int unifycr_shm_free(const char *name, size_t size, void **paddr)
         if (rc == -1) {
             /* failed to open shared memory */
             LOGERR("Failed to unmap shared memory %s errno=%d (%s)",
-                name, errno, strerror(errno));
+                   name, errno, strerror(errno));
             return UNIFYCR_FAILURE;
         }
 
@@ -124,7 +124,7 @@ int unifycr_shm_free(const char *name, size_t size, void **paddr)
         if (rc == -1) {
             /* failed to open shared memory */
             LOGERR("Failed to unlink shared memory %s errno=%d (%s)",
-                name, errno, strerror(errno));
+                   name, errno, strerror(errno));
             return UNIFYCR_FAILURE;
         }
     }

@@ -32,11 +32,11 @@
 #include "unifycr_const.h"
 
 /* pointer to debug file stream */
-FILE *dbg_stream = NULL;
+FILE* dbg_stream;
 
 /* open specified file as debug file stream,
  * returns UNIFYCR_SUCCESS on success */
-int dbg_open(char *fname)
+int dbg_open(char* fname)
 {
     dbg_stream = fopen(fname, "a");
     if (dbg_stream == NULL) {
@@ -50,7 +50,7 @@ int dbg_open(char *fname)
 
 /* close our debug file stream,
  * returns UNIFYCR_SUCCESS on success */
-int dbg_close()
+int dbg_close(void)
 {
     if (dbg_stream == NULL) {
         /* nothing to close */

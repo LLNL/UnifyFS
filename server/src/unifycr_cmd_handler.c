@@ -59,7 +59,7 @@
  * @return success/error code
  */
 static int attach_to_shm(
-    app_config_t *app_config,
+    app_config_t* app_config,
     int app_id,
     int client_side_id)
 {
@@ -76,7 +76,7 @@ static int attach_to_shm(
     strcpy(app_config->super_buf_name[client_side_id], shm_name);
 
     /* attach to superblock */
-    void *addr = unifycr_shm_alloc(shm_name, app_config->superblock_sz);
+    void* addr = unifycr_shm_alloc(shm_name, app_config->superblock_sz);
     if (addr == NULL) {
         LOGERR("Failed to attach to superblock %s", shm_name);
         return (int)UNIFYCR_ERROR_SHMEM;
@@ -130,8 +130,8 @@ static int attach_to_shm(
  * @param sock_id: position in poll_set in unifycr_sock.h
  * @return success/error code
  */
-static int open_log_file(app_config_t *app_config,
-                  int app_id, int client_side_id)
+static int open_log_file(app_config_t* app_config,
+                         int app_id, int client_side_id)
 {
     /* build name to spill over log file,
      * have one of these per app_id and client_id,
@@ -139,7 +139,7 @@ static int open_log_file(app_config_t *app_config,
      * memory storage */
     char path[UNIFYCR_MAX_FILENAME] = {0};
     snprintf(path, sizeof(path), "%s/spill_%d_%d.log",
-        app_config->external_spill_dir, app_id, client_side_id);
+             app_config->external_spill_dir, app_id, client_side_id);
 
     /* copy filename of spill over file into app_config */
     strcpy(app_config->spill_log_name[client_side_id], path);
@@ -156,7 +156,7 @@ static int open_log_file(app_config_t *app_config,
      * this contains index meta data for data the client wrote to the
      * spill over file */
     snprintf(path, sizeof(path), "%s/spill_index_%d_%d.log",
-        app_config->external_spill_dir, app_id, client_side_id);
+             app_config->external_spill_dir, app_id, client_side_id);
 
     /* copy name of spill over index metadata file to app_config */
     strcpy(app_config->spill_index_log_name[client_side_id], path);
@@ -176,26 +176,26 @@ static int open_log_file(app_config_t *app_config,
 /* create a request manager thread for the given app_id
  * and client_id, returns pointer to thread control structure
  * on success and NULL on failure */
-static thrd_ctrl_t *unifycr_rm_thrd_create(int app_id, int client_id)
+static thrd_ctrl_t* unifycr_rm_thrd_create(int app_id, int client_id)
 {
     /* allocate a new thread control structure */
     size_t bytes = sizeof(thrd_ctrl_t);
-    thrd_ctrl_t *thrd_ctrl = (thrd_ctrl_t *)malloc(bytes);
+    thrd_ctrl_t* thrd_ctrl = (thrd_ctrl_t*)malloc(bytes);
     if (thrd_ctrl == NULL) {
         LOGERR("Failed to allocate structure for request "
-            "manager thread for app_id=%d client_id=%d",
-            app_id, client_id);
+               "manager thread for app_id=%d client_id=%d",
+               app_id, client_id);
         return NULL;
     }
     memset(thrd_ctrl, 0, bytes);
 
     /* allocate an array for listing read requests from client */
     bytes = sizeof(msg_meta_t);
-    thrd_ctrl->del_req_set = (msg_meta_t *)malloc(bytes);
+    thrd_ctrl->del_req_set = (msg_meta_t*)malloc(bytes);
     if (thrd_ctrl->del_req_set == NULL) {
         LOGERR("Failed to allocate read request structure for request "
-            "manager thread for app_id=%d client_id=%d",
-            app_id, client_id);
+               "manager thread for app_id=%d client_id=%d",
+               app_id, client_id);
         free(thrd_ctrl);
         return NULL;
     }
@@ -204,11 +204,11 @@ static thrd_ctrl_t *unifycr_rm_thrd_create(int app_id, int client_id)
     /* allocate structure for tracking outstanding read requests
      * this delegator has with service managers on other nodes */
     bytes = sizeof(del_req_stat_t);
-    thrd_ctrl->del_req_stat = (del_req_stat_t *)malloc(bytes);
+    thrd_ctrl->del_req_stat = (del_req_stat_t*)malloc(bytes);
     if (thrd_ctrl->del_req_stat == NULL) {
         LOGERR("Failed to allocate delegator structure for request "
-            "manager thread for app_id=%d client_id=%d",
-            app_id, client_id);
+               "manager thread for app_id=%d client_id=%d",
+               app_id, client_id);
         free(thrd_ctrl->del_req_set);
         free(thrd_ctrl);
         return NULL;
@@ -218,11 +218,11 @@ static thrd_ctrl_t *unifycr_rm_thrd_create(int app_id, int client_id)
     /* allocate a structure to track requests we have on each
      * remote service manager */
     bytes = sizeof(per_del_stat_t) * glb_size;
-    thrd_ctrl->del_req_stat->req_stat = (per_del_stat_t *)malloc(bytes);
+    thrd_ctrl->del_req_stat->req_stat = (per_del_stat_t*)malloc(bytes);
     if (thrd_ctrl->del_req_stat->req_stat == NULL) {
         LOGERR("Failed to allocate per-delegator structure for request "
-            "manager thread for app_id=%d client_id=%d",
-            app_id, client_id);
+               "manager thread for app_id=%d client_id=%d",
+               app_id, client_id);
         free(thrd_ctrl->del_req_stat);
         free(thrd_ctrl->del_req_set);
         free(thrd_ctrl);
@@ -235,8 +235,8 @@ static thrd_ctrl_t *unifycr_rm_thrd_create(int app_id, int client_id)
     int rc = pthread_mutex_init(&(thrd_ctrl->thrd_lock), NULL);
     if (rc != 0) {
         LOGERR("pthread_mutex_init failed for request "
-            "manager thread app_id=%d client_id=%d rc=%d (%s)",
-            app_id, client_id, rc, strerror(rc));
+               "manager thread app_id=%d client_id=%d rc=%d (%s)",
+               app_id, client_id, rc, strerror(rc));
         free(thrd_ctrl->del_req_stat->req_stat);
         free(thrd_ctrl->del_req_stat);
         free(thrd_ctrl->del_req_set);
@@ -249,8 +249,8 @@ static thrd_ctrl_t *unifycr_rm_thrd_create(int app_id, int client_id)
     rc = pthread_cond_init(&(thrd_ctrl->thrd_cond), NULL);
     if (rc != 0) {
         LOGERR("pthread_cond_init failed for request "
-            "manager thread app_id=%d client_id=%d rc=%d (%s)",
-            app_id, client_id, rc, strerror(rc));
+               "manager thread app_id=%d client_id=%d rc=%d (%s)",
+               app_id, client_id, rc, strerror(rc));
         pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
         free(thrd_ctrl->del_req_stat->req_stat);
         free(thrd_ctrl->del_req_stat);
@@ -285,11 +285,11 @@ static thrd_ctrl_t *unifycr_rm_thrd_create(int app_id, int client_id)
 
     /* launch request manager thread */
     rc = pthread_create(&(thrd_ctrl->thrd), NULL,
-        rm_delegate_request_thread, (void *)thrd_ctrl);
+                        rm_delegate_request_thread, (void*)thrd_ctrl);
     if (rc != 0) {
         LOGERR("pthread_create failed for request "
-            "manager thread app_id=%d client_id=%d rc=%d (%s)",
-            app_id, client_id, rc, strerror(rc));
+               "manager thread app_id=%d client_id=%d rc=%d (%s)",
+               app_id, client_id, rc, strerror(rc));
         pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
         pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
         free(thrd_ctrl->del_req_stat->req_stat);
@@ -327,15 +327,15 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     int client_id = in.local_rank_idx;
 
     /* lookup app_config for given app_id */
-    app_config_t *tmp_config =
-        (app_config_t *) arraylist_get(app_config_list, app_id);
+    app_config_t* tmp_config =
+        (app_config_t*) arraylist_get(app_config_list, app_id);
 
     /* fill in and insert a new entry for this app_id
      * if we don't already have one */
     if (tmp_config == NULL) {
         /* don't have an app_config for this app_id,
          * so allocate and fill one in */
-        tmp_config = (app_config_t *)malloc(sizeof(app_config_t));
+        tmp_config = (app_config_t*)malloc(sizeof(app_config_t));
 
         /* record size of shared memory regions */
         tmp_config->req_buf_sz    = in.req_buf_sz;
@@ -397,7 +397,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     }
 
     /* create request manager thread */
-    thrd_ctrl_t *thrd_ctrl = unifycr_rm_thrd_create(app_id, client_id);
+    thrd_ctrl_t* thrd_ctrl = unifycr_rm_thrd_create(app_id, client_id);
     if (thrd_ctrl != NULL) {
         /* TODO: seems like it would be cleaner to avoid thread_list
          * and instead just record address to struct */
@@ -576,7 +576,7 @@ static void unifycr_read_rpc(hg_handle_t handle)
     /* read data for a single read request from client,
      * returns data to client through shared memory */
     ret = rm_cmd_read(in.app_id, in.local_rank_idx,
-        in.gfid, in.offset, in.length);
+                      in.gfid, in.offset, in.length);
 
     /* build our output values */
     unifycr_read_out_t out;
@@ -606,11 +606,11 @@ static void unifycr_mread_rpc(hg_handle_t handle)
 
     /* allocate buffer to hold array of read requests */
     hg_size_t size = in.bulk_size;
-    void *buffer = (void *)malloc(size);
+    void* buffer = (void*)malloc(size);
     assert(buffer);
 
     /* get pointer to mercury structures to set up bulk transfer */
-    const struct hg_info *hgi = margo_get_info(handle);
+    const struct hg_info* hgi = margo_get_info(handle);
     assert(hgi);
     margo_instance_id mid = margo_hg_info_get_instance(hgi);
     assert(mid != MARGO_INSTANCE_NULL);
@@ -627,7 +627,7 @@ static void unifycr_mread_rpc(hg_handle_t handle)
 
     /* initiate read operations to fetch data for read requests */
     ret = rm_cmd_mread(in.app_id, in.local_rank_idx,
-        in.gfid, in.read_count, buffer);
+                       in.gfid, in.read_count, buffer);
 
     /* build our output values */
     unifycr_mread_out_t out;

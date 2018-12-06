@@ -41,16 +41,16 @@ int sock_init_server(void);
 int sock_add(int fd);
 void sock_reset();
 int sock_wait_cli_cmd();
-char *sock_get_cmd_buf(int sock_id);
+char* sock_get_cmd_buf(int sock_id);
 int sock_handle_error(int sock_error_no);
 int sock_get_id();
 int sock_get_error_id();
 int sock_ack_cli(int sock_id, int ret_sz);
 int sock_sanitize();
 void sock_sanitize_cli(int client_id);
-char *sock_get_ack_buf(int sock_id);
+char* sock_get_ack_buf(int sock_id);
 int sock_remove(int idx);
 int sock_notify_cli(int sock_id, int cmd);
-char *sock_get_cmd_buf(int sock_id);
+char* sock_get_cmd_buf(int sock_id);
 
 #endif
