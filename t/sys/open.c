@@ -15,84 +15,62 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <mpi.h>
 #include <linux/limits.h>
-#include <unifycr.h>
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
 
-int main(int argc, char *argv[])
+/* This function contains the tests for UNIFYCR_WRAP(open) found in
+ * client/src/unifycr-sysio.c.
+ *
+ * Notice the tests are ordered in a logical testing order. Changing the order
+ * or adding new tests in between two others could negatively affect the
+ *  desired results. */
+int open_test(char* unifycr_root)
 {
-    int rank_num;
-    int rank;
+    /* Diagnostic message for reading and debugging output */
+    diag("Starting UNIFYCR_WRAP(open) tests");
+
     char path[64];
-    char *unifycr_root;
     int mode = 0600;
     int fd;
     int rc;
 
-    MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &rank_num);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    plan(NO_PLAN);
-
-    unifycr_root = testutil_get_mount_point();
-
-    /*
-     * Verify unifycr_mount succeeds.
-     */
-    rc = unifycr_mount(unifycr_root, rank, rank_num, 0);
-    ok(rc == 0, "unifycr_mount at %s (rc=%d)", unifycr_root, rc);
-
+    /* Create a random file name at the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifycr_root);
 
-    /*
-     * Verify we can create a new file.
-     */
+    /* Verify we can create a new file. */
     errno = 0;
     fd = open(path, O_CREAT|O_EXCL, mode);
     ok(fd >= 0, "open non-existing file %s flags O_CREAT|O_EXCL (fd=%d): %s",
        path, fd, strerror(errno));
 
-    /*
-     * Verify close succeeds.
-     */
+    /* Verify close succeeds. */
     errno = 0;
     rc = close(fd);
-    ok(rc == 0, "close %s (rc=%d): %s", path, rc, strerror(errno));
+    ok(rc == 0, "close new file %s (rc=%d): %s", path, rc, strerror(errno));
 
-    /*
-     * Verify opening an existing file with O_CREAT|O_EXCL fails with
-     * errno=EEXIST.
-     */
+    /* Verify opening an existing file with O_CREAT|O_EXCL fails with
+     * errno=EEXIST. */
     errno = 0;
     fd = open(path, O_CREAT|O_EXCL, mode);
     ok(fd < 0 && errno == EEXIST,
-       "open existing file %s O_CREAT|O_EXCL should fail (fd=%d): %s",
-       path, fd, strerror(errno));
+       "open existing file %s O_CREAT|O_EXCL should fail (fd=%d, errno=%d): %s",
+       path, fd, errno, strerror(errno));
 
-    /*
-     * Verify opening an existing file with O_RDWR succeeds.
-     */
+    /* Verify opening an existing file with O_RDWR succeeds. */
     errno = 0;
     fd = open(path, O_RDWR, mode);
     ok(fd >= 0, "open existing file %s O_RDWR (fd=%d): %s",
        path, fd, strerror(errno));
 
-    /*
-     * Verify close succeeds.
-     */
+    /* Verify close succeeds. */
     errno = 0;
     rc = close(fd);
     ok(rc == 0, "close %s (rc=%d): %s", path, rc, strerror(errno));
 
-    MPI_Finalize();
-
-    done_testing();
+    diag("Finished UNIFYCR_WRAP(open) tests");
 
     return 0;
 }
