@@ -1,0 +1,80 @@
+/*
+ * Copyright (c) 2018, Lawrence Livermore National Security, LLC.
+ * Produced at the Lawrence Livermore National Laboratory.
+ *
+ * Copyright 2018, UT-Battelle, LLC.
+ *
+ * LLNL-CODE-741539
+ * All rights reserved.
+ *
+ * This is the license for UnifyCR.
+ * For details, see https://github.com/LLNL/UnifyCR.
+ * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ */
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <linux/limits.h>
+#include <unifycr.h>
+#include "t/lib/tap.h"
+#include "t/lib/testutil.h"
+
+/* This function contains the tests for UNIFYCR_WRAP(open64) found in
+ * client/src/unifycr-sysio.c.
+ *
+ * Notice the tests are ordered in a logical testing order. Changing the order
+ * or adding new tests in between two others could negatively affect the
+ * desired results. */
+int open64_test(char* unifycr_root)
+{
+    /* Diagnostic message for reading and debugging output */
+    diag("Starting UNIFYCR_WRAP(open64) tests");
+
+    char path[64];
+    int mode = 0600;
+    int fd;
+    int rc;
+
+    /* Create a random file name at the mountpoint path to test on */
+    testutil_rand_path(path, sizeof(path), unifycr_root);
+
+    /* Verify opening a non-existent file without O_CREAT fails with
+     * errno=ENOENT */
+    errno = 0;
+    fd = open64(path, O_RDWR, mode);
+    ok(fd < 0 && errno == ENOENT,
+       "open64 non-existing file %s w/out O_CREATE fails (fd=%d, errno=%d): %s",
+       path, fd, errno, strerror(errno));
+
+    /* Verify we can create a new file. */
+    errno = 0;
+    fd = open64(path, O_CREAT|O_EXCL, mode);
+    ok(fd >= 0, "open64 non-existing file %s flags O_CREAT|O_EXCL (fd=%d): %s",
+       path, fd, strerror(errno));
+
+    rc = close(fd);
+
+    /* Verify opening an existing file with O_CREAT|O_EXCL fails with
+     * errno=EEXIST. */
+    errno = 0;
+    fd = open64(path, O_CREAT|O_EXCL, mode);
+    ok(fd < 0 && errno == EEXIST,
+       "open64 existing file %s O_CREAT|O_EXCL fails (fd=%d, errno=%d): %s",
+       path, fd, errno, strerror(errno));
+
+    /* Verify opening an existing file with O_RDWR succeeds. */
+    errno = 0;
+    fd = open64(path, O_RDWR, mode);
+    ok(fd >= 0, "open64 existing file %s O_RDWR (fd=%d): %s",
+       path, fd, strerror(errno));
+
+    rc = close(fd);
+
+    diag("Finished UNIFYCR_WRAP(open64) tests");
+
+    return 0;
+}

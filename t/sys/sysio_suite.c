@@ -65,7 +65,11 @@ int main(int argc, char* argv[])
 
     creat_close_test(unifycr_root);
 
+    creat64_test(unifycr_root);
+
     open_test(unifycr_root);
+
+    open64_test(unifycr_root);
 
     done_testing();
 
