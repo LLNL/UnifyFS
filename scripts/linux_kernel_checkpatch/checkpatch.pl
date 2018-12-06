@@ -3786,7 +3786,9 @@ sub process {
 			my ($ident, $from, $to) = ($1, $2, $2);
 
 			# Should start with a space.
-			$to =~ s/^(\S)/ $1/;
+			#$to =~ s/^(\S)/ $1/;
+			# UNIFYCR: Should not start with a space.
+			$to =~ s/^\s+(\S)/$1/;
 			# Should not end with a space.
 			$to =~ s/\s+$//;
 			# '*'s should not have spaces between.
