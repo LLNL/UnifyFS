@@ -26,6 +26,7 @@ checkpatch_ignore+=",USE_NEGATIVE_ERRNO" # We don't return negative errnos
 checkpatch_ignore+=",NEW_TYPEDEFS"
 checkpatch_ignore+=",ENOSYS"
 checkpatch_ignore+=",CONSTANT_COMPARISON" # Allow consts on left: if(COSNT==val)
+checkpatch_ignore+=",VOLATILE"            # Allow use of volatile keyword
 
 checkpatch_cmd+=" --ignore $checkpatch_ignore"
 
