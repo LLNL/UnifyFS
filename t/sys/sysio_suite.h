@@ -33,7 +33,13 @@
 /* Tests for UNIFYCR_WRAP(creat) and UNIFYCR_WRAP(close) */
 int creat_close_test(char* unifycr_root);
 
+/* Tests for UNIFYCR_WRAP(creat64) */
+int creat64_test(char* unifycr_root);
+
 /* Tests for UNIFYCR_WRAP(open) */
 int open_test(char* unifycr_root);
+
+/* Tests for UNIFYCR_WRAP(open64) */
+int open64_test(char* unifycr_root);
 
 #endif /* SYSIO_SUITE_H */
