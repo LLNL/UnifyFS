@@ -30,6 +30,9 @@
 #ifndef SYSIO_SUITE_H
 #define SYSIO_SUITE_H
 
+/* Tests for UNIFYCR_WRAP(creat) and UNIFYCR_WRAP(close) */
+int creat_close_test(char* unifycr_root);
+
 /* Tests for UNIFYCR_WRAP(open) */
 int open_test(char* unifycr_root);
 
