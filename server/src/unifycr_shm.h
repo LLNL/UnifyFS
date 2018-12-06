@@ -20,13 +20,13 @@
 /* allocate and attach a named shared memory region of a particular size
  * and mmap into our memory, returns starting memory address on success,
  * returns NULL on failure */
-void *unifycr_shm_alloc(const char *name, size_t size);
+void* unifycr_shm_alloc(const char* name, size_t size);
 
 /* unmaps shared memory region from memory, and releases it,
  * caller should povider the address of a pointer to the region
  * in paddr, sets paddr to NULL on return,
  * returns UNIFYCR_SUCCESS on success */
-int unifycr_shm_free(const char *name, size_t size, void **paddr);
+int unifycr_shm_free(const char* name, size_t size, void** paddr);
 
 /* release a shared memory region mapping */
 

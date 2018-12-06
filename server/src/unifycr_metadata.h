@@ -62,26 +62,26 @@ typedef struct {
     long length;
 } cli_req_t;
 
-extern arraylist_t *ulfs_keys;
-extern arraylist_t *ulfs_vals;
-extern arraylist_t *ulfs_metas;
+extern arraylist_t* ulfs_keys;
+extern arraylist_t* ulfs_vals;
+extern arraylist_t* ulfs_metas;
 
 int meta_sanitize();
-int meta_init_store(unifycr_cfg_t *cfg);
+int meta_init_store(unifycr_cfg_t* cfg);
 void print_bget_indices(int app_id, int cli_id,
-                        send_msg_t *index_set, int tot_num);
+                        send_msg_t* index_set, int tot_num);
 int meta_process_fsync(int app_id, int client_side_id, int gfid);
 int meta_read_get(int app_id, int client_id,
-                   int thrd_id, int dbg_rank, int gfid, long offset, long length, 
-                   msg_meta_t* del_req_set);
+                  int thrd_id, int dbg_rank, int gfid, long offset, long length,
+                  msg_meta_t* del_req_set);
 int meta_batch_get(int app_id, int client_id,
                    int thrd_id, int dbg_rank, void* reqbuf, int num,
                    msg_meta_t* del_req_set);
 int meta_init_indices();
 int meta_free_indices();
-void print_fsync_indices(unifycr_key_t **unifycr_keys,
-                         unifycr_val_t **unifycr_vals, long num_entries);
+void print_fsync_indices(unifycr_key_t** unifycr_keys,
+                         unifycr_val_t** unifycr_vals, long num_entries);
 int meta_process_attr_set(int gfid, const char* filename);
-int meta_process_attr_get(int gfid, unifycr_file_attr_t *ptr_attr_val);
+int meta_process_attr_get(int gfid, unifycr_file_attr_t* ptr_attr_val);
 
 #endif

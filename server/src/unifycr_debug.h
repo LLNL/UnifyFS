@@ -33,10 +33,10 @@
 
 /* open specified file as debug file stream,
  * returns UNIFYCR_SUCCESS on success */
-int dbg_open(char *fname);
+int dbg_open(char* fname);
 
 /* close our debug file stream,
  * returns UNIFYCR_SUCCESS on success */
-int dbg_close();
+int dbg_close(void);
 
 #endif
