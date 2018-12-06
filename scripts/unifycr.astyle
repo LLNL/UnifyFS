@@ -22,8 +22,8 @@
 # limit lines to 80 chars
 --max-code-length=80
 
-# void *foo
---align-pointer=name
+# void* foo
+--align-pointer=type
 
 # add spaces in operations
 --pad-oper
