@@ -61,11 +61,21 @@ int main(int argc, char* argv[])
         BAIL_OUT("unifycr_mount in sysio_suite failed");
     }
 
-    /* Add tests for new functions below in the order desired for testing. */
+    /* Add tests for new functions below in the order desired for testing.
+     *
+     * *** NOTE ***
+     * The order of the tests does matter as some subsequent tests use
+     * functions that were already tested (i.e., mkdir_rmdir_test uses the
+     * creat function). Thus if creat fails, it could cause later tests to
+     * fail. If this occurs, fix the bugs causing the tests that ran first to
+     * break as that is likely to cause subsequent failures to start passing.
+     */
 
     creat_close_test(unifycr_root);
 
     creat64_test(unifycr_root);
+
+    mkdir_rmdir_test(unifycr_root);
 
     open_test(unifycr_root);
 
