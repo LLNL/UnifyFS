@@ -5,9 +5,11 @@ Testing Guide
 Running the Tests
 =================
 
-To run the UnifyCR test suite, simply run ``make check`` from your build/t
-directory. Individual tests may be run by hand. The test ``0001-setup.t``
-should normally be run first to start the UnifyCR daemon.
+To manually run the UnifyCR test suite, simply run ``make check`` from your
+build/t directory. If changes are made to existing files in the test suite, the
+tests can be run again by simply doing ``make clean`` followed by ``make
+check``. Individual tests may be run by hand. The test ``0001-setup.t`` should
+normally be run first to start the UnifyCR daemon.
 
 .. note::
 
@@ -46,21 +48,91 @@ documentation.
 
 ------------
 
-Adding Test Cases
-=================
+Adding Tests
+============
 
 The UnifyCR Test Suite uses the `Test Anything Protocol`_ (TAP) and the
 Automake test harness. By convention, test scripts and programs that output
 TAP are named with a ".t" extension.
 
 To add a new test case to the test harness, follow the existing examples in
-`t/Makefile.am <https://github.com/LLNL/UnifyCR/blob/dev/t/Makefile.am>`_. In
-short, add your test program to the list of tests in the ``TESTS`` variable. If
-it is a shell script, also add it to ``check_SCRIPTS`` so that it gets included
-in the source distribution tarball.
+`t/Makefile.am`_. In short, add your test program to the list of tests in the
+``TESTS`` variable. If it is a shell script, also add it to ``check_SCRIPTS``
+so that it gets included in the source distribution tarball.
 
-.. subsection on adding additional Bamboo/Gitlab tests when process is
-   established
+Test Suites
+-----------
+
+If multiple tests fit within the same category (i.e., tests for creat and mkdir
+both fall under tests for sysio) then create a test suite to run those tests.
+This makes it so less duplication of files and code is needed in order to create
+additional tests.
+
+To create a new test suite, look at how it is currently done for the
+sysio_suite in `t/Makefile.am`_ and `t/sys/sysio_suite.c`_:
+
+    If you're testing C code, you'll need to use environment variables set by
+    sharness.
+
+    - Create a shell script, *<####-suite-name>.t* (the #### indicates the
+      order in which they should be run by the tap-driver), that wraps your
+      suite and sources `sharness.d/00-test-env.sh`_ and
+      `sharness.d/01-unifycr-settings.sh`_
+    - Add this file to `t/Makefile.am`_ in the ``TESTS``, ``check_SCRIPTS``,
+      and ``libexec_PROGRAMS`` variables
+
+    You can then create the test suite file and any tests to be run in this
+    suite.
+
+    - Create a <test_suite_name>.c file (i.e., *sysio_suite.c*) that will
+      contain the main function and mpi job that drives your suite
+
+      - Mount unifycr from this file
+      - Call testing functions (created in other files) in the order desired
+        for testing, passing the mount point to those functions
+    - Create a <test_suite_name>.h file that declares the names of all the test
+      functions to be run by this suite and ``include`` this in the
+      <test_suite_name>.c file
+    - Create <test_name>.c files (i.e., *open.c*) that contains the testing
+      function (i.e., ``open_test(char* unifycr_root)``) that houses the
+      variables and TAP tests needed to test that individual function
+
+      - Add the function name to the <test_suite_name>.h file
+      - Call the function from the <test_suite_name>.c file
+
+    The source files and flags for the test suite are then added to the bottom
+    of `t/Makefile.am`_.
+
+    - Add the <test_suite_name>.c and <test_suite_name>.h files to the
+      ``<test_suite>_SOURCES`` variable
+    - Add additional <test_name>.c files to the ``<test_suite>_SOURCES``
+      variable as they are created
+    - Add the associated flags for the test suite
+
+Test Cases
+----------
+
+For testing C code, test cases are written using the `libtap library`_. See the
+:ref:`C Program Tests <C-tests-label>` section below on how to write these
+tests.
+
+To add new test cases to any existing suite of tests:
+
+    1. Simply add the desired tests (order matters) to the appropriate
+       <test_name>.c file
+
+If the test cases needing to be written don't already have a file they belong
+in (i.e., testing a wrapper that doesn't have any tests yet):
+
+    1. Creata a <function_name>.c file with a function called
+       <function_name>_test(char* unifycr_root) that contains the desired TAP
+       test cases
+    2. Add the <function_name>_test to the corresponding <test_suite_name>.h
+       file
+    3. Add the <function_name>.c file to the bottom of `t/Makefile.am`_ under
+       the appropriate ``<test_suite>_SOURCES`` variable
+    4. The <function_name>_test function can now be called from the
+       <test_suite_name>.c file
 
 ------------
 
@@ -111,11 +183,13 @@ Here is an example of a sharness test:
 
     test_done
 
+.. _C-tests-label:
+
 C Program Tests
 ---------------
 
 C programs use the `libtap library`_ to implement test cases. Convenience
-functions common to test cases written in C are implemmented in the library
+functions common to test cases written in C are implemented in the library
 `lib/testutil.c`_. If your C program needs to use environment variables set by
 sharness, it can be wrapped in a shell script that first sources
 `sharness.d/00-test-env.sh`_ and `sharness.d/01-unifycr-settings.sh`_. Your
@@ -161,6 +235,8 @@ Here is an example libtap test:
 .. _examples: https://github.com/LLNL/UnifyCR/tree/dev/examples/src
 .. _libtap library: https://github.com/zorgnax/libtap
 .. _lib/testutil.c: https://github.com/LLNL/UnifyCR/blob/dev/t/lib/testutil.c
+.. _t/Makefile.am: https://github.com/LLNL/UnifyCR/blob/dev/t/Makefile.am
+.. _t/sys/sysio_suite.c: https://github.com/LLNL/UnifyCR/blob/dev/t/sys/sysio_suite.c
 .. _Test Anything Protocol: https://testanything.org
 .. _Travis CI: https://docs.travis-ci.com
 .. _sharness: https://github.com/chriscool/sharness
