@@ -78,13 +78,13 @@ static int unifycr_fpos_enabled = 1; /* whether we can use fgetpos/fsetpos */
 /* TODO: add "unifycr_unsupported" call to report details of unsupported fns */
 
 /* given a stream, return file name or NULL if invalid */
-static const char *unifycr_stream_name(FILE *fp)
+static const char* unifycr_stream_name(FILE* fp)
 {
     /* convert to unifycr_stream_t pointer */
-    unifycr_stream_t *s = (unifycr_stream_t *) fp;
+    unifycr_stream_t* s = (unifycr_stream_t*) fp;
 
     /* get name of file */
-    const char *name = NULL;
+    const char* name = NULL;
     int fid = unifycr_get_fid_from_fd(s->fd);
     if (fid >= 0) {
         name = unifycr_filelist[fid].filename;
@@ -93,21 +93,21 @@ static const char *unifycr_stream_name(FILE *fp)
 }
 
 int unifycr_unsupported_stream(
-    FILE *fp,
-    const char *wrap_fn,
-    const char *wrap_file,
+    FILE* fp,
+    const char* wrap_fn,
+    const char* wrap_file,
     int         wrap_line,
-    const char *format,
+    const char* format,
     ...)
 {
     /* convert to unifycr_stream_t pointer */
-    unifycr_stream_t *s = (unifycr_stream_t *) fp;
+    unifycr_stream_t* s = (unifycr_stream_t*) fp;
 
     /* get name of file */
-    const char *name = unifycr_stream_name(fp);
+    const char* name = unifycr_stream_name(fp);
 
     /* get file position */
-    unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(s->fd);
+    unifycr_fd_t* filedesc = unifycr_get_filedesc_from_fd(s->fd);
     off_t pos = filedesc->pos;
 
     /* determine length of string to hold formatted args */
@@ -118,7 +118,7 @@ int unifycr_unsupported_stream(
 
     /* allocate memory for string */
     int chars = strlen + 1;
-    char *str = (char *) malloc(chars);
+    char* str = (char*) malloc(chars);
     if (str == NULL) {
         /* Error */
     }
@@ -144,10 +144,10 @@ int unifycr_unsupported_stream(
     return rc;
 }
 
-int unifycr_stream_set_pointers(unifycr_stream_t *s)
+int unifycr_stream_set_pointers(unifycr_stream_t* s)
 {
     /* get pointer to file descriptor structure */
-    unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(s->fd);
+    unifycr_fd_t* filedesc = unifycr_get_filedesc_from_fd(s->fd);
     if (filedesc == NULL) {
         /* ERROR: invalid file descriptor */
         s->err = 1;
@@ -175,9 +175,9 @@ int unifycr_stream_set_pointers(unifycr_stream_t *s)
     } else {
         /* determine number of bytes to copy from stream buffer */
         size_t stream_offset    = (size_t)(current - s->bufpos);
-        char  *stream_start     = (char *)s->buf + stream_offset;
+        char*  stream_start     = (char*)s->buf + stream_offset;
         size_t stream_remaining = s->buflen - stream_offset;
-        s->_p = (unsigned char *) stream_start;
+        s->_p = (unsigned char*) stream_start;
         s->_r = stream_remaining;
     }
 
@@ -192,11 +192,11 @@ int unifycr_stream_set_pointers(unifycr_stream_t *s)
  * returns UNIFYCR_ERROR_INVAL if invalid character is found
  */
 static int unifycr_fopen_parse_mode(
-    const char *mode,
-    int *read,
-    int *write,
-    int *append,
-    int *plus)
+    const char* mode,
+    int* read,
+    int* write,
+    int* append,
+    int* plus)
 {
     /* we'll set each of these to 1 as we find them */
     *read   = 0;
@@ -271,9 +271,9 @@ static int unifycr_fopen_parse_mode(
  * UNIFYCR_SUCCESS if successful, returns some other UNIFYCR error
  * otherwise */
 static int unifycr_fopen(
-    const char *path,
-    const char *mode,
-    FILE **outstream)
+    const char* path,
+    const char* mode,
+    FILE** outstream)
 {
     /* assume that we'll fail */
     *outstream = NULL;
@@ -345,7 +345,7 @@ static int unifycr_fopen(
     }
 
     /* get stream structure corresponding to stream id */
-    unifycr_stream_t *s = &(unifycr_streams[sid]);
+    unifycr_stream_t* s = &(unifycr_streams[sid]);
 
     /* allocate a file descriptor for this file */
     int fd = unifycr_stack_pop(unifycr_fd_stack);
@@ -361,7 +361,7 @@ static int unifycr_fopen(
     }
 
     /* set file pointer and read/write mode in file descriptor */
-    unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
+    unifycr_fd_t* filedesc = unifycr_get_filedesc_from_fd(fd);
     filedesc->fid   = fid;
     filedesc->pos   = pos;
     filedesc->read  = read  || plus;
@@ -400,7 +400,7 @@ static int unifycr_fopen(
     s->_r = 0;
 
     /* set return parameter and return */
-    *outstream = (FILE *)s;
+    *outstream = (FILE*)s;
     return UNIFYCR_SUCCESS;
 }
 
@@ -408,13 +408,13 @@ static int unifycr_fopen(
  * if buf is NULL, otherwise uses buffer passed by caller, also sets
  * stream to fully/line/unbuffered, returns UNIFYCR error codes */
 static int unifycr_setvbuf(
-    FILE *stream,
-    char *buf,
+    FILE* stream,
+    char* buf,
     int type,
     size_t size)
 {
     /* lookup stream */
-    unifycr_stream_t *s = (unifycr_stream_t *) stream;
+    unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
     /* TODO: check that stream is valid */
 
@@ -466,10 +466,10 @@ static int unifycr_setvbuf(
 /* calls unifycr_fd_write to flush stream if it is dirty,
  * returns UNIFYCR error codes, sets stream error indicator and errno
  * upon error */
-static int unifycr_stream_flush(FILE *stream)
+static int unifycr_stream_flush(FILE* stream)
 {
     /* lookup stream */
-    unifycr_stream_t *s = (unifycr_stream_t *) stream;
+    unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
     /* TODO: check that stream is valid */
 
@@ -494,20 +494,20 @@ static int unifycr_stream_flush(FILE *stream)
  * position, returns number of bytes read in retcount, returns UNIFYCR
  * error codes*/
 static int unifycr_stream_read(
-    FILE *stream,
-    void *buf,
+    FILE* stream,
+    void* buf,
     size_t count,
-    size_t *retcount)
+    size_t* retcount)
 {
     /* lookup stream */
-    unifycr_stream_t *s = (unifycr_stream_t *) stream;
+    unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
     /* clear pointers, will force a reset when refill is called */
     s->_p = NULL;
     s->_r = 0;
 
     /* get pointer to file descriptor structure */
-    unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(s->fd);
+    unifycr_fd_t* filedesc = unifycr_get_filedesc_from_fd(s->fd);
     if (filedesc == NULL) {
         /* ERROR: invalid file descriptor */
         s->err = 1;
@@ -561,7 +561,7 @@ static int unifycr_stream_read(
         }
 
         /* copy bytes from push back buffer to user buffer */
-        unsigned char *ubuf_start = s->ubuf + s->ubufsize - ubuflen;
+        unsigned char* ubuf_start = s->ubuf + s->ubufsize - ubuflen;
         memcpy(buf, ubuf_start, ubuf_chars);
 
         /* drop bytes from push back buffer */
@@ -621,8 +621,8 @@ static int unifycr_stream_read(
 
         /* copy data from stream buffer to user buffer */
         if (bytes > 0) {
-            char *buf_start    = (char *)buf + (count - remaining);
-            char *stream_start = (char *)s->buf + stream_offset;
+            char* buf_start    = (char*)buf + (count - remaining);
+            char* stream_start = (char*)s->buf + stream_offset;
             memcpy(buf_start, stream_start, bytes);
         }
 
@@ -651,12 +651,12 @@ static int unifycr_stream_read(
  * indicators as appropriate, sets errno if error, updates file
  * position, return UNIFYCR error codes */
 static int unifycr_stream_write(
-    FILE *stream,
-    const void *buf,
+    FILE* stream,
+    const void* buf,
     size_t count)
 {
     /* lookup stream */
-    unifycr_stream_t *s = (unifycr_stream_t *) stream;
+    unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
     /* clear pointers, will force a reset when refill is called */
     s->_p = NULL;
@@ -665,7 +665,7 @@ static int unifycr_stream_write(
     /* TODO: check that stream is valid */
 
     /* get pointer to file descriptor structure */
-    unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(s->fd);
+    unifycr_fd_t* filedesc = unifycr_get_filedesc_from_fd(s->fd);
     if (filedesc == NULL) {
         /* ERROR: invalid file descriptor */
         s->err = 1;
@@ -769,7 +769,7 @@ static int unifycr_stream_write(
             /* line buffered, scan to first newline or end of
              * user buffer and counts bytes as we go */
             bytes = 0;
-            const char *ptr = (const char *)buf + (count - remaining);
+            const char* ptr = (const char*)buf + (count - remaining);
             while (bytes < remaining) {
                 bytes++;
                 if (*ptr == '\n') {
@@ -783,7 +783,7 @@ static int unifycr_stream_write(
 
             /* error if we exhaust buffer before finding a newline */
             if (bytes > stream_remaining ||
-                (bytes == stream_remaining && !need_flush)) {
+                    (bytes == stream_remaining && !need_flush)) {
                 /* ERROR: write error, set error indicator and errno */
                 s->err = 1;
                 errno = ENOMEM;
@@ -800,8 +800,8 @@ static int unifycr_stream_write(
 
         /* copy data from user buffer to stream buffer */
         if (bytes > 0) {
-            char *buf_start    = (char *)buf + (count - remaining);
-            char *stream_start = (char *)s->buf + stream_offset;
+            char* buf_start    = (char*)buf + (count - remaining);
+            char* stream_start = (char*)s->buf + stream_offset;
             memcpy(stream_start, buf_start, bytes);
 
             /* mark buffer as dirty and increase number of bytes */
@@ -838,17 +838,17 @@ static int unifycr_stream_write(
 /* fseek, fseeko, rewind, and fsetpos all call this function, sets error
  * indicator and errno if necessary, returns -1 on error, returns
  * 0 for success */
-static int unifycr_fseek(FILE *stream, off_t offset, int whence)
+static int unifycr_fseek(FILE* stream, off_t offset, int whence)
 {
     /* lookup stream */
-    unifycr_stream_t *s = (unifycr_stream_t *) stream;
+    unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
     /* clear pointers, will force a reset when refill is called */
     s->_p = NULL;
     s->_r = 0;
 
     /* get pointer to file descriptor structure */
-    unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(s->fd);
+    unifycr_fd_t* filedesc = unifycr_get_filedesc_from_fd(s->fd);
     if (filedesc == NULL) {
         /* ERROR: invalid file descriptor */
         s->err = 1;
@@ -924,11 +924,11 @@ static int unifycr_fseek(FILE *stream, off_t offset, int whence)
     return 0;
 }
 
-FILE *UNIFYCR_WRAP(fopen)(const char *path, const char *mode)
+FILE* UNIFYCR_WRAP(fopen)(const char* path, const char* mode)
 {
     /* check whether we should intercept this path */
     if (unifycr_intercept_path(path)) {
-        FILE *stream;
+        FILE* stream;
         int rc = unifycr_fopen(path, mode, &stream);
         if (rc != UNIFYCR_SUCCESS) {
             errno = unifycr_err_map_to_errno(rc);
@@ -937,12 +937,12 @@ FILE *UNIFYCR_WRAP(fopen)(const char *path, const char *mode)
         return stream;
     } else {
         MAP_OR_FAIL(fopen);
-        FILE *ret = UNIFYCR_REAL(fopen)(path, mode);
+        FILE* ret = UNIFYCR_REAL(fopen)(path, mode);
         return ret;
     }
 }
 
-FILE *UNIFYCR_WRAP(freopen)(const char *path, const char *mode, FILE *stream)
+FILE* UNIFYCR_WRAP(freopen)(const char* path, const char* mode, FILE* stream)
 {
     /* check whether we should intercept this path */
     if (unifycr_intercept_stream(stream)) {
@@ -951,18 +951,18 @@ FILE *UNIFYCR_WRAP(freopen)(const char *path, const char *mode, FILE *stream)
                                    path);
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return NULL;
     } else {
         MAP_OR_FAIL(freopen);
-        FILE *ret = UNIFYCR_REAL(freopen)(path, mode, stream);
+        FILE* ret = UNIFYCR_REAL(freopen)(path, mode, stream);
         return ret;
     }
 }
 
-int UNIFYCR_WRAP(setvbuf)(FILE *stream, char *buf, int type, size_t size)
+int UNIFYCR_WRAP(setvbuf)(FILE* stream, char* buf, int type, size_t size)
 {
     /* check whether we should intercept this path */
     if (unifycr_intercept_stream(stream)) {
@@ -979,7 +979,7 @@ int UNIFYCR_WRAP(setvbuf)(FILE *stream, char *buf, int type, size_t size)
     }
 }
 
-void UNIFYCR_WRAP(setbuf)(FILE *stream, char *buf)
+void UNIFYCR_WRAP(setbuf)(FILE* stream, char* buf)
 {
     /* check whether we should intercept this path */
     if (unifycr_intercept_stream(stream)) {
@@ -996,7 +996,7 @@ void UNIFYCR_WRAP(setbuf)(FILE *stream, char *buf)
     }
 }
 
-int UNIFYCR_WRAP(ungetc)(int c, FILE *stream)
+int UNIFYCR_WRAP(ungetc)(int c, FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1009,10 +1009,10 @@ int UNIFYCR_WRAP(ungetc)(int c, FILE *stream)
         unsigned char uc = (unsigned char) c;
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
         /* get filedescriptor and check that stream is valid */
-        unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(s->fd);
+        unifycr_fd_t* filedesc = unifycr_get_filedesc_from_fd(s->fd);
         if (filedesc == NULL) {
             return EOF;
         }
@@ -1040,16 +1040,16 @@ int UNIFYCR_WRAP(ungetc)(int c, FILE *stream)
             }
 
             /* allocate new buffer */
-            unsigned char *newbuf = (unsigned char *) malloc(newsize);
+            unsigned char* newbuf = (unsigned char*) malloc(newsize);
             if (newbuf == NULL) {
                 return EOF;
             }
 
             /* copy old bytes to new buffer and free old buffer */
             if (len > 0) {
-                unsigned char *oldbuf = s->ubuf;
-                unsigned char *oldstart = oldbuf + oldsize - len;
-                unsigned char *newstart = newbuf + newsize - len;
+                unsigned char* oldbuf = s->ubuf;
+                unsigned char* oldstart = oldbuf + oldsize - len;
+                unsigned char* newstart = newbuf + newsize - len;
                 memcpy(newstart, oldstart, len);
                 free(s->ubuf);
             }
@@ -1062,7 +1062,7 @@ int UNIFYCR_WRAP(ungetc)(int c, FILE *stream)
 
         /* push char onto buffer */
         s->ubuflen++;
-        unsigned char *pos = s->ubuf + s->ubufsize - s->ubuflen;
+        unsigned char* pos = s->ubuf + s->ubufsize - s->ubuflen;
         *pos = uc;
 
         /* decrement file position */
@@ -1083,7 +1083,7 @@ int UNIFYCR_WRAP(ungetc)(int c, FILE *stream)
     }
 }
 
-int UNIFYCR_WRAP(fgetc)(FILE *stream)
+int UNIFYCR_WRAP(fgetc)(FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1107,7 +1107,7 @@ int UNIFYCR_WRAP(fgetc)(FILE *stream)
     }
 }
 
-int UNIFYCR_WRAP(fputc)(int c, FILE *stream)
+int UNIFYCR_WRAP(fputc)(int c, FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1130,7 +1130,7 @@ int UNIFYCR_WRAP(fputc)(int c, FILE *stream)
     }
 }
 
-int UNIFYCR_WRAP(getc)(FILE *stream)
+int UNIFYCR_WRAP(getc)(FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1154,7 +1154,7 @@ int UNIFYCR_WRAP(getc)(FILE *stream)
     }
 }
 
-int UNIFYCR_WRAP(putc)(int c, FILE *stream)
+int UNIFYCR_WRAP(putc)(int c, FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1177,7 +1177,7 @@ int UNIFYCR_WRAP(putc)(int c, FILE *stream)
     }
 }
 
-char *UNIFYCR_WRAP(fgets)(char *s, int n, FILE *stream)
+char* UNIFYCR_WRAP(fgets)(char* s, int n, FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1186,7 +1186,7 @@ char *UNIFYCR_WRAP(fgets)(char *s, int n, FILE *stream)
          * scan for newline */
 
         /* lookup stream */
-        unifycr_stream_t *stm = (unifycr_stream_t *) stream;
+        unifycr_stream_t* stm = (unifycr_stream_t*) stream;
 
         /* TODO: check that stream is valid */
 
@@ -1234,12 +1234,12 @@ char *UNIFYCR_WRAP(fgets)(char *s, int n, FILE *stream)
         return s;
     } else {
         MAP_OR_FAIL(fgets);
-        char *ret = UNIFYCR_REAL(fgets)(s, n, stream);
+        char* ret = UNIFYCR_REAL(fgets)(s, n, stream);
         return ret;
     }
 }
 
-int UNIFYCR_WRAP(fputs)(const char *s, FILE *stream)
+int UNIFYCR_WRAP(fputs)(const char* s, FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1249,7 +1249,7 @@ int UNIFYCR_WRAP(fputs)(const char *s, FILE *stream)
         size_t count = strlen(s);
 
         /* write data to file */
-        int write_rc = unifycr_stream_write(stream, (const void *)s, count);
+        int write_rc = unifycr_stream_write(stream, (const void*)s, count);
         if (write_rc != UNIFYCR_SUCCESS) {
             /* stream write sets error indicator, EOF indicator,
              * and errno for us */
@@ -1265,7 +1265,7 @@ int UNIFYCR_WRAP(fputs)(const char *s, FILE *stream)
     }
 }
 
-size_t UNIFYCR_WRAP(fread)(void *ptr, size_t size, size_t nitems, FILE *stream)
+size_t UNIFYCR_WRAP(fread)(void* ptr, size_t size, size_t nitems, FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1302,8 +1302,8 @@ size_t UNIFYCR_WRAP(fread)(void *ptr, size_t size, size_t nitems, FILE *stream)
     }
 }
 
-size_t UNIFYCR_WRAP(fwrite)(const void *ptr, size_t size, size_t nitems,
-                            FILE *stream)
+size_t UNIFYCR_WRAP(fwrite)(const void* ptr, size_t size, size_t nitems,
+                            FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1333,12 +1333,12 @@ size_t UNIFYCR_WRAP(fwrite)(const void *ptr, size_t size, size_t nitems,
     }
 }
 
-int UNIFYCR_WRAP(vfprintf)(FILE *stream, const char *format, va_list ap)
+int UNIFYCR_WRAP(vfprintf)(FILE* stream, const char* format, va_list ap)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
         /* TODO: check that stream is active */
 
@@ -1351,7 +1351,7 @@ int UNIFYCR_WRAP(vfprintf)(FILE *stream, const char *format, va_list ap)
 
         /* allocate space to hold string, add one for the terminating NUL */
         size_t strlen = chars + 1;
-        char *str = (char *) malloc(strlen);
+        char* str = (char*) malloc(strlen);
         if (str == NULL) {
             s->err = 1;
             errno = ENOMEM;
@@ -1392,7 +1392,7 @@ int UNIFYCR_WRAP(vfprintf)(FILE *stream, const char *format, va_list ap)
     }
 }
 
-int UNIFYCR_WRAP(fprintf)(FILE *stream, const char *format, ...)
+int UNIFYCR_WRAP(fprintf)(FILE* stream, const char* format, ...)
 {
     va_list args;
     int ret;
@@ -1414,9 +1414,9 @@ int UNIFYCR_WRAP(fprintf)(FILE *stream, const char *format, ...)
 }
 
 /* need to declare this before calling it */
-static int __svfscanf(unifycr_stream_t *fp, const char *fmt0, va_list ap);
+static int __svfscanf(unifycr_stream_t* fp, const char* fmt0, va_list ap);
 
-int UNIFYCR_WRAP(vfscanf)(FILE *stream, const char *format, va_list ap)
+int UNIFYCR_WRAP(vfscanf)(FILE* stream, const char* format, va_list ap)
 {
     va_list args;
     int ret;
@@ -1424,7 +1424,7 @@ int UNIFYCR_WRAP(vfscanf)(FILE *stream, const char *format, va_list ap)
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
         va_copy(args, ap);
-        ret = __svfscanf((unifycr_stream_t *)stream, format, args);
+        ret = __svfscanf((unifycr_stream_t*)stream, format, args);
         va_end(args);
         return ret;
     } else {
@@ -1436,7 +1436,7 @@ int UNIFYCR_WRAP(vfscanf)(FILE *stream, const char *format, va_list ap)
     }
 }
 
-int UNIFYCR_WRAP(fscanf)(FILE *stream, const char *format, ...)
+int UNIFYCR_WRAP(fscanf)(FILE* stream, const char* format, ...)
 {
     va_list args;
     int ret;
@@ -1458,7 +1458,7 @@ int UNIFYCR_WRAP(fscanf)(FILE *stream, const char *format, ...)
 }
 
 /* TODO: return error if new position overflows long */
-int UNIFYCR_WRAP(fseek)(FILE *stream, long offset, int whence)
+int UNIFYCR_WRAP(fseek)(FILE* stream, long offset, int whence)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1472,7 +1472,7 @@ int UNIFYCR_WRAP(fseek)(FILE *stream, long offset, int whence)
     }
 }
 
-int UNIFYCR_WRAP(fseeko)(FILE *stream, off_t offset, int whence)
+int UNIFYCR_WRAP(fseeko)(FILE* stream, off_t offset, int whence)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1486,20 +1486,20 @@ int UNIFYCR_WRAP(fseeko)(FILE *stream, off_t offset, int whence)
 }
 
 /* TODO: set EOVERFLOW if position overflows long */
-long UNIFYCR_WRAP(ftell)(FILE *stream)
+long UNIFYCR_WRAP(ftell)(FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
         /* get pointer to file descriptor structure */
-        unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(s->fd);
+        unifycr_fd_t* filedesc = unifycr_get_filedesc_from_fd(s->fd);
         if (filedesc == NULL) {
             /* ERROR: invalid file descriptor */
             s->err = 1;
             errno = EBADF;
-            return (long) (-1);
+            return (long)(-1);
         }
 
         /* get current position */
@@ -1512,20 +1512,20 @@ long UNIFYCR_WRAP(ftell)(FILE *stream)
     }
 }
 
-off_t UNIFYCR_WRAP(ftello)(FILE *stream)
+off_t UNIFYCR_WRAP(ftello)(FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
         /* get pointer to file descriptor structure */
-        unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(s->fd);
+        unifycr_fd_t* filedesc = unifycr_get_filedesc_from_fd(s->fd);
         if (filedesc == NULL) {
             /* ERROR: invalid file descriptor */
             s->err = 1;
             errno = EBADF;
-            return (off_t) (-1);
+            return (off_t)(-1);
         }
 
         /* get current position */
@@ -1540,12 +1540,12 @@ off_t UNIFYCR_WRAP(ftello)(FILE *stream)
 
 /* equivalent to fseek(stream, 0L, SEEK_SET) except shall also clear
  * error indicator */
-void UNIFYCR_WRAP(rewind)(FILE *stream)
+void UNIFYCR_WRAP(rewind)(FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
         /* TODO: check that stream is active */
 
@@ -1572,7 +1572,7 @@ struct unifycr_fpos_t {
     off_t pos;
 };
 
-int UNIFYCR_WRAP(fgetpos)(FILE *stream, fpos_t *pos)
+int UNIFYCR_WRAP(fgetpos)(FILE* stream, fpos_t* pos)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1583,12 +1583,12 @@ int UNIFYCR_WRAP(fgetpos)(FILE *stream, fpos_t *pos)
         }
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
         /* TODO: check that stream is active */
 
         /* get file descriptor for stream */
-        unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(s->fd);
+        unifycr_fd_t* filedesc = unifycr_get_filedesc_from_fd(s->fd);
         if (filedesc == NULL) {
             /* ERROR: invalid file descriptor */
             errno = EBADF;
@@ -1596,7 +1596,7 @@ int UNIFYCR_WRAP(fgetpos)(FILE *stream, fpos_t *pos)
         }
 
         /* allocate memory to hold state of stream */
-        struct unifycr_fpos_t *state = malloc(sizeof(struct unifycr_fpos_t));
+        struct unifycr_fpos_t* state = malloc(sizeof(struct unifycr_fpos_t));
         if (state == NULL) {
             errno = ENOMEM;
             return 1;
@@ -1606,8 +1606,8 @@ int UNIFYCR_WRAP(fgetpos)(FILE *stream, fpos_t *pos)
         state->pos = filedesc->pos;
 
         /* save pointer to state in output parameter */
-        void **ptr = (void **) pos;
-        *ptr = (void *) state;
+        void** ptr = (void**) pos;
+        *ptr = (void*) state;
 
         return 0;
     } else {
@@ -1617,12 +1617,12 @@ int UNIFYCR_WRAP(fgetpos)(FILE *stream, fpos_t *pos)
     }
 }
 
-int UNIFYCR_WRAP(fsetpos)(FILE *stream, const fpos_t *pos)
+int UNIFYCR_WRAP(fsetpos)(FILE* stream, const fpos_t* pos)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
         /* TODO: check that stream is active */
 
@@ -1636,7 +1636,7 @@ int UNIFYCR_WRAP(fsetpos)(FILE *stream, const fpos_t *pos)
         /* get pointer to state from pos input parameter,
          * assumes pos is a pointer to void*, deference to get value
          * of void*, which we then cast to a state pointer, ugh */
-        struct unifycr_fpos_t *state = (struct unifycr_fpos_t *) * (void **) pos;
+        struct unifycr_fpos_t* state = (struct unifycr_fpos_t*) *(void**)pos;
 
         /* semantics of fsetpos seem to match a seek */
         int seek_rc = unifycr_fseek(stream, state->pos, SEEK_SET);
@@ -1655,7 +1655,7 @@ int UNIFYCR_WRAP(fsetpos)(FILE *stream, const fpos_t *pos)
     }
 }
 
-int UNIFYCR_WRAP(fflush)(FILE *stream)
+int UNIFYCR_WRAP(fflush)(FILE* stream)
 {
     /* if stream is NULL, flush output on all streams */
     if (stream == NULL) {
@@ -1669,10 +1669,10 @@ int UNIFYCR_WRAP(fflush)(FILE *stream)
         int i;
         for (i = 0; i < UNIFYCR_MAX_FILEDESCS; i++) {
             /* get stream and check whether it's active */
-            unifycr_stream_t *s = &(unifycr_streams[i]);
+            unifycr_stream_t* s = &(unifycr_streams[i]);
             if (s->fd >= 0) {
                 /* attempt to flush stream */
-                int flush_rc = unifycr_stream_flush((FILE *)s);
+                int flush_rc = unifycr_stream_flush((FILE*)s);
                 if (flush_rc != UNIFYCR_SUCCESS) {
                     /* ERROR: flush sets error indicator and errno */
                     ret = EOF;
@@ -1704,12 +1704,12 @@ int UNIFYCR_WRAP(fflush)(FILE *stream)
 
 /* return non-zero if and only if end-of-file indicator is set
  * for stream */
-int UNIFYCR_WRAP(feof)(FILE *stream)
+int UNIFYCR_WRAP(feof)(FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
         /* TODO: ensure stream is active */
 
@@ -1722,12 +1722,12 @@ int UNIFYCR_WRAP(feof)(FILE *stream)
     }
 }
 
-int UNIFYCR_WRAP(ferror)(FILE *stream)
+int UNIFYCR_WRAP(ferror)(FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
         /* lookup stream and file descriptor */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
         /* TODO: ensure stream is active */
 
@@ -1740,12 +1740,12 @@ int UNIFYCR_WRAP(ferror)(FILE *stream)
     }
 }
 
-void UNIFYCR_WRAP(clearerr)(FILE *stream)
+void UNIFYCR_WRAP(clearerr)(FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
         /* TODO: ensure stream is active */
 
@@ -1761,12 +1761,12 @@ void UNIFYCR_WRAP(clearerr)(FILE *stream)
 
 }
 
-int UNIFYCR_WRAP(fileno)(FILE *stream)
+int UNIFYCR_WRAP(fileno)(FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
         /* TODO: check that stream is valid */
         int fd = s->fd;
@@ -1784,12 +1784,12 @@ int UNIFYCR_WRAP(fileno)(FILE *stream)
     }
 }
 
-int UNIFYCR_WRAP(fclose)(FILE *stream)
+int UNIFYCR_WRAP(fclose)(FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
         /* get the file id for this file descriptor */
         int fid = unifycr_get_fid_from_fd(s->fd);
@@ -1850,7 +1850,7 @@ int UNIFYCR_WRAP(fclose)(FILE *stream)
 
 
 
-int UNIFYCR_WRAP(fwprintf)(FILE *stream, const wchar_t *format, ...)
+int UNIFYCR_WRAP(fwprintf)(FILE* stream, const wchar_t* format, ...)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1858,7 +1858,7 @@ int UNIFYCR_WRAP(fwprintf)(FILE *stream, const wchar_t *format, ...)
         unifycr_unsupported_stream(stream, __func__, __FILE__, __LINE__, "%s", format);
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return -1;
@@ -1872,7 +1872,7 @@ int UNIFYCR_WRAP(fwprintf)(FILE *stream, const wchar_t *format, ...)
     }
 }
 
-int UNIFYCR_WRAP(fwscanf)(FILE *stream, const wchar_t *format, ...)
+int UNIFYCR_WRAP(fwscanf)(FILE* stream, const wchar_t* format, ...)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1880,7 +1880,7 @@ int UNIFYCR_WRAP(fwscanf)(FILE *stream, const wchar_t *format, ...)
         unifycr_unsupported_stream(stream, __func__, __FILE__, __LINE__, "%s", format);
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return EOF;
@@ -1894,7 +1894,7 @@ int UNIFYCR_WRAP(fwscanf)(FILE *stream, const wchar_t *format, ...)
     }
 }
 
-int UNIFYCR_WRAP(vfwprintf)(FILE *stream, const wchar_t *format, va_list arg)
+int UNIFYCR_WRAP(vfwprintf)(FILE* stream, const wchar_t* format, va_list arg)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1902,7 +1902,7 @@ int UNIFYCR_WRAP(vfwprintf)(FILE *stream, const wchar_t *format, va_list arg)
         unifycr_unsupported_stream(stream, __func__, __FILE__, __LINE__, "%s", format);
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return -1;
@@ -1916,7 +1916,7 @@ int UNIFYCR_WRAP(vfwprintf)(FILE *stream, const wchar_t *format, va_list arg)
     }
 }
 
-int UNIFYCR_WRAP(vfwscanf)(FILE *stream, const wchar_t *format, va_list arg)
+int UNIFYCR_WRAP(vfwscanf)(FILE* stream, const wchar_t* format, va_list arg)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1924,7 +1924,7 @@ int UNIFYCR_WRAP(vfwscanf)(FILE *stream, const wchar_t *format, va_list arg)
         unifycr_unsupported_stream(stream, __func__, __FILE__, __LINE__, "%s", format);
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return EOF;
@@ -1938,7 +1938,7 @@ int UNIFYCR_WRAP(vfwscanf)(FILE *stream, const wchar_t *format, va_list arg)
     }
 }
 
-wint_t UNIFYCR_WRAP(fgetwc)(FILE *stream)
+wint_t UNIFYCR_WRAP(fgetwc)(FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1946,7 +1946,7 @@ wint_t UNIFYCR_WRAP(fgetwc)(FILE *stream)
         unifycr_unsupported_stream(stream, __func__, __FILE__, __LINE__, "");
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return WEOF;
@@ -1957,7 +1957,7 @@ wint_t UNIFYCR_WRAP(fgetwc)(FILE *stream)
     }
 }
 
-wchar_t *UNIFYCR_WRAP(fgetws)(wchar_t *s, int n, FILE *stream)
+wchar_t* UNIFYCR_WRAP(fgetws)(wchar_t* s, int n, FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1965,18 +1965,18 @@ wchar_t *UNIFYCR_WRAP(fgetws)(wchar_t *s, int n, FILE *stream)
         unifycr_unsupported_stream(stream, __func__, __FILE__, __LINE__, "");
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return NULL;
     } else {
         MAP_OR_FAIL(fgetws);
-        wchar_t *ret = UNIFYCR_REAL(fgetws)(s, n, stream);
+        wchar_t* ret = UNIFYCR_REAL(fgetws)(s, n, stream);
         return ret;
     }
 }
 
-wint_t UNIFYCR_WRAP(fputwc)(wchar_t wc, FILE *stream)
+wint_t UNIFYCR_WRAP(fputwc)(wchar_t wc, FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -1984,7 +1984,7 @@ wint_t UNIFYCR_WRAP(fputwc)(wchar_t wc, FILE *stream)
         unifycr_unsupported_stream(stream, __func__, __FILE__, __LINE__, "");
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return WEOF;
@@ -1995,7 +1995,7 @@ wint_t UNIFYCR_WRAP(fputwc)(wchar_t wc, FILE *stream)
     }
 }
 
-int UNIFYCR_WRAP(fputws)(const wchar_t *s, FILE *stream)
+int UNIFYCR_WRAP(fputws)(const wchar_t* s, FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -2003,7 +2003,7 @@ int UNIFYCR_WRAP(fputws)(const wchar_t *s, FILE *stream)
         unifycr_unsupported_stream(stream, __func__, __FILE__, __LINE__, "");
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return -1;
@@ -2014,7 +2014,7 @@ int UNIFYCR_WRAP(fputws)(const wchar_t *s, FILE *stream)
     }
 }
 
-int UNIFYCR_WRAP(fwide)(FILE *stream, int mode)
+int UNIFYCR_WRAP(fwide)(FILE* stream, int mode)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -2022,7 +2022,7 @@ int UNIFYCR_WRAP(fwide)(FILE *stream, int mode)
         unifycr_unsupported_stream(stream, __func__, __FILE__, __LINE__, "");
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return 0;
@@ -2033,7 +2033,7 @@ int UNIFYCR_WRAP(fwide)(FILE *stream, int mode)
     }
 }
 
-wint_t UNIFYCR_WRAP(getwc)(FILE *stream)
+wint_t UNIFYCR_WRAP(getwc)(FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -2041,7 +2041,7 @@ wint_t UNIFYCR_WRAP(getwc)(FILE *stream)
         unifycr_unsupported_stream(stream, __func__, __FILE__, __LINE__, "");
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return WEOF;
@@ -2052,7 +2052,7 @@ wint_t UNIFYCR_WRAP(getwc)(FILE *stream)
     }
 }
 
-wint_t UNIFYCR_WRAP(putwc)(wchar_t c, FILE *stream)
+wint_t UNIFYCR_WRAP(putwc)(wchar_t c, FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -2060,7 +2060,7 @@ wint_t UNIFYCR_WRAP(putwc)(wchar_t c, FILE *stream)
         unifycr_unsupported_stream(stream, __func__, __FILE__, __LINE__, "");
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return WEOF;
@@ -2071,7 +2071,7 @@ wint_t UNIFYCR_WRAP(putwc)(wchar_t c, FILE *stream)
     }
 }
 
-wint_t UNIFYCR_WRAP(ungetwc)(wint_t c, FILE *stream)
+wint_t UNIFYCR_WRAP(ungetwc)(wint_t c, FILE* stream)
 {
     /* check whether we should intercept this stream */
     if (unifycr_intercept_stream(stream)) {
@@ -2079,7 +2079,7 @@ wint_t UNIFYCR_WRAP(ungetwc)(wint_t c, FILE *stream)
         unifycr_unsupported_stream(stream, __func__, __FILE__, __LINE__, "");
 
         /* lookup stream */
-        unifycr_stream_t *s = (unifycr_stream_t *) stream;
+        unifycr_stream_t* s = (unifycr_stream_t*) stream;
         s->err = 1;
         errno = EIO;
         return WEOF;
@@ -2182,9 +2182,9 @@ wint_t UNIFYCR_WRAP(ungetwc)(wint_t c, FILE *stream)
 #undef __inline
 #define __inline
 
-static const u_char *__sccl(char *, const u_char *);
+static const u_char* __sccl(char*, const u_char*);
 #ifndef NO_FLOATING_POINT
-static int parsefloat(unifycr_stream_t *, char *, char *);
+static int parsefloat(unifycr_stream_t*, char*, char*);
 #endif
 
 /*
@@ -2197,13 +2197,13 @@ static int parsefloat(unifycr_stream_t *, char *, char *);
 static const int suppress;
 #define SUPPRESS_PTR    ((void *)&suppress)
 
-static int __srefill(unifycr_stream_t *stream)
+static int __srefill(unifycr_stream_t* stream)
 {
     /* lookup stream */
-    unifycr_stream_t *s = (unifycr_stream_t *) stream;
+    unifycr_stream_t* s = (unifycr_stream_t*) stream;
 
     /* get pointer to file descriptor structure */
-    unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(s->fd);
+    unifycr_fd_t* filedesc = unifycr_get_filedesc_from_fd(s->fd);
     if (filedesc == NULL) {
         /* ERROR: invalid file descriptor */
         s->err = 1;
@@ -2220,7 +2220,7 @@ static int __srefill(unifycr_stream_t *stream)
 
     /* associate buffer with stream if we need to */
     if (s->buf == NULL) {
-        int setvbuf_rc = unifycr_setvbuf((FILE *)stream, NULL, s->buftype,
+        int setvbuf_rc = unifycr_setvbuf((FILE*)stream, NULL, s->buftype,
                                          UNIFYCR_STREAM_BUFSIZE);
         if (setvbuf_rc != UNIFYCR_SUCCESS) {
             /* ERROR: failed to associate buffer */
@@ -2247,7 +2247,7 @@ static int __srefill(unifycr_stream_t *stream)
         /* current is outside the range of our buffer */
 
         /* flush buffer if needed before read */
-        int flush_rc = unifycr_stream_flush((FILE *)stream);
+        int flush_rc = unifycr_stream_flush((FILE*)stream);
         if (flush_rc != UNIFYCR_SUCCESS) {
             /* ERROR: flush sets error indicator and errno */
             return 1;
@@ -2271,7 +2271,7 @@ static int __srefill(unifycr_stream_t *stream)
     /* determine number of bytes to copy from stream buffer */
     size_t stream_offset    = (size_t)(current - s->bufpos);
     size_t stream_remaining = s->buflen - stream_offset;
-    unsigned char *stream_start = (unsigned char *)s->buf + stream_offset;
+    unsigned char* stream_start = (unsigned char*)s->buf + stream_offset;
     s->_p = stream_start;
     s->_r = stream_remaining;
 
@@ -2289,7 +2289,7 @@ static int __srefill(unifycr_stream_t *stream)
  */
 
 static __inline int
-convert_char(unifycr_stream_t *fp, char *p, int width)
+convert_char(unifycr_stream_t* fp, char* p, int width)
 {
     int n;
 
@@ -2315,7 +2315,7 @@ convert_char(unifycr_stream_t *fp, char *p, int width)
         }
         return (sum);
     } else {
-        size_t r = fread(p, 1, width, (FILE *)fp);
+        size_t r = fread(p, 1, width, (FILE*)fp);
 
         if (r == 0) {
             return (-1);
@@ -2325,9 +2325,9 @@ convert_char(unifycr_stream_t *fp, char *p, int width)
 }
 
 static __inline int
-convert_ccl(unifycr_stream_t *fp, char *p, int width, const char *ccltab)
+convert_ccl(unifycr_stream_t* fp, char* p, int width, const char* ccltab)
 {
-    char *p0;
+    char* p0;
     int n;
 
     if (p == SUPPRESS_PTR) {
@@ -2366,9 +2366,9 @@ convert_ccl(unifycr_stream_t *fp, char *p, int width, const char *ccltab)
 }
 
 static __inline int
-convert_string(unifycr_stream_t *fp, char *p, int width)
+convert_string(unifycr_stream_t* fp, char* p, int width)
 {
-    char *p0;
+    char* p0;
     int n;
 
     if (p == SUPPRESS_PTR) {
@@ -2408,13 +2408,13 @@ convert_string(unifycr_stream_t *fp, char *p, int width)
  * otherwise.
  */
 static __inline int
-parseint(unifycr_stream_t *fp, char *__restrict buf, int width, int base,
+parseint(unifycr_stream_t* fp, char* __restrict buf, int width, int base,
          int flags)
 {
     /* `basefix' is used to avoid `if' tests */
     static const short basefix[17] =
     { 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
-    char *p;
+    char* p;
     int c;
 
     flags |= SIGNOK | NDIGITS | NZDIGITS;
@@ -2507,7 +2507,7 @@ parseint(unifycr_stream_t *fp, char *__restrict buf, int width, int base,
         case 'x':
         case 'X':
             if (flags & PFXOK && p ==
-                buf + 1 + !!(flags & HAVESIGN)) {
+                    buf + 1 + !!(flags & HAVESIGN)) {
                 base = 16;  /* if %i */
                 flags &= ~PFXOK;
                 goto ok;
@@ -2537,14 +2537,15 @@ ok:
      * back the x and treat it as [sign] '0'.
      */
     if (flags & NDIGITS) {
-        if (p > buf)
-            (void) ungetc(*(u_char *)--p, (FILE *)fp);
+        if (p > buf) {
+            (void) ungetc(*(u_char*) --p, (FILE*)fp);
+        }
         return (0);
     }
-    c = ((u_char *)p)[-1];
+    c = ((u_char*)p)[-1];
     if (c == 'x' || c == 'X') {
         --p;
-        (void) ungetc(c, (FILE *)fp);
+        (void) ungetc(c, (FILE*)fp);
     }
     return (p - buf);
 }
@@ -2553,10 +2554,10 @@ ok:
  * __svfscanf - non-MT-safe version of __vfscanf
  */
 static int
-__svfscanf(unifycr_stream_t *fp, const char *fmt0, va_list ap)
+__svfscanf(unifycr_stream_t* fp, const char* fmt0, va_list ap)
 {
 #define GETARG(type)    ((flags & SUPPRESS) ? SUPPRESS_PTR : va_arg(ap, type))
-    const u_char *fmt = (const u_char *)fmt0;
+    const u_char* fmt = (const u_char*)fmt0;
     int c;          /* character from format, or conversion */
     size_t width;       /* field width, or 0 */
     int flags;      /* flags as defined above */
@@ -2733,21 +2734,21 @@ literal:
                 continue;
             }
             if (flags & SHORTSHORT) {
-                *va_arg(ap, char *) = nread;
+                *va_arg(ap, char*) = nread;
             } else if (flags & SHORT) {
-                *va_arg(ap, short *) = nread;
+                *va_arg(ap, short*) = nread;
             } else if (flags & LONG) {
-                *va_arg(ap, long *) = nread;
+                *va_arg(ap, long*) = nread;
             } else if (flags & LONGLONG) {
-                *va_arg(ap, long long *) = nread;
+                *va_arg(ap, long long*) = nread;
             } else if (flags & INTMAXT) {
-                *va_arg(ap, intmax_t *) = nread;
+                *va_arg(ap, intmax_t*) = nread;
             } else if (flags & SIZET) {
-                *va_arg(ap, size_t *) = nread;
+                *va_arg(ap, size_t*) = nread;
             } else if (flags & PTRDIFFT) {
-                *va_arg(ap, ptrdiff_t *) = nread;
+                *va_arg(ap, ptrdiff_t*) = nread;
             } else {
-                *va_arg(ap, int *) = nread;
+                *va_arg(ap, int*) = nread;
             }
             continue;
 
@@ -2800,12 +2801,13 @@ literal:
                 width = 1;
             }
             if (flags & LONG) {
-                unifycr_unsupported_stream((FILE *)fp, __func__, __FILE__,
+                unifycr_unsupported_stream((FILE*)fp, __func__, __FILE__,
                                            __LINE__, "%s", fmt0);
             } else {
-                nr = convert_char(fp, GETARG(char *), width);
-                if (nr < 0)
+                nr = convert_char(fp, GETARG(char*), width);
+                if (nr < 0) {
                     goto input_failure;
+                }
             }
             break;
 
@@ -2815,16 +2817,17 @@ literal:
                 width = (size_t)~0;    /* `infinity' */
             }
             if (flags & LONG) {
-                unifycr_unsupported_stream((FILE *)fp, __func__, __FILE__,
+                unifycr_unsupported_stream((FILE*)fp, __func__, __FILE__,
                                            __LINE__, "%s", fmt0);
             } else {
-                nr = convert_ccl(fp, GETARG(char *), width,
+                nr = convert_ccl(fp, GETARG(char*), width,
                                  ccltab);
                 if (nr <= 0) {
-                    if (nr < 0)
+                    if (nr < 0) {
                         goto input_failure;
-                    else /* nr == 0 */
+                    } else { /* nr == 0 */
                         goto match_failure;
+                    }
                 }
             }
             break;
@@ -2835,12 +2838,13 @@ literal:
                 width = (size_t)~0;
             }
             if (flags & LONG) {
-                unifycr_unsupported_stream((FILE *)fp, __func__, __FILE__,
+                unifycr_unsupported_stream((FILE*)fp, __func__, __FILE__,
                                            __LINE__, "%s", fmt0);
             } else {
-                nr = convert_string(fp, GETARG(char *), width);
-                if (nr < 0)
+                nr = convert_string(fp, GETARG(char*), width);
+                if (nr < 0) {
                     goto input_failure;
+                }
             }
             break;
 
@@ -2866,29 +2870,29 @@ literal:
 
                 buf[nr] = '\0';
                 if ((flags & UNSIGNED) == 0) {
-                    res = strtoimax(buf, (char **)NULL, base);
+                    res = strtoimax(buf, (char**)NULL, base);
                 } else {
-                    res = strtoumax(buf, (char **)NULL, base);
+                    res = strtoumax(buf, (char**)NULL, base);
                 }
                 if (flags & POINTER)
-                    *va_arg(ap, void **) =
-                        (void *)(uintptr_t)res;
+                    *va_arg(ap, void**) =
+                        (void*)(uintptr_t)res;
                 else if (flags & SHORTSHORT) {
-                    *va_arg(ap, char *) = res;
+                    *va_arg(ap, char*) = res;
                 } else if (flags & SHORT) {
-                    *va_arg(ap, short *) = res;
+                    *va_arg(ap, short*) = res;
                 } else if (flags & LONG) {
-                    *va_arg(ap, long *) = res;
+                    *va_arg(ap, long*) = res;
                 } else if (flags & LONGLONG) {
-                    *va_arg(ap, long long *) = res;
+                    *va_arg(ap, long long*) = res;
                 } else if (flags & INTMAXT) {
-                    *va_arg(ap, intmax_t *) = res;
+                    *va_arg(ap, intmax_t*) = res;
                 } else if (flags & PTRDIFFT) {
-                    *va_arg(ap, ptrdiff_t *) = res;
+                    *va_arg(ap, ptrdiff_t*) = res;
                 } else if (flags & SIZET) {
-                    *va_arg(ap, size_t *) = res;
+                    *va_arg(ap, size_t*) = res;
                 } else {
-                    *va_arg(ap, int *) = res;
+                    *va_arg(ap, int*) = res;
                 }
             }
             break;
@@ -2906,13 +2910,13 @@ literal:
             if ((flags & SUPPRESS) == 0) {
                 if (flags & LONGDBL) {
                     long double res = strtold(buf, NULL);
-                    *va_arg(ap, long double *) = res;
+                    *va_arg(ap, long double*) = res;
                 } else if (flags & LONG) {
                     double res = strtod(buf, NULL);
-                    *va_arg(ap, double *) = res;
+                    *va_arg(ap, double*) = res;
                 } else {
                     float res = strtof(buf, NULL);
-                    *va_arg(ap, float *) = res;
+                    *va_arg(ap, float*) = res;
                 }
             }
             break;
@@ -2936,10 +2940,10 @@ match_failure:
  * closing `]'.  The table has a 1 wherever characters should be
  * considered part of the scanset.
  */
-static const u_char *
+static const u_char*
 __sccl(tab, fmt)
-char *tab;
-const u_char *fmt;
+char* tab;
+const u_char* fmt;
 {
     int c, n, v;
 
@@ -3022,15 +3026,15 @@ doswitch:
             break;
         }
     }
-/* NOTREACHED */
+    /* NOTREACHED */
 }
 
 #ifndef NO_FLOATING_POINT
 static int
 //parsefloat(unifycr_stream_t *fp, char *buf, char *end, locale_t locale)
-parsefloat(unifycr_stream_t *fp, char *buf, char *end)
+parsefloat(unifycr_stream_t* fp, char* buf, char* end)
 {
-    char *commit, *p;
+    char* commit, *p;
     int infnanpos = 0, decptpos = 0;
     enum {
         S_START, S_GOTSIGN, S_INF, S_NAN, S_DONE, S_MAYBEHEX,
@@ -3038,7 +3042,7 @@ parsefloat(unifycr_stream_t *fp, char *buf, char *end)
     } state = S_START;
     unsigned char c;
     const char us_decpt[] = ".";
-    const char *decpt = us_decpt;
+    const char* decpt = us_decpt;
     int gotmantdig = 0, ishex = 0;
 
     /*
@@ -3083,8 +3087,8 @@ reswitch:
             break;
         case S_INF:
             if (infnanpos > 6 ||
-                (c != "nfinity"[infnanpos] &&
-                 c != "NFINITY"[infnanpos])) {
+                    (c != "nfinity"[infnanpos] &&
+                     c != "NFINITY"[infnanpos])) {
                 goto parsedone;
             }
             if (infnanpos == 1 || infnanpos == 6) {
@@ -3165,7 +3169,7 @@ reswitch:
             }
         case S_FRAC:
             if (((c == 'E' || c == 'e') && !ishex) ||
-                ((c == 'P' || c == 'p') && ishex)) {
+                    ((c == 'P' || c == 'p') && ishex)) {
                 if (!gotmantdig) {
                     goto parsedone;
                 } else {
@@ -3204,8 +3208,9 @@ reswitch:
     }
 
 parsedone:
-    while (commit < --p)
-        ungetc(*(u_char *)p, (FILE *)fp);
+    while (commit < --p) {
+        ungetc(*(u_char*)p, (FILE*)fp);
+    }
     *++commit = '\0';
     return (commit - buf);
 }

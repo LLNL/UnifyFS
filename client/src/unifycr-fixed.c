@@ -42,29 +42,22 @@
 
 #include "unifycr-fixed.h"
 
-extern int dbgrank;
-extern unifycr_index_buf_t unifycr_indices;
-extern unifycr_fattr_buf_t unifycr_fattrs;
-extern void *unifycr_superblock;
-extern unsigned long unifycr_max_index_entries;
-extern int unifycr_spillover_max_chunks;
-
 /* given a file id and logical chunk id, return pointer to meta data
  * for specified chunk, return NULL if not found */
-unifycr_chunkmeta_t *unifycr_get_chunkmeta(int fid, int cid)
+unifycr_chunkmeta_t* unifycr_get_chunkmeta(int fid, int cid)
 {
     /* lookup file meta data for specified file id */
-    unifycr_filemeta_t *meta = unifycr_get_meta_from_fid(fid);
+    unifycr_filemeta_t* meta = unifycr_get_meta_from_fid(fid);
     if (meta != NULL) {
         /* now lookup chunk meta data for specified chunk id */
         if (cid >= 0 && cid < unifycr_max_chunks) {
-            unifycr_chunkmeta_t *chunk_meta = &(meta->chunk_meta[cid]);
+            unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[cid]);
             return chunk_meta;
         }
     }
 
     /* failed to find file or chunk id is out of range */
-    return (unifycr_chunkmeta_t *)NULL;
+    return (unifycr_chunkmeta_t*)NULL;
 }
 
 /* ---------------------------------------
@@ -73,19 +66,19 @@ unifycr_chunkmeta_t *unifycr_get_chunkmeta(int fid, int cid)
 
 /* given a logical chunk id and an offset within that chunk, return the pointer
  * to the memory location corresponding to that location */
-static inline void *unifycr_compute_chunk_buf(
-    const unifycr_filemeta_t *meta,
+static inline void* unifycr_compute_chunk_buf(
+    const unifycr_filemeta_t* meta,
     int logical_id,
     off_t logical_offset)
 {
     /* get pointer to chunk meta */
-    const unifycr_chunkmeta_t *chunk_meta = &(meta->chunk_meta[logical_id]);
+    const unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[logical_id]);
 
     /* identify physical chunk id */
     int physical_id = chunk_meta->id;
 
     /* compute the start of the chunk */
-    char *start = NULL;
+    char* start = NULL;
     if (physical_id < unifycr_max_chunks) {
         start = unifycr_chunks + ((long)physical_id << unifycr_chunk_bits);
     } else {
@@ -95,19 +88,19 @@ static inline void *unifycr_compute_chunk_buf(
     }
 
     /* now add offset */
-    char *buf = start + logical_offset;
-    return (void *)buf;
+    char* buf = start + logical_offset;
+    return (void*)buf;
 }
 
 /* given a chunk id and an offset within that chunk, return the offset
  * in the spillover file corresponding to that location */
 static inline off_t unifycr_compute_spill_offset(
-    const unifycr_filemeta_t *meta,
+    const unifycr_filemeta_t* meta,
     int logical_id,
     off_t logical_offset)
 {
     /* get pointer to chunk meta */
-    const unifycr_chunkmeta_t *chunk_meta = &(meta->chunk_meta[logical_id]);
+    const unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[logical_id]);
 
     /* identify physical chunk id */
     int physical_id = chunk_meta->id;
@@ -127,10 +120,10 @@ static inline off_t unifycr_compute_spill_offset(
 }
 
 /* allocate a new chunk for the specified file and logical chunk id */
-static int unifycr_chunk_alloc(int fid, unifycr_filemeta_t *meta, int chunk_id)
+static int unifycr_chunk_alloc(int fid, unifycr_filemeta_t* meta, int chunk_id)
 {
     /* get pointer to chunk meta data */
-    unifycr_chunkmeta_t *chunk_meta = &(meta->chunk_meta[chunk_id]);
+    unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[chunk_id]);
     /* allocate a chunk and record its location */
     if (unifycr_use_memfs) {
         /* allocate a new chunk from memory */
@@ -193,10 +186,10 @@ static int unifycr_chunk_alloc(int fid, unifycr_filemeta_t *meta, int chunk_id)
     return UNIFYCR_SUCCESS;
 }
 
-static int unifycr_chunk_free(int fid, unifycr_filemeta_t *meta, int chunk_id)
+static int unifycr_chunk_free(int fid, unifycr_filemeta_t* meta, int chunk_id)
 {
     /* get pointer to chunk meta data */
-    unifycr_chunkmeta_t *chunk_meta = &(meta->chunk_meta[chunk_id]);
+    unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[chunk_id]);
 
     /* get physical id of chunk */
     int id = chunk_meta->id;
@@ -224,27 +217,29 @@ static int unifycr_chunk_free(int fid, unifycr_filemeta_t *meta, int chunk_id)
 /* read data from specified chunk id, chunk offset, and count into user buffer,
  * count should fit within chunk starting from specified offset */
 static int unifycr_chunk_read(
-    unifycr_filemeta_t *meta, /* pointer to file meta data */
+    unifycr_filemeta_t* meta, /* pointer to file meta data */
     int chunk_id,            /* logical chunk id to read data from */
     off_t chunk_offset,      /* logical offset within chunk to read from */
-    void *buf,               /* buffer to store data to */
+    void* buf,               /* buffer to store data to */
     size_t count)            /* number of bytes to read */
 {
     /* get chunk meta data */
-    unifycr_chunkmeta_t *chunk_meta = &(meta->chunk_meta[chunk_id]);
+    unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[chunk_id]);
 
     /* determine location of chunk */
     if (chunk_meta->location == CHUNK_LOCATION_MEMFS) {
         /* just need a memcpy to read data */
-        void *chunk_buf = unifycr_compute_chunk_buf(meta, chunk_id, chunk_offset);
+        void* chunk_buf = unifycr_compute_chunk_buf(
+            meta, chunk_id, chunk_offset);
         memcpy(buf, chunk_buf, count);
     } else if (chunk_meta->location == CHUNK_LOCATION_SPILLOVER) {
         /* spill over to a file, so read from file descriptor */
         //MAP_OR_FAIL(pread);
         off_t spill_offset = unifycr_compute_spill_offset(meta, chunk_id, chunk_offset);
         ssize_t rc = pread(unifycr_spilloverblock, buf, count, spill_offset);
-        if (rc < 0)
+        if (rc < 0) {
             return unifycr_errno_map_to_err(rc);
+        }
     } else {
         /* unknown chunk type */
         DEBUG("unknown chunk type in read\n");
@@ -262,7 +257,7 @@ static int unifycr_chunk_read(
  * @param slice_range: the slice size of the key-value store
  * @return index_set: the set of split indices
  * */
-int unifycr_split_index(unifycr_index_t *cur_idx, index_set_t *index_set,
+int unifycr_split_index(unifycr_index_t* cur_idx, index_set_t* index_set,
                         long slice_range)
 {
 
@@ -333,18 +328,17 @@ int unifycr_split_index(unifycr_index_t *cur_idx, index_set_t *index_set,
 static int unifycr_logio_chunk_write(
     int fid,                  /* local file id */
     long pos,                 /* write offset inside the file */
-    unifycr_filemeta_t *meta, /* pointer to file meta data */
+    unifycr_filemeta_t* meta, /* pointer to file meta data */
     int chunk_id,             /* logical chunk id to write to */
     off_t chunk_offset,       /* logical offset within chunk to write to */
-    const void *buf,          /* buffer holding data to be written */
+    const void* buf,          /* buffer holding data to be written */
     size_t count)             /* number of bytes to write */
 {
     /* get chunk meta data */
-    unifycr_chunkmeta_t *chunk_meta = &(meta->chunk_meta[chunk_id]);
+    unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[chunk_id]);
 
     if (chunk_meta->location != CHUNK_LOCATION_MEMFS &&
-        chunk_meta->location != CHUNK_LOCATION_SPILLOVER)
-    {
+            chunk_meta->location != CHUNK_LOCATION_SPILLOVER) {
         /* unknown chunk type */
         DEBUG("unknown chunk type in read\n");
         return UNIFYCR_ERROR_IO;
@@ -354,7 +348,8 @@ static int unifycr_logio_chunk_write(
     off_t log_offset = 0;
     if (chunk_meta->location == CHUNK_LOCATION_MEMFS) {
         /* just need a memcpy to write data */
-        char *chunk_buf = unifycr_compute_chunk_buf(meta, chunk_id, chunk_offset);
+        char* chunk_buf = unifycr_compute_chunk_buf(
+            meta, chunk_id, chunk_offset);
         memcpy(chunk_buf, buf, count);
 
         log_offset = chunk_buf - unifycr_chunks;
@@ -373,12 +368,12 @@ static int unifycr_logio_chunk_write(
     /* find the corresponding file attr entry and update attr*/
     unifycr_file_attr_t tmp_meta_entry;
     tmp_meta_entry.fid = fid;
-    unifycr_file_attr_t *ptr_meta_entry
-        = (unifycr_file_attr_t *)bsearch(&tmp_meta_entry,
-                                     unifycr_fattrs.meta_entry,
-                                     *unifycr_fattrs.ptr_num_entries,
-                                     sizeof(unifycr_file_attr_t),
-    				 compare_fattr);
+    unifycr_file_attr_t* ptr_meta_entry
+        = (unifycr_file_attr_t*)bsearch(&tmp_meta_entry,
+                                        unifycr_fattrs.meta_entry,
+                                        *unifycr_fattrs.ptr_num_entries,
+                                        sizeof(unifycr_file_attr_t),
+                                        compare_fattr);
     if (ptr_meta_entry !=  NULL) {
         ptr_meta_entry->file_attr.st_size = pos + count;
     }
@@ -405,16 +400,16 @@ static int unifycr_logio_chunk_write(
     /* check whether there is room to add new entries */
     if (num_entries + tmp_entries < unifycr_max_index_entries) {
         /* get pointer to index array */
-        unifycr_index_t *idxs = unifycr_indices.index_entry;
+        unifycr_index_t* idxs = unifycr_indices.index_entry;
 
         /* coalesce contiguous indices */
         int i = 0;
         if (num_entries > 0) {
             /* pointer to last element in index array */
-            unifycr_index_t *prev_idx = &idxs[num_entries - 1];
+            unifycr_index_t* prev_idx = &idxs[num_entries - 1];
 
             /* pointer to first element in temp list */
-            unifycr_index_t *next_idx = &tmp_index_set.idxes[0];
+            unifycr_index_t* next_idx = &tmp_index_set.idxes[0];
 
             /* offset of last byte for last index in list */
             off_t prev_offset = prev_idx->file_pos + prev_idx->length;
@@ -422,8 +417,7 @@ static int unifycr_logio_chunk_write(
             /* check whether last index and temp index refer to
              * contiguous bytes in the same file */
             if (prev_idx->fid == next_idx->fid &&
-                prev_offset   == next_idx->file_pos)
-            {
+                    prev_offset   == next_idx->file_pos) {
                 /* got contiguous bytes in the same file,
                  * check if both index values fall in the same slice */
                 off_t prev_slice = prev_idx->file_pos / unifycr_key_slice_range;
@@ -441,7 +435,7 @@ static int unifycr_logio_chunk_write(
         }
 
         /* pointer to temp index list */
-        unifycr_index_t *newidxs = tmp_index_set.idxes;
+        unifycr_index_t* newidxs = tmp_index_set.idxes;
 
         /* copy remaining items in temp index list to index list */
         while (i < tmp_index_set.count) {
@@ -471,19 +465,20 @@ static int unifycr_logio_chunk_write(
 /* read data from specified chunk id, chunk offset, and count into user buffer,
  * count should fit within chunk starting from specified offset */
 static int unifycr_chunk_write(
-    unifycr_filemeta_t *meta, /* pointer to file meta data */
+    unifycr_filemeta_t* meta, /* pointer to file meta data */
     int chunk_id,            /* logical chunk id to write to */
     off_t chunk_offset,      /* logical offset within chunk to write to */
-    const void *buf,         /* buffer holding data to be written */
+    const void* buf,         /* buffer holding data to be written */
     size_t count)            /* number of bytes to write */
 {
     /* get chunk meta data */
-    unifycr_chunkmeta_t *chunk_meta = &(meta->chunk_meta[chunk_id]);
+    unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[chunk_id]);
 
     /* determine location of chunk */
     if (chunk_meta->location == CHUNK_LOCATION_MEMFS) {
         /* just need a memcpy to write data */
-        void *chunk_buf = unifycr_compute_chunk_buf(meta, chunk_id, chunk_offset);
+        void* chunk_buf = unifycr_compute_chunk_buf(
+            meta, chunk_id, chunk_offset);
         memcpy(chunk_buf, buf, count);
 //        _intel_fast_memcpy(chunk_buf, buf, count);
 //        unifycr_memcpy(chunk_buf, buf, count);
@@ -512,7 +507,7 @@ static int unifycr_chunk_write(
  * --------------------------------------- */
 
 /* if length is greater than reserved space, reserve space up to length */
-int unifycr_fid_store_fixed_extend(int fid, unifycr_filemeta_t *meta,
+int unifycr_fid_store_fixed_extend(int fid, unifycr_filemeta_t* meta,
                                    off_t length)
 {
     /* determine whether we need to allocate more chunks */
@@ -543,7 +538,7 @@ int unifycr_fid_store_fixed_extend(int fid, unifycr_filemeta_t *meta,
 }
 
 /* if length is shorter than reserved space, give back space down to length */
-int unifycr_fid_store_fixed_shrink(int fid, unifycr_filemeta_t *meta,
+int unifycr_fid_store_fixed_shrink(int fid, unifycr_filemeta_t* meta,
                                    off_t length)
 {
     /* determine the number of chunks to leave after truncating */
@@ -562,8 +557,8 @@ int unifycr_fid_store_fixed_shrink(int fid, unifycr_filemeta_t *meta,
 }
 
 /* read data from file stored as fixed-size chunks */
-int unifycr_fid_store_fixed_read(int fid, unifycr_filemeta_t *meta, off_t pos,
-                                 void *buf, size_t count)
+int unifycr_fid_store_fixed_read(int fid, unifycr_filemeta_t* meta, off_t pos,
+                                 void* buf, size_t count)
 {
     int rc;
 
@@ -578,8 +573,9 @@ int unifycr_fid_store_fixed_read(int fid, unifycr_filemeta_t *meta, off_t pos,
         rc = unifycr_chunk_read(meta, chunk_id, chunk_offset, buf, count);
     } else {
         /* read what's left of current chunk */
-        char *ptr = (char *) buf;
-        rc = unifycr_chunk_read(meta, chunk_id, chunk_offset, (void *)ptr, remaining);
+        char* ptr = (char*) buf;
+        rc = unifycr_chunk_read(meta, chunk_id,
+            chunk_offset, (void*)ptr, remaining);
         ptr += remaining;
 
         /* read from the next chunk */
@@ -595,7 +591,7 @@ int unifycr_fid_store_fixed_read(int fid, unifycr_filemeta_t *meta, off_t pos,
             }
 
             /* read data */
-            rc = unifycr_chunk_read(meta, chunk_id, 0, (void *)ptr, num);
+            rc = unifycr_chunk_read(meta, chunk_id, 0, (void*)ptr, num);
             ptr += num;
 
             /* update number of bytes written */
@@ -607,8 +603,8 @@ int unifycr_fid_store_fixed_read(int fid, unifycr_filemeta_t *meta, off_t pos,
 }
 
 /* write data to file stored as fixed-size chunks */
-int unifycr_fid_store_fixed_write(int fid, unifycr_filemeta_t *meta, off_t pos,
-                                  const void *buf, size_t count)
+int unifycr_fid_store_fixed_write(int fid, unifycr_filemeta_t* meta, off_t pos,
+                                  const void* buf, size_t count)
 {
     int rc;
 
@@ -640,12 +636,13 @@ int unifycr_fid_store_fixed_write(int fid, unifycr_filemeta_t *meta, off_t pos,
         }
     } else {
         /* otherwise, fill up the remainder of the current chunk */
-        char *ptr = (char *) buf;
+        char* ptr = (char*) buf;
         if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-            rc = unifycr_chunk_write(meta, chunk_id, chunk_offset, (void *)ptr, remaining);
+            rc = unifycr_chunk_write(meta, chunk_id,
+                chunk_offset, (void*)ptr, remaining);
         } else if (meta->storage == FILE_STORAGE_LOGIO) {
-            rc = unifycr_logio_chunk_write(fid, pos, meta, chunk_id, chunk_offset,
-                                           (void *)ptr, remaining);
+            rc = unifycr_logio_chunk_write(fid, pos, meta, chunk_id,
+                chunk_offset, (void*)ptr, remaining);
         } else {
             return UNIFYCR_ERROR_IO;
         }
@@ -668,10 +665,10 @@ int unifycr_fid_store_fixed_write(int fid, unifycr_filemeta_t *meta, off_t pos,
 
             /* write data */
             if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-                rc = unifycr_chunk_write(meta, chunk_id, 0, (void *)ptr, num);
+                rc = unifycr_chunk_write(meta, chunk_id, 0, (void*)ptr, num);
             } else if (meta->storage == FILE_STORAGE_LOGIO)
                 rc = unifycr_logio_chunk_write(fid, pos, meta, chunk_id, 0,
-                                               (void *)ptr, num);
+                                               (void*)ptr, num);
             else {
                 return UNIFYCR_ERROR_IO;
             }

@@ -38,18 +38,18 @@
  * seekdir(3)
  */
 
-UNIFYCR_DECL(opendir, DIR *, (const char *name));
-UNIFYCR_DECL(fdopendir, DIR *, (int fd));
-UNIFYCR_DECL(closedir, int, (DIR *dirp));
-UNIFYCR_DECL(readdir, struct dirent *, (DIR *dirp));
-UNIFYCR_DECL(rewinddir, void, (DIR *dirp));
-UNIFYCR_DECL(dirfd, int, (DIR *dirp));
-UNIFYCR_DECL(telldir, long, (DIR *dirp));
-UNIFYCR_DECL(scandir, int, (const char *dirp, struct dirent **namelist,
-                            int (*filter)(const struct dirent *),
-                            int (*compar)(const struct dirent **,
-                                          const struct dirent **)));
-UNIFYCR_DECL(seekdir, void, (DIR *dirp, long loc));
+UNIFYCR_DECL(opendir, DIR*, (const char* name));
+UNIFYCR_DECL(fdopendir, DIR*, (int fd));
+UNIFYCR_DECL(closedir, int, (DIR* dirp));
+UNIFYCR_DECL(readdir, struct dirent*, (DIR* dirp));
+UNIFYCR_DECL(rewinddir, void, (DIR* dirp));
+UNIFYCR_DECL(dirfd, int, (DIR* dirp));
+UNIFYCR_DECL(telldir, long, (DIR* dirp));
+UNIFYCR_DECL(scandir, int, (const char* dirp, struct dirent** namelist,
+                            int (*filter)(const struct dirent*),
+                            int (*compar)(const struct dirent**,
+                                    const struct dirent**)));
+UNIFYCR_DECL(seekdir, void, (DIR* dirp, long loc));
 
 #endif /* __UNIFYCR_DIROPS_H */
 
