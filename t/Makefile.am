@@ -6,6 +6,7 @@ T_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) $(top_srcdir)/t/tap-driver.sh
 TESTS = \
 	0001-setup.t \
 	0100-sysio.t \
+	0200-stdio.t \
 	9005-unifycr-unmount.t \
 	9010-stop-unifycrd.t \
 	9020-mountpoint-empty.t
@@ -13,6 +14,7 @@ TESTS = \
 check_SCRIPTS = \
 	0001-setup.t \
 	0100-sysio.t \
+	0200-stdio.t \
 	9005-unifycr-unmount.t \
 	9010-stop-unifycrd.t \
 	9020-mountpoint-empty.t
@@ -30,6 +32,7 @@ clean-local:
 
 libexec_PROGRAMS = \
 	sys/sysio.t \
+	std/stdio.t \
 	unifycr_unmount.t
 
 test_ldadd = \
@@ -56,6 +59,13 @@ sys_sysio_t_SOURCES = sys/sysio_suite.h \
 sys_sysio_t_CPPFLAGS = $(test_cppflags)
 sys_sysio_t_LDADD = $(test_ldadd)
 sys_sysio_t_LDFLAGS = $(AM_LDFLAGS)
+
+std_stdio_t_SOURCES = std/stdio_suite.h \
+					  std/stdio_suite.c \
+					  std/fopen-fclose.c
+std_stdio_t_CPPFLAGS = $(test_cppflags)
+std_stdio_t_LDADD = $(test_ldadd)
+std_stdio_t_LDFLAGS = $(AM_LDFLAGS)
 
 unifycr_unmount_t_SOURCES = unifycr_unmount.c
 unifycr_unmount_t_CPPFLAGS = $(test_cppflags)
