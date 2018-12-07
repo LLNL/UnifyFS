@@ -64,12 +64,12 @@ typedef struct {
 size_t unifycr_stack_bytes(int size);
 
 /* intializes stack to record all entries as being free */
-void unifycr_stack_init(void *start, int size);
+void unifycr_stack_init(void* start, int size);
 
 /* pops one entry from stack and returns its value */
-int unifycr_stack_pop(void *start);
+int unifycr_stack_pop(void* start);
 
 /* pushes item onto free stack */
-void unifycr_stack_push(void *start, int value);
+void unifycr_stack_push(void* start, int value);
 
 #endif /* UNIFYCR_STACK_H */

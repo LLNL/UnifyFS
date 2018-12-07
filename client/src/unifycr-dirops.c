@@ -17,7 +17,7 @@
 
 /* given a file id corresponding to a directory,
  * allocate and initialize a directory stream */
-static inline unifycr_dirstream_t *unifycr_dirstream_alloc(int fid)
+static inline unifycr_dirstream_t* unifycr_dirstream_alloc(int fid)
 {
     /* allocate a file descriptor for this stream */
     int fd = unifycr_stack_pop(unifycr_fd_stack);
@@ -38,17 +38,17 @@ static inline unifycr_dirstream_t *unifycr_dirstream_alloc(int fid)
     }
 
     /* get file descriptor for this fd */
-    unifycr_fd_t *filedesc = unifycr_get_filedesc_from_fd(fd);
+    unifycr_fd_t* filedesc = unifycr_get_filedesc_from_fd(fd);
     filedesc->fid   = fid;
     filedesc->pos   = 0;
     filedesc->read  = 0;
     filedesc->write = 0;
 
     /* get pointer to file stream structure */
-    unifycr_dirstream_t *dirp = &(unifycr_dirstreams[dirid]);
+    unifycr_dirstream_t* dirp = &(unifycr_dirstreams[dirid]);
 
     /* initialize fields in structure */
-    memset((void *) dirp, 0, sizeof(*dirp));
+    memset((void*) dirp, 0, sizeof(*dirp));
 
     /* record index into unifycr_dirstreams */
     dirp->dirid = dirid;
@@ -66,7 +66,7 @@ static inline unifycr_dirstream_t *unifycr_dirstream_alloc(int fid)
 }
 
 /* release resources allocated in unifycr_dirstream_alloc */
-static inline int unifycr_dirstream_free(unifycr_dirstream_t *dirp)
+static inline int unifycr_dirstream_free(unifycr_dirstream_t* dirp)
 {
     /* reinit file descriptor to indicate that it's no longer in use,
      * not really necessary, but should help find bugs */
@@ -85,7 +85,7 @@ static inline int unifycr_dirstream_free(unifycr_dirstream_t *dirp)
     return UNIFYCR_SUCCESS;
 }
 
-DIR *UNIFYCR_WRAP(opendir)(const char *name)
+DIR* UNIFYCR_WRAP(opendir)(const char* name)
 {
     /* call real opendir and return early if this is
      * not one of our paths */
@@ -109,13 +109,13 @@ DIR *UNIFYCR_WRAP(opendir)(const char *name)
         return NULL;
     }
 
-    struct stat *sb = &gfattr.file_attr;
+    struct stat* sb = &gfattr.file_attr;
     if (!S_ISDIR(sb->st_mode)) {
         errno = ENOTDIR;
         return NULL;
     }
 
-    unifycr_filemeta_t *meta = NULL;
+    unifycr_filemeta_t* meta = NULL;
     if (fid >= 0) {
         meta = unifycr_get_meta_from_fid(fid);
 
@@ -149,29 +149,29 @@ DIR *UNIFYCR_WRAP(opendir)(const char *name)
         meta->log_size = 0;
     }
 
-    unifycr_dirstream_t *dirp = unifycr_dirstream_alloc(fid);
+    unifycr_dirstream_t* dirp = unifycr_dirstream_alloc(fid);
 
-    return (DIR *) dirp;
+    return (DIR*) dirp;
 }
 
-DIR *UNIFYCR_WRAP(fdopendir)(int fd)
+DIR* UNIFYCR_WRAP(fdopendir)(int fd)
 {
     if (unifycr_intercept_fd(&fd)) {
         fprintf(stderr, "Function not yet supported @ %s:%d\n",
-            __FILE__, __LINE__);
+                __FILE__, __LINE__);
         errno = ENOSYS;
         return NULL;
     } else {
         MAP_OR_FAIL(fdopendir);
-        DIR *ret = UNIFYCR_REAL(fdopendir)(fd);
+        DIR* ret = UNIFYCR_REAL(fdopendir)(fd);
         return ret;
     }
 }
 
-int UNIFYCR_WRAP(closedir)(DIR *dirp)
+int UNIFYCR_WRAP(closedir)(DIR* dirp)
 {
     if (unifycr_intercept_dirstream(dirp)) {
-        unifycr_dirstream_t *d = (unifycr_dirstream_t *) dirp;
+        unifycr_dirstream_t* d = (unifycr_dirstream_t*) dirp;
         unifycr_dirstream_free(d);
         return 0;
     } else {
@@ -181,24 +181,24 @@ int UNIFYCR_WRAP(closedir)(DIR *dirp)
     }
 }
 
-struct dirent *UNIFYCR_WRAP(readdir)(DIR *dirp)
+struct dirent* UNIFYCR_WRAP(readdir)(DIR* dirp)
 {
     if (unifycr_intercept_dirstream(dirp)) {
         fprintf(stderr, "Function not yet supported @ %s:%d\n",
-            __FILE__, __LINE__);
+                __FILE__, __LINE__);
         errno = ENOSYS;
         return NULL;
     } else {
         MAP_OR_FAIL(readdir);
-        struct dirent *d = UNIFYCR_REAL(readdir)(dirp);
+        struct dirent* d = UNIFYCR_REAL(readdir)(dirp);
         return d;
     }
 }
 
-void UNIFYCR_WRAP(rewinddir)(DIR *dirp)
+void UNIFYCR_WRAP(rewinddir)(DIR* dirp)
 {
     if (unifycr_intercept_dirstream(dirp)) {
-        unifycr_dirstream_t *_dirp = (unifycr_dirstream_t *) dirp;
+        unifycr_dirstream_t* _dirp = (unifycr_dirstream_t*) dirp;
 
         /* TODO: update the pos in the file descriptor (fd) via lseek */
 
@@ -210,10 +210,10 @@ void UNIFYCR_WRAP(rewinddir)(DIR *dirp)
     }
 }
 
-int UNIFYCR_WRAP(dirfd)(DIR *dirp)
+int UNIFYCR_WRAP(dirfd)(DIR* dirp)
 {
     if (unifycr_intercept_dirstream(dirp)) {
-        unifycr_dirstream_t *d = (unifycr_dirstream_t *) dirp;
+        unifycr_dirstream_t* d = (unifycr_dirstream_t*) dirp;
         int fd = d->fd;
         return fd;
     } else {
@@ -223,10 +223,10 @@ int UNIFYCR_WRAP(dirfd)(DIR *dirp)
     }
 }
 
-long UNIFYCR_WRAP(telldir)(DIR *dirp)
+long UNIFYCR_WRAP(telldir)(DIR* dirp)
 {
     if (unifycr_intercept_dirstream(dirp)) {
-        unifycr_dirstream_t *d = (unifycr_dirstream_t *) dirp;
+        unifycr_dirstream_t* d = (unifycr_dirstream_t*) dirp;
         return d->pos;
     } else {
         MAP_OR_FAIL(telldir);
@@ -235,14 +235,14 @@ long UNIFYCR_WRAP(telldir)(DIR *dirp)
     }
 }
 
-int UNIFYCR_WRAP(scandir)(const char *path, struct dirent **namelist,
-                          int (*filter)(const struct dirent *),
-                          int (*compar)(const struct dirent **,
-                                        const struct dirent **))
+int UNIFYCR_WRAP(scandir)(const char* path, struct dirent** namelist,
+                          int (*filter)(const struct dirent*),
+                          int (*compar)(const struct dirent**,
+                                        const struct dirent**))
 {
     if (unifycr_intercept_path(path)) {
         fprintf(stderr, "Function not yet supported @ %s:%d\n",
-            __FILE__, __LINE__);
+                __FILE__, __LINE__);
         errno = ENOSYS;
         return -1;
     } else {
@@ -252,11 +252,11 @@ int UNIFYCR_WRAP(scandir)(const char *path, struct dirent **namelist,
     }
 }
 
-void UNIFYCR_WRAP(seekdir)(DIR *dirp, long loc)
+void UNIFYCR_WRAP(seekdir)(DIR* dirp, long loc)
 {
     if (unifycr_intercept_dirstream(dirp)) {
         fprintf(stderr, "Function not yet supported @ %s:%d\n",
-            __FILE__, __LINE__);
+                __FILE__, __LINE__);
         errno = ENOSYS;
     } else {
         MAP_OR_FAIL(seekdir);

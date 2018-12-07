@@ -58,14 +58,14 @@ size_t unifycr_stack_bytes(int size)
 }
 
 /* intializes stack to record all entries as being free */
-void unifycr_stack_init(void *start, int size)
+void unifycr_stack_init(void* start, int size)
 {
-    unifycr_stack *stack = (unifycr_stack *) start;
+    unifycr_stack* stack = (unifycr_stack*) start;
     stack->size = size;
     stack->last = size;
 
     int i;
-    int *entries = (int *)((char *)start + sizeof(unifycr_stack));
+    int* entries = (int*)((char*)start + sizeof(unifycr_stack));
     for (i = 0; i < size; i++) {
         /* flip the order so low numbers are at the top
          * to make debugging easier */
@@ -74,9 +74,9 @@ void unifycr_stack_init(void *start, int size)
 }
 
 /* pops one entry from stack and returns its value */
-int unifycr_stack_pop(void *start)
+int unifycr_stack_pop(void* start)
 {
-    unifycr_stack *stack = (unifycr_stack *) start;
+    unifycr_stack* stack = (unifycr_stack*) start;
 
     /* check that the stack isn't empty */
     if (stack->last > 0) {
@@ -88,7 +88,7 @@ int unifycr_stack_pop(void *start)
         int idx = stack->last;
 
         /* return the value of this item */
-        int *entries = (int *)((char *)start + sizeof(unifycr_stack));
+        int* entries = (int*)((char*)start + sizeof(unifycr_stack));
         int value = entries[idx];
         return value;
     } else {
@@ -98,9 +98,9 @@ int unifycr_stack_pop(void *start)
 }
 
 /* pushes item onto free stack */
-void unifycr_stack_push(void *start, int value)
+void unifycr_stack_push(void* start, int value)
 {
-    unifycr_stack *stack = (unifycr_stack *) start;
+    unifycr_stack* stack = (unifycr_stack*) start;
 
     /* check that we have space to push item onto stack */
     if (stack->last < stack->size) {
@@ -108,7 +108,7 @@ void unifycr_stack_push(void *start, int value)
         int idx = stack->last;
 
         /* place item on stack */
-        int *entries = (int *)((char *)start + sizeof(unifycr_stack));
+        int* entries = (int*)((char*)start + sizeof(unifycr_stack));
         entries[idx] = value;
 
         /* increment last pointer to point to next item */

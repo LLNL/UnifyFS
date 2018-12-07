@@ -49,8 +49,8 @@
  * POSIX wrappers: file descriptors
  * --------------------------------------- */
 
-UNIFYCR_WRAP_DECL(open, int, (const char *path, int flags, ...));
-UNIFYCR_WRAP_DECL(write, ssize_t, (int fd, const void *buf, size_t count));
+UNIFYCR_WRAP_DECL(open, int, (const char* path, int flags, ...));
+UNIFYCR_WRAP_DECL(write, ssize_t, (int fd, const void* buf, size_t count));
 UNIFYCR_WRAP_DECL(lseek, off_t, (int fd, off_t offset, int whence));
 
 #endif /* UNIFYCR_WRAP_H */
