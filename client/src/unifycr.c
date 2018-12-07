@@ -2239,65 +2239,19 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
 }
 
 /**
- * unmount the mounted file system, triggered
- * by the root process of an application
- * ToDo: add the support for more operations
- * beyond terminating the servers. E.g.
- * data flush for persistence.
+ * unmount the mounted file system
+ * TODO: Add support for unmounting more than
+ * one filesystem.
  * @return success/error code
  */
 int unifycr_unmount(void)
 {
-#if 0
-    int cmd = COMM_UNMOUNT;
-    int bytes_read = 0;
-    int rc;
-    int *response = NULL;
+    int ret;
 
-    memset(cmd_buf, 0, sizeof(cmd_buf));
-    memcpy(cmd_buf, &cmd, sizeof(int));
-
-    rc = __real_write(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
-    if (rc <= 0)
-        return UNIFYCR_FAILURE;
-
-    cmd_fd.events = POLLIN | POLLPRI;
-    cmd_fd.revents = 0;
-
-    rc = poll(&cmd_fd, 1, -1);
-    if (rc < 0)
-        return UNIFYCR_FAILURE;
-
-    if (cmd_fd.revents != 0 && cmd_fd.revents == POLLIN) {
-        bytes_read = __real_read(cmd_fd.fd, cmd_buf, sizeof(cmd_buf));
-
-        response = (int *) cmd_buf;
-
-        if (bytes_read <= 0 ||
-            response[0] != COMM_UNMOUNT || response[1] != ACK_SUCCESS)
-            return UNIFYCR_FAILURE;
-    }
-#endif
-
-    /* free directory stream stack */
-    if (unifycr_dirstream_stack != NULL) {
-        free(unifycr_dirstream_stack);
-        unifycr_dirstream_stack = NULL;
-    }
-
-    /* free file stream stack */
-    if (unifycr_stream_stack != NULL) {
-        free(unifycr_stream_stack);
-        unifycr_stream_stack = NULL;
-    }
-
-    /* free file descriptor stack */
-    if (unifycr_fd_stack != NULL) {
-        free(unifycr_fd_stack);
-        unifycr_fd_stack = NULL;
-    }
-
-    return UNIFYCR_SUCCESS;
+    /* invoke unmount rpc */
+    printf("calling unmount\n");
+    ret = unifycr_client_unmount_rpc_invoke(&unifycr_rpc_context);
+    return ret;
 }
 
 /**
@@ -2444,6 +2398,11 @@ static int unifycr_client_rpc_init(char* svr_addr_str,
         MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_mount_rpc",
                        unifycr_mount_in_t,
                        unifycr_mount_out_t, NULL);
+
+    (*unifycr_rpc_context)->unifycr_unmount_rpc_id   =
+        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_unmount_rpc",
+                       unifycr_unmount_in_t,
+                       unifycr_unmount_out_t, NULL);
 
     (*unifycr_rpc_context)->unifycr_metaget_rpc_id =
         MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_metaget_rpc",

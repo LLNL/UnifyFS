@@ -47,6 +47,7 @@ int sock_get_id();
 int sock_get_error_id();
 int sock_ack_cli(int sock_id, int ret_sz);
 int sock_sanitize();
+void sock_sanitize_cli(int client_id);
 char *sock_get_ack_buf(int sock_id);
 int sock_remove(int idx);
 int sock_notify_cli(int sock_id, int cmd);

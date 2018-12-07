@@ -46,7 +46,8 @@ DECLARE_MARGO_RPC_HANDLER(unifycr_mount_rpc)
 
 MERCURY_GEN_PROC(unifycr_unmount_out_t, ((int32_t)(ret)))
 MERCURY_GEN_PROC(unifycr_unmount_in_t,
-    ((hg_const_string_t)(external_spill_dir)))
+    ((uint32_t)(app_id))
+    ((uint32_t)(local_rank_idx)))
 DECLARE_MARGO_RPC_HANDLER(unifycr_unmount_rpc)
 
 /* given a global file id and a file name,

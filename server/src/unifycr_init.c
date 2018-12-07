@@ -211,6 +211,10 @@ static margo_instance_id setup_sm_target()
                      unifycr_mount_in_t, unifycr_mount_out_t,
                      unifycr_mount_rpc);
 
+    MARGO_REGISTER(mid, "unifycr_unmount_rpc",
+                     unifycr_unmount_in_t, unifycr_unmount_out_t,
+                     unifycr_unmount_rpc);
+
     MARGO_REGISTER(mid, "unifycr_metaget_rpc",
                      unifycr_metaget_in_t, unifycr_metaget_out_t,
                      unifycr_metaget_rpc);
@@ -794,8 +798,7 @@ static int unifycr_exit()
     int i, j;
     for (i = 0; i < arraylist_size(thrd_list); i++) {
         /* wait for resource manager thread to exit */
-        thrd_ctrl_t *thrd_ctrl =
-            (thrd_ctrl_t *)arraylist_get(thrd_list, i);
+        thrd_ctrl_t* thrd_ctrl = (thrd_ctrl_t *)arraylist_get(thrd_list, i);
         rm_cmd_exit(thrd_ctrl);
     }
 
@@ -828,7 +831,7 @@ static int unifycr_exit()
             /* release receive buffer shared memory region */
             if (app->shm_recv_bufs[j] != NULL) {
                 unifycr_shm_free(app->recv_buf_name[j],
-                    app->recv_buf_sz, &(app->shm_recv_bufs[j]));
+                app->recv_buf_sz, &(app->shm_recv_bufs[j]));
             }
 
             /* release super block shared memory region */
@@ -854,7 +857,7 @@ static int unifycr_exit()
     /* shutdown the metadata service*/
     meta_sanitize();
 
-    /* TODO: notify the service threads to exit*/
+    /* TODO: notify the service threads to exit */
 
     /* destroy the sockets except for the ones
      * for acks*/

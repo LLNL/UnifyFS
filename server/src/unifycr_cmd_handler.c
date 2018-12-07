@@ -423,6 +423,61 @@ static void unifycr_mount_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(unifycr_mount_rpc)
 
+static void unifycr_unmount_rpc(hg_handle_t handle)
+{
+    /* get input params */
+    unifycr_unmount_in_t in;
+    int margo_ret = margo_get_input(handle, &in);
+    assert(margo_ret == HG_SUCCESS);
+
+    /* read app_id and client_id from input */
+    int app_id    = in.app_id;
+    int client_id = in.local_rank_idx;
+
+    /* lookup app_config for given app_id */
+    app_config_t* app_config =
+        (app_config_t *) arraylist_get(app_config_list, app_id);
+
+    /* TODO: do cleanup here */
+
+    /* get thread id for this client */
+    int thrd_id = app_config->thrd_idxs[client_id];
+
+    /* look up thread control structure */
+    thrd_ctrl_t* thrd_ctrl = (thrd_ctrl_t *)arraylist_get(thrd_list, thrd_id);
+
+    /* shutdown the delegator thread */
+    rm_cmd_exit(thrd_ctrl);
+
+    /* detach from the request shared memory */
+    unifycr_shm_free(app_config->req_buf_name[client_id],
+                     app_config->req_buf_sz,
+                     &(app_config->shm_req_bufs[client_id]));
+    app_config->shm_req_bufs[client_id] = NULL;
+
+    /* detach from the read shared memory buffer */
+    unifycr_shm_free(app_config->recv_buf_name[client_id],
+                     app_config->recv_buf_sz,
+                     &(app_config->shm_recv_bufs[client_id]));
+    app_config->shm_recv_bufs[client_id] = NULL;
+
+    /* destroy the sockets except for the ones for acks */
+    sock_sanitize_cli(client_id);
+
+    /* build output structure to return to caller */
+    unifycr_mount_out_t out;
+    out.ret = UNIFYCR_SUCCESS;
+
+    /* send output back to caller */
+    hg_return_t hret = margo_respond(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* free margo resources */
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(unifycr_unmount_rpc)
+
 /* returns file meta data including file size and file name
  * given a global file id */
 static void unifycr_metaget_rpc(hg_handle_t handle)
@@ -564,7 +619,7 @@ static void unifycr_mread_rpc(hg_handle_t handle)
     hg_bulk_t bulk_handle;
     hg_return_t hret = margo_bulk_create(mid, 1, &buffer,
         &size, HG_BULK_WRITE_ONLY, &bulk_handle);
- 
+
     /* get list of read requests */
     hret = margo_bulk_transfer(mid, HG_BULK_PULL,
         hgi->addr, in.bulk_handle, 0, bulk_handle, 0, size);
