@@ -22,7 +22,6 @@ libunifycr_la_SOURCES = \
   unifycr.c \
   unifycr.h \
   unifycr-internal.h \
-  unifycr-wrap.h \
   unifycr_clientcalls_rpc.h \
   unifycr_client.c \
   unifycr_client.h \
@@ -58,7 +57,6 @@ libunifycr_gotcha_la_SOURCES = \
   unifycr.h \
   gotcha_map_unifycr_list.h \
   unifycr-internal.h \
-  unifycr-wrap.h \
   unifycr_clientcalls_rpc.h \
   unifycr_client.c \
   unifycr_client.h \
