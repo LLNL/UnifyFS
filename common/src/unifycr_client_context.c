@@ -16,8 +16,8 @@
 #include "unifycr_client_context.h"
 
 #include "string.h"
-int unifycr_pack_client_context(unifycr_client_context_t ctx, char *buffer,
-                                off_t *offset)
+int unifycr_pack_client_context(unifycr_client_context_t ctx, char* buffer,
+                                off_t* offset)
 {
     int rc = UNIFYCR_SUCCESS;
 
@@ -75,48 +75,48 @@ int unifycr_pack_client_context(unifycr_client_context_t ctx, char *buffer,
     return rc;
 }
 
-int unifycr_unpack_client_context(char *buffer, off_t *offset,
-                                  unifycr_client_context_t *ctx)
+int unifycr_unpack_client_context(char* buffer, off_t* offset,
+                                  unifycr_client_context_t* ctx)
 {
     int rc = UNIFYCR_SUCCESS;
 
-    ctx->app_id = *(int *)(buffer + *offset);
+    ctx->app_id = *(int*)(buffer + *offset);
     *offset += sizeof(ctx->app_id);
 
-    ctx->local_rank_index = *(int *)(buffer + *offset);
+    ctx->local_rank_index = *(int*)(buffer + *offset);
     *offset += sizeof(ctx->local_rank_index);
 
-    ctx->dbg_rank = *(int *)(buffer + *offset);
+    ctx->dbg_rank = *(int*)(buffer + *offset);
     *offset += sizeof(ctx->dbg_rank);
 
-    ctx->num_procs_per_node = *(int *)(buffer + *offset);
+    ctx->num_procs_per_node = *(int*)(buffer + *offset);
     *offset += sizeof(ctx->num_procs_per_node);
 
-    ctx->req_buf_sz = *(int *)(buffer + *offset);
+    ctx->req_buf_sz = *(int*)(buffer + *offset);
     *offset += sizeof(ctx->req_buf_sz);
 
-    ctx->recv_buf_sz = *(int *)(buffer + *offset);
+    ctx->recv_buf_sz = *(int*)(buffer + *offset);
     *offset += sizeof(ctx->recv_buf_sz);
 
-    ctx->superblock_sz = *(long *)(buffer + *offset);
+    ctx->superblock_sz = *(long*)(buffer + *offset);
     *offset += sizeof(ctx->superblock_sz);
 
-    ctx->meta_offset = *(long *)(buffer + *offset);
+    ctx->meta_offset = *(long*)(buffer + *offset);
     *offset += sizeof(ctx->meta_offset);
 
-    ctx->meta_size = *(long *)(buffer + *offset);
+    ctx->meta_size = *(long*)(buffer + *offset);
     *offset += sizeof(ctx->meta_size);
 
-    ctx->fmeta_offset = *(long *)(buffer + *offset);
+    ctx->fmeta_offset = *(long*)(buffer + *offset);
     *offset += sizeof(ctx->fmeta_offset);
 
-    ctx->fmeta_size = *(long *)(buffer + *offset);
+    ctx->fmeta_size = *(long*)(buffer + *offset);
     *offset += sizeof(ctx->fmeta_size);
 
-    ctx->data_offset = *(long *)(buffer + *offset);
+    ctx->data_offset = *(long*)(buffer + *offset);
     *offset += sizeof(ctx->data_offset);
 
-    ctx->data_size = *(long *)(buffer + *offset);
+    ctx->data_size = *(long*)(buffer + *offset);
     *offset += sizeof(ctx->data_size);
 
     // TODO: determain if a pointer to the string will

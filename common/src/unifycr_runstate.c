@@ -7,17 +7,17 @@
 #include "unifycr_runstate.h"
 #include "unifycr_pmix.h"
 
-const char *runstate_file = "unifycr-runstate.conf";
+const char* runstate_file = "unifycr-runstate.conf";
 
-int unifycr_read_runstate(unifycr_cfg_t *cfg,
-                          const char *runstate_path)
+int unifycr_read_runstate(unifycr_cfg_t* cfg,
+                          const char* runstate_path)
 {
     int rc = (int)UNIFYCR_SUCCESS;
     int have_path = 0;
     int uid = (int)getuid();
     char runstate_fname[UNIFYCR_MAX_FILENAME] = {0};
 #ifdef HAVE_PMIX_H
-    char *pmix_path = NULL;
+    char* pmix_path = NULL;
 #endif
 
     if (cfg == NULL) {
@@ -61,11 +61,11 @@ int unifycr_read_runstate(unifycr_cfg_t *cfg,
     return rc;
 }
 
-int unifycr_write_runstate(unifycr_cfg_t *cfg)
+int unifycr_write_runstate(unifycr_cfg_t* cfg)
 {
     int rc = (int)UNIFYCR_SUCCESS;
     int uid = (int)getuid();
-    FILE *runstate_fp = NULL;
+    FILE* runstate_fp = NULL;
     char runstate_fname[UNIFYCR_MAX_FILENAME] = {0};
 
     if (cfg == NULL) {
@@ -99,7 +99,7 @@ int unifycr_write_runstate(unifycr_cfg_t *cfg)
     return rc;
 }
 
-int unifycr_clean_runstate(unifycr_cfg_t *cfg)
+int unifycr_clean_runstate(unifycr_cfg_t* cfg)
 {
     int rc = (int)UNIFYCR_SUCCESS;
     char runstate_fname[UNIFYCR_MAX_FILENAME] = {0};

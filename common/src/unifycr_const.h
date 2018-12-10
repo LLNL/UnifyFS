@@ -105,14 +105,16 @@
 // #define IP_STR_LEN 20
 // #define MAX_CQ_SIZE 2*NUM_CLI
 // #define MAX_NUM_CONNS 10
-// #define NUM_MSG 32768 /* number of messages one server sends to each of another server */
+// /* number of messages one server sends to each of another server */
+// #define NUM_MSG 32768
 // #define NUM_OF_READ_TASKS 65536
 // #define PORT_STR_LEN 10
 // #define SH_BUF_SIZE 1048576
-// #define SERVICE_MEM_POOL_SIZE 2147483648 /* buffer size on the service manager for read clustering and pipelining */
+// /* buffer size on the service manager for read clustering and pipelining */
+// #define SERVICE_MEM_POOL_SIZE 2147483648
 
 /* ****************** Metadata/MDHIM Default Values ******************** */
-#define META_DEFAULT_DB_PATH /tmp
+#define META_DEFAULT_DB_PATH (/tmp)
 #define META_DEFAULT_DB_NAME unifycr_db
 #define META_DEFAULT_SERVER_RATIO 1
 #define META_DEFAULT_RANGE_SZ MIB
