@@ -58,7 +58,7 @@ typedef enum {
     N_ACT            = 2
 } action_e;
 
-static char *actions[N_ACT] = { "start", "terminate" };
+static char* actions[N_ACT] = { "start", "terminate" };
 
 static action_e action = INVALID_ACTION;
 static unifycr_args_t cli_args;
@@ -77,9 +77,9 @@ static struct option const long_opts[] = {
     { 0, 0, 0, 0 },
 };
 
-static char *program;
-static char *short_opts = ":cC:de:hi:m:o:s:";
-static char *usage_str =
+static char* program;
+static char* short_opts = ":cC:de:hi:m:o:s:";
+static char* usage_str =
     "\n"
     "Usage: %s <command> [options...]\n"
     "\n"
@@ -112,17 +112,17 @@ static void usage(int status)
     exit(status);
 }
 
-static void parse_cmd_arguments(int argc, char **argv)
+static void parse_cmd_arguments(int argc, char** argv)
 {
     int ch = 0;
     int optidx = 2;
     int cleanup = 0;
     unifycr_cm_e consistency = UNIFYCR_CM_LAMINATED;
-    char *mountpoint = NULL;
-    char *script = NULL;
-    char *srvr_exe = NULL;
-    char *stage_in = NULL;
-    char *stage_out = NULL;
+    char* mountpoint = NULL;
+    char* script = NULL;
+    char* srvr_exe = NULL;
+    char* stage_in = NULL;
+    char* stage_out = NULL;
 
     while ((ch = getopt_long(argc, argv,
                              short_opts, long_opts, &optidx)) >= 0) {
@@ -134,8 +134,9 @@ static void parse_cmd_arguments(int argc, char **argv)
 
         case 'C':
             consistency = unifycr_cm_enum_from_str(optarg);
-            if (consistency == UNIFYCR_CM_INVALID)
+            if (consistency == UNIFYCR_CM_INVALID) {
                 usage(1);
+            }
             break;
 
         case 'd':
@@ -181,17 +182,18 @@ static void parse_cmd_arguments(int argc, char **argv)
     cli_args.stage_out = stage_out;
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     int i = 0;
     int ret = 0;
-    char *cmd = NULL;
+    char* cmd = NULL;
 
     program = strdup(argv[0]);
     program = basename(program);
 
-    if (argc < 2)
+    if (argc < 2) {
         usage(1);
+    }
 
     cmd = argv[1];
 
@@ -202,8 +204,9 @@ int main(int argc, char **argv)
         }
     }
 
-    if (action == INVALID_ACTION)
+    if (action == INVALID_ACTION) {
         usage(1);
+    }
 
     parse_cmd_arguments(argc, argv);
 
@@ -228,16 +231,17 @@ int main(int argc, char **argv)
     if (debug) {
         printf("\n## job allocation (%zu nodes) ##\n",
                resource.n_nodes);
-        for (i = 0; i < resource.n_nodes; i++)
+        for (i = 0; i < resource.n_nodes; i++) {
             printf("%s\n", resource.nodes[i]);
+        }
     }
     fflush(stdout);
 
-    if (action == ACT_START)
+    if (action == ACT_START) {
         return unifycr_start_servers(&resource, &cli_args);
-    else if (action == ACT_TERMINATE)
+    } else if (action == ACT_TERMINATE) {
         return unifycr_stop_servers(&resource, &cli_args);
-    else {
+    } else {
         fprintf(stderr, "INTERNAL ERROR: unhandled action %d\n", (int)action);
         return -1;
     }
