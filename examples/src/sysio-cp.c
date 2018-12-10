@@ -38,42 +38,47 @@ static int total_ranks;
 static int rank_worker;
 static int debug;
 
-static char *mountpoint = "/unifycr";  /* unifycr mountpoint */
+static char* mountpoint = "/unifycr";  /* unifycr mountpoint */
 static int unmount;                /* unmount unifycr after running the test */
 
-static char *srcpath;
-static char *dstpath;
+static char* srcpath;
+static char* dstpath;
 
-static unsigned long bufsize = 64*(1<<10);
+static unsigned long bufsize = 64 * (1 << 10);
 
-static int resolve_dstpath(char *path)
+static int resolve_dstpath(char* path)
 {
     int ret = 0;
     struct stat sb = { 0, };
-    char *tmp = NULL;
-    char *tmpdir = NULL;
-    char *filename = basename(srcpath); /* do not free(3) */
+    char* tmp = NULL;
+    char* tmpdir = NULL;
+    char* filename = basename(srcpath); /* do not free(3) */
 
-    if (path[strlen(path)-1] == '/')
-        path[strlen(path)-1] = '\0';
+    if (path[strlen(path) - 1] == '/') {
+        path[strlen(path) - 1] = '\0';
+    }
 
     if (path[0] != '/') {
         tmp = realpath(path, NULL);
-        if (!tmp)
+        if (!tmp) {
             return errno;
-    } else
+        }
+    } else {
         tmp = strdup(path);
+    }
 
     ret = stat(tmp, &sb);
     if (ret == 0 && S_ISDIR(sb.st_mode)) {
-        dstpath = calloc(1, strlen(tmp)+strlen(filename)+2);
-        if (!dstpath)
+        dstpath = calloc(1, strlen(tmp) + strlen(filename) + 2);
+        if (!dstpath) {
             return ENOMEM;
+        }
 
         sprintf(dstpath, "%s/%s", tmp, filename);
         free(tmp);
-    } else
-        dstpath = tmp;  /* further error will be resolved when open(2) */
+    } else {
+        dstpath = tmp;    /* further error will be resolved when open(2) */
+    }
 
     return 0;
 }
@@ -86,14 +91,16 @@ static int do_copy(void)
     ssize_t n_read = 0;
     ssize_t n_written = 0;
     ssize_t n_left = 0;
-    char *buf = malloc(bufsize);
+    char* buf = malloc(bufsize);
 
-    if (!buf)
+    if (!buf) {
         return ENOMEM;
+    }
 
     fd_src = open(srcpath, O_RDONLY);
-    if (fd_src < 0)
+    if (fd_src < 0) {
         return errno;
+    }
 
     fd_dst = open(dstpath, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd_dst < 0) {
@@ -103,8 +110,9 @@ static int do_copy(void)
 
     while (1) {
         n_read = read(fd_src, buf, bufsize);
-        if (n_read == 0)    /* EOF */
+        if (n_read == 0) {  /* EOF */
             break;
+        }
 
         if (n_read < 0) {   /* error */
             ret = errno;
@@ -149,25 +157,25 @@ static struct option const long_opts[] = {
     { 0, 0, 0, 0},
 };
 
-static char *short_opts = "b:dhm:r:u";
+static char* short_opts = "b:dhm:r:u";
 
-static const char *usage_str =
-"\n"
-"Usage: %s [options...] <source path> <destination path>\n"
-"\n"
-"Available options:\n"
-" -b, --bufsize=<buffersize>   use <buffersize> for copy buffer\n"
-"                              (default: 64KB)\n"
-" -d, --debug                  pause before running test\n"
-"                              (handy for attaching in debugger)\n"
-" -h, --help                   help message\n"
-" -m, --mount=<mountpoint>     use <mountpoint> for unifycr\n"
-"                              (default: /unifycr)\n"
-" -r, --rank=<rank>            use <rank> to copy the file (default: 0)\n"
-" -u, --unmount                unmount the filesystem after test\n"
-"\n";
+static const char* usage_str =
+    "\n"
+    "Usage: %s [options...] <source path> <destination path>\n"
+    "\n"
+    "Available options:\n"
+    " -b, --bufsize=<buffersize>   use <buffersize> for copy buffer\n"
+    "                              (default: 64KB)\n"
+    " -d, --debug                  pause before running test\n"
+    "                              (handy for attaching in debugger)\n"
+    " -h, --help                   help message\n"
+    " -m, --mount=<mountpoint>     use <mountpoint> for unifycr\n"
+    "                              (default: /unifycr)\n"
+    " -r, --rank=<rank>            use <rank> to copy the file (default: 0)\n"
+    " -u, --unmount                unmount the filesystem after test\n"
+    "\n";
 
-static char *program;
+static char* program;
 
 static void print_usage(void)
 {
@@ -175,7 +183,7 @@ static void print_usage(void)
     exit(0);
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     int ret = 0;
     int ch = 0;
@@ -218,16 +226,19 @@ int main(int argc, char **argv)
         }
     }
 
-    if (argc - optind != 2)
+    if (argc - optind != 2) {
         print_usage();
+    }
 
     srcpath = strdup(argv[optind++]);
 
-    if (srcpath[strlen(srcpath)-1] == '/')
-        srcpath[strlen(srcpath)-1] = '\0';
+    if (srcpath[strlen(srcpath) - 1] == '/') {
+        srcpath[strlen(srcpath) - 1] = '\0';
+    }
 
-    if (debug)
+    if (debug) {
         test_pause(rank, "Attempting to mount");
+    }
 
     ret = unifycr_mount(mountpoint, rank, total_ranks, 0);
     if (ret) {
@@ -242,8 +253,9 @@ int main(int argc, char **argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (rank != rank_worker)
+    if (rank != rank_worker) {
         goto donothing;
+    }
 
     ret = stat(srcpath, &sb);
     if (ret < 0) {
@@ -254,13 +266,14 @@ int main(int argc, char **argv)
     ret = resolve_dstpath(argv[optind]);
     if (ret) {
         test_print(rank, "cannot resolve the destination path \"%s\" (%s)\n",
-                         dstpath, strerror(ret));
+                   dstpath, strerror(ret));
         goto out;
     }
 
     ret = do_copy();
-    if (ret)
+    if (ret) {
         test_print(rank, "copy failed (%d: %s)\n", ret, strerror(ret));
+    }
 
     free(dstpath);
     free(srcpath);
@@ -268,8 +281,9 @@ int main(int argc, char **argv)
 donothing:
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (unmount && rank == 0)
+    if (unmount && rank == 0) {
         unifycr_unmount();
+    }
 
 out:
     MPI_Finalize();

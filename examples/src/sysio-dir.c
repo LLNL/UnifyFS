@@ -41,8 +41,8 @@ static int total_ranks;
 static int debug;           /* pause for attaching debugger */
 static int unmount;         /* unmount unifycr after running the test */
 static uint64_t count = 10; /* number of directories each rank creates */
-static char *mountpoint = "/unifycr";  /* unifycr mountpoint */
-static char *testdir = "testdir";  /* test directory under mountpoint */
+static char* mountpoint = "/unifycr";  /* unifycr mountpoint */
+static char* testdir = "testdir";  /* test directory under mountpoint */
 static char targetdir[NAME_MAX];   /* target file name */
 
 static char dirnamebuf[NAME_MAX];
@@ -151,23 +151,24 @@ enum {
 
 static int singletest;
 
-static const char *singletest_names[N_DIRTESTS] = {
+static const char* singletest_names[N_DIRTESTS] = {
     "all", "mkdir", "stat", "readdir", "rmdir"
 };
 
-static int set_singletest(const char *testname)
+static int set_singletest(const char* testname)
 {
     int i = 0;
 
     if (singletest) {
         fprintf(stderr, "Only a single test can be performed with "
-                        "--singletest option.\n");
+                "--singletest option.\n");
         exit(1);
     }
 
     for (i = 0; i < N_DIRTESTS; i++)
-        if (strcmp(testname, singletest_names[i]) == 0)
+        if (strcmp(testname, singletest_names[i]) == 0) {
             return i;
+        }
 
     fprintf(stderr, "%s is not a valid test name.\n", testname);
     exit(1);
@@ -192,30 +193,30 @@ static struct option const long_opts[] = {
     { 0, 0, 0, 0},
 };
 
-static char *short_opts = "dD:hm:n:Sst:u";
+static char* short_opts = "dD:hm:n:Sst:u";
 
-static const char *usage_str =
-"\n"
-"Usage: %s [options...]\n"
-"\n"
-"Available options:\n"
-" -d, --debug                      pause before running test\n"
-"                                  (handy for attaching in debugger)\n"
-" -D, --dirname=<dirname>          test directory name under mountpoint\n"
-"                                  (default: testdir)\n"
-" -h, --help                       help message\n"
-" -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-"                                  (default: /unifycr)\n"
-" -n, --count=<NUM>                number of directories that each rank will\n"
-"                                  create (default: 10)\n"
-" -S, --synchronous                sync metadata on each write\n"
-" -s, --standard                   do not use unifycr but run standard I/O\n"
-" -t, --singletest=<operation>     only test a single operation\n"
-"                                  (operations: mkdir, stat, readdir, rmdir)\n"
-" -u, --unmount                    unmount the filesystem after test\n"
-"\n";
+static const char* usage_str =
+    "\n"
+    "Usage: %s [options...]\n"
+    "\n"
+    "Available options:\n"
+    " -d, --debug                      pause before running test\n"
+    "                                  (handy for attaching in debugger)\n"
+    " -D, --dirname=<dirname>          test directory name under mountpoint\n"
+    "                                  (default: testdir)\n"
+    " -h, --help                       help message\n"
+    " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
+    "                                  (default: /unifycr)\n"
+    " -n, --count=<NUM>                number of directories that each rank will\n"
+    "                                  create (default: 10)\n"
+    " -S, --synchronous                sync metadata on each write\n"
+    " -s, --standard                   do not use unifycr but run standard I/O\n"
+    " -t, --singletest=<operation>     only test a single operation\n"
+    "                                  (operations: mkdir, stat, readdir, rmdir)\n"
+    " -u, --unmount                    unmount the filesystem after test\n"
+    "\n";
 
-static char *program;
+static char* program;
 
 static void print_usage(void)
 {
@@ -223,7 +224,7 @@ static void print_usage(void)
     exit(0);
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     int ret = 0;
     int ch = 0;
@@ -279,14 +280,15 @@ int main(int argc, char **argv)
 
     if (static_linked(program) && standard) {
         test_print_once(rank, "--standard, -s option only works when "
-                              "dynamically linked.\n");
+                        "dynamically linked.\n");
         exit(-1);
     }
 
     sprintf(targetdir, "%s/%s", mountpoint, testdir);
 
-    if (debug)
+    if (debug) {
         test_pause(rank, "Attempting to mount");
+    }
 
     if (!standard) {
         ret = unifycr_mount(mountpoint, rank, total_ranks, 0);
@@ -336,8 +338,9 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
 
 out_unmount:
-    if (!standard && unmount && rank == 0)
+    if (!standard && unmount && rank == 0) {
         unifycr_unmount();
+    }
 out:
     MPI_Finalize();
 

@@ -38,9 +38,9 @@
  * meaning that @blocksize should be larger than and multiple of @chunksize.
  */
 
-static uint64_t blocksize = 1<<20;          /* 1MB */
+static uint64_t blocksize = 1 << 20;        /* 1MB */
 static uint64_t nblocks = 128;              /* Each process writes 128MB */
-static uint64_t chunksize = 64*(1<<10);     /* 64KB for each write(2) call */
+static uint64_t chunksize = 64 * (1 << 10); /* 64KB for each write(2) call */
 
 static int use_pwrite;      /* use pwrite(2) */
 static int pattern;         /* N to 1 (N1, default) or N to N (NN) */
@@ -58,9 +58,9 @@ static int total_ranks;
 
 static int debug;           /* pause for attaching debugger */
 static int unmount;         /* unmount unifycr after running the test */
-static char *buf;           /* I/O buffer */
-static char *mountpoint = "/unifycr";   /* unifycr mountpoint */
-static char *filename = "testfile"; /* testfile name under mountpoint */
+static char* buf;           /* I/O buffer */
+static char* mountpoint = "/unifycr";   /* unifycr mountpoint */
+static char* filename = "testfile"; /* testfile name under mountpoint */
 static char targetfile[NAME_MAX];   /* target file name */
 
 static int do_write(void)
@@ -74,29 +74,32 @@ static int do_write(void)
     for (i = 0; i < nblocks; i++) {
         for (j = 0; j < nchunks; j++) {
             if (pattern == IO_PATTERN_N1)
-                offset = i*total_ranks*blocksize + rank*blocksize
-                         + j*chunksize;
-            else
-                offset = i*blocksize + j*chunksize;
-
-            if (lipsum)
-                lipsum_generate(buf, chunksize, offset);
-
-            if (use_pwrite)
-                ret = pwrite(fd, buf, chunksize, offset);
+                offset = i * total_ranks * blocksize + rank * blocksize
+                         + j * chunksize;
             else {
+                offset = i * blocksize + j * chunksize;
+            }
+
+            if (lipsum) {
+                lipsum_generate(buf, chunksize, offset);
+            }
+
+            if (use_pwrite) {
+                ret = pwrite(fd, buf, chunksize, offset);
+            } else {
                 lseek(fd, offset, SEEK_SET);
                 ret = write(fd, buf, chunksize);
             }
 
             if (ret < 0) {
                 test_print(rank, "%s failed",
-                                 use_pwrite ? "pwrite()" : "write()");
+                           use_pwrite ? "pwrite()" : "write()");
                 return -1;
             }
 
-            if (synchronous)
+            if (synchronous) {
                 fsync(fd);
+            }
         }
     }
 
@@ -120,7 +123,7 @@ static void report_result(void)
     double max_meta_time = .0F;
 
     write_time = timediff_sec(&write_start, &write_end);
-    write_bw = 1.0*blocksize*nblocks/write_time/(1<<20);
+    write_bw = 1.0 * blocksize * nblocks / write_time / (1 << 20);
 
     meta_time = timediff_sec(&meta_start, &write_end);
 
@@ -131,8 +134,8 @@ static void report_result(void)
     MPI_Reduce(&meta_time, &max_meta_time,
                1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
-    min_write_bw = 1.0*blocksize*nblocks*total_ranks
-                    /max_write_time/(1<<20);
+    min_write_bw = 1.0 * blocksize * nblocks * total_ranks
+                   / max_write_time / (1 << 20);
 
     test_print_once(rank,
                     "\n"
@@ -145,8 +148,8 @@ static void report_result(void)
                     "Min. write bandwidth:      %lf MB/s\n"
                     "Total Write time:          %lf sec. (%lf for fsync)\n\n",
                     total_ranks,
-                    1.0*blocksize*nblocks/(1<<20),
-                    1.0*total_ranks*blocksize*nblocks/(1<<20),
+                    1.0 * blocksize * nblocks / (1 << 20),
+                    1.0 * total_ranks * blocksize * nblocks / (1 << 20),
                     io_pattern_string(pattern),
                     chunksize,
                     agg_write_bw,
@@ -172,36 +175,36 @@ static struct option const long_opts[] = {
     { 0, 0, 0, 0},
 };
 
-static char *short_opts = "b:n:c:df:hlm:p:PSsu";
+static char* short_opts = "b:n:c:df:hlm:p:PSsu";
 
-static const char *usage_str =
-"\n"
-"Usage: %s [options...]\n"
-"\n"
-"Available options:\n"
-" -b, --blocksize=<size in bytes>  logical block size for the target file\n"
-"                                  (default 1048576, 1MB)\n"
-" -n, --nblocks=<count>            count of blocks each process will write\n"
-"                                  (default 128)\n"
-" -c, --chunksize=<size in bytes>  I/O chunk size for each write operation\n"
-"                                  (default 64436, 64KB)\n"
-" -d, --debug                      pause before running test\n"
-"                                  (handy for attaching in debugger)\n"
-" -f, --filename=<filename>        target file name under mountpoint\n"
-"                                  (default: testfile)\n"
-" -h, --help                       help message\n"
-" -L, --lipsum                     generate contents to verify correctness\n"
-" -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-"                                  (default: /unifycr)\n"
-" -P, --pwrite                     use pwrite(2) instead of write(2)\n"
-" -p, --pattern=<pattern>          should be 'n1'(n to 1) or 'nn' (n to n)\n"
-"                                  (default: n1)\n"
-" -S, --synchronous                sync metadata on each write\n"
-" -s, --standard                   do not use unifycr but run standard I/O\n"
-" -u, --unmount                    unmount the filesystem after test\n"
-"\n";
+static const char* usage_str =
+    "\n"
+    "Usage: %s [options...]\n"
+    "\n"
+    "Available options:\n"
+    " -b, --blocksize=<size in bytes>  logical block size for the target file\n"
+    "                                  (default 1048576, 1MB)\n"
+    " -n, --nblocks=<count>            count of blocks each process will write\n"
+    "                                  (default 128)\n"
+    " -c, --chunksize=<size in bytes>  I/O chunk size for each write operation\n"
+    "                                  (default 64436, 64KB)\n"
+    " -d, --debug                      pause before running test\n"
+    "                                  (handy for attaching in debugger)\n"
+    " -f, --filename=<filename>        target file name under mountpoint\n"
+    "                                  (default: testfile)\n"
+    " -h, --help                       help message\n"
+    " -L, --lipsum                     generate contents to verify correctness\n"
+    " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
+    "                                  (default: /unifycr)\n"
+    " -P, --pwrite                     use pwrite(2) instead of write(2)\n"
+    " -p, --pattern=<pattern>          should be 'n1'(n to 1) or 'nn' (n to n)\n"
+    "                                  (default: n1)\n"
+    " -S, --synchronous                sync metadata on each write\n"
+    " -s, --standard                   do not use unifycr but run standard I/O\n"
+    " -u, --unmount                    unmount the filesystem after test\n"
+    "\n";
 
-static char *program;
+static char* program;
 
 static void print_usage(void)
 {
@@ -209,7 +212,7 @@ static void print_usage(void)
     exit(0);
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     int ret = 0;
     int ch = 0;
@@ -286,26 +289,27 @@ int main(int argc, char **argv)
 
     if (blocksize < chunksize || blocksize % chunksize > 0) {
         test_print_once(rank, "blocksize should be larger than "
-                              "and divisible by chunksize.\n");
+                        "and divisible by chunksize.\n");
         exit(-1);
     }
 
-    if (chunksize % (1<<10) > 0) {
+    if (chunksize % (1 << 10) > 0) {
         test_print_once(rank, "chunksize and blocksize should be divisible "
-                              "by 1024.\n");
+                        "by 1024.\n");
         exit(-1);
     }
 
     if (static_linked(program) && standard) {
         test_print_once(rank, "--standard, -s option only works when "
-                              "dynamically linked.\n");
+                        "dynamically linked.\n");
         exit(-1);
     }
 
     sprintf(targetfile, "%s/%s", mountpoint, filename);
 
-    if (debug)
+    if (debug) {
         test_pause(rank, "Attempting to mount");
+    }
 
     if (!standard) {
         ret = unifycr_mount(mountpoint, rank, total_ranks, 0);
@@ -323,8 +327,9 @@ int main(int argc, char **argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (pattern == IO_PATTERN_NN)
+    if (pattern == IO_PATTERN_NN) {
         sprintf(&targetfile[strlen(targetfile)], "-%d", rank);
+    }
 
     fd = open(targetfile, O_RDWR | O_CREAT | O_TRUNC, 0600);
     if (fd < 0) {
@@ -340,11 +345,13 @@ int main(int argc, char **argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (!standard && unmount && rank == 0)
+    if (!standard && unmount && rank == 0) {
         unifycr_unmount();
+    }
 
-    if (ret == 0)
+    if (ret == 0) {
         report_result();
+    }
 
     free(buf);
 

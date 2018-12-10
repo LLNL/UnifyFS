@@ -31,9 +31,9 @@
 
 #include "testlib.h"
 
-static uint64_t blocksize = 1<<20;          /* 1MB */
+static uint64_t blocksize = 1 << 20;        /* 1MB */
 static uint64_t nblocks = 128;              /* Each process reads 128MB */
-static uint64_t chunksize = 64*(1<<10);     /* 64KB for each read(2) call */
+static uint64_t chunksize = 64 * (1 << 10); /* 64KB for each read(2) call */
 
 static int use_listio;      /* use lio_listio(2) */
 static int use_pread;       /* use pread(2) */
@@ -51,14 +51,14 @@ static int total_ranks;
 
 static int debug;           /* pause for attaching debugger */
 static int unmount;         /* unmount unifycr after running the test */
-static char *mountpoint = "/unifycr"; /* unifycr mountpoint */
-static char *filename = "testfile"; /* testfile name under mountpoint */
+static char* mountpoint = "/unifycr"; /* unifycr mountpoint */
+static char* filename = "testfile"; /* testfile name under mountpoint */
 static char targetfile[NAME_MAX];   /* target file name */
 
-static char *buf;                   /* I/O buffer */
+static char* buf;                   /* I/O buffer */
 static uint64_t n_aiocb_list;       /* number of aio requests */
-static struct aiocb **aiocb_list;   /* aio request list */
-static struct aiocb *aiocb_items;   /* aio requests */
+static struct aiocb** aiocb_list;   /* aio request list */
+static struct aiocb* aiocb_items;   /* aio requests */
 
 static int do_read(void)
 {
@@ -71,21 +71,22 @@ static int do_read(void)
     for (i = 0; i < nblocks; i++) {
         for (j = 0; j < nchunks; j++) {
             if (pattern == IO_PATTERN_N1)
-                offset = i*total_ranks*blocksize + rank*blocksize
-                         + j*chunksize;
-            else
-                offset = i*blocksize + j*chunksize;
-
-            if (use_pread)
-                ret = pread(fd, buf, chunksize, offset);
+                offset = i * total_ranks * blocksize + rank * blocksize
+                         + j * chunksize;
             else {
+                offset = i * blocksize + j * chunksize;
+            }
+
+            if (use_pread) {
+                ret = pread(fd, buf, chunksize, offset);
+            } else {
                 lseek(fd, offset, SEEK_SET);
                 ret = read(fd, buf, chunksize);
             }
 
             if (ret < 0) {
                 test_print(rank, "%s failed",
-                                 use_pread ? "pread()" : "read()");
+                           use_pread ? "pread()" : "read()");
                 return -1;
             }
 
@@ -113,27 +114,28 @@ static int do_listread(void)
     uint64_t i, j;
     uint64_t nchunks = blocksize / chunksize;
     uint64_t current_ix = 0;
-    struct aiocb *current = NULL;
+    struct aiocb* current = NULL;
 
     gettimeofday(&read_start, NULL);
 
     for (i = 0; i < nblocks; i++) {
         for (j = 0; j < nchunks; j++) {
-            current_ix = i*nchunks + j;
+            current_ix = i * nchunks + j;
 
             current = &aiocb_items[current_ix];
             aiocb_list[current_ix] = current;
 
             current->aio_fildes = fd;
-            current->aio_buf = &buf[current_ix*chunksize];
+            current->aio_buf = &buf[current_ix * chunksize];
             current->aio_nbytes = chunksize;
             current->aio_lio_opcode = LIO_READ;
 
             if (pattern == IO_PATTERN_N1)
-                current->aio_offset = i*total_ranks*blocksize
-                                      + rank*blocksize + j*chunksize;
-            else
-                current->aio_offset = i*blocksize + j*chunksize;
+                current->aio_offset = i * total_ranks * blocksize
+                                      + rank * blocksize + j * chunksize;
+            else {
+                current->aio_offset = i * blocksize + j * chunksize;
+            }
         }
     }
 
@@ -144,12 +146,12 @@ static int do_listread(void)
     }
 
     if (lipsum) {
-        for (i = 0; i < nblocks*(blocksize/chunksize); i++) {
+        for (i = 0; i < nblocks * (blocksize / chunksize); i++) {
             uint64_t epos = 0;
 
             current = &aiocb_items[i];
 
-            ret = lipsum_check((const char *) current->aio_buf, chunksize,
+            ret = lipsum_check((const char*) current->aio_buf, chunksize,
                                current->aio_offset, &epos);
             if (ret < 0) {
                 test_print(rank, "lipsum check failed at offset %llu.\n",
@@ -173,15 +175,15 @@ static void report_result(void)
     double read_time = .0F;
 
     read_time = timediff_sec(&read_start, &read_end);
-    read_bw = 1.0*blocksize*nblocks/read_time/(1<<20);
+    read_bw = 1.0 * blocksize * nblocks / read_time / (1 << 20);
 
     MPI_Reduce(&read_bw, &agg_read_bw,
                1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&read_time, &max_read_time,
                1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
-    min_read_bw = 1.0*blocksize*nblocks*total_ranks
-                    /max_read_time/(1<<20);
+    min_read_bw = 1.0 * blocksize * nblocks * total_ranks
+                  / max_read_time / (1 << 20);
 
     test_print_once(rank,
                     "\n"
@@ -194,8 +196,8 @@ static void report_result(void)
                     "Min. read bandwidth:      %lf MB/s\n"
                     "Total Read time:          %lf sec.\n\n",
                     total_ranks,
-                    1.0*blocksize*nblocks/(1<<20),
-                    1.0*total_ranks*blocksize*nblocks/(1<<20),
+                    1.0 * blocksize * nblocks / (1 << 20),
+                    1.0 * total_ranks * blocksize * nblocks / (1 << 20),
                     io_pattern_string(pattern),
                     chunksize,
                     agg_read_bw,
@@ -220,36 +222,36 @@ static struct option const long_opts[] = {
     { 0, 0, 0, 0},
 };
 
-static char *short_opts = "b:n:c:df:hLlm:Pp:su";
+static char* short_opts = "b:n:c:df:hLlm:Pp:su";
 
-static const char *usage_str =
-"\n"
-"Usage: %s [options...]\n"
-"\n"
-"Available options:\n"
-" -b, --blocksize=<size in bytes>  logical block size for the target file\n"
-"                                  (default 1048576, 1MB)\n"
-" -n, --nblocks=<count>            count of blocks each process will read\n"
-"                                  (default 128)\n"
-" -c, --chunksize=<size in bytes>  I/O chunk size for each read operation\n"
-"                                  (default 64436, 64KB)\n"
-" -d, --debug                      pause before running test\n"
-"                                  (handy for attaching in debugger)\n"
-" -f, --filename=<filename>        target file name under mountpoint\n"
-"                                  (default: testfile)\n"
-" -h, --help                       help message\n"
-" -L, --lipsum                     check contents written by write test\n"
-" -l, --listio                     use lio_listio(2) instead of read(2)\n"
-" -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-"                                  (default: /unifycr)\n"
-" -P, --pread                      use pread(2) instead of read(2)\n"
-" -p, --pattern=<pattern>          should be 'n1'(n to 1) or 'nn' (n to n)\n"
-"                                  (default: n1)\n"
-" -s, --standard                   do not use unifycr but run standard I/O\n"
-" -u, --unmount                    unmount the filesystem after test\n"
-"\n";
+static const char* usage_str =
+    "\n"
+    "Usage: %s [options...]\n"
+    "\n"
+    "Available options:\n"
+    " -b, --blocksize=<size in bytes>  logical block size for the target file\n"
+    "                                  (default 1048576, 1MB)\n"
+    " -n, --nblocks=<count>            count of blocks each process will read\n"
+    "                                  (default 128)\n"
+    " -c, --chunksize=<size in bytes>  I/O chunk size for each read operation\n"
+    "                                  (default 64436, 64KB)\n"
+    " -d, --debug                      pause before running test\n"
+    "                                  (handy for attaching in debugger)\n"
+    " -f, --filename=<filename>        target file name under mountpoint\n"
+    "                                  (default: testfile)\n"
+    " -h, --help                       help message\n"
+    " -L, --lipsum                     check contents written by write test\n"
+    " -l, --listio                     use lio_listio(2) instead of read(2)\n"
+    " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
+    "                                  (default: /unifycr)\n"
+    " -P, --pread                      use pread(2) instead of read(2)\n"
+    " -p, --pattern=<pattern>          should be 'n1'(n to 1) or 'nn' (n to n)\n"
+    "                                  (default: n1)\n"
+    " -s, --standard                   do not use unifycr but run standard I/O\n"
+    " -u, --unmount                    unmount the filesystem after test\n"
+    "\n";
 
-static char *program;
+static char* program;
 
 static void print_usage(void)
 {
@@ -257,7 +259,7 @@ static void print_usage(void)
     exit(0);
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     int ret = 0;
     int ch = 0;
@@ -335,19 +337,19 @@ int main(int argc, char **argv)
 
     if (blocksize < chunksize || blocksize % chunksize > 0) {
         test_print_once(rank, "blocksize should be larger than "
-                              "and divisible by chunksize.\n");
+                        "and divisible by chunksize.\n");
         exit(-1);
     }
 
-    if (chunksize % (1<<10) > 0) {
+    if (chunksize % (1 << 10) > 0) {
         test_print_once(rank, "chunksize and blocksize should be divisible "
-                              "by 1024.\n");
+                        "by 1024.\n");
         exit(-1);
     }
 
     if (static_linked(program) && standard) {
         test_print_once(rank, "--standard, -s option only works when "
-                              "dynamically linked.\n");
+                        "dynamically linked.\n");
         exit(-1);
     }
 
@@ -358,15 +360,17 @@ int main(int argc, char **argv)
     }
 
     if (use_listio) {
-        bufsize = blocksize*nblocks;
-        n_aiocb_list = blocksize*nblocks/chunksize;
-    } else
+        bufsize = blocksize * nblocks;
+        n_aiocb_list = blocksize * nblocks / chunksize;
+    } else {
         bufsize = chunksize;
+    }
 
     sprintf(targetfile, "%s/%s", mountpoint, filename);
 
-    if (debug)
+    if (debug) {
         test_pause(rank, "Attempting to mount");
+    }
 
     if (!standard) {
         ret = unifycr_mount(mountpoint, rank, total_ranks, 0);
@@ -394,8 +398,9 @@ int main(int argc, char **argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (pattern == IO_PATTERN_NN)
+    if (pattern == IO_PATTERN_NN) {
         sprintf(&targetfile[strlen(targetfile)], "-%d", rank);
+    }
 
     fd = open(targetfile, O_RDONLY, 0600);
     if (fd < 0) {
@@ -411,11 +416,13 @@ int main(int argc, char **argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (!standard && unmount && rank == 0)
+    if (!standard && unmount && rank == 0) {
         unifycr_unmount();
+    }
 
-    if (ret == 0)
+    if (ret == 0) {
         report_result();
+    }
 
     free(buf);
 
