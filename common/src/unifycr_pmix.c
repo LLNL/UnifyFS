@@ -29,17 +29,17 @@ static pmix_proc_t myproc;
 char myhost[80];
 
 // PMIx keys we use
-const char *pmix_key_runstate = "unifycr.runstate";
-const char *pmix_key_unifycrd_socket = "unifycrd.socket";
+const char* pmix_key_runstate = "unifycr.runstate";
+const char* pmix_key_unifycrd_socket = "unifycrd.socket";
 
 
 // initialize PMIx
-int unifycr_pmix_init(int *orank,
-                      size_t *ouniv)
+int unifycr_pmix_init(int* orank,
+                      size_t* ouniv)
 {
     int rc;
     pmix_value_t value;
-    pmix_value_t *valp = &value;
+    pmix_value_t* valp = &value;
     pmix_proc_t proc;
 
     if (!initialized) {
@@ -61,7 +61,7 @@ int unifycr_pmix_init(int *orank,
         rc = PMIx_Get(&proc, PMIX_UNIV_SIZE, NULL, 0, &valp);
         if (rc != PMIX_SUCCESS) {
             fprintf(stderr, "ERROR [%s]: %s() - PMIx rank %d: "
-                            "PMIx_Get(UNIV_SIZE) failed: %s\n",
+                    "PMIx_Get(UNIV_SIZE) failed: %s\n",
                     myhost, __func__, myproc.rank, PMIx_Error_string(rc));
             return (int)UNIFYCR_FAILURE;
         }
@@ -71,10 +71,12 @@ int unifycr_pmix_init(int *orank,
         initialized = 1;
     }
 
-    if (orank != NULL)
+    if (orank != NULL) {
         *orank = myproc.rank;
-    if (ouniv != NULL)
+    }
+    if (ouniv != NULL) {
         *ouniv = univ_nprocs;
+    }
 
     return (int)UNIFYCR_SUCCESS;
 }
@@ -84,7 +86,7 @@ int unifycr_pmix_fini(void)
 {
     int rc;
     size_t ninfo;
-    pmix_info_t *info;
+    pmix_info_t* info;
     pmix_data_range_t range;
 
     rc = (int) UNIFYCR_SUCCESS;
@@ -100,7 +102,7 @@ int unifycr_pmix_fini(void)
             rc = PMIx_Unpublish(NULL, info, ninfo);
             if (rc != PMIX_SUCCESS) {
                 fprintf(stderr, "ERROR [%s]: %s() - PMIx rank %d: "
-                                "PMIx_Unpublish failed: %s\n",
+                        "PMIx_Unpublish failed: %s\n",
                         myhost, __func__, myproc.rank, PMIx_Error_string(rc));
             }
             published = 0;
@@ -110,7 +112,7 @@ int unifycr_pmix_fini(void)
         rc = PMIx_Finalize(NULL, 0);
         if (rc != PMIX_SUCCESS) {
             fprintf(stderr, "ERROR [%s]: %s() PMIx rank %d: "
-                            "PMIx_Finalize() failed: %s\n",
+                    "PMIx_Finalize() failed: %s\n",
                     myhost, __func__, myproc.rank, PMIx_Error_string(rc));
             rc = (int) UNIFYCR_FAILURE;
         }
@@ -122,19 +124,20 @@ int unifycr_pmix_fini(void)
 }
 
 // publish a key-value pair
-int unifycr_pmix_publish(const char *key,
-                         const char *val)
+int unifycr_pmix_publish(const char* key,
+                         const char* val)
 {
     int rc;
     size_t len, hlen, ninfo;
-    pmix_info_t *info;
+    pmix_info_t* info;
     pmix_data_range_t range;
     char pmix_key[PMIX_MAX_KEYLEN];
 
     if (!initialized) {
         rc = unifycr_pmix_init(NULL, NULL);
-        if (rc != (int)UNIFYCR_SUCCESS)
+        if (rc != (int)UNIFYCR_SUCCESS) {
             return rc;
+        }
     }
 
     if ((key == NULL) || (val == NULL)) {
@@ -147,7 +150,7 @@ int unifycr_pmix_publish(const char *key,
     hlen = strlen(myhost);
     if ((len + hlen) >= sizeof(pmix_key)) {
         fprintf(stderr, "ERROR [%s]: %s() - "
-                        "length of key (%zd) exceeds max %zd\n",
+                "length of key (%zd) exceeds max %zd\n",
                 myhost, __func__, len, sizeof(pmix_key));
         return (int)UNIFYCR_ERROR_INVAL;
     } else {
@@ -165,7 +168,7 @@ int unifycr_pmix_publish(const char *key,
     rc = PMIx_Publish(info, ninfo);
     if (rc != PMIX_SUCCESS) {
         fprintf(stderr, "ERROR [%s]: %s() - PMIx rank %d: "
-                        "PMIx_Publish failed: %s\n",
+                "PMIx_Publish failed: %s\n",
                 myhost, __func__, myproc.rank, PMIx_Error_string(rc));
         rc = (int)UNIFYCR_FAILURE;
     } else {
@@ -179,15 +182,15 @@ int unifycr_pmix_publish(const char *key,
 }
 
 // lookup a key-value pair
-int unifycr_pmix_lookup_common(const char *pmix_key,
+int unifycr_pmix_lookup_common(const char* pmix_key,
                                int keywait,
-                               char **oval)
+                               char** oval)
 {
     int rc, wait;
     size_t ndir;
     pmix_data_range_t range;
-    pmix_info_t *directives;
-    pmix_pdata_t *pdata;
+    pmix_info_t* directives;
+    pmix_pdata_t* pdata;
 
     if ((pmix_key == NULL) || (oval == NULL)) {
         fprintf(stderr, "ERROR [%s]: %s() - NULL key or value\n",
@@ -209,14 +212,15 @@ int unifycr_pmix_lookup_common(const char *pmix_key,
     range = PMIX_RANGE_GLOBAL;
     PMIX_INFO_CREATE(directives, ndir);
     PMIX_INFO_LOAD(&directives[0], PMIX_RANGE, &range, PMIX_DATA_RANGE);
-    if (keywait)
+    if (keywait) {
         PMIX_INFO_LOAD(&directives[1], PMIX_WAIT, &wait, PMIX_INT);
+    }
 
     /* try lookup */
     rc = PMIx_Lookup(pdata, 1, directives, ndir);
     if (rc != PMIX_SUCCESS) {
         fprintf(stderr, "ERROR [%s]: %s() - PMIx rank %d: "
-                        "PMIx_Lookup(%s) failed: %s\n",
+                "PMIx_Lookup(%s) failed: %s\n",
                 myhost, __func__, myproc.rank, pmix_key, PMIx_Error_string(rc));
         *oval = NULL;
         rc = (int)UNIFYCR_FAILURE;
@@ -226,7 +230,7 @@ int unifycr_pmix_lookup_common(const char *pmix_key,
             rc = (int)UNIFYCR_SUCCESS;
         } else {
             fprintf(stderr, "ERROR [%s]: %s() - PMIx rank %d: "
-                            "PMIx_Lookup(%s) returned NULL string\n",
+                    "PMIx_Lookup(%s) returned NULL string\n",
                     myhost, __func__, myproc.rank, pmix_key);
             *oval = NULL;
             rc = (int)UNIFYCR_FAILURE;
@@ -239,35 +243,37 @@ int unifycr_pmix_lookup_common(const char *pmix_key,
     return rc;
 }
 
-int unifycr_pmix_lookup(const char *key,
+int unifycr_pmix_lookup(const char* key,
                         int keywait,
-                        char **oval)
+                        char** oval)
 {
     int rc;
     char full_key[PMIX_MAX_KEYLEN];
 
     if (!initialized) {
         rc = unifycr_pmix_init(NULL, NULL);
-        if (rc != (int)UNIFYCR_SUCCESS)
+        if (rc != (int)UNIFYCR_SUCCESS) {
             return rc;
+        }
     }
 
     snprintf(full_key, sizeof(full_key), "%s.%s", key, myhost);
     return unifycr_pmix_lookup_common(full_key, keywait, oval);
 }
 
-int unifycr_pmix_lookup_remote(const char *host,
-                               const char *key,
+int unifycr_pmix_lookup_remote(const char* host,
+                               const char* key,
                                int keywait,
-                               char **oval)
+                               char** oval)
 {
     int rc;
     char full_key[PMIX_MAX_KEYLEN];
 
     if (!initialized) {
         rc = unifycr_pmix_init(NULL, NULL);
-        if (rc != (int)UNIFYCR_SUCCESS)
+        if (rc != (int)UNIFYCR_SUCCESS) {
             return rc;
+        }
     }
 
     snprintf(full_key, sizeof(full_key), "%s.%s", key, host);

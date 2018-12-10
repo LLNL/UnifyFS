@@ -23,29 +23,29 @@
 #include <pmix.h>
 
 // PMIx keys we use
-const char *pmix_key_runstate;        // path to runstate file
-const char *pmix_key_unifycrd_socket; // server domain socket path
+const char* pmix_key_runstate;        // path to runstate file
+const char* pmix_key_unifycrd_socket; // server domain socket path
 
 // initialize PMIx
-int unifycr_pmix_init(int *orank,
-                      size_t *ouniv);
+int unifycr_pmix_init(int* orank,
+                      size_t* ouniv);
 
 // finalize PMIx
 int unifycr_pmix_fini(void);
 
 // publish a key-value pair
-int unifycr_pmix_publish(const char *key,
-                         const char *val);
+int unifycr_pmix_publish(const char* key,
+                         const char* val);
 
 // lookup a key-value pair
-int unifycr_pmix_lookup(const char *key,
+int unifycr_pmix_lookup(const char* key,
                         int wait,
-                        char **oval);
+                        char** oval);
 
-int unifycr_pmix_lookup_remote(const char *host,
-                               const char *key,
+int unifycr_pmix_lookup_remote(const char* host,
+                               const char* key,
                                int wait,
-                               char **oval);
+                               char** oval);
 
 #endif // UNIFYCR_PMIX_H
 
