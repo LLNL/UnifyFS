@@ -82,13 +82,13 @@ typedef struct {
     int fid;
     long offset;
     long length;
-    char *buf;
+    char* buf;
 
 } read_req_t;
 
-static const char *opts = "h:v:d:f:p:n:";
+static const char* opts = "h:v:d:f:p:n:";
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
     int direction = 0, ranknum, rank;
     long h_grid_points = 0, v_grid_points = 0;
@@ -105,17 +105,23 @@ int main(int argc, char *argv[])
     while ((c = getopt(argc, argv, opts)) != -1) {
         switch (c)  {
         case 'h': /*number of elements along horizontal direction*/
-            h_grid_points = atol(optarg); break;
+            h_grid_points = atol(optarg);
+            break;
         case 'v': /*number of elements along vertical direction*/
-            v_grid_points = atol(optarg); break;
+            v_grid_points = atol(optarg);
+            break;
         case 'n': /*number of ranks along the x dimension*/
-            r_ranks = atoi(optarg); break;
+            r_ranks = atoi(optarg);
+            break;
         case 'd': /*0: read 1: write*/
-            direction = atoi(optarg); break;
+            direction = atoi(optarg);
+            break;
         case 'f':
-            strcpy(fname, optarg); break;
+            strcpy(fname, optarg);
+            break;
         case 'p': /*size of each elements*/
-            sz_per_elem = atoi(optarg); break;
+            sz_per_elem = atoi(optarg);
+            break;
         default:
             return -1;
         }
@@ -152,7 +158,7 @@ int main(int argc, char *argv[])
 
     long num_reqs = y_size; /*number of I/O requests*/
 
-    read_req_t *r_w_reqs = (read_req_t *) malloc(num_reqs*sizeof(read_req_t));
+    read_req_t* r_w_reqs = (read_req_t*) malloc(num_reqs * sizeof(read_req_t));
 
     /*initialize the I/O requests*/
     long cursor = 0, tot_sz;
@@ -164,7 +170,7 @@ int main(int argc, char *argv[])
     }
     tot_sz = v_grid_points * h_grid_points * sz_per_elem;
 
-    char *buf = malloc(x_size * sz_per_elem);
+    char* buf = malloc(x_size * sz_per_elem);
 
     memset(buf, 0, x_size * sz_per_elem);
 
@@ -197,26 +203,27 @@ int main(int argc, char *argv[])
     fsync(fd);
     gettimeofday(&metaend, NULL);
 
-    metatime += 1000000*(metaend.tv_sec-metastart.tv_sec)
+    metatime += 1000000 * (metaend.tv_sec - metastart.tv_sec)
                 + metaend.tv_usec - metastart.tv_usec;
     metatime /= 1000000;
 
     gettimeofday(&writeend, NULL);
 
-    writetime += 1000000*(writeend.tv_sec - writestart.tv_sec)
-                + writeend.tv_usec - writestart.tv_usec;
+    writetime += 1000000 * (writeend.tv_sec - writestart.tv_sec)
+                 + writeend.tv_usec - writestart.tv_usec;
 
     writetime = writetime / 1000000;
 
     if (direction == 1) {
-        if (rank == 0)
+        if (rank == 0) {
             unifycr_unmount();
+        }
         close(fd);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    double wr_bw = (double) tot_sz/ranknum/1048576/writetime;
+    double wr_bw = (double) tot_sz / ranknum / 1048576 / writetime;
     double aggrdbw;
     double aggwrbw;
     double max_wr_time;
@@ -226,33 +233,33 @@ int main(int argc, char *argv[])
     MPI_Reduce(&writetime, &max_wr_time, 1, MPI_DOUBLE, MPI_MAX,
                0, MPI_COMM_WORLD);
 
-    min_wr_bw = (double) tot_sz/1048576/max_wr_time;
+    min_wr_bw = (double) tot_sz / 1048576 / max_wr_time;
 
     if (direction == 1) {
         if (rank == 0) {
             printf("Aggregated Write BW is %lf, Min Write BW is %lf\n",
-                    aggwrbw, min_wr_bw);
+                   aggwrbw, min_wr_bw);
             fflush(stdout);
         }
     }
 
-    char  *read_buf;
+    char*  read_buf;
 
     if (direction == 0) {
-        struct aiocb *aiocb_list = (struct aiocb *) malloc(num_reqs *
+        struct aiocb* aiocb_list = (struct aiocb*) malloc(num_reqs *
                                    sizeof(struct aiocb));
-        struct aiocb **cb_list = (struct aiocb **) malloc(num_reqs *
-                                  sizeof(struct aiocb *));
+        struct aiocb** cb_list = (struct aiocb**) malloc(num_reqs *
+                                 sizeof(struct aiocb*));
 
-        read_buf = (char *) malloc(tot_sz/ranknum);
-        memset(read_buf, 0, tot_sz/ranknum);
+        read_buf = (char*) malloc(tot_sz / ranknum);
+        memset(read_buf, 0, tot_sz / ranknum);
 
         gettimeofday(&readstart, NULL);
         cursor = 0;
 
         for (i = 0; i < num_reqs; i++) {
             aiocb_list[cursor].aio_fildes = fd;
-            aiocb_list[cursor].aio_buf = read_buf + i*x_size*sz_per_elem;
+            aiocb_list[cursor].aio_buf = read_buf + i * x_size * sz_per_elem;
             aiocb_list[cursor].aio_nbytes = r_w_reqs[cursor].length;
             aiocb_list[cursor].aio_offset = r_w_reqs[cursor].offset;
             aiocb_list[cursor].aio_lio_opcode = LIO_READ;
@@ -268,17 +275,18 @@ int main(int argc, char *argv[])
         }
 
         gettimeofday(&readend, NULL);
-        readtime = (readend.tv_sec - readstart.tv_sec)*1000000
+        readtime = (readend.tv_sec - readstart.tv_sec) * 1000000
                    + readend.tv_usec - readstart.tv_usec;
-        readtime = readtime/1000000;
+        readtime = readtime / 1000000;
 
         MPI_Barrier(MPI_COMM_WORLD);
         close(fd);
 
-        if (rank == 0)
+        if (rank == 0) {
             unifycr_unmount();
+        }
 
-        double rd_bw = (double)tot_sz/ranknum/1048576/readtime;
+        double rd_bw = (double)tot_sz / ranknum / 1048576 / readtime;
         double max_rd_time;
         double min_rd_bw;
 
@@ -287,7 +295,7 @@ int main(int argc, char *argv[])
         MPI_Reduce(&readtime, &max_rd_time, 1, MPI_DOUBLE, MPI_MAX,
                    0, MPI_COMM_WORLD);
 
-        min_rd_bw = (double) tot_sz/1048576/max_rd_time;
+        min_rd_bw = (double) tot_sz / 1048576 / max_rd_time;
 
         if (rank == 0) {
             printf("Aggregated Read BW is %lfMB/s\n"

@@ -37,13 +37,13 @@ static int rank;
 static int total_ranks;
 static int debug;
 
-static char *mountpoint = "/unifycr";  /* unifycr mountpoint */
-static char *filename = "/unifycr";
+static char* mountpoint = "/unifycr";  /* unifycr mountpoint */
+static char* filename = "/unifycr";
 static int unmount;                /* unmount unifycr after running the test */
 
 #define FP_SPECIAL 1
 
-static void dump_stat(int rank, const struct stat *sb)
+static void dump_stat(int rank, const struct stat* sb)
 {
     printf("## [RANK %d] %s\n", rank, filename);
     printf("File type:                ");
@@ -76,27 +76,27 @@ static void dump_stat(int rank, const struct stat *sb)
     }
 
     printf("Device containing i-node: major=%ld   minor=%ld\n",
-            (long) major(sb->st_dev), (long) minor(sb->st_dev));
+           (long) major(sb->st_dev), (long) minor(sb->st_dev));
 
     printf("I-node number:            %ld\n", (long) sb->st_ino);
 
     printf("Mode:                     %lo\n",
-            (unsigned long) sb->st_mode);
+           (unsigned long) sb->st_mode);
 
     if (sb->st_mode & (S_ISUID | S_ISGID | S_ISVTX))
         printf("    special bits set:     %s%s%s\n",
-                (sb->st_mode & S_ISUID) ? "set-UID " : "",
-                (sb->st_mode & S_ISGID) ? "set-GID " : "",
-                (sb->st_mode & S_ISVTX) ? "sticky " : "");
+               (sb->st_mode & S_ISUID) ? "set-UID " : "",
+               (sb->st_mode & S_ISGID) ? "set-GID " : "",
+               (sb->st_mode & S_ISVTX) ? "sticky " : "");
 
     printf("Number of (hard) links:   %ld\n", (long) sb->st_nlink);
 
     printf("Ownership:                UID=%ld   GID=%ld\n",
-            (long) sb->st_uid, (long) sb->st_gid);
+           (long) sb->st_uid, (long) sb->st_gid);
 
     if (S_ISCHR(sb->st_mode) || S_ISBLK(sb->st_mode))
         printf("Device number (st_rdev):  major=%ld; minor=%ld\n",
-                (long) major(sb->st_rdev), (long) minor(sb->st_rdev));
+               (long) major(sb->st_rdev), (long) minor(sb->st_rdev));
 
     printf("File size:                %lld bytes\n", (long long) sb->st_size);
     printf("Optimal I/O block size:   %ld bytes\n", (long) sb->st_blksize);
@@ -115,22 +115,22 @@ static struct option const long_opts[] = {
     { 0, 0, 0, 0},
 };
 
-static char *short_opts = "dhm:u";
+static char* short_opts = "dhm:u";
 
-static const char *usage_str =
-"\n"
-"Usage: %s [options...] <filename>\n"
-"\n"
-"Available options:\n"
-" -d, --debug                      pause before running test\n"
-"                                  (handy for attaching in debugger)\n"
-" -h, --help                       help message\n"
-" -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-"                                  (default: /unifycr)\n"
-" -u, --unmount                    unmount the filesystem after test\n"
-"\n";
+static const char* usage_str =
+    "\n"
+    "Usage: %s [options...] <filename>\n"
+    "\n"
+    "Available options:\n"
+    " -d, --debug                      pause before running test\n"
+    "                                  (handy for attaching in debugger)\n"
+    " -h, --help                       help message\n"
+    " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
+    "                                  (default: /unifycr)\n"
+    " -u, --unmount                    unmount the filesystem after test\n"
+    "\n";
 
-static char *program;
+static char* program;
 
 static void print_usage(void)
 {
@@ -138,7 +138,7 @@ static void print_usage(void)
     exit(0);
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     int ret = 0;
     int ch = 0;
@@ -173,13 +173,15 @@ int main(int argc, char **argv)
         }
     }
 
-    if (argc - optind != 1)
+    if (argc - optind != 1) {
         print_usage();
+    }
 
     filename = argv[optind];
 
-    if (debug)
+    if (debug) {
         test_pause(rank, "Attempting to mount");
+    }
 
     ret = unifycr_mount(mountpoint, rank, total_ranks, 0);
     if (ret) {
@@ -190,15 +192,17 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
 
     ret = stat(filename, &sb);
-    if (ret < 0)
+    if (ret < 0) {
         test_print(rank, "stat failed on \"%s\"\n", filename);
-    else
+    } else {
         dump_stat(rank, &sb);
+    }
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (unmount && rank == 0)
+    if (unmount && rank == 0) {
         unifycr_unmount();
+    }
 
     MPI_Finalize();
 
