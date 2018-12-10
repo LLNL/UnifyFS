@@ -35,7 +35,7 @@ static void test_util_srand(void)
 /*
  * Store a random string of length @len into buffer @buf.
  */
-void testutil_rand_string(char *buf, size_t len)
+void testutil_rand_string(char* buf, size_t len)
 {
     const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                            "abcdefghijklmnopqrstuvwxyz"
@@ -59,7 +59,7 @@ void testutil_rand_string(char *buf, size_t len)
  * path will begin with the NUL-terminated string pointed to by @pfx,
  * followed by a slash (/), followed by a random sequence of characters.
  */
-void testutil_rand_path(char *buf, size_t len, const char *pfx)
+void testutil_rand_path(char* buf, size_t len, const char* pfx)
 {
     int rc;
 
@@ -73,15 +73,16 @@ void testutil_rand_path(char *buf, size_t len, const char *pfx)
  * otherwise use P_tmpdir which is defined in stdio.h and is typically
  * /tmp.
  */
-char *testutil_get_mount_point(void)
+char* testutil_get_mount_point(void)
 {
-    char *path;
-    char *env = getenv("UNIFYCR_MOUNT_POINT");
+    char* path;
+    char* env = getenv("UNIFYCR_MOUNT_POINT");
 
-    if (env != NULL)
+    if (env != NULL) {
         path = env;
-    else
+    } else {
         path = P_tmpdir;
+    }
 
     return path;
 }
