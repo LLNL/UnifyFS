@@ -48,16 +48,16 @@
 
 #include "unifycr.h"
 
-typedef int (*unifycr_rm_read_resource_t)(unifycr_resource_t *resource);
+typedef int (*unifycr_rm_read_resource_t)(unifycr_resource_t* resource);
 
-typedef int (*unifycr_rm_launch_t)(unifycr_resource_t *resource,
-                                   unifycr_args_t *args);
+typedef int (*unifycr_rm_launch_t)(unifycr_resource_t* resource,
+                                   unifycr_args_t* args);
 
-typedef int (*unifycr_rm_terminate_t)(unifycr_resource_t *resource,
-                                      unifycr_args_t *args);
+typedef int (*unifycr_rm_terminate_t)(unifycr_resource_t* resource,
+                                      unifycr_args_t* args);
 
 struct _ucr_resource_manager {
-    const char *type;
+    const char* type;
 
     unifycr_rm_read_resource_t read_resource;
     unifycr_rm_launch_t launch;
@@ -78,7 +78,7 @@ typedef struct _ucr_resource_manager _ucr_resource_manager_t;
  *
  * @return -ENOSYS
  */
-static int invalid_read_resource(unifycr_resource_t *resource)
+static int invalid_read_resource(unifycr_resource_t* resource)
 {
     return -ENOSYS;
 }
@@ -94,18 +94,19 @@ static int invalid_read_resource(unifycr_resource_t *resource)
  *
  * @return 0 on success, negative errno otherwise
  */
-static int parse_hostfile(unifycr_resource_t *resource,
-                         char *hostfile,
-                         size_t n_nodes)
+static int parse_hostfile(unifycr_resource_t* resource,
+                          char* hostfile,
+                          size_t n_nodes)
 {
     int ret = 0;
     int i = 0;
-    FILE *fp = NULL;
-    char **nodes = NULL;
+    FILE* fp = NULL;
+    char** nodes = NULL;
     char buf[1024] = { 0, };
 
-    if (hostfile == NULL)
+    if (hostfile == NULL) {
         return -EINVAL;
+    }
 
     /*
      * node names may be duplicated in hostfile, depending on the number of
@@ -114,10 +115,11 @@ static int parse_hostfile(unifycr_resource_t *resource,
      */
 
     fp = fopen(hostfile, "r");
-    if (!fp)
+    if (!fp) {
         return -errno;
+    }
 
-    nodes = calloc(sizeof(char *), n_nodes);
+    nodes = calloc(sizeof(char*), n_nodes);
     if (!nodes) {
         ret = -errno;
         goto out;
@@ -126,11 +128,13 @@ static int parse_hostfile(unifycr_resource_t *resource,
     while (fgets(buf, 1024, fp) != NULL) {
         buf[strlen(buf) - 1] = '\0';    /* discard the newline */
         if (i > 0) {
-            if (strcmp(buf, nodes[i - 1]) == 0)
-                continue; // skip duplicate
+            if (strcmp(buf, nodes[i - 1]) == 0) {
+                continue;    // skip duplicate
+            }
             nodes[i] = strdup(buf);
-        } else
+        } else {
             nodes[i] = strdup(buf);
+        }
         i++;
     }
 
@@ -150,15 +154,15 @@ out:
  *
  * @return 0 on success, negative errno otherwise
  */
-static int lsf_read_resource(unifycr_resource_t *resource)
+static int lsf_read_resource(unifycr_resource_t* resource)
 {
     size_t i, n_nodes;
-    char *val;
-    char *node;
-    char *last_node;
-    char *lsb_hosts;
-    char *pos;
-    char **nodes;
+    char* val;
+    char* node;
+    char* last_node;
+    char* lsb_hosts;
+    char* pos;
+    char** nodes;
     int mcpu = 0;
 
     // LSB_HOSTS is space-separated list of host-slots with duplicates,
@@ -168,25 +172,28 @@ static int lsf_read_resource(unifycr_resource_t *resource)
         // LSB_MCPU_HOSTS is space-separated list of host slot-count pairs,
         // and includes launch node as first entry
         val = getenv("LSB_MCPU_HOSTS");
-        if (val == NULL)
+        if (val == NULL) {
             return -EINVAL;
-        else
+        } else {
             mcpu = 1;
+        }
     }
 
     lsb_hosts = strdup(val);
 
     // replace spaces with zeroes
     for (pos = lsb_hosts; *pos; pos++)
-        if (isspace(*pos))
+        if (isspace(*pos)) {
             *pos = '\0';
+        }
 
     // count nodes, skipping first
     pos = lsb_hosts + (strlen(lsb_hosts) + 1); // skip launch node
-    if (!mcpu)
+    if (!mcpu) {
         last_node = lsb_hosts;
-    else
-        pos += (strlen(pos) + 1); // skip launch node slot count
+    } else {
+        pos += (strlen(pos) + 1);    // skip launch node slot count
+    }
     for (n_nodes = 0; *pos;) {
         node = pos;
         if (!mcpu) {
@@ -202,16 +209,18 @@ static int lsf_read_resource(unifycr_resource_t *resource)
         }
     }
 
-    nodes = calloc(sizeof(char *), n_nodes);
-    if (nodes == NULL)
+    nodes = calloc(sizeof(char*), n_nodes);
+    if (nodes == NULL) {
         return -ENOMEM;
+    }
 
     // fill nodes array, skipping first
     pos = lsb_hosts + (strlen(lsb_hosts) + 1); // skip launch node
-    if (!mcpu)
+    if (!mcpu) {
         last_node = lsb_hosts;
-    else
-        pos += (strlen(pos) + 1); // skip launch node slot count
+    } else {
+        pos += (strlen(pos) + 1);    // skip launch node slot count
+    }
     for (i = 0; *pos && i < n_nodes;) {
         node = pos;
         if (!mcpu) {
@@ -240,19 +249,21 @@ static int lsf_read_resource(unifycr_resource_t *resource)
  *
  * @return 0 on success, negative errno otherwise
  */
-static int pbs_read_resource(unifycr_resource_t *resource)
+static int pbs_read_resource(unifycr_resource_t* resource)
 {
     size_t n_nodes = 0;
-    char *num_nodes_str = NULL;
-    char *nodefile = NULL;
+    char* num_nodes_str = NULL;
+    char* nodefile = NULL;
 
     nodefile = getenv("PBS_NODEFILE");
-    if (nodefile == NULL)
+    if (nodefile == NULL) {
         return -EINVAL;
+    }
 
     num_nodes_str = getenv("PBS_NUM_NODES");
-    if (num_nodes_str == NULL)
+    if (num_nodes_str == NULL) {
         return -EINVAL;
+    }
     n_nodes = (size_t) strtoul(num_nodes_str, NULL, 10);
 
     return parse_hostfile(resource, nodefile, n_nodes);
@@ -266,40 +277,44 @@ static int pbs_read_resource(unifycr_resource_t *resource)
  *
  * @return 0 on success, negative errno otherwise
  */
-static int slurm_read_resource(unifycr_resource_t *resource)
+static int slurm_read_resource(unifycr_resource_t* resource)
 {
     int ret;
     size_t len = 0;
     size_t n_nodes = 0;
-    char *num_nodes_str = NULL;
-    char *cmd = NULL;
-    char *hostfile = NULL;
-    char *tmpdir = NULL;
-    const char *cmd_fmt = "scontrol show hostnames > %s";
-    const char *hostfile_fmt = "%s/unifycr-hosts.%d";
-    const char *tmp = "/tmp";
+    char* num_nodes_str = NULL;
+    char* cmd = NULL;
+    char* hostfile = NULL;
+    char* tmpdir = NULL;
+    const char* cmd_fmt = "scontrol show hostnames > %s";
+    const char* hostfile_fmt = "%s/unifycr-hosts.%d";
+    const char* tmp = "/tmp";
 
     // get num nodes
     num_nodes_str = getenv("SLURM_NNODES");
-    if (num_nodes_str == NULL)
+    if (num_nodes_str == NULL) {
         return -EINVAL;
+    }
     n_nodes = (size_t) strtoul(num_nodes_str, NULL, 10);
 
     // get temporary hostfile
     tmpdir = getenv("TMPDIR");
-    if (tmpdir == NULL)
-	tmpdir = (char *)tmp;
+    if (tmpdir == NULL) {
+        tmpdir = (char*)tmp;
+    }
     len = strlen(tmpdir) + strlen(hostfile_fmt) + 16;
     hostfile = malloc(len);
-    if (hostfile == NULL)
-	return -ENOMEM;
+    if (hostfile == NULL) {
+        return -ENOMEM;
+    }
     snprintf(hostfile, len, hostfile_fmt, tmpdir, (int)getpid());
 
     // write SLURM hostnames to temporary hostfile for parsing
     len = strlen(cmd_fmt) + strlen(hostfile) + 8;
     cmd = malloc(len);
-    if (cmd == NULL)
-	return -ENOMEM;
+    if (cmd == NULL) {
+        return -ENOMEM;
+    }
     snprintf(cmd, len, cmd_fmt, hostfile);
     system(cmd);
     free(cmd);
@@ -318,40 +333,42 @@ static int slurm_read_resource(unifycr_resource_t *resource)
  *
  * @return number of server arguments
  */
-static size_t construct_server_argv(unifycr_args_t *args,
-                                    char **server_argv)
+static size_t construct_server_argv(unifycr_args_t* args,
+                                    char** server_argv)
 {
     size_t argc;
     char number[16];
 
     if (server_argv != NULL) {
-        if (args->server_path != NULL)
+        if (args->server_path != NULL) {
             server_argv[0] = strdup(args->server_path);
-        else
+        } else {
             server_argv[0] = strdup(BINDIR "/unifycrd");
+        }
     }
     argc = 1;
 
     if (args->debug) {
         if (server_argv != NULL) {
             server_argv[argc] = strdup("-d");
-            server_argv[argc+1] = strdup("-v");
+            server_argv[argc + 1] = strdup("-v");
             snprintf(number, sizeof(number), "%d", args->debug);
-            server_argv[argc+2] = strdup(number);
+            server_argv[argc + 2] = strdup(number);
         }
         argc += 3;
     }
 
     if (args->cleanup) {
-        if (server_argv != NULL)
+        if (server_argv != NULL) {
             server_argv[argc] = strdup("-C");
+        }
         argc++;
     }
 
     if (args->consistency != UNIFYCR_CM_LAMINATED) {
         if (server_argv != NULL) {
             server_argv[argc] = strdup("-c");
-            server_argv[argc+1] =
+            server_argv[argc + 1] =
                 strdup(unifycr_cm_enum_str(args->consistency));
         }
         argc += 2;
@@ -360,7 +377,7 @@ static size_t construct_server_argv(unifycr_args_t *args,
     if (args->mountpoint != NULL) {
         if (server_argv != NULL) {
             server_argv[argc] = strdup("-m");
-            server_argv[argc+1] = strdup(args->mountpoint);
+            server_argv[argc + 1] = strdup(args->mountpoint);
         }
         argc += 2;
     }
@@ -376,8 +393,8 @@ static size_t construct_server_argv(unifycr_args_t *args,
  *
  * @return -ENOSYS
  */
-static int invalid_launch(unifycr_resource_t *resource,
-                                  unifycr_args_t *args)
+static int invalid_launch(unifycr_resource_t* resource,
+                          unifycr_args_t* args)
 {
     return -ENOSYS;
 }
@@ -390,8 +407,8 @@ static int invalid_launch(unifycr_resource_t *resource,
  *
  * @return -ENOSYS
  */
-static int invalid_terminate(unifycr_resource_t *resource,
-                             unifycr_args_t *args)
+static int invalid_terminate(unifycr_resource_t* resource,
+                             unifycr_args_t* args)
 {
     return -ENOSYS;
 }
@@ -404,11 +421,11 @@ static int invalid_terminate(unifycr_resource_t *resource,
  *
  * @return
  */
-static int jsrun_launch(unifycr_resource_t *resource,
-                        unifycr_args_t *args)
+static int jsrun_launch(unifycr_resource_t* resource,
+                        unifycr_args_t* args)
 {
     size_t argc, jsrun_argc, server_argc;
-    char **argv = NULL;
+    char** argv = NULL;
     char n_nodes[16];
 
     // full command: jsrun <jsrun args> <server args>
@@ -419,7 +436,7 @@ static int jsrun_launch(unifycr_resource_t *resource,
 
     // setup full command argv
     argc = 1 + jsrun_argc + server_argc;
-    argv = calloc(argc, sizeof(char *));
+    argv = calloc(argc, sizeof(char*));
     argv[0] = strdup("jsrun");
     argv[1] = strdup("--immediate");
     argv[2] = strdup("-e");
@@ -429,7 +446,7 @@ static int jsrun_launch(unifycr_resource_t *resource,
     argv[6] = strdup("-r1");
     argv[7] = strdup("-c1");
     argv[8] = strdup("-a1");
-    construct_server_argv(args, argv+jsrun_argc);
+    construct_server_argv(args, argv + jsrun_argc);
 
     execvp(argv[0], argv);
     perror("failed to execvp() jsrun to launch unifycrd");
@@ -444,11 +461,11 @@ static int jsrun_launch(unifycr_resource_t *resource,
  *
  * @return
  */
-static int jsrun_terminate(unifycr_resource_t *resource,
-                           unifycr_args_t *args)
+static int jsrun_terminate(unifycr_resource_t* resource,
+                           unifycr_args_t* args)
 {
     size_t argc, jsrun_argc;
-    char **argv = NULL;
+    char** argv = NULL;
     char n_nodes[16];
 
     // full command: jsrun <jsrun args> pkill unifycrd
@@ -457,7 +474,7 @@ static int jsrun_terminate(unifycr_resource_t *resource,
 
     // setup full command argv
     argc = 1 + jsrun_argc;
-    argv = calloc(argc, sizeof(char *));
+    argv = calloc(argc, sizeof(char*));
     argv[0] = strdup("jsrun");
     argv[1] = strdup("--immediate");
     argv[2] = strdup("-e");
@@ -483,11 +500,11 @@ static int jsrun_terminate(unifycr_resource_t *resource,
  *
  * @return
  */
-static int mpirun_launch(unifycr_resource_t *resource,
-                         unifycr_args_t *args)
+static int mpirun_launch(unifycr_resource_t* resource,
+                         unifycr_args_t* args)
 {
     size_t argc, mpirun_argc, server_argc;
-    char **argv = NULL;
+    char** argv = NULL;
     char n_nodes[16];
 
     // full command: mpirun <mpirun args> <server args>
@@ -499,13 +516,13 @@ static int mpirun_launch(unifycr_resource_t *resource,
 
     // setup full command argv
     argc = 1 + mpirun_argc + server_argc;
-    argv = calloc(argc, sizeof(char *));
+    argv = calloc(argc, sizeof(char*));
     argv[0] = strdup("mpirun");
     argv[1] = strdup("-np");
     argv[2] = strdup(n_nodes);
     argv[3] = strdup("--map-by");
     argv[4] = strdup("ppr:1:node");
-    construct_server_argv(args, argv+mpirun_argc);
+    construct_server_argv(args, argv + mpirun_argc);
 
     execvp(argv[0], argv);
     perror("failed to execvp() mpirun to launch unifycrd");
@@ -520,11 +537,11 @@ static int mpirun_launch(unifycr_resource_t *resource,
  *
  * @return
  */
-static int mpirun_terminate(unifycr_resource_t *resource,
-                            unifycr_args_t *args)
+static int mpirun_terminate(unifycr_resource_t* resource,
+                            unifycr_args_t* args)
 {
     size_t argc, mpirun_argc;
-    char **argv = NULL;
+    char** argv = NULL;
     char n_nodes[16];
 
     // full command: mpirun <mpirun args> pkill unifycrd
@@ -533,7 +550,7 @@ static int mpirun_terminate(unifycr_resource_t *resource,
 
     // setup full command argv
     argc = 1 + mpirun_argc;
-    argv = calloc(argc, sizeof(char *));
+    argv = calloc(argc, sizeof(char*));
     argv[0] = strdup("mpirun");
     argv[1] = strdup("-np");
     argv[2] = strdup(n_nodes);
@@ -556,11 +573,11 @@ static int mpirun_terminate(unifycr_resource_t *resource,
  *
  * @return
  */
-static int srun_launch(unifycr_resource_t *resource,
-                       unifycr_args_t *args)
+static int srun_launch(unifycr_resource_t* resource,
+                       unifycr_args_t* args)
 {
     size_t argc, srun_argc, server_argc;
-    char **argv = NULL;
+    char** argv = NULL;
     char n_nodes[16];
 
     // full command: srun <srun args> <server args>
@@ -572,13 +589,13 @@ static int srun_launch(unifycr_resource_t *resource,
 
     // setup full command argv
     argc = 1 + srun_argc + server_argc;
-    argv = calloc(argc, sizeof(char *));
+    argv = calloc(argc, sizeof(char*));
     argv[0] = strdup("srun");
     argv[1] = strdup("-N");
     argv[2] = strdup(n_nodes);
     argv[3] = strdup("-n");
     argv[4] = strdup(n_nodes);
-    construct_server_argv(args, argv+srun_argc);
+    construct_server_argv(args, argv + srun_argc);
 
     execvp(argv[0], argv);
     perror("failed to execvp() srun to launch unifycrd");
@@ -593,11 +610,11 @@ static int srun_launch(unifycr_resource_t *resource,
  *
  * @return
  */
-static int srun_terminate(unifycr_resource_t *resource,
-                          unifycr_args_t *args)
+static int srun_terminate(unifycr_resource_t* resource,
+                          unifycr_args_t* args)
 {
     size_t argc, srun_argc;
-    char **argv = NULL;
+    char** argv = NULL;
     char n_nodes[16];
 
     // full command: srun <srun args> pkill unifycrd
@@ -606,7 +623,7 @@ static int srun_terminate(unifycr_resource_t *resource,
 
     // setup full command argv
     argc = 1 + srun_argc;
-    argv = calloc(argc, sizeof(char *));
+    argv = calloc(argc, sizeof(char*));
     argv[0] = strdup("srun");
     argv[1] = strdup("-N");
     argv[2] = strdup(n_nodes);
@@ -628,11 +645,11 @@ static int srun_terminate(unifycr_resource_t *resource,
  *
  * @return
  */
-static int script_launch(unifycr_resource_t *resource,
-                         unifycr_args_t *args)
+static int script_launch(unifycr_resource_t* resource,
+                         unifycr_args_t* args)
 {
     size_t argc, script_argc, server_argc;
-    char **argv = NULL;
+    char** argv = NULL;
     char n_nodes[16];
 
     // full command: <script> <#nodes> <server args>
@@ -644,10 +661,10 @@ static int script_launch(unifycr_resource_t *resource,
 
     // setup full command argv
     argc = 1 + script_argc + server_argc;
-    argv = calloc(argc, sizeof(char *));
+    argv = calloc(argc, sizeof(char*));
     argv[0] = strdup(args->script);
     argv[1] = strdup(n_nodes);
-    construct_server_argv(args, argv+script_argc);
+    construct_server_argv(args, argv + script_argc);
 
     execvp(argv[0], argv);
     perror("failed to execvp() custom launch script");
@@ -662,11 +679,11 @@ static int script_launch(unifycr_resource_t *resource,
  *
  * @return
  */
-static int script_terminate(unifycr_resource_t *resource,
-                            unifycr_args_t *args)
+static int script_terminate(unifycr_resource_t* resource,
+                            unifycr_args_t* args)
 {
     size_t argc, script_argc;
-    char **argv = NULL;
+    char** argv = NULL;
     char n_nodes[16];
 
     // full command: <script> <#nodes> pkill unifycrd
@@ -675,7 +692,7 @@ static int script_terminate(unifycr_resource_t *resource,
 
     // setup full command argv
     argc = 1 + script_argc;
-    argv = calloc(argc, sizeof(char *));
+    argv = calloc(argc, sizeof(char*));
     argv[0] = strdup(args->script);
     argv[1] = strdup(n_nodes);
     argv[2] = strdup("pkill");
@@ -697,45 +714,51 @@ static _ucr_resource_manager_t resource_managers[] = {
     { "lsfcsm", &lsf_read_resource, &jsrun_launch, &jsrun_terminate },
 };
 
-int unifycr_detect_resources(unifycr_resource_t *resource)
+int unifycr_detect_resources(unifycr_resource_t* resource)
 {
-    if (getenv("PBS_JOBID") != NULL)
+    if (getenv("PBS_JOBID") != NULL) {
         resource->rm = UNIFYCR_RM_PBS;
-    else if (getenv("SLURM_JOBID") != NULL)
+    } else if (getenv("SLURM_JOBID") != NULL) {
         resource->rm = UNIFYCR_RM_SLURM;
-    else if (getenv("LSB_JOBID") != NULL) {
-        if (getenv("CSM_ALLOCATION_ID") != NULL)
+    } else if (getenv("LSB_JOBID") != NULL) {
+        if (getenv("CSM_ALLOCATION_ID") != NULL) {
             resource->rm = UNIFYCR_RM_LSF_CSM;
-        else
+        } else {
             resource->rm = UNIFYCR_RM_LSF;
-    } else
+        }
+    } else {
         resource->rm = UNIFYCR_RM_INVALID;
+    }
 
     return resource_managers[resource->rm].read_resource(resource);
 }
 
-int unifycr_start_servers(unifycr_resource_t *resource,
-                          unifycr_args_t *args)
+int unifycr_start_servers(unifycr_resource_t* resource,
+                          unifycr_args_t* args)
 {
 
-    if ((resource == NULL) || (args == NULL))
+    if ((resource == NULL) || (args == NULL)) {
         return -EINVAL;
+    }
 
-    if (args->script != NULL)
+    if (args->script != NULL) {
         return script_launch(resource, args);
-    else
+    } else {
         return resource_managers[resource->rm].launch(resource, args);
+    }
 }
 
-int unifycr_stop_servers(unifycr_resource_t *resource,
-                         unifycr_args_t *args)
+int unifycr_stop_servers(unifycr_resource_t* resource,
+                         unifycr_args_t* args)
 {
 
-    if ((resource == NULL) || (args == NULL))
+    if ((resource == NULL) || (args == NULL)) {
         return -EINVAL;
+    }
 
-    if (args->script != NULL)
+    if (args->script != NULL) {
         return script_terminate(resource, args);
-    else
+    } else {
         return resource_managers[resource->rm].terminate(resource, args);
+    }
 }
