@@ -2,8 +2,6 @@ bin_PROGRAMS = unifycrd
 
 unifycrd_SOURCES = arraylist.c \
                    arraylist.h \
-                   unifycr_shm.c \
-                   unifycr_shm.h \
                    unifycr_cmd_handler.c \
                    unifycr_cmd_handler.h \
                    unifycr_debug.c \
