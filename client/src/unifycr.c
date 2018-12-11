@@ -44,6 +44,7 @@
 #include "unifycr-fixed.h"
 #include "unifycr_meta.h"
 #include "unifycr_pmix.h"
+#include "unifycr_shm.h"
 #include "unifycr_runstate.h"
 #include "unifycr_client_context.h"
 
@@ -63,9 +64,6 @@
 
 #include "unifycr_client.h"
 #include "unifycr_clientcalls_rpc.h"
-
-/* hack until we can define common error reporting */
-#define LOGERR(...) fprintf(stderr, __VA_ARGS__);
 
 /* global rpc context (probably should find a better spot for this) */
 unifycr_client_rpc_context_t* unifycr_rpc_context = NULL;
@@ -1845,69 +1843,6 @@ static int unifycr_get_spillblock(size_t size, const char* path)
     return spillblock_fd;
 }
 
-/* creates a shared memory of given size under specified name,
- * returns address of new shared memory if successful,
- * returns NULL on error  */
-static void* shm_alloc(const char* name, size_t size)
-{
-    int ret;
-
-    /* open shared memory file */
-    int fd = shm_open(name, MMAP_OPEN_FLAG, MMAP_OPEN_MODE);
-    if (fd == -1) {
-        /* failed to open shared memory */
-        LOGERR("Failed to open shared memory %s errno=%d (%s)",
-               name, errno, strerror(errno));
-        return NULL;
-    }
-
-    /* set size of shared memory region */
-#ifdef HAVE_POSIX_FALLOCATE
-    ret = posix_fallocate(fd, 0, size);
-    if (ret != 0) {
-        /* failed to set size shared memory */
-        errno = ret;
-        LOGERR("posix_fallocate failed for %s errno=%d (%s)",
-               name, errno, strerror(errno));
-        close(fd);
-        return NULL;
-    }
-#else
-    ret = ftruncate(fd, size);
-    if (ret == -1) {
-        /* failed to set size of shared memory */
-        LOGERR("ftruncate failed for %s errno=%d (%s)",
-               name, errno, strerror(errno));
-        close(fd);
-        return NULL;
-    }
-#endif
-
-    /* map shared memory region into address space */
-    void* addr = mmap(NULL, size, PROT_WRITE | PROT_READ, MAP_SHARED,
-                      fd, 0);
-    if (addr == MAP_FAILED) {
-        /* failed to open shared memory */
-        LOGERR("Failed to mmap shared memory %s errno=%d (%s)",
-               name, errno, strerror(errno));
-        close(fd);
-        return NULL;
-    }
-
-    /* safe to close file descriptor now */
-    ret = close(fd);
-    if (ret == -1) {
-        /* failed to open shared memory */
-        LOGERR("Failed to mmap shared memory %s errno=%d (%s)",
-               name, errno, strerror(errno));
-
-        /* not fatal, so keep going */
-    }
-
-    /* return address */
-    return addr;
-}
-
 /* create superblock of specified size and name, or attach to existing
  * block if available */
 static void* unifycr_superblock_shmget(size_t size, key_t key)
@@ -1918,7 +1853,7 @@ static void* unifycr_superblock_shmget(size_t size, key_t key)
     DEBUG("Key for superblock = %x\n", key);
 
     /* open shared memory file */
-    void* addr = shm_alloc(shm_name, size);
+    void* addr = unifycr_shm_alloc(shm_name, size);
     if (addr == NULL) {
         LOGERR("Failed to create superblock");
         return NULL;
@@ -2411,7 +2346,7 @@ static int unifycr_init_recv_shm(int local_rank_idx, int app_id)
              "%d-recv-%d", app_id, local_rank_idx);
 
     /* allocate memory for shared memory receive buffer */
-    shm_recvbuf = shm_alloc(shm_name, shm_recv_size);
+    shm_recvbuf = unifycr_shm_alloc(shm_name, shm_recv_size);
     if (shm_recvbuf == NULL) {
         LOGERR("Failed to create buffer for read replies");
         return UNIFYCR_FAILURE;
@@ -2451,7 +2386,7 @@ static int unifycr_init_req_shm(int local_rank_idx, int app_id)
              "%d-req-%d", app_id, local_rank_idx);
 
     /* allocate memory for shared memory receive buffer */
-    shm_reqbuf = shm_alloc(shm_name, shm_req_size);
+    shm_reqbuf = unifycr_shm_alloc(shm_name, shm_req_size);
     if (shm_reqbuf == NULL) {
         LOGERR("Failed to create buffer for read requests");
         return UNIFYCR_FAILURE;

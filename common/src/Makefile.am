@@ -21,7 +21,9 @@ BASE_SRCS = \
   unifycr_meta.h \
   unifycr_pmix.h \
   unifycr_client_context.h \
-  unifycr_client_context.c
+  unifycr_client_context.c \
+  unifycr_shm.h \
+  unifycr_shm.c
 
 OPT_SRCS =
 OPT_LIBS =
