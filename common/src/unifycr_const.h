@@ -114,7 +114,6 @@
 // #define SERVICE_MEM_POOL_SIZE 2147483648
 
 /* ****************** Metadata/MDHIM Default Values ******************** */
-#define META_DEFAULT_DB_PATH (/tmp)
 #define META_DEFAULT_DB_NAME unifycr_db
 #define META_DEFAULT_SERVER_RATIO 1
 #define META_DEFAULT_RANGE_SZ MIB
