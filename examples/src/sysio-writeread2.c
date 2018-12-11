@@ -406,6 +406,8 @@ int main(int argc, char *argv[])
     /* verify data integrity in file */
     checkdata(name, filesize, times);
 
+    unifycr_unmount();
+
     MPI_Finalize();
 
     return 0;
