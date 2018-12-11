@@ -58,6 +58,7 @@ uint32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t**
     unifycr_sync_to_del(&in);
     hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
+    free(in.external_spill_dir);
 
     /* decode response */
     hret = margo_get_output(handle, &out);

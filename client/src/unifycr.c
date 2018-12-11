@@ -804,6 +804,7 @@ int unifycr_get_global_file_meta(int fid, int gfid, unifycr_file_attr_t* gfattr)
         &unifycr_rpc_context, &fmeta, fid, gfid);
     if (ret == UNIFYCR_SUCCESS) {
         *gfattr = *fmeta;
+        free(fmeta);
     }
 
     return ret;
@@ -2240,14 +2241,54 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
     return rc;
 }
 
-/**
- * unmount the mounted file system
- * TODO: Add support for unmounting more than
- * one filesystem.
- * @return success/error code
- */
-int unifycr_unmount(void)
+/* free resources allocated in corresponding call
+ * to unifycr_client_rpc_init */
+static int unifycr_client_rpc_finalize(
+  unifycr_client_rpc_context_t** pcontext)
 {
+    if (pcontext != NULL && *pcontext != NULL) {
+        /* define a temporary to refer to context */
+        unifycr_client_rpc_context_t* ctx = *pcontext;
+
+        /* free margo address to server */
+        margo_addr_free(ctx->mid, ctx->svr_addr);
+
+        /* shut down margo */
+        margo_finalize(ctx->mid);
+
+        /* free memory allocated for context structure,
+         * and set caller's pointer to NULL */
+        free(ctx);
+        *pcontext = NULL;
+    }
+
+    return UNIFYCR_SUCCESS;
+}
+
+/* free resources allocated during unifycr_init,
+ * generally we do this in reverse order that
+ * things were initailized in */
+static int unifycr_finalize(void)
+{
+    int rc = UNIFYCR_SUCCESS;
+
+    if (!unifycr_initialized) {
+        /* not initialized yet, so we shouldn't call finalize */
+        return UNIFYCR_FAILURE;
+    }
+
+    /* close spillover files */
+    if (unifycr_spilloverblock != 0) {
+        close(unifycr_spilloverblock);
+        unifycr_spilloverblock = 0;
+    }
+    if (unifycr_spillmetablock != 0) {
+        close(unifycr_spillmetablock);
+        unifycr_spillmetablock = 0;
+    }
+
+    /* TODO: detach from superblock */
+
     /* free directory stream stack */
     if (unifycr_dirstream_stack != NULL) {
         free(unifycr_dirstream_stack);
@@ -2266,9 +2307,42 @@ int unifycr_unmount(void)
         unifycr_fd_stack = NULL;
     }
 
+    /* free resources allocated in client_rpc_init */
+    unifycr_client_rpc_finalize(&unifycr_rpc_context);
+
+    /* clean up configuration */
+    int tmp_rc = unifycr_config_fini(&client_cfg);
+    if (tmp_rc) {
+        rc = UNIFYCR_FAILURE;
+    }
+
+    /* no longer initialized, so update the flag */
+    unifycr_initialized = 0;
+
+    return rc;
+}
+
+/**
+ * unmount the mounted file system
+ * TODO: Add support for unmounting more than
+ * one filesystem.
+ * @return success/error code
+ */
+int unifycr_unmount(void)
+{
     /* invoke unmount rpc */
     printf("calling unmount\n");
     int ret = unifycr_client_unmount_rpc_invoke(&unifycr_rpc_context);
+
+    unifycr_finalize();
+
+    /* free memory tracking our mount prefix string */
+    if (unifycr_mount_prefix != NULL) {
+        free(unifycr_mount_prefix);
+        unifycr_mount_prefix = NULL;
+        unifycr_mount_prefixlen = 0;
+    }
+
     return ret;
 }
 
