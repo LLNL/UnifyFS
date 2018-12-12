@@ -82,9 +82,6 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
 int unifycr_unmount(void);
 int compare_fattr(const void* a, const void* b);
 
-/* mount memfs at some prefix location */
-int unifycrfs_mount(const char prefix[], size_t size, int rank);
-
 /* get information about the chunk data region
  * for external async libraries to register during their init */
 size_t unifycr_get_data_region(void** ptr);
