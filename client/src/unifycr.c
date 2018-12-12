@@ -799,12 +799,11 @@ int unifycr_get_global_file_meta(int fid, int gfid, unifycr_file_attr_t* gfattr)
         return -EINVAL;
     }
 
-    unifycr_file_attr_t* fmeta = NULL;
+    unifycr_file_attr_t fmeta;
     int ret = unifycr_client_metaget_rpc_invoke(
         &unifycr_rpc_context, &fmeta, fid, gfid);
     if (ret == UNIFYCR_SUCCESS) {
-        *gfattr = *fmeta;
-        free(fmeta);
+        *gfattr = fmeta;
     }
 
     return ret;
@@ -2307,9 +2306,6 @@ static int unifycr_finalize(void)
         unifycr_fd_stack = NULL;
     }
 
-    /* free resources allocated in client_rpc_init */
-    unifycr_client_rpc_finalize(&unifycr_rpc_context);
-
     /* clean up configuration */
     int tmp_rc = unifycr_config_fini(&client_cfg);
     if (tmp_rc) {
@@ -2333,6 +2329,9 @@ int unifycr_unmount(void)
     /* invoke unmount rpc */
     printf("calling unmount\n");
     int ret = unifycr_client_unmount_rpc_invoke(&unifycr_rpc_context);
+
+    /* free resources allocated in client_rpc_init */
+    unifycr_client_rpc_finalize(&unifycr_rpc_context);
 
     unifycr_finalize();
 
