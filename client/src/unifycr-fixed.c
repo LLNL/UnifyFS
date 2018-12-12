@@ -104,6 +104,7 @@ static inline off_t unifycr_compute_spill_offset(
 
     /* identify physical chunk id */
     int physical_id = chunk_meta->id;
+
     /* compute start of chunk in spill over device */
     off_t start = 0;
     if (physical_id < unifycr_max_chunks) {
@@ -115,6 +116,7 @@ static inline off_t unifycr_compute_spill_offset(
          * grabbing this chunk */
         start = ((long)(physical_id - unifycr_max_chunks) << unifycr_chunk_bits);
     }
+
     off_t buf = start + logical_offset;
     return buf;
 }
@@ -124,6 +126,7 @@ static int unifycr_chunk_alloc(int fid, unifycr_filemeta_t* meta, int chunk_id)
 {
     /* get pointer to chunk meta data */
     unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[chunk_id]);
+
     /* allocate a chunk and record its location */
     if (unifycr_use_memfs) {
         /* allocate a new chunk from memory */
@@ -138,8 +141,8 @@ static int unifycr_chunk_alloc(int fid, unifycr_filemeta_t* meta, int chunk_id)
             chunk_meta->id = id;
         } else if (unifycr_use_spillover) {
             /* shm segment out of space, grab a block from spill-over device */
-
             DEBUG("getting blocks from spill-over device\n");
+
             /* TODO: missing lock calls? */
             /* add unifycr_max_chunks to identify chunk location */
             unifycr_stack_lock();
@@ -512,7 +515,6 @@ int unifycr_fid_store_fixed_extend(int fid, unifycr_filemeta_t* meta,
 {
     /* determine whether we need to allocate more chunks */
     off_t maxsize = meta->chunks << unifycr_chunk_bits;
-//      printf("rank %d,meta->chunks is %d, length is %ld, maxsize is %ld\n", dbgrank, meta->chunks, length, maxsize);
     if (length > maxsize) {
         /* compute number of additional bytes we need */
         off_t additional = length - maxsize;
@@ -521,6 +523,7 @@ int unifycr_fid_store_fixed_extend(int fid, unifycr_filemeta_t* meta,
             if (meta->chunks == unifycr_max_chunks + unifycr_spillover_max_chunks) {
                 return UNIFYCR_ERROR_NOSPC;
             }
+
             /* allocate a new chunk */
             int rc = unifycr_chunk_alloc(fid, meta, meta->chunks);
             if (rc != UNIFYCR_SUCCESS) {
