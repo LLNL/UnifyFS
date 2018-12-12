@@ -26,13 +26,14 @@ static int set_global_file_meta(unifycr_metaset_in_t* in,
 }
 
 static int get_global_file_meta(int fid, int gfid, unifycr_metaget_out_t* out,
-                                unifycr_file_attr_t** file_meta)
+                                unifycr_file_attr_t* file_meta)
 {
-    *file_meta = (unifycr_file_attr_t*)calloc(1, sizeof(unifycr_file_attr_t));
-    (*file_meta)->fid = fid;
-    (*file_meta)->gfid = gfid;
-    strcpy((*file_meta)->filename, out->filename);
-    (*file_meta)->file_attr.st_size = out->st_size;
+    memset(file_meta, 0, sizeof(unifycr_file_attr_t));
+
+    file_meta->fid  = fid;
+    file_meta->gfid = gfid;
+    strcpy(file_meta->filename, out->filename);
+    file_meta->file_attr.st_size = out->st_size;
 
     return UNIFYCR_SUCCESS;
 }
@@ -147,7 +148,7 @@ uint32_t unifycr_client_metaset_rpc_invoke(unifycr_client_rpc_context_t**
 /* invokes the client metaget rpc function by calling get_global_file_meta */
 uint32_t unifycr_client_metaget_rpc_invoke(unifycr_client_rpc_context_t**
         unifycr_rpc_context,
-        unifycr_file_attr_t** file_meta, int fid, int gfid)
+        unifycr_file_attr_t* file_meta, int fid, int gfid)
 {
     hg_handle_t handle;
     unifycr_metaget_in_t in;
