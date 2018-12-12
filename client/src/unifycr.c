@@ -2141,153 +2141,6 @@ static int unifycr_init(int rank)
  * --------------------------------------- */
 
 /**
-* mount a file system at a given prefix
-* subtype: 0-> log-based file system;
-* 1->striping based file system, not implemented yet.
-* @param prefix: directory prefix
-* @param size: the number of ranks
-* @param l_app_id: application ID
-* @return success/error code
-*/
-int unifycr_mount(const char prefix[], int rank, size_t size,
-                  int l_app_id)
-{
-    int rc;
-
-    dbg_rank = rank;
-    app_id = l_app_id;
-
-    // initialize configuration
-    rc = unifycr_config_init(&client_cfg, 0, NULL);
-    if (rc) {
-        DEBUG("rank:%d, failed to initialize configuration.", dbg_rank);
-        return -1;
-    }
-
-    // update configuration from runstate file
-    rc = unifycr_read_runstate(&client_cfg, NULL);
-    if (rc) {
-        DEBUG("rank:%d, failed to update configuration from runstate.",
-              dbg_rank);
-        return -1;
-    }
-
-    /* print log messages to stderr for now */
-    unifycr_log_open(NULL);
-
-    rc = unifycrfs_mount(prefix, size, rank);
-    return rc;
-}
-
-/* free resources allocated in corresponding call
- * to unifycr_client_rpc_init */
-static int unifycr_client_rpc_finalize(
-  unifycr_client_rpc_context_t** pcontext)
-{
-    if (pcontext != NULL && *pcontext != NULL) {
-        /* define a temporary to refer to context */
-        unifycr_client_rpc_context_t* ctx = *pcontext;
-
-        /* free margo address to server */
-        margo_addr_free(ctx->mid, ctx->svr_addr);
-
-        /* shut down margo */
-        margo_finalize(ctx->mid);
-
-        /* free memory allocated for context structure,
-         * and set caller's pointer to NULL */
-        free(ctx);
-        *pcontext = NULL;
-    }
-
-    return UNIFYCR_SUCCESS;
-}
-
-/* free resources allocated during unifycr_init,
- * generally we do this in reverse order that
- * things were initailized in */
-static int unifycr_finalize(void)
-{
-    int rc = UNIFYCR_SUCCESS;
-
-    if (!unifycr_initialized) {
-        /* not initialized yet, so we shouldn't call finalize */
-        return UNIFYCR_FAILURE;
-    }
-
-    /* close spillover files */
-    if (unifycr_spilloverblock != 0) {
-        close(unifycr_spilloverblock);
-        unifycr_spilloverblock = 0;
-    }
-    if (unifycr_spillmetablock != 0) {
-        close(unifycr_spillmetablock);
-        unifycr_spillmetablock = 0;
-    }
-
-    /* TODO: detach from superblock */
-
-    /* free directory stream stack */
-    if (unifycr_dirstream_stack != NULL) {
-        free(unifycr_dirstream_stack);
-        unifycr_dirstream_stack = NULL;
-    }
-
-    /* free file stream stack */
-    if (unifycr_stream_stack != NULL) {
-        free(unifycr_stream_stack);
-        unifycr_stream_stack = NULL;
-    }
-
-    /* free file descriptor stack */
-    if (unifycr_fd_stack != NULL) {
-        free(unifycr_fd_stack);
-        unifycr_fd_stack = NULL;
-    }
-
-    /* clean up configuration */
-    int tmp_rc = unifycr_config_fini(&client_cfg);
-    if (tmp_rc) {
-        rc = UNIFYCR_FAILURE;
-    }
-
-    /* no longer initialized, so update the flag */
-    unifycr_initialized = 0;
-
-    return rc;
-}
-
-/**
- * unmount the mounted file system
- * TODO: Add support for unmounting more than
- * one filesystem.
- * @return success/error code
- */
-int unifycr_unmount(void)
-{
-    /* invoke unmount rpc */
-    printf("calling unmount\n");
-    int ret = unifycr_client_unmount_rpc_invoke(&unifycr_rpc_context);
-
-    /* free resources allocated in client_rpc_init */
-    unifycr_client_rpc_finalize(&unifycr_rpc_context);
-
-    unifycr_finalize();
-
-    /* shut down our logging */
-    unifycr_log_close();
-
-    /* free memory tracking our mount prefix string */
-    if (unifycr_mount_prefix != NULL) {
-        free(unifycr_mount_prefix);
-        unifycr_mount_prefix = NULL;
-        unifycr_mount_prefixlen = 0;
-    }
-
-    return ret;
-}
-
-/**
  * Transfer the client-side context information to the corresponding
  * delegator on the server side.
  */
@@ -2834,12 +2687,39 @@ static char* addr_lookup_server_rpc()
     return str;
 }
 
-/* mount memfs at some prefix location */
-int unifycrfs_mount(const char prefix[], size_t size, int rank)
+/**
+ * mount a file system at a given prefix
+ * subtype: 0-> log-based file system;
+ * 1->striping based file system, not implemented yet.
+ * @param prefix: directory prefix
+ * @param size: the number of ranks
+ * @param l_app_id: application ID
+ * @return success/error code
+ */
+int unifycr_mount(const char prefix[], int rank, size_t size,
+                  int l_app_id)
 {
     int rc;
     bool b;
     char* cfgval;
+
+    dbg_rank = rank;
+    app_id = l_app_id;
+
+    // initialize configuration
+    rc = unifycr_config_init(&client_cfg, 0, NULL);
+    if (rc) {
+        DEBUG("rank:%d, failed to initialize configuration.", dbg_rank);
+        return -1;
+    }
+
+    // update configuration from runstate file
+    rc = unifycr_read_runstate(&client_cfg, NULL);
+    if (rc) {
+        DEBUG("rank:%d, failed to update configuration from runstate.",
+              dbg_rank);
+        return -1;
+    }
 
     unifycr_mount_prefix = strdup(prefix);
     unifycr_mount_prefixlen = strlen(unifycr_mount_prefix);
@@ -2923,6 +2803,112 @@ int unifycrfs_mount(const char prefix[], size_t size, int rank)
     }
 
     return 0;
+    return rc;
+}
+
+/* free resources allocated in corresponding call
+ * to unifycr_client_rpc_init */
+static int unifycr_client_rpc_finalize(
+  unifycr_client_rpc_context_t** pcontext)
+{
+    if (pcontext != NULL && *pcontext != NULL) {
+        /* define a temporary to refer to context */
+        unifycr_client_rpc_context_t* ctx = *pcontext;
+
+        /* free margo address to server */
+        margo_addr_free(ctx->mid, ctx->svr_addr);
+
+        /* shut down margo */
+        margo_finalize(ctx->mid);
+
+        /* free memory allocated for context structure,
+         * and set caller's pointer to NULL */
+        free(ctx);
+        *pcontext = NULL;
+    }
+
+    return UNIFYCR_SUCCESS;
+}
+
+/* free resources allocated during unifycr_init,
+ * generally we do this in reverse order that
+ * things were initailized in */
+static int unifycr_finalize(void)
+{
+    int rc = UNIFYCR_SUCCESS;
+
+    if (!unifycr_initialized) {
+        /* not initialized yet, so we shouldn't call finalize */
+        return UNIFYCR_FAILURE;
+    }
+
+    /* close spillover files */
+    if (unifycr_spilloverblock != 0) {
+        close(unifycr_spilloverblock);
+        unifycr_spilloverblock = 0;
+    }
+    if (unifycr_spillmetablock != 0) {
+        close(unifycr_spillmetablock);
+        unifycr_spillmetablock = 0;
+    }
+
+    /* TODO: detach from superblock */
+
+    /* free directory stream stack */
+    if (unifycr_dirstream_stack != NULL) {
+        free(unifycr_dirstream_stack);
+        unifycr_dirstream_stack = NULL;
+    }
+
+    /* free file stream stack */
+    if (unifycr_stream_stack != NULL) {
+        free(unifycr_stream_stack);
+        unifycr_stream_stack = NULL;
+    }
+
+    /* free file descriptor stack */
+    if (unifycr_fd_stack != NULL) {
+        free(unifycr_fd_stack);
+        unifycr_fd_stack = NULL;
+    }
+
+    /* clean up configuration */
+    int tmp_rc = unifycr_config_fini(&client_cfg);
+    if (tmp_rc) {
+        rc = UNIFYCR_FAILURE;
+    }
+
+    /* no longer initialized, so update the flag */
+    unifycr_initialized = 0;
+
+    return rc;
+}
+
+/**
+ * unmount the mounted file system
+ * TODO: Add support for unmounting more than
+ * one filesystem.
+ * @return success/error code
+ */
+int unifycr_unmount(void)
+{
+    /* invoke unmount rpc */
+    printf("calling unmount\n");
+    int ret = unifycr_client_unmount_rpc_invoke(&unifycr_rpc_context);
+
+    /* free resources allocated in client_rpc_init */
+    unifycr_client_rpc_finalize(&unifycr_rpc_context);
+
+    unifycr_finalize();
+
+    /* free memory tracking our mount prefix string */
+    if (unifycr_mount_prefix != NULL) {
+        free(unifycr_mount_prefix);
+        unifycr_mount_prefix = NULL;
+        unifycr_mount_prefixlen = 0;
+    }
+
+    return ret;
 }
 
 /*
