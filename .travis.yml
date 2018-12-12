@@ -18,7 +18,6 @@ before_install:
   - git config --global http.sslVerify false
   - git clone https://xgitlab.cels.anl.gov/sds/sds-repo.git $HOME/sds-repo.git
   - $HOME/spack/bin/spack repo add $HOME/sds-repo.git
-  - $HOME/spack/bin/spack install argobots
   - $HOME/spack/bin/spack install margo
   - git config --global http.sslVerify true
   # prepare build environment

@@ -13,7 +13,7 @@ AC_DEFUN([UNIFYCR_AC_MARGO], [
     LDFLAGS="$LDFLAGS ${MARGO_LDFLAGS}"
   ], [])
 
-  AC_CHECK_LIB([margo], [margo_init],
+  AC_CHECK_LIB([margo], [margo_init_opt],
     [MARGO_LIBS="-lmargo"
      AC_SUBST(MARGO_CFLAGS)
      AC_SUBST(MARGO_LDFLAGS)
