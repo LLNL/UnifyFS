@@ -2910,19 +2910,3 @@ int unifycr_unmount(void)
 
     return ret;
 }
-
-/*
- * get information about the chunk data region for external async libraries
- * to register during their init
- */
-size_t unifycr_get_data_region(void** ptr)
-{
-    *ptr = unifycr_chunks;
-    return unifycr_chunk_mem;
-}
-
-/* get a list of chunks for a given file (useful for RDMA, etc.) */
-chunk_list_t* unifycr_get_chunk_list(char* path)
-{
-    return NULL;
-}
