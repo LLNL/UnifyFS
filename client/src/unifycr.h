@@ -82,15 +82,4 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
 int unifycr_unmount(void);
 int compare_fattr(const void* a, const void* b);
 
-/* get information about the chunk data region
- * for external async libraries to register during their init */
-size_t unifycr_get_data_region(void** ptr);
-
-/* get a list of chunks for a given file (useful for RDMA, etc.) */
-chunk_list_t* unifycr_get_chunk_list(char* path);
-
-/* debug function to print list of chunks constituting a file
- * and to test above function*/
-void unifycr_print_chunk_list(char* path);
-
 #endif /* UNIFYCR_H */
