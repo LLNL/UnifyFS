@@ -45,7 +45,7 @@
 
 #include "mpi.h"
 
-#include "log.h"
+#include "unifycr_log.h"
 #include "unifycr_sock.h"
 #include "unifycr_service_manager.h"
 #include "unifycr_const.h"

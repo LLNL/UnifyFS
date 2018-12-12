@@ -37,7 +37,7 @@
 #include <unistd.h>
 
 #include "arraylist.h"
-#include "log.h"
+#include "unifycr_log.h"
 #include "unifycr_const.h"
 #include "unifycr_global.h"
 #include "unifycr_pmix.h"

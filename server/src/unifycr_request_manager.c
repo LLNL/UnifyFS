@@ -31,7 +31,7 @@
 #include <poll.h>
 #include <time.h>
 #include <string.h>
-#include "log.h"
+#include "unifycr_log.h"
 #include "unifycr_request_manager.h"
 #include "unifycr_const.h"
 #include "unifycr_global.h"

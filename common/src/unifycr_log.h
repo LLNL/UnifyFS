@@ -35,26 +35,23 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 
-extern FILE* dbg_stream;
-extern int glb_rank;
-
 typedef enum {
     LOG_FATAL = 1,
     LOG_ERR   = 2,
     LOG_WARN  = 3,
     LOG_INFO  = 4,
     LOG_DBG   = 5
-} loglevel;
+} unifycr_log_level_t;
 
-char timestamp[256];
-time_t ltime;
+extern unifycr_log_level_t unifycr_log_level;
 
-// add and change all
-struct tm* ttime;
-struct timeval logstart, logend;
-double mlogtm;
+extern FILE* unifycr_log_stream;
+extern int glb_rank;
 
-extern int log_print_level;
+extern time_t unifycr_log_time;
+extern struct tm* unifycr_log_ltime;
+extern char unifycr_log_timestamp[256];
+
 #if defined(__NR_gettid)
 #define gettid() syscall(__NR_gettid)
 #elif defined(SYS_gettid)
@@ -63,22 +60,29 @@ extern int log_print_level;
 #error gettid syscal is not defined
 #endif
 #define LOG(level, ...) \
-                if(level <= log_print_level) { \
-                    gettimeofday(&logstart, NULL); \
-                    ltime = time(NULL); \
-                    ttime = localtime(&ltime); \
-                    strftime(timestamp, sizeof(timestamp), \
-                            "%Y-%m-%dT%H:%M:%S", ttime); \
-                    fprintf(dbg_stream,"logtime:%lf rank [%d] [%s] [%ld] [%s:%d] [%s] ", \
-                                mlogtm/1000000, glb_rank, timestamp, gettid(), \
-                                        __FILE__, __LINE__, __FUNCTION__); \
-                    fprintf(dbg_stream, __VA_ARGS__); \
-                    fprintf(dbg_stream, "\n"); \
-                    fflush(dbg_stream); \
-                    gettimeofday(&logend, NULL); \
-                    mlogtm += 1000000*(logend.tv_sec-logstart.tv_sec)+logend.tv_usec-logstart.tv_usec; \
-                        }
+    if (level <= unifycr_log_level) { \
+        unifycr_log_time = time(NULL); \
+        unifycr_log_ltime = localtime(&unifycr_log_time); \
+        strftime(unifycr_log_timestamp, sizeof(unifycr_log_timestamp), \
+            "%Y-%m-%dT%H:%M:%S", unifycr_log_ltime); \
+        fprintf(unifycr_log_stream, "%s rank=%d tid=%ld @ %s:%d in %s: ", \
+            unifycr_log_timestamp, glb_rank, gettid(), \
+            __FILE__, __LINE__, __func__); \
+        fprintf(unifycr_log_stream, __VA_ARGS__); \
+        fprintf(unifycr_log_stream, "\n"); \
+        fflush(unifycr_log_stream); \
+    }
 
-#define LOGERR(...) LOG(LOG_ERR, __VA_ARGS__)
+#define LOGERR(...)  LOG(LOG_ERR,  __VA_ARGS__)
+#define LOGWARN(...) LOG(LOG_WARN, __VA_ARGS__)
+#define LOGDBG(...)  LOG(LOG_DBG,  __VA_ARGS__)
+
+/* open specified file as debug file stream,
+ *  * returns UNIFYCR_SUCCESS on success */
+int unifycr_log_open(const char* file);
+
+/* close our debug file stream,
+ *  * returns UNIFYCR_SUCCESS on success */
+int unifycr_log_close(void);
 
 #endif /* LOG_H */
