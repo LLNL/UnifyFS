@@ -22,6 +22,8 @@ BASE_SRCS = \
   unifycr_pmix.h \
   unifycr_client_context.h \
   unifycr_client_context.c \
+  unifycr_log.h \
+  unifycr_log.c \
   unifycr_shm.h \
   unifycr_shm.c
 
@@ -37,6 +39,6 @@ libunifycr_common_la_SOURCES = $(BASE_SRCS) $(OPT_SRCS)
 
 libunifycr_common_la_CPPFLAGS = -I$(top_builddir)/client
 libunifycr_common_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION)
-libunifycr_common_la_LIBADD = -lm $(OPT_LIBS)
+libunifycr_common_la_LIBADD = -lm $(OPT_LIBS) -lrt
 
 AM_CFLAGS = -Wall -Wno-strict-aliasing

@@ -4,8 +4,6 @@ unifycrd_SOURCES = arraylist.c \
                    arraylist.h \
                    unifycr_cmd_handler.c \
                    unifycr_cmd_handler.h \
-                   unifycr_debug.c \
-                   unifycr_debug.h \
                    unifycr_init.c \
                    unifycr_init.h \
                    unifycr_metadata.c \
@@ -18,8 +16,7 @@ unifycrd_SOURCES = arraylist.c \
                    unifycr_sock.h \
                    unifycr_global.h \
                    unifycr_setup.h \
-                   unifycr_server.h \
-                   log.h
+                   unifycr_server.h
 
 unifycrd_LDFLAGS = -static
 

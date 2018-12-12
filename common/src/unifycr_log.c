@@ -28,37 +28,47 @@
  */
 
 #include <stdio.h>
-#include "unifycr_debug.h"
+#include "unifycr_log.h"
 #include "unifycr_const.h"
 
-/* pointer to debug file stream */
-FILE* dbg_stream;
+/* one of the loglevel values */
+unifycr_log_level_t unifycr_log_level = 5;
 
-/* open specified file as debug file stream,
+/* pointer to log file stream */
+FILE* unifycr_log_stream;
+
+int glb_rank;
+
+/* used within LOG macro to build a timestamp */
+time_t unifycr_log_time;
+struct tm* unifycr_log_ltime;
+char unifycr_log_timestamp[256];
+
+/* open specified file as log file stream,
  * returns UNIFYCR_SUCCESS on success */
-int dbg_open(char* fname)
+int unifycr_log_open(const char* file)
 {
-    dbg_stream = fopen(fname, "a");
-    if (dbg_stream == NULL) {
+    unifycr_log_stream = fopen(file, "a");
+    if (unifycr_log_stream == NULL) {
         /* failed to open file name, fall back to stderr */
-        dbg_stream = stderr;
+        unifycr_log_stream = stderr;
         return (int)UNIFYCR_ERROR_DBG;
     } else {
         return UNIFYCR_SUCCESS;
     }
 }
 
-/* close our debug file stream,
+/* close our log file stream,
  * returns UNIFYCR_SUCCESS on success */
-int dbg_close(void)
+int unifycr_log_close(void)
 {
-    if (dbg_stream == NULL) {
+    if (unifycr_log_stream == NULL) {
         /* nothing to close */
         return (int)UNIFYCR_ERROR_DBG;
     } else {
         /* if stream is open, and its not stderr, close it */
-        if (dbg_stream != stderr &&
-            fclose(dbg_stream) == 0) {
+        if (unifycr_log_stream != stderr &&
+            fclose(unifycr_log_stream) == 0) {
             return UNIFYCR_SUCCESS;
         }
         return (int)UNIFYCR_ERROR_DBG;

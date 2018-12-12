@@ -21,7 +21,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 
-#include "log.h"
+#include "unifycr_log.h"
 #include "unifycr_const.h"
 
 /* TODO: same function exists in client code, move this to common */

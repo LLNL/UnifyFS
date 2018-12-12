@@ -38,7 +38,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
-#include "log.h"
+#include "unifycr_log.h"
 #include "unifycr_global.h"
 #include "unifycr_meta.h"
 #include "unifycr_cmd_handler.h"

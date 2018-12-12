@@ -65,6 +65,8 @@
 #include "unifycr_client.h"
 #include "unifycr_clientcalls_rpc.h"
 
+#include "unifycr_log.h"
+
 /* global rpc context (probably should find a better spot for this) */
 unifycr_client_rpc_context_t* unifycr_rpc_context = NULL;
 
@@ -2171,6 +2173,9 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
         return -1;
     }
 
+    /* print log messages to stderr for now */
+    unifycr_log_open(NULL);
+
     rc = unifycrfs_mount(prefix, size, rank);
     return rc;
 }
@@ -2269,6 +2274,9 @@ int unifycr_unmount(void)
     unifycr_client_rpc_finalize(&unifycr_rpc_context);
 
     unifycr_finalize();
+
+    /* shut down our logging */
+    unifycr_log_close();
 
     /* free memory tracking our mount prefix string */
     if (unifycr_mount_prefix != NULL) {

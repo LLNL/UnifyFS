@@ -38,8 +38,7 @@
 #include <string.h>
 #include <assert.h>
 #include "unifycr_metadata.h"
-#include "log.h"
-#include "unifycr_debug.h"
+#include "unifycr_log.h"
 #include "unifycr_sock.h"
 #include "unifycr_init.h"
 #include "unifycr_const.h"
@@ -61,7 +60,6 @@ pthread_t data_thrd;
 arraylist_t* thrd_list;
 
 int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
-int log_print_level = 5;
 
 unifycr_cfg_t server_cfg;
 
@@ -483,7 +481,7 @@ int main(int argc, char* argv[])
     snprintf(dbg_fname, sizeof(dbg_fname), "%s/%s.%d",
              server_cfg.log_dir, server_cfg.log_file, glb_rank);
 
-    rc = dbg_open(dbg_fname);
+    rc = unifycr_log_open(dbg_fname);
     if (rc != ULFS_SUCCESS)
         LOG(LOG_ERR, "%s",
             unifycr_error_enum_description((unifycr_error_e)rc));
