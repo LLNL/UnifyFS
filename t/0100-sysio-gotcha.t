@@ -5,4 +5,4 @@
 #
 . $(dirname $0)/sharness.d/00-test-env.sh
 . $(dirname $0)/sharness.d/01-unifycr-settings.sh
-$UNIFYCR_BUILD_DIR/t/sys/sysio.t
+$UNIFYCR_BUILD_DIR/t/sys/sysio-gotcha.t
