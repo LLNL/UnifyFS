@@ -204,8 +204,9 @@ int main(int argc, char **argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (!standard && unmount && rank == 0)
+    if (!standard && unmount) {
         unifycr_unmount();
+    }
 
     return 0;
 }

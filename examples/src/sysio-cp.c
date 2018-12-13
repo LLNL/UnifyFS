@@ -281,7 +281,7 @@ int main(int argc, char** argv)
 donothing:
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (unmount && rank == 0) {
+    if (unmount) {
         unifycr_unmount();
     }
 

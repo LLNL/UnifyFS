@@ -247,8 +247,8 @@ int main(int argc, char* argv[])
 
     if (direction != 0) {/*only write without reading*/
         close(fd);
+        unifycr_unmount();
         if (rank == 0) {
-            unifycr_unmount();
             printf("Aggregated Write BW is %lf, Min Write BW is %lf\n",
                    aggwrbw, min_wr_bw);
             fflush(stdout);
@@ -291,9 +291,7 @@ int main(int argc, char* argv[])
         close(fd);
         MPI_Barrier(MPI_COMM_WORLD);
 
-        if (rank == 0) {
-            unifycr_unmount();
-        }
+        unifycr_unmount();
 
         free(aiocb_list);
         free(cb_list);

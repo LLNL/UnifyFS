@@ -276,9 +276,7 @@ int main(int argc, char* argv[])
 
 #ifndef NO_UNIFYCR
     if (use_unifycr) {
-        if (rank == 0) {
-            unifycr_unmount();
-        }
+        unifycr_unmount();
     }
 #endif
 

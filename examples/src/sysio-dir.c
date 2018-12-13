@@ -338,7 +338,7 @@ int main(int argc, char** argv)
     MPI_Barrier(MPI_COMM_WORLD);
 
 out_unmount:
-    if (!standard && unmount && rank == 0) {
+    if (!standard && unmount) {
         unifycr_unmount();
     }
 out:
