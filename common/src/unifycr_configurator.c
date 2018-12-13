@@ -412,10 +412,16 @@ int unifycr_config_process_cli_args(unifycr_cfg_t *cfg,
 
 #define UNIFYCR_CFG_CLI(sec, key, typ, dv, desc, vfn, opt, use) \
         case opt: {                                             \
-            if (optarg)                                         \
+            if (optarg) {                                       \
+                if (cfg->sec##_##key != NULL)                   \
+                    free(cfg->sec##_##key);                     \
                 cfg->sec##_##key = strdup(optarg);              \
-            else if (strcmp(#typ, "BOOL") == 0)                 \
+            }                                                   \
+            else if (strcmp(#typ, "BOOL") == 0) {               \
+                if (cfg->sec##_##key != NULL)                   \
+                    free(cfg->sec##_##key);                     \
                 cfg->sec##_##key = strdup("on");                \
+            }                                                   \
             break;                                              \
         }
 
@@ -423,6 +429,8 @@ int unifycr_config_process_cli_args(unifycr_cfg_t *cfg,
 
 #define UNIFYCR_CFG_MULTI_CLI(sec, key, typ, desc, vfn, me, opt, use)   \
         case opt: {                                                     \
+            if (cfg->sec##_##key[cfg->n_##sec##_##key] != NULL)         \
+                free(cfg->sec##_##key[cfg->n_##sec##_##key];            \
             cfg->sec##_##key[cfg->n_##sec##_##key++] = strdup(optarg);  \
             break;                                                      \
         }
@@ -509,18 +517,26 @@ int unifycr_config_process_environ(unifycr_cfg_t *cfg)
 
 #define UNIFYCR_CFG(sec, key, typ, dv, desc, vfn)       \
     envval = getenv_helper(#sec, #key, 0);              \
-    if (envval != NULL)                                 \
-        cfg->sec##_##key = strdup(envval);
+    if (envval != NULL) {                               \
+        if (cfg->sec##_##key != NULL)                   \
+            free(cfg->sec##_##key);                     \
+        cfg->sec##_##key = strdup(envval);              \
+    }
 
 #define UNIFYCR_CFG_CLI(sec, key, typ, dv, desc, vfn, opt, use) \
     envval = getenv_helper(#sec, #key, 0);                      \
-    if (envval != NULL)                                         \
-        cfg->sec##_##key = strdup(envval);
+    if (envval != NULL) {                                       \
+        if (cfg->sec##_##key != NULL)                           \
+            free(cfg->sec##_##key);                             \
+        cfg->sec##_##key = strdup(envval);                      \
+    }
 
 #define UNIFYCR_CFG_MULTI(sec, key, typ, desc, vfn, me) \
     for (u = 0; u < me; u++) {                          \
         envval = getenv_helper(#sec, #key, u+1);        \
         if (envval != NULL) {                           \
+            if (cfg->sec##_##key[u] != NULL)            \
+                free(cfg->sec##_##key[u]);              \
             cfg->sec##_##key[u] = strdup(envval);       \
             cfg->n_##sec##_##key++;                     \
         }                                               \
@@ -530,6 +546,8 @@ int unifycr_config_process_environ(unifycr_cfg_t *cfg)
     for (u = 0; u < me; u++) {                                          \
         envval = getenv_helper(#sec, #key, u+1);                        \
         if (envval != NULL) {                                           \
+            if (cfg->sec##_##key[u] != NULL)                            \
+                free(cfg->sec##_##key[u]);                              \
             cfg->sec##_##key[u] = strdup(envval);                       \
             cfg->n_##sec##_##key++;                                     \
         }                                                               \
@@ -563,16 +581,24 @@ int inih_config_handler(void *user,
     else if ((strcmp(section, #sec) == 0) && (strcmp(kee, #key) == 0)) { \
         curval = cfg->sec##_##key;                                      \
         defval = stringify(dv);                                         \
-        if ((curval == NULL) || (strcmp(defval, curval) == 0))          \
+        if (curval == NULL)                                             \
             cfg->sec##_##key = strdup(val);                             \
+        else if (strcmp(defval, curval) == 0) {                         \
+            free(cfg->sec##_##key);                                     \
+            cfg->sec##_##key = strdup(val);                             \
+        }                                                               \
     }
 
 #define UNIFYCR_CFG_CLI(sec, key, typ, dv, desc, vfn, opt, use)         \
     else if ((strcmp(section, #sec) == 0) && (strcmp(kee, #key) == 0)) { \
         curval = cfg->sec##_##key;                                      \
         defval = stringify(dv);                                         \
-        if ((curval == NULL) || (strcmp(defval, curval) == 0))          \
+        if (curval == NULL)                                             \
             cfg->sec##_##key = strdup(val);                             \
+        else if (strcmp(defval, curval) == 0) {                         \
+            free(cfg->sec##_##key);                                     \
+            cfg->sec##_##key = strdup(val);                             \
+        }                                                               \
     }
 
 #define UNIFYCR_CFG_MULTI(sec, key, typ, desc, vfn, me)                 \
@@ -684,7 +710,8 @@ int unifycr_config_validate(unifycr_cfg_t *cfg)
         rc = vrc;                                                       \
         fprintf(stderr, "UNIFYCR CONFIG ERROR: value '%s' for %s.%s is INVALID %s\n", \
                 cfg->sec##_##key, #sec, #key, #typ);                    \
-    } else if (new_val != NULL) {                                       \
+    }                                                                   \
+    else if (new_val != NULL) {                                         \
         if (cfg->sec##_##key != NULL)                                   \
             free(cfg->sec##_##key);                                     \
         cfg->sec##_##key = new_val;                                     \
@@ -697,7 +724,8 @@ int unifycr_config_validate(unifycr_cfg_t *cfg)
         rc = vrc;                                                       \
         fprintf(stderr, "UNIFYCR CONFIG ERROR: value '%s' for %s.%s is INVALID %s\n", \
                 cfg->sec##_##key, #sec, #key, #typ);                    \
-    } else if (new_val != NULL) {                                       \
+    }                                                                   \
+    else if (new_val != NULL) {                                         \
         if (cfg->sec##_##key != NULL)                                   \
             free(cfg->sec##_##key);                                     \
         cfg->sec##_##key = new_val;                                     \
@@ -711,7 +739,8 @@ int unifycr_config_validate(unifycr_cfg_t *cfg)
             rc = vrc;                                                   \
             fprintf(stderr, "UNIFYCR CONFIG ERROR: value[%u] '%s' for %s.%s is INVALID %s\n", \
                     u+1, cfg->sec##_##key[u], #sec, #key, #typ);        \
-        } else if (new_val != NULL) {                                   \
+        }                                                               \
+        else if (new_val != NULL) {                                     \
             if (cfg->sec##_##key[u] != NULL)                            \
                 free(cfg->sec##_##key[u]);                              \
             cfg->sec##_##key[u] = new_val;                              \
@@ -726,7 +755,8 @@ int unifycr_config_validate(unifycr_cfg_t *cfg)
             rc = vrc;                                                   \
             fprintf(stderr, "UNIFYCR CONFIG ERROR: value[%u] '%s' for %s.%s is INVALID %s\n", \
                     u+1, cfg->sec##_##key[u], #sec, #key, #typ);        \
-        } else if (new_val != NULL) {                                   \
+        }                                                               \
+        else if (new_val != NULL) {                                     \
             if (cfg->sec##_##key[u] != NULL)                            \
                 free(cfg->sec##_##key[u]);                              \
             cfg->sec##_##key[u] = new_val;                              \
@@ -790,14 +820,16 @@ int configurator_bool_val(const char *val,
         default:
             return 1;
         }
-    } else if ((strcmp(val, "no") == 0)
-               || (strcmp(val, "off") == 0)
-               || (strcmp(val, "false") == 0)) {
+    }
+    else if ((strcmp(val, "no") == 0)
+              || (strcmp(val, "off") == 0)
+              || (strcmp(val, "false") == 0)) {
         *b = false;
         return 0;
-    } else if ((strcmp(val, "yes") == 0)
-               || (strcmp(val, "on") == 0)
-               || (strcmp(val, "true") == 0)) {
+    }
+    else if ((strcmp(val, "yes") == 0)
+              || (strcmp(val, "on") == 0)
+              || (strcmp(val, "true") == 0)) {
         *b = true;
         return 0;
     }
@@ -936,7 +968,7 @@ int configurator_int_check(const char *s,
     long l;
     char *newval = NULL;
 
-    if( NULL == val ) // unset is OK
+    if (val == NULL) // unset is OK
         return 0;
 
     rc = configurator_int_val(val, &l);
@@ -991,7 +1023,8 @@ int configurator_directory_check(const char *s,
             return 0;
         else
             return ENOTDIR;
-    } else { // try to create it
+    }
+    else { // try to create it
         mode = 0770; // S_IRWXU | S_IRWXG
         rc = mkdir(val, mode);
         if (rc == 0)
