@@ -20,8 +20,6 @@ BASE_SRCS = \
   unifycr_runstate.c \
   unifycr_meta.h \
   unifycr_pmix.h \
-  unifycr_client_context.h \
-  unifycr_client_context.c \
   unifycr_log.h \
   unifycr_log.c \
   unifycr_shm.h \
