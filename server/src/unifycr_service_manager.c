@@ -87,11 +87,8 @@
  * requesting delegator, these are appened in an ack list
  * which records a set of read replies before being sent */
 typedef struct {
-    long src_fid;    /* global file id of file */
-    long src_offset; /* offset in file */
-    long length;     /* length of data */
-    int  errcode;    /* error code to be returned (pass/fail) */
-    char* addr;      /* address of data in read buffer */
+    recv_msg_t msg; /* header information for read reply */
+    char* addr;     /* address of data in read buffer */
 } ack_meta_t;
 
 /* this records info about outstanding sends to delegators,
@@ -490,7 +487,7 @@ static int insert_ack_meta(
     ack_meta->rank_id      = rank_id;
     ack_meta->thrd_id      = thrd_id;
     ack_meta->src_cli_rank = src_cli_rank;
-    ack_meta->src_sz       = ack->length;
+    ack_meta->src_sz       = ack->msg.length;
     ack_meta->start_cursor = 0;
 
     /* check that we were able to create a new ack_list */
@@ -560,25 +557,14 @@ static int sm_ack_remote_delegator(rank_ack_meta_t* ack_meta)
         ack_meta_t* meta =
             (ack_meta_t*)arraylist_get(ack_meta->ack_list, i);
 
-        /* copy global file id to send buffer */
-        memcpy(send_msg_buf + send_sz, &(meta->src_fid), sizeof(long));
-        send_sz += sizeof(long);
-
-        /* copy offset to send buffer */
-        memcpy(send_msg_buf + send_sz, &(meta->src_offset), sizeof(long));
-        send_sz += sizeof(long);
-
-        /* copy length to send buffer */
-        memcpy(send_msg_buf + send_sz, &(meta->length), sizeof(long));
-        send_sz += sizeof(long);
-
-        /* copy in error status */
-        memcpy(send_msg_buf + send_sz, &(meta->errcode), sizeof(int));
-        send_sz += sizeof(int);
+        /* copy read reply header to send buffer */
+        memcpy(send_msg_buf + send_sz, &(meta->msg), sizeof(recv_msg_t));
+        send_sz += sizeof(recv_msg_t);
 
         /* copy file data to send buffer */
-        memcpy(send_msg_buf + send_sz, meta->addr, meta->length);
-        send_sz += meta->length;
+        size_t length = (size_t) meta->msg.length;
+        memcpy(send_msg_buf + send_sz, meta->addr, length);
+        send_sz += (int) length;
     }
 
     /* get rank and thread id of remote delegator */
@@ -636,11 +622,11 @@ static int insert_to_ack_list(
 
     /* the src_offset might start from any position in the message, so
      * make it a separate parameter */
-    ack->src_fid    = msg->src_fid; /* global file id */
-    ack->src_offset = src_offset;   /* offset in file */
-    ack->length     = len;          /* length of data */
-    ack->errcode    = errcode;      /* error code for read (pass/fail) */
-    ack->addr       = mem_addr;     /* pointer to data in read buffer */
+    ack->msg.src_fid    = msg->src_fid; /* global file id */
+    ack->msg.src_offset = src_offset;   /* offset in file */
+    ack->msg.length     = len;          /* length of data */
+    ack->msg.errcode    = errcode;      /* error code for read (pass/fail) */
+    ack->addr           = mem_addr;     /* pointer to data in read buffer */
 
     /* after setting the ack for this message, link it
      * to a ack list based on its destination. */
@@ -672,7 +658,7 @@ static int insert_to_ack_list(
                             ack_meta->src_sz;
 
         /* number of bytes to pack this read reply */
-        size_t bytes = sizeof(ack_meta_t) + ack->length;
+        size_t bytes = sizeof(ack_meta_t) + ack->msg.length;
 
         /* check whether we can fit this data into the
          * existing send block */
@@ -681,7 +667,7 @@ static int insert_to_ack_list(
             rc = sm_ack_remote_delegator(ack_meta);
 
             /* start a new list */
-            ack_meta->src_sz = ack->length;
+            ack_meta->src_sz = ack->msg.length;
             arraylist_add(ack_meta->ack_list, ack);
 
             /* start_cursor records the starting ack
@@ -695,7 +681,7 @@ static int insert_to_ack_list(
         } else {
             /* current read reply fits in send buffer,
              * add it to the list */
-            ack_meta->src_sz += ack->length;
+            ack_meta->src_sz += ack->msg.length;
             arraylist_add(ack_meta->ack_list, ack);
         }
     }
