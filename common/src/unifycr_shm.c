@@ -107,7 +107,7 @@ int unifycr_shm_free(const char* name, size_t size, void** paddr)
     void* addr = *paddr;
 
     /* if we have a pointer, try to munmap and unlink it */
-    if (addr == NULL) {
+    if (addr != NULL) {
         /* unmap shared memory from memory space */
         errno = 0;
         int rc = munmap(addr, size);
