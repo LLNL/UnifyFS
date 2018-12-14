@@ -47,7 +47,6 @@
 #include "unifycr_const.h"
 #include "unifycr_sock.h"
 #include "unifycr_metadata.h"
-#include "unifycr_client_context.h"
 #include "unifycr_shm.h"
 #include "../../client/src/unifycr_clientcalls_rpc.h"
 

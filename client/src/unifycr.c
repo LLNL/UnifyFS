@@ -46,7 +46,6 @@
 #include "unifycr_pmix.h"
 #include "unifycr_shm.h"
 #include "unifycr_runstate.h"
-#include "unifycr_client_context.h"
 
 #include <time.h>
 #include <mpi.h>
