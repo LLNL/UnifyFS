@@ -332,9 +332,7 @@ read_req_set_t read_req_set;
 read_req_set_t tmp_read_req_set;
 index_set_t tmp_index_set;
 
-extern int dbgrank;
 extern unifycr_index_buf_t unifycr_indices;
-extern void* unifycr_superblock;
 extern unsigned long unifycr_max_index_entries;
 extern long unifycr_spillover_max_chunks;
 
@@ -344,18 +342,13 @@ extern int local_rank_idx;
 extern int local_del_cnt;
 extern int client_sockfd;
 extern struct pollfd cmd_fd;
-extern long shm_req_size;
-extern long shm_recv_size;
-extern char* shm_recvbuf;
-extern char* shm_reqbuf;
+extern void* shm_req_buf;
+extern void* shm_recv_buf;
 extern char cmd_buf[CMD_BUF_SIZE];
-extern char ack_msg[3];
 extern unifycr_fattr_buf_t unifycr_fattrs;
 
-extern int glb_superblock_size;
 extern int dbg_rank;
 extern int app_id;
-extern int glb_size;
 extern long unifycr_key_slice_range;
 
 /* -------------------------------
