@@ -92,7 +92,7 @@ int local_rank_cnt;
 int local_rank_idx;
 
 int local_del_cnt = 1;
-int client_sockfd;
+int client_sockfd = -1;
 struct pollfd cmd_fd;
 
 /* shared memory buffer to transfer read requests
@@ -2833,7 +2833,15 @@ int unifycr_unmount(void)
     unifycr_shm_free(shm_req_name,  shm_req_size,  &shm_req_buf);
     unifycr_shm_free(shm_recv_name, shm_recv_size, &shm_recv_buf);
 
-    /* TODO: close socket */
+    /* close socket to server */
+    if (client_sockfd >= 0) {
+        errno = 0;
+        int close_rc = close(client_sockfd);
+        if (close_rc != 0) {
+            LOGERR("Failed to close socket to server rc=%d (%s)",
+                errno, strerror(errno));
+        }
+    }
 
     /* invoke unmount rpc to tell server we're disconnecting */
     printf("calling unmount\n");
