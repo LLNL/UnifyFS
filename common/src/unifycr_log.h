@@ -59,6 +59,7 @@ extern char unifycr_log_timestamp[256];
 #else
 #error gettid syscal is not defined
 #endif
+
 #define LOG(level, ...) \
     if (level <= unifycr_log_level) { \
         unifycr_log_time = time(NULL); \

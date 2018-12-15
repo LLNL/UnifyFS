@@ -2605,6 +2605,9 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
     bool b;
     char* cfgval;
 
+    /* print log messages to stderr */
+    unifycr_log_open(NULL);
+
     /* record our rank for debugging messages,
      * record the value we should use for an app_id */
     dbg_rank = rank;
@@ -2863,6 +2866,9 @@ int unifycr_unmount(void)
     if (tmp_rc) {
         ret = UNIFYCR_FAILURE;
     }
+
+    /* shut down our logging */
+    unifycr_log_close();
 
     return ret;
 }
