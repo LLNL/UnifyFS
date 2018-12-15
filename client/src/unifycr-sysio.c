@@ -51,7 +51,6 @@
 
 extern int unifycr_spilloverblock;
 extern int unifycr_use_spillover;
-extern int dbgrank;
 
 /* ---------------------------------------
  * POSIX wrappers: paths
@@ -1654,7 +1653,7 @@ static int delegator_signal()
     int rc = UNIFYCR_SUCCESS;
 
     /* set shm flag to 0 to signal delegator we're done */
-    volatile int* ptr_flag = (volatile int*)shm_recvbuf;
+    volatile int* ptr_flag = (volatile int*)shm_recv_buf;
     *ptr_flag = 0;
 
     /* TODO: MEM_FLUSH */
@@ -1695,7 +1694,7 @@ static int delegator_wait()
     shm_wait_tm.tv_nsec = SHM_WAIT_INTERVAL;
 
     /* get pointer to flag in shared memory */
-    volatile int* ptr_flag = (volatile int*)shm_recvbuf;
+    volatile int* ptr_flag = (volatile int*)shm_recv_buf;
 
     /* TODO: MEM_FETCH */
 
@@ -1718,7 +1717,7 @@ static int process_read_data(read_req_t* read_req, int count, int* done)
     int rc = UNIFYCR_SUCCESS;
 
     /* get pointer to start of shared memory buffer */
-    char* shmptr = (char*)shm_recvbuf;
+    char* shmptr = (char*)shm_recv_buf;
 
     /* extract pointer to flag */
     int* ptr_flag = (int*)shmptr;
@@ -2203,6 +2202,14 @@ void* UNIFYCR_WRAP(mmap)(void* addr, size_t length, int prot, int flags,
 {
     /* check whether we should intercept this file descriptor */
     if (unifycr_intercept_fd(&fd)) {
+        /* for now, tell user that we can't support mmap,
+         * we'll need to track assigned memory region so that
+         * we can identify our files on msync and munmap */
+        fprintf(stderr, "Function not yet supported @ %s:%d\n",
+            __FILE__, __LINE__);
+        errno = ENODEV;
+        return MAP_FAILED;
+
         /* get the file id for this file descriptor */
         int fid = unifycr_get_fid_from_fd(fd);
         if (fid < 0) {
@@ -2260,18 +2267,28 @@ void* UNIFYCR_WRAP(mmap)(void* addr, size_t length, int prot, int flags,
 
 int UNIFYCR_WRAP(munmap)(void* addr, size_t length)
 {
+#if 0
     fprintf(stderr, "Function not yet supported @ %s:%d\n", __FILE__, __LINE__);
-    errno = ENOSYS;
-    return ENODEV;
+    errno = EINVAL;
+    return -1;
+#endif
+    MAP_OR_FAIL(munmap);
+    int ret = UNIFYCR_REAL(munmap)(addr, length);
+    return ret;
 }
 
 int UNIFYCR_WRAP(msync)(void* addr, size_t length, int flags)
 {
     /* TODO: need to keep track of all the mmaps that are linked to
-     * a given file before this function can be implemented*/
+     * a given file before this function can be implemented */
+#if 0
     fprintf(stderr, "Function not yet supported @ %s:%d\n", __FILE__, __LINE__);
-    errno = ENOSYS;
-    return ENOMEM;
+    errno = EINVAL;
+    return -1;
+#endif
+    MAP_OR_FAIL(msync);
+    int ret = UNIFYCR_REAL(msync)(addr, length, flags);
+    return ret;
 }
 
 void* UNIFYCR_WRAP(mmap64)(void* addr, size_t length, int prot, int flags,

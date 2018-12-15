@@ -41,6 +41,7 @@ UNIFYCR_DEF(flock, int, (int fd, int operation));
 UNIFYCR_DEF(mmap, void*, (void* addr, size_t length, int prot, int flags,
                           int fd, off_t offset));
 UNIFYCR_DEF(msync, int, (void* addr, size_t length, int flags));
+UNIFYCR_DEF(munmap, int, (void* addr, size_t length));
 UNIFYCR_DEF(mmap64, void*, (void* addr, size_t length, int prot, int flags,
                             int fd, off_t offset));
 UNIFYCR_DEF(__fxstat, int, (int vers, int fd, struct stat* buf));
@@ -137,6 +138,7 @@ struct gotcha_binding_t wrap_unifycr_list[] = {
     { "flock", UNIFYCR_WRAP(flock), &UNIFYCR_REAL(flock) },
     { "mmap", UNIFYCR_WRAP(mmap), &UNIFYCR_REAL(mmap) },
     { "msync", UNIFYCR_WRAP(msync), &UNIFYCR_REAL(msync) },
+    { "munmap", UNIFYCR_WRAP(munmap), &UNIFYCR_REAL(munmap) },
     { "mmap64", UNIFYCR_WRAP(mmap64), &UNIFYCR_REAL(mmap64) },
     { "__fxstat", UNIFYCR_WRAP(__fxstat), &UNIFYCR_REAL(__fxstat) },
     { "close", UNIFYCR_WRAP(close), &UNIFYCR_REAL(close) },

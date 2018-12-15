@@ -85,7 +85,6 @@ static size_t unifycr_fattr_buf_size;
 unsigned long
 unifycr_max_index_entries; /*max number of metadata entries for log-structured write*/
 unsigned int unifycr_max_fattr_entries;
-int glb_superblock_size;
 int unifycr_spillmetablock;
 
 int* local_rank_lst;
@@ -95,20 +94,31 @@ int local_rank_idx;
 int local_del_cnt = 1;
 int client_sockfd;
 struct pollfd cmd_fd;
-long shm_req_size = UNIFYCR_SHMEM_REQ_SIZE;
-long shm_recv_size = UNIFYCR_SHMEM_RECV_SIZE;
-char* shm_recvbuf;
-char* shm_reqbuf;
+
+/* shared memory buffer to transfer read requests
+ * from client to server */
+static char   shm_req_name[GEN_STR_LEN]  = {0};
+static size_t shm_req_size = UNIFYCR_SHMEM_REQ_SIZE;
+void*  shm_req_buf;
+
+/* shared memory buffer to transfer read replies
+ * from server to client */
+static char   shm_recv_name[GEN_STR_LEN] = {0};
+static size_t shm_recv_size = UNIFYCR_SHMEM_RECV_SIZE;
+void*  shm_recv_buf;
+
 char cmd_buf[CMD_BUF_SIZE] = {0};
-char ack_msg[3] = {0};
 
 int dbg_rank;
 int app_id;
-int glb_size;
 long unifycr_key_slice_range;
 
-int unifycr_use_logio = 0;
+/* whether chunks should be allocated to
+ * store file contents in memory */
 int unifycr_use_memfs = 1;
+
+/* whether chunks should be allocated to
+ * store file contents on spill over device */
 int unifycr_use_spillover = 1;
 
 static int unifycr_use_single_shm = 0;
@@ -120,17 +130,18 @@ static off_t unifycr_max_long;
 static off_t unifycr_min_long;
 
 /* TODO: moved these to fixed file */
-int dbgrank;
 int    unifycr_max_files;  /* maximum number of files to store */
 size_t unifycr_chunk_mem;  /* number of bytes in memory to be used for chunk storage */
 int    unifycr_chunk_bits; /* we set chunk size = 2^unifycr_chunk_bits */
 off_t  unifycr_chunk_size; /* chunk size in bytes */
 off_t  unifycr_chunk_mask; /* mask applied to logical offset to determine physical offset within chunk */
-long    unifycr_max_chunks; /* maximum number of chunks that fit in memory */
+long   unifycr_max_chunks; /* maximum number of chunks that fit in memory */
 
-static size_t
-unifycr_spillover_size;  /* number of bytes in spillover to be used for chunk storage */
-long    unifycr_spillover_max_chunks; /* maximum number of chunks that fit in spillover storage */
+/* number of bytes in spillover to be used for chunk storage */
+static size_t unifycr_spillover_size;
+
+/* maximum number of chunks that fit in spillover storage */
+long unifycr_spillover_max_chunks;
 
 #ifdef HAVE_LIBNUMA
 static char unifycr_numa_policy[10];
@@ -145,8 +156,12 @@ int unifycr_initialized = 0;
 /* keep track of debug level */
 int unifycr_debug_level;
 
+/* shared memory for superblock */
+static char   shm_super_name[GEN_STR_LEN] = {0};
+static size_t shm_super_size;
+
 /* global persistent memory block (metadata + data) */
-void* unifycr_superblock;
+void* shm_super_buf;
 static void* free_fid_stack;
 void* free_chunk_stack;
 void* free_spillchunk_stack;
@@ -1351,9 +1366,9 @@ int unifycr_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         }
 
         DEBUG("Creating a new entry for %s.\n", path);
-        DEBUG("unifycr_superblock = %p; free_fid_stack = %p;"
+        DEBUG("shm_super_buf = %p; free_fid_stack = %p;"
               "free_chunk_stack = %p; unifycr_filelist = %p;"
-              "chunks = %p\n", unifycr_superblock, free_fid_stack,
+              "chunks = %p\n", shm_super_buf, free_fid_stack,
               free_chunk_stack, unifycr_filelist, unifycr_chunks);
 
         /* allocate a file id slot for this new file */
@@ -1634,7 +1649,7 @@ static void* unifycr_init_pointers(void* superblock)
     /* compute size of memory we're using and check that
      * it matches what we allocated */
     size_t ptr_size = (size_t)(ptr - (char*)superblock);
-    if (ptr_size > glb_superblock_size) {
+    if (ptr_size > shm_super_size) {
         LOGERR("Data structures in superblock extend beyond its size");
     }
 
@@ -1722,12 +1737,12 @@ static int unifycr_get_spillblock(size_t size, const char* path)
 static void* unifycr_superblock_shmget(size_t size, key_t key)
 {
     /* define name for superblock shared memory region */
-    char shm_name[GEN_STR_LEN] = {0};
-    snprintf(shm_name, sizeof(shm_name), "%d-super-%d", app_id, key);
+    snprintf(shm_super_name, sizeof(shm_super_name), "%d-super-%d",
+        app_id, key);
     DEBUG("Key for superblock = %x\n", key);
 
     /* open shared memory file */
-    void* addr = unifycr_shm_alloc(shm_name, size);
+    void* addr = unifycr_shm_alloc(shm_super_name, size);
     if (addr == NULL) {
         LOGERR("Failed to create superblock");
         return NULL;
@@ -1954,13 +1969,13 @@ static int unifycr_init(int rank)
         unifycr_stack_init(unifycr_dirstream_stack, num_dirstreams);
 
         /* determine the size of the superblock */
-        glb_superblock_size = unifycr_superblock_size();
+        shm_super_size = unifycr_superblock_size();
 
         /* get a superblock of shared memory and initialize our
          * global variables for this block */
-        unifycr_superblock = unifycr_superblock_shmget(
-            glb_superblock_size, unifycr_mount_shmget_key);
-        if (unifycr_superblock == NULL) {
+        shm_super_buf = unifycr_superblock_shmget(
+            shm_super_size, unifycr_mount_shmget_key);
+        if (shm_super_buf == NULL) {
             printf("unifycr_superblock_shmget() failed\n");
             return UNIFYCR_FAILURE;
         }
@@ -2039,18 +2054,18 @@ int unifycr_sync_to_del(unifycr_mount_in_t* in)
 
     int req_buf_sz         = shm_req_size;
     int recv_buf_sz        = shm_recv_size;
-    long superblock_sz     = glb_superblock_size;
+    long superblock_sz     = shm_super_size;
 
     void* meta_start = (void*)unifycr_indices.ptr_num_entries;
-    long meta_offset = meta_start - unifycr_superblock;
+    long meta_offset = meta_start - shm_super_buf;
     long meta_size   = unifycr_max_index_entries * sizeof(unifycr_index_t);
 
     void* fmeta_start = (void*)unifycr_fattrs.ptr_num_entries;
-    long fmeta_offset = fmeta_start - unifycr_superblock;
+    long fmeta_offset = fmeta_start - shm_super_buf;
     long fmeta_size   = unifycr_max_fattr_entries * sizeof(unifycr_file_attr_t);
 
     void* data_start = (void*)unifycr_chunks;
-    long data_offset = data_start - unifycr_superblock;
+    long data_offset = data_start - shm_super_buf;
     long data_size   = (long)unifycr_max_chunks * unifycr_chunk_size;
 
     char* external_spill_dir = malloc(UNIFYCR_MAX_FILENAME);
@@ -2090,19 +2105,18 @@ static int unifycr_init_recv_shm(int local_rank_idx, int app_id)
     }
 
     /* define file name to shared memory file */
-    char shm_name[GEN_STR_LEN] = {0};
-    snprintf(shm_name, sizeof(shm_name),
+    snprintf(shm_recv_name, sizeof(shm_recv_name),
              "%d-recv-%d", app_id, local_rank_idx);
 
     /* allocate memory for shared memory receive buffer */
-    shm_recvbuf = unifycr_shm_alloc(shm_name, shm_recv_size);
-    if (shm_recvbuf == NULL) {
+    shm_recv_buf = unifycr_shm_alloc(shm_recv_name, shm_recv_size);
+    if (shm_recv_buf == NULL) {
         LOGERR("Failed to create buffer for read replies");
         return UNIFYCR_FAILURE;
     }
 
     /* what is this for? */
-    *((int*)shm_recvbuf) = app_id + 3;
+    *((int*)shm_recv_buf) = app_id + 3;
 
     return UNIFYCR_SUCCESS;
 }
@@ -2130,13 +2144,12 @@ static int unifycr_init_req_shm(int local_rank_idx, int app_id)
     }
 
     /* define name of shared memory region for request buffer */
-    char shm_name[GEN_STR_LEN] = {0};
-    snprintf(shm_name, sizeof(shm_name),
+    snprintf(shm_req_name, sizeof(shm_req_name),
              "%d-req-%d", app_id, local_rank_idx);
 
     /* allocate memory for shared memory receive buffer */
-    shm_reqbuf = unifycr_shm_alloc(shm_name, shm_req_size);
-    if (shm_reqbuf == NULL) {
+    shm_req_buf = unifycr_shm_alloc(shm_req_name, shm_req_size);
+    if (shm_req_buf == NULL) {
         LOGERR("Failed to create buffer for read requests");
         return UNIFYCR_FAILURE;
     }
@@ -2289,6 +2302,7 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
 
     flag = fcntl(client_sockfd, F_GETFL);
     fcntl(client_sockfd, F_SETFL, flag | O_NONBLOCK);
+
     cmd_fd.fd = client_sockfd;
     cmd_fd.events = POLLIN | POLLHUP;
     cmd_fd.revents = 0;
@@ -2773,7 +2787,8 @@ static int unifycr_finalize(void)
         unifycr_spillmetablock = 0;
     }
 
-    /* TODO: detach from superblock */
+    /* detach from superblock */
+    unifycr_shm_free(shm_super_name, shm_super_size, &shm_super_buf);
 
     /* free directory stream stack */
     if (unifycr_dirstream_stack != NULL) {
@@ -2807,12 +2822,27 @@ static int unifycr_finalize(void)
  */
 int unifycr_unmount(void)
 {
+    /************************
+     * tear down connection to server
+     ************************/
+
+    /* detach from shared memory regions */
+    unifycr_shm_free(shm_req_name,  shm_req_size,  &shm_req_buf);
+    unifycr_shm_free(shm_recv_name, shm_recv_size, &shm_recv_buf);
+
+    /* TODO: close socket */
+
     /* invoke unmount rpc to tell server we're disconnecting */
     printf("calling unmount\n");
     int ret = unifycr_client_unmount_rpc_invoke(&unifycr_rpc_context);
 
     /* free resources allocated in client_rpc_init */
     unifycr_client_rpc_finalize(&unifycr_rpc_context);
+
+    /************************
+     * free our mount point, and detach from structures
+     * storing data
+     ************************/
 
     /* free resources allocated in unifycr_init */
     unifycr_finalize();
@@ -2823,6 +2853,10 @@ int unifycr_unmount(void)
         unifycr_mount_prefix = NULL;
         unifycr_mount_prefixlen = 0;
     }
+
+    /************************
+     * free configuration values
+     ************************/
 
     /* clean up configuration */
     int tmp_rc = unifycr_config_fini(&client_cfg);
