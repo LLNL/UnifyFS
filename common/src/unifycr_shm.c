@@ -115,7 +115,8 @@ int unifycr_shm_free(const char* name, size_t size, void** paddr)
             /* failed to open shared memory */
             LOGERR("Failed to unmap shared memory %s errno=%d (%s)",
                    name, errno, strerror(errno));
-            return UNIFYCR_FAILURE;
+
+            /* not fatal, so keep going */
         }
 
         /* release our reference to the shared memory region */
@@ -125,7 +126,8 @@ int unifycr_shm_free(const char* name, size_t size, void** paddr)
             /* failed to open shared memory */
             LOGERR("Failed to unlink shared memory %s errno=%d (%s)",
                    name, errno, strerror(errno));
-            return UNIFYCR_FAILURE;
+
+            /* not fatal, so keep going */
         }
     }
 
