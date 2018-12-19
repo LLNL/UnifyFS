@@ -318,7 +318,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
 
     /* get input params */
     unifycr_mount_in_t in;
-    int ret = HG_Get_input(handle, &in);
+    int ret = margo_get_input(handle, &in);
     assert(ret == HG_SUCCESS);
 
     /* read app_id and client_id from input */
@@ -483,7 +483,7 @@ static void unifycr_metaget_rpc(hg_handle_t handle)
 {
     /* get input params */
     unifycr_metaget_in_t in;
-    int ret = HG_Get_input(handle, &in);
+    int ret = margo_get_input(handle, &in);
     assert(ret == HG_SUCCESS);
 
     /* given the global file id, look up file attributes
@@ -513,7 +513,7 @@ static void unifycr_metaset_rpc(hg_handle_t handle)
 {
     /* get input params */
     unifycr_metaset_in_t in;
-    int ret = HG_Get_input(handle, &in);
+    int ret = margo_get_input(handle, &in);
     assert(ret == HG_SUCCESS);
 
     /* store file name for given global file id */
@@ -540,7 +540,7 @@ static void unifycr_fsync_rpc(hg_handle_t handle)
 {
     /* get input params */
     unifycr_fsync_in_t in;
-    int ret = HG_Get_input(handle, &in);
+    int ret = margo_get_input(handle, &in);
     assert(ret == HG_SUCCESS);
 
     /* given global file id, read index metadata from client and
@@ -569,7 +569,7 @@ static void unifycr_read_rpc(hg_handle_t handle)
 {
     /* get input params */
     unifycr_read_in_t in;
-    int ret = HG_Get_input(handle, &in);
+    int ret = margo_get_input(handle, &in);
     assert(ret == HG_SUCCESS);
 
     /* read data for a single read request from client,
@@ -600,7 +600,7 @@ static void unifycr_mread_rpc(hg_handle_t handle)
 {
     /* get input params */
     unifycr_mread_in_t in;
-    int ret = HG_Get_input(handle, &in);
+    int ret = margo_get_input(handle, &in);
     assert(ret == HG_SUCCESS);
 
     /* allocate buffer to hold array of read requests */
