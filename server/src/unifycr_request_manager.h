@@ -35,13 +35,6 @@
 #include "unifycr_meta.h"
 #include "arraylist.h"
 
-typedef struct {
-    int src_fid;
-    long offset;
-    long length;
-} shm_meta_t; /*metadata format in the shared memory*/
-
-
 /**
  * synchronize all the indices and file attributes
  * to the key-value store

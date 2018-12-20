@@ -113,15 +113,15 @@ int rm_process_fsync(int sock_id)
 
     // file extends
     for (i = 0; i < num_entries; i++) {
-        unifycr_keys[i] = malloc(sizeof(unifycr_key_t *));
-        unifycr_vals[i] = malloc(sizeof(unifycr_val_t *));
+        unifycr_keys[i] = malloc(sizeof(unifycr_key_t));
+        unifycr_vals[i] = malloc(sizeof(unifycr_val_t));
         unifycr_keys[i]->fid = meta_payload[i].fid;
         unifycr_keys[i]->offset = meta_payload[i].file_pos;
         unifycr_vals[i]->addr = meta_payload[i].mem_pos;
         unifycr_vals[i]->len = meta_payload[i].length;
         unifycr_vals[i]->delegator_id = glb_rank;
-        memcpy((char *) &(unifycr_vals[i]->app_rank_id), &app_id, sizeof(int));
-        memcpy((char *) &(unifycr_vals[i]->app_rank_id) + sizeof(int),
+        memcpy((char *) &(unifycr_vals[i]->app_id), &app_id, sizeof(int));
+        memcpy((char *) &(unifycr_vals[i]->app_id) + sizeof(int),
                &client_side_id, sizeof(int));
 
         unifycr_key_lens[i] = sizeof(unifycr_key_t);
@@ -133,6 +133,12 @@ int rm_process_fsync(int sock_id)
     if (ret != UNIFYCR_SUCCESS) {
         // TODO: need propper error handling
         return ret;
+    }
+
+    // cleanup
+    for (i = 0; i < num_entries; i++) {
+        free(unifycr_keys[i]);
+        free(unifycr_vals[i]);
     }
 
     // file attributes
@@ -165,11 +171,18 @@ int rm_process_fsync(int sock_id)
         fattr_val_lens[i] = sizeof(fattr_val_t);
     }
 
+    //printf("num_entries: %lu, %d\n", num_entries, (int)num_entries);fflush(NULL);
+
     ret = unifycr_set_file_attributes(num_entries, fattr_keys, fattr_key_lens,
                                       fattr_vals, fattr_val_lens);
     if (ret != UNIFYCR_SUCCESS) {
         // TODO: need propper error handling
         return ret;
+    }
+
+    // cleanup
+    for (i = 0; i < num_entries; i++) {
+        free(fattr_keys[i]);
     }
 
     // clean up memory
@@ -217,14 +230,14 @@ int rm_read_remote_data(int sock_id, size_t req_cnt)
 
     // allocate key storage
     // TODO: might want to get this from a memory pool
-    unifycr_keys = calloc(req_num, sizeof(unifycr_key_t));
+    unifycr_keys = calloc(req_cnt * 2, sizeof(unifycr_key_t));
     if (unifycr_keys == NULL) {
         // this is a fatal error
         // TODO: we need better error handling
         fprintf(stderr, "Error allocating buffer in %s\n", __FILE__);
          exit(-1);
     }
-    unifycr_key_lens = calloc(req_num, sizeof(int));
+    unifycr_key_lens = calloc(req_cnt * 2, sizeof(int));
     if (unifycr_key_lens == NULL) {
         // this is a fatal error
         // TODO: we need better error handling
@@ -243,7 +256,7 @@ int rm_read_remote_data(int sock_id, size_t req_cnt)
      *       other mechanism to retrieve all relevant key-value pairs from the
      *       KV-store.
      */
-    for (i = 0; i < req_num; i++) {
+    for (i = 0; i < req_cnt; i++) {
         unifycr_keys[2 * i].fid = client_request[i].fid;
         unifycr_keys[2 * i].offset = client_request[i].offset;
         unifycr_key_lens[2 * i] = sizeof(unifycr_key_t);
@@ -253,7 +266,7 @@ int rm_read_remote_data(int sock_id, size_t req_cnt)
         unifycr_key_lens[2 * i + 1] = sizeof(unifycr_key_t);
     }
 
-    rc = unifycr_get_file_extents(req_num * 2, unifycr_keys, unifycr_key_lens,
+    rc = unifycr_get_file_extents(req_cnt * 2, &unifycr_keys, unifycr_key_lens,
                                   &num_vals, &keyvals);
 
     // set up the thread_control delegator request set
@@ -265,9 +278,9 @@ int rm_read_remote_data(int sock_id, size_t req_cnt)
         meta.dest_delegator_rank = keyvals[i].val.delegator_id;
         meta.length = keyvals[i].val.len;
 
-        memcpy(&meta.dest_app_id, (char *) &(keyvals[i].val.app_rank_id),
+        memcpy(&meta.dest_app_id, (char *) &(keyvals[i].val.app_id),
                sizeof(int));
-        memcpy(&meta.dest_client_id, (char *) &(keyvals[i].val.app_rank_id)
+        memcpy(&meta.dest_client_id, (char *) &(keyvals[i].val.app_id)
                + sizeof(int), sizeof(int));
 
         meta.src_app_id = app_id;
@@ -297,7 +310,7 @@ int rm_read_remote_data(int sock_id, size_t req_cnt)
     thrd_ctrl->del_req_stat->req_stat[0].del_id =
         thrd_ctrl->del_req_set->msg_meta[0].dest_delegator_rank;
 
-    int i, del_ndx = 0;
+    int del_ndx = 0;
     for (i = 1; i < thrd_ctrl->del_req_set->num; i++) {
         if (thrd_ctrl->del_req_set->msg_meta[i].dest_delegator_rank
             == thrd_ctrl->del_req_set->msg_meta[i - 1].dest_delegator_rank) {

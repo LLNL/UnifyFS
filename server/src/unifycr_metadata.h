@@ -67,6 +67,9 @@ typedef struct {
 
 int unifycr_key_compare(unifycr_key_t *a, unifycr_key_t *b);
 
+/**
+ * Value for a file extent
+ */
 typedef struct {
     unsigned long addr;
     unsigned long len;
@@ -75,19 +78,10 @@ typedef struct {
     int rank;
 } unifycr_val_t;
 
-/**
- * Value for a file extent
- */
-typedef struct {
-    /** delegator_id */
-    unsigned long delegator_id;
-    /** length */
-    unsigned long len;
-    /** address of the extent*/
-    unsigned long addr;
-    /** app and rank id  */
-    unsigned long app_rank_id; /*include both app and rank id*/
-} unifycr_val_t;
+#define UNIFYCR_VAL_SZ (sizeof(unifycr_val_t))
+
+#define UNIFYCR_VAL_ADDR(valp) (((unifycr_val_t *)valp)->addr)
+#define UNIFYCR_VAL_LEN(valp) (((unifycr_val_t *)valp)->len)
 
 /**
  * key-value tuple for a file extent
@@ -207,7 +201,7 @@ int unifycr_set_file_extents(int num_entries, unifycr_key_t **keys,
  * @return UNIFYCR_SUCCESS on success
  */
 int unifycr_get_file_extents(int num_keys,
-                             unifycr_key_t *keys, int *key_lens,
+                             unifycr_key_t **keys, int *key_lens,
                              int *num_values, unifycr_keyval_t **keyval);
 
 #endif
