@@ -14,20 +14,31 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
+#include <sys/time.h>
 #include "testutil.h"
 
-static int seed;
+static unsigned long seed;
 
 /*
  * Seed the pseudo random number generator if it hasn't already been
  * seeded. Call this before calling rand() if you want a unique
  * pseudo random sequence.
+ *
+ * Test suites currently each run off their own main function so that they can
+ * be run individually if need be. If they run too fast, seeding srand() with
+ * time(NULL) can happen more than once in a second, causing the pseudo random
+ * sequence to repeat which causes each suite to create the same random files.
+ * Using gettimeofday() allows us to increase the granularty to microseconds.
  */
 static void test_util_srand(void)
 {
     if (seed == 0) {
-        seed = time(NULL);
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+
+        /* Convert seconds since Epoch to microseconds and add the microseconds
+         * in order to prevent the seed from rolling over and repeating. */
+        seed = (tv.tv_sec * 1000000) + tv.tv_usec;
         srand(seed);
     }
 }
