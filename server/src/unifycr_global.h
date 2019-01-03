@@ -67,14 +67,14 @@ typedef enum {
 typedef struct {
     int dest_app_id;         /* app id of log file */
     int dest_client_id;      /* client id of log file */
-    long dest_offset;        /* data offset within log file */
+    size_t dest_offset;      /* data offset within log file */
     int dest_delegator_rank; /* delegator rank of service manager */
-    long length;             /* length of data to be read */
+    size_t length;           /* length of data to be read */
     int src_delegator_rank;  /* delegator rank of request manager */
     int src_cli_id;          /* client id of requesting client process */
     int src_app_id;          /* app id of requesting client process */
     int src_fid;             /* global file id */
-    long src_offset;         /* logical file offset */
+    size_t src_offset;       /* logical file offset */
     int src_thrd;            /* thread id of request manager */
     int src_dbg_rank;        /* MPI rank of client process */
     int arrival_time;        /* records time reaches service mgr */
@@ -84,10 +84,10 @@ typedef struct {
  * back to request manager, data payload of length bytes immediately
  * follows the header */
 typedef struct {
-    long src_fid;    /* global file id */
-    long src_offset; /* logical offset in file */
-    long length;     /* number of bytes */
-    int  errcode;    /* indicates whether read was successful */
+    size_t src_offset; /* logical offset in file */
+    size_t length;     /* number of bytes */
+    int src_fid;    /* global file id */
+    int errcode;    /* indicates whether read was successful */
 } recv_msg_t;
 
 /* defines a fixed-length list of read requests */
@@ -174,15 +174,15 @@ typedef struct {
 typedef struct {
     /* global values which are identical across all clients,
      * for this given app id */
-    long superblock_sz; /* size of memory region used to store data */
-    long meta_offset;   /* offset within superblock to index metadata */
-    long meta_size;     /* size of index metadata region in bytes */
-    long fmeta_offset;  /* offset within superblock to file attribute (stat) metadata */
-    long fmeta_size;    /* size of file attribute (stat) metadata region in bytes */
-    long data_offset;   /* offset within superblock to data log */
-    long data_size;     /* size of data log in bytes */
-    int req_buf_sz;     /* size of buffer to be used for client to issue read requests */
-    int recv_buf_sz;    /* size of buffer to copy read replies to client */
+    size_t superblock_sz; /* size of memory region used to store data */
+    size_t meta_offset;   /* superblock offset to index metadata */
+    size_t meta_size;     /* size of index metadata region in bytes */
+    size_t fmeta_offset;  /* superblock offset to file attribute metadata */
+    size_t fmeta_size;    /* size of file attribute metadata region in bytes */
+    size_t data_offset;   /* superblock offset to data log */
+    size_t data_size;     /* size of data log in bytes */
+    size_t req_buf_sz;    /* buffer size for client to issue read requests */
+    size_t recv_buf_sz;   /* buffer size for read replies to client */
 
     /* number of clients on the node */
     int num_procs_per_node;
@@ -228,7 +228,7 @@ extern pthread_t data_thrd;
 extern int glb_rank, glb_size;
 extern int *local_rank_lst;
 extern int local_rank_cnt;
-extern long max_recs_per_slice;
+extern size_t max_recs_per_slice;
 
 #if defined(UNIFYCR_MULTIPLE_DELEGATORS)
 extern int local_rank_idx;

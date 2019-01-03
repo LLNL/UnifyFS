@@ -489,7 +489,8 @@ static void unifycr_metaget_rpc(hg_handle_t handle)
     /* given the global file id, look up file attributes
      * from key/value store */
     unifycr_file_attr_t attr_val;
-    ret = meta_process_attr_get(in.gfid, &attr_val);
+    attr_val.gfid = in.gfid;
+    ret = meta_process_attr_get(&attr_val);
 
     /* build our output values */
     unifycr_metaget_out_t out;
@@ -517,7 +518,12 @@ static void unifycr_metaset_rpc(hg_handle_t handle)
     assert(ret == HG_SUCCESS);
 
     /* store file name for given global file id */
-    ret = meta_process_attr_set(in.gfid, in.filename);
+    unifycr_file_attr_t fattr;
+    memset(&fattr, 0, sizeof(fattr));
+    fattr.gfid = in.gfid;
+    strncpy(fattr.filename, in.filename, sizeof(fattr.filename));
+    /* TODO: unifycr_metaset_in_t is missing struct stat info */
+    ret = meta_process_attr_set(&fattr);
 
     /* build our output values */
     unifycr_metaset_out_t out;

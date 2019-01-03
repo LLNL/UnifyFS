@@ -35,41 +35,43 @@ int unifycr_client_rpc_init(char* svr_addr_str,
                              unifycr_rpc_context);
 */
 
-uint32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t**
-        unifycr_rpc_context);
+int32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t**
+                                        unifycr_rpc_context);
 
-uint32_t unifycr_client_unmount_rpc_invoke(unifycr_client_rpc_context_t**
-                                                unifycr_rpc_context);
+int32_t unifycr_client_unmount_rpc_invoke(unifycr_client_rpc_context_t**
+                                          unifycr_rpc_context);
 
-uint32_t unifycr_client_metaset_rpc_invoke(unifycr_client_rpc_context_t**
-        unifycr_rpc_context,
-        unifycr_file_attr_t* f_meta);
+int32_t unifycr_client_metaset_rpc_invoke(unifycr_client_rpc_context_t**
+                                          unifycr_rpc_context,
+                                          unifycr_file_attr_t* f_meta);
 
-uint32_t unifycr_client_metaget_rpc_invoke(unifycr_client_rpc_context_t**
-        unifycr_rpc_context,
-        unifycr_file_attr_t* file_meta, int fid, int gfid);
+int32_t unifycr_client_metaget_rpc_invoke(unifycr_client_rpc_context_t**
+                                          unifycr_rpc_context,
+                                          unifycr_file_attr_t* f_meta,
+                                          int32_t fid,
+                                          int32_t gfid);
 
-uint32_t unifycr_client_fsync_rpc_invoke(unifycr_client_rpc_context_t**
-        unifycr_rpc_context,
-        uint32_t app_id,
-        uint32_t local_rank_idx,
-        uint32_t gfid);
-
-uint32_t unifycr_client_read_rpc_invoke(unifycr_client_rpc_context_t**
+int32_t unifycr_client_fsync_rpc_invoke(unifycr_client_rpc_context_t**
                                         unifycr_rpc_context,
-                                        uint32_t app_id,
-                                        uint32_t local_rank_idx,
-                                        uint32_t gfid,
-                                        uint64_t offset,
-                                        uint64_t length);
+                                        int32_t app_id,
+                                        int32_t local_rank_idx,
+                                        int32_t gfid);
 
-uint32_t unifycr_client_mread_rpc_invoke(unifycr_client_rpc_context_t**
-        unifycr_rpc_context,
-        uint32_t app_id,
-        uint32_t local_rank_idx,
-        uint32_t gfid,
-        uint32_t read_count,
-        hg_size_t size,
-        void* buffer);
+int32_t unifycr_client_read_rpc_invoke(unifycr_client_rpc_context_t**
+                                       unifycr_rpc_context,
+                                       int32_t app_id,
+                                       int32_t local_rank_idx,
+                                       int32_t gfid,
+                                       hg_size_t offset,
+                                       hg_size_t length);
+
+int32_t unifycr_client_mread_rpc_invoke(unifycr_client_rpc_context_t**
+                                        unifycr_rpc_context,
+                                        int32_t app_id,
+                                        int32_t local_rank_idx,
+                                        int32_t gfid,
+                                        int32_t read_count,
+                                        hg_size_t size,
+                                        void* buffer);
 
 #endif

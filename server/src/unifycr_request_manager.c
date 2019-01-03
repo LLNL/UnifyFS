@@ -66,23 +66,13 @@
  * It iterates with the client until all incoming read replies
  * have been transferred. */
 
-/* defines header for read reply as written by request manager
- * back to application client via shared memory, the data
- * payload of length bytes immediately follows the header */
-typedef struct {
-    int src_fid; /* global file id */
-    long offset; /* offset within file */
-    long length; /* number of bytes */
-    int errcode; /* indicates whether read encountered error */
-} shm_meta_t;
-
 static void print_send_msgs(send_msg_t* send_metas,
-                            long msg_cnt, int dbg_rank)
+                            int msg_cnt, int dbg_rank)
 {
-    long i;
+    int i;
     for (i = 0; i < msg_cnt; i++) {
-        LOG(LOG_DBG, "dbg_rank:%d, src_offset:%ld, msg_cnt:%ld",
-            dbg_rank, send_metas[i].src_offset, msg_cnt);
+        LOGDBG("print_send_msgs:dbg_rank:%d, src_offset:%zu, msg_cnt:%d",
+               dbg_rank, send_metas[i].src_offset, msg_cnt);
     }
 }
 
@@ -91,44 +81,39 @@ static void print_remote_del_reqs(int app_id, int cli_id,
 {
     int i;
     for (i = 0; i < del_req_stat->del_cnt; i++) {
-        LOG(LOG_DBG, "remote:dbg_rank:%d, remote_delegator:%d, req_cnt:%d",
-            dbg_rank, del_req_stat->req_stat->del_id,
-            del_req_stat->req_stat->req_cnt);
-        fflush(stdout);
+        LOGDBG("remote:dbg_rank:%d, remote_delegator:%d, req_cnt:%d",
+               dbg_rank, del_req_stat->req_stat[i].del_id,
+               del_req_stat->req_stat[i].req_cnt);
     }
 }
 
 #if 0 // NOT CURRENTLY USED
-static void print_recv_msg(
-    int app_id,
-    int cli_id,
-    int dbg_rank,
-    int thrd_id,
-    shm_meta_t* msg)
+static void print_recv_msg(int app_id, int cli_id,
+                           int dbg_rank, int thrd_id,
+                           shm_meta_t* msg)
 {
-    LOG(LOG_DBG,
-        "recv_msg:dbg_rank:%d, app_id:%d, cli_id:%d, thrd_id:%d, "
-        "fid:%d, offset:%ld, len:%ld",
-        dbg_rank, app_id, cli_id,  thrd_id, msg->src_fid,
-        msg->offset, msg->length);
+    LOGDBG("recv_msg:dbg_rank:%d, app_id:%d, cli_id:%d, thrd_id:%d, "
+           "fid:%d, offset:%ld, len:%ld",
+           dbg_rank, app_id, cli_id, thrd_id, msg->src_fid,
+           msg->offset, msg->length);
 }
 #endif
 
 /* order read requests by destination delegator rank */
 static int compare_delegators(const void* a, const void* b)
 {
-    const send_msg_t* ptr_a = a;
-    const send_msg_t* ptr_b = b;
+    const send_msg_t* msg_a = a;
+    const send_msg_t* msg_b = b;
+    int rank_a = msg_a->dest_delegator_rank;
+    int rank_b = msg_b->dest_delegator_rank;
 
-    if (ptr_a->dest_delegator_rank > ptr_b->dest_delegator_rank) {
+    if (rank_a == rank_b) {
+        return 0;
+    } else if (rank_a < rank_b) {
+        return -1;
+    } else {
         return 1;
     }
-
-    if (ptr_a->dest_delegator_rank < ptr_b->dest_delegator_rank) {
-        return -1;
-    }
-
-    return 0;
 }
 
 /************************
@@ -145,8 +130,8 @@ int rm_cmd_read(
     int app_id,    /* app_id for requesting client */
     int client_id, /* client_id for requesting client */
     int gfid,      /* global file id of read request */
-    long offset,   /* logical file offset of read request */
-    long length)   /* number of bytes to read */
+    size_t offset, /* logical file offset of read request */
+    size_t length) /* number of bytes to read */
 {
     /* rank to print debug messages */
     int dbg_rank = -1;
@@ -251,17 +236,19 @@ int rm_cmd_read(
 }
 
 /**
-* send the read requests to the
-* remote delegators
-* @param client_id: which socket in the poll_set received
-* the application's requests
+* send the read requests to the remote delegators
+*
+* @param app_id: application id
+* @param client_id: client id for requesting process
+* @param gfid: global file id
 * @param req_num: number of read requests
+* @param reqbuf: read requests buffer
 * @return success/error code
 */
-int rm_cmd_mread(int app_id, int client_id, int gfid, int req_num, void* buffer)
+int rm_cmd_mread(int app_id, int client_id, int gfid,
+                 size_t req_num, void* reqbuf)
 {
     int rc;
-
     int dbg_rank = -1;
 
     app_config_t* app_config =
@@ -273,12 +260,13 @@ int rm_cmd_mread(int app_id, int client_id, int gfid, int req_num, void* buffer)
     pthread_mutex_lock(&thrd_ctrl->thrd_lock);
 
     /* get the locations of all the read requests from the key-value store*/
-    printf("calling meta_batch_get with req_num: %d, thrd_id: %d\n", req_num,
-           thrd_id);
-    rc = meta_batch_get(app_id, client_id, thrd_id, 0, buffer, req_num,
+    LOGDBG("calling meta_batch_get with req_num:%zu, thrd_id:%d",
+           req_num, thrd_id);
+    rc = meta_batch_get(app_id, client_id, thrd_id, 0,
+                        reqbuf, req_num,
                         thrd_ctrl->del_req_set);
+    LOGDBG("completed meta_batch_get, rc=%d", rc);
 
-    printf("completed meta_batch_get\n");
     /*
      * group together the read requests
      * to be sent to the same delegators.
@@ -290,8 +278,6 @@ int rm_cmd_mread(int app_id, int client_id, int gfid, int req_num, void* buffer)
                     thrd_ctrl->del_req_set->num, dbg_rank);
     thrd_ctrl->del_req_stat->req_stat[0].req_cnt = 1;
 
-
-
     int i, del_cnt = 0;
     thrd_ctrl->del_req_stat->req_stat[0].del_id =
         thrd_ctrl->del_req_set->msg_meta[0].dest_delegator_rank;
@@ -300,14 +286,13 @@ int rm_cmd_mread(int app_id, int client_id, int gfid, int req_num, void* buffer)
      * to be sent to each delegator*/
     for (i = 1; i < thrd_ctrl->del_req_set->num; i++) {
         if (thrd_ctrl->del_req_set->msg_meta[i].dest_delegator_rank ==
-                thrd_ctrl->del_req_set->msg_meta[i - 1].dest_delegator_rank) {
+            thrd_ctrl->del_req_set->msg_meta[i - 1].dest_delegator_rank) {
             thrd_ctrl->del_req_stat->req_stat[del_cnt].req_cnt++;
         } else {
             del_cnt++;
             thrd_ctrl->del_req_stat->req_stat[del_cnt].req_cnt = 1;
             thrd_ctrl->del_req_stat->req_stat[del_cnt].del_id =
                 thrd_ctrl->del_req_set->msg_meta[i].dest_delegator_rank;
-
         }
     }
     del_cnt++;
@@ -317,109 +302,26 @@ int rm_cmd_mread(int app_id, int client_id, int gfid, int req_num, void* buffer)
     print_remote_del_reqs(app_id, thrd_id, dbg_rank,
                           thrd_ctrl->del_req_stat);
 
-    printf("wake up the service thread for the requesting client\n");
+    LOGDBG("wake up the service thread for the requesting client");
     /*wake up the service thread for the requesting client*/
     if (!thrd_ctrl->has_waiting_delegator) {
-        printf("has waiting delegator\n");
+        LOGDBG("has waiting delegator");
         thrd_ctrl->has_waiting_dispatcher = 1;
         pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
-        printf("has waiting dispatcherr\n");
+        LOGDBG("has waiting dispatcherr");
         thrd_ctrl->has_waiting_dispatcher = 0;
         pthread_cond_signal(&thrd_ctrl->thrd_cond);
-        printf("signaled\n");
+        LOGDBG("signaled");
     } else {
-        printf("does not have waiting delegator\n");
+        LOGDBG("does not have waiting delegator");
         pthread_cond_signal(&thrd_ctrl->thrd_cond);
     }
-    printf("woked\n");
+    LOGDBG("woked");
     pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
-    printf("unlocked\n");
+    LOGDBG("unlocked");
+
     return rc;
-
 }
-
-#ifdef RPC
-int rm_read_remote_data(int app_id, int thrd_id, int gfid, int req_num)
-{
-    int rc;
-
-    app_config_t* app_config =
-        (app_config_t*)arraylist_get(app_config_list, app_id);
-
-    int dbg_rank = 1;
-
-    int thrd_id = app_config->thrd_idxs[client_id];
-    client_ctrl_t* client_ctrl = (client_ctrl_t*)arraylist_get(client_list,
-                                 thrd_id);
-
-    //pthread_mutex_lock(&thrd_ctrl->thrd_lock);
-
-    /* get the locations of all the read requests from the key-value store*/
-    printf("calling meta_batch_get\n");
-    rc = meta_batch_get(app_id, client_id, thrd_id, 0,
-                        app_config->shm_req_bufs[client_id], req_num,
-                        client_ctrl->del_req_set);
-
-    printf("completed meta_batch_get\n");
-    /*
-     * group together the read requests
-     * to be sent to the same delegators.
-     * */
-    qsort(client_ctrl->del_req_set->msg_meta,
-          client_ctrl->del_req_set->num,
-          sizeof(send_msg_t), compare_delegators);
-    print_send_msgs(client_ctrl->del_req_set->msg_meta,
-                    client_ctrl->del_req_set->num, dbg_rank);
-    client_ctrl->del_req_stat->req_stat[0].req_cnt = 1;
-
-
-
-    int i, del_cnt = 0;
-    client_ctrl->del_req_stat->req_stat[0].del_id =
-        client_ctrl->del_req_set->msg_meta[0].dest_delegator_rank;
-
-    /* calculate the number of read requests
-     * to be sent to each delegator*/
-    for (i = 1; i < client_ctrl->del_req_set->num; i++) {
-        if (client_ctrl->del_req_set->msg_meta[i].dest_delegator_rank ==
-                client_ctrl->del_req_set->msg_meta[i - 1].dest_delegator_rank) {
-            client_ctrl->del_req_stat->req_stat[del_cnt].req_cnt++;
-        } else {
-            del_cnt++;
-            client_ctrl->del_req_stat->req_stat[del_cnt].req_cnt = 1;
-            client_ctrl->del_req_stat->req_stat[del_cnt].del_id =
-                client_ctrl->del_req_set->msg_meta[i].dest_delegator_rank;
-
-        }
-    }
-    del_cnt++;
-
-    client_ctrl->del_req_stat->del_cnt = del_cnt;
-
-    print_remote_del_reqs(app_id, client_id, dbg_rank,
-                          client_ctrl->del_req_stat);
-
-    printf("wake up the service thread for the requesting client\n");
-    /*wake up the service thread for the requesting client*/
-    if (!thrd_ctrl->has_waiting_delegator) {
-        printf("has waiting delegator\n");
-        thrd_ctrl->has_waiting_dispatcher = 1;
-        pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
-        thrd_ctrl->has_waiting_dispatcher = 0;
-        printf("has waiting dispatcher\n");
-        pthread_cond_signal(&thrd_ctrl->thrd_cond);
-        printf("signaled\n");
-    } else {
-        printf("does not have waiting delegator\n");
-        pthread_cond_signal(&thrd_ctrl->thrd_cond);
-    }
-    printf("woked\n");
-    pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
-    printf("unlocked\n");
-    return rc;
-
-}
-#endif
 
 /* function called by main thread to instruct
  * resource manager thread to exit,
@@ -481,8 +383,8 @@ int rm_cmd_exit(thrd_ctrl_t* thrd_ctrl)
 static int rm_pack_send_requests(
     char* req_msg_buf,      /* pointer to buffer to pack requests into */
     send_msg_t* send_metas, /* request objects to be packed */
-    int req_num,            /* number of requests */
-    long* tot_sz)           /* total data payload size we're requesting */
+    int req_cnt,            /* number of requests */
+    size_t* tot_sz)         /* total data payload size we're requesting */
 {
     /* tot_sz records the aggregate data size
      * requested in this transfer */
@@ -494,6 +396,7 @@ static int rm_pack_send_requests(
 
     /* get pointer to start of send buffer */
     char* ptr = req_msg_buf;
+    memset(ptr, 0, REQ_BUF_LEN);
 
     /* pack command */
     int cmd = XFER_COMM_DATA;
@@ -501,28 +404,28 @@ static int rm_pack_send_requests(
     ptr += sizeof(int);
 
     /* pack request count */
-    memcpy(ptr, &req_num, sizeof(int));
+    memcpy(ptr, &req_cnt, sizeof(int));
     ptr += sizeof(int);
 
     /* pack each request into the send buffer,
      * total up incoming bytes as we go */
     int i;
-    long bytes = 0;
-    for (i = 0; i < req_num; i++) {
-        /* copy request into buffer */
-        memcpy(ptr, &(send_metas[i]), sizeof(send_msg_t));
-        ptr += sizeof(send_msg_t);
-
+    size_t bytes = 0;
+    for (i = 0; i < req_cnt; i++) {
         /* accumulate data size of this request */
         bytes += send_metas[i].length;
     }
+
+    /* copy requests into buffer */
+    memcpy(ptr, send_metas, (req_cnt * sizeof(send_msg_t)));
+    ptr += (req_cnt * sizeof(send_msg_t));
 
     /* increment running total size of data bytes */
     (*tot_sz) += bytes;
 
     /* return number of bytes used to pack requests */
-    int packed_size = (int)(ptr - req_msg_buf);
-    return packed_size;
+    size_t packed_size = ptr - req_msg_buf;
+    return (int)packed_size;
 }
 
 /**
@@ -531,7 +434,7 @@ static int rm_pack_send_requests(
 */
 static int rm_send_remote_requests(
     thrd_ctrl_t* thrd_ctrl, /* lists delegators and read requests */
-    long* tot_sz)           /* returns total data payload to be read */
+    size_t* tot_sz)         /* returns total data payload to be read */
 {
     int i = 0;
 
@@ -543,6 +446,9 @@ static int rm_send_remote_requests(
     /* use this variable to total up number of incoming data bytes */
     *tot_sz = 0;
 
+    /* get pointer to send buffer */
+    char* sendbuf = thrd_ctrl->del_req_msg_buf;
+
     /* get pointer to start of read request array,
      * and initialize index to point to first element */
     send_msg_t* msgs = thrd_ctrl->del_req_set->msg_meta;
@@ -550,26 +456,15 @@ static int rm_send_remote_requests(
 
     /* iterate over each delegator we need to send requests to */
     for (i = 0; i < thrd_ctrl->del_req_stat->del_cnt; i++) {
-        printf("request data transfer for client_id: %d, src_fid: %d, "
-               "dest_offset %ld, src_offset %ld, length %ld\n",
-               thrd_ctrl->del_req_set->msg_meta[msg_cursor].dest_client_id,
-               thrd_ctrl->del_req_set->msg_meta[msg_cursor].src_fid,
-               thrd_ctrl->del_req_set->msg_meta[msg_cursor].dest_offset,
-               thrd_ctrl->del_req_set->msg_meta[msg_cursor].src_offset,
-               thrd_ctrl->del_req_set->msg_meta[msg_cursor].length);
-
-        /* get pointer to send buffer */
-        char* sendbuf = thrd_ctrl->del_req_msg_buf;
-
         /* pointer to start of requests for this delegator */
-        send_msg_t* req = &(msgs[msg_cursor]);
+        send_msg_t* reqs = msgs + msg_cursor;
 
         /* number of requests for this delegator */
         int req_num = thrd_ctrl->del_req_stat->req_stat[i].req_cnt;
 
         /* pack requests into send buffer, get size of packed data,
          * increase total number of data payload we will get back */
-        int packed_size = rm_pack_send_requests(sendbuf, req,
+        int packed_size = rm_pack_send_requests(sendbuf, reqs,
                                                 req_num, tot_sz);
 
         /* get rank of target delegator */
@@ -656,7 +551,7 @@ static int rm_process_received_msg(
     int app_id,         /* client app id to get shared memory */
     int client_id,      /* client_id to client */
     char* recv_msg_buf, /* pointer to receive buffer */
-    long* ptr_tot_sz)   /* decrements total data received */
+    size_t* ptr_tot_sz) /* decrements total data received */
 {
     /* assume we'll succeed in processing the message */
     int rc = UNIFYCR_SUCCESS;
@@ -781,7 +676,7 @@ static int rm_process_received_msg(
 */
 static int rm_receive_remote_message(
     thrd_ctrl_t* thrd_ctrl, /* contains pointer to receive buffer */
-    long tot_sz)            /* number of incoming data payload bytes */
+    size_t tot_sz)          /* number of incoming data payload bytes */
 {
     /* assume we'll succeed */
     int rc = ULFS_SUCCESS;
@@ -799,11 +694,6 @@ static int rm_receive_remote_message(
 
     /* get thread id for this client (used for MPI tags) */
     int thrd_id = app_config->thrd_idxs[client_id];
-
-    /*
-     * ToDo: something wrong happens and tot_sz keeps larger
-     * than 0, handle this exception.
-     * */
 
     /* service manager will incorporate our thread id in tag,
      * to distinguish between target request manager threads */
@@ -919,7 +809,7 @@ void* rm_delegate_request_thread(void* arg)
 
         /* this will hold the total number of bytes we expect
          * to come in, compute in send, subtracted in receive */
-        long tot_sz = 0;
+        size_t tot_sz = 0;
 
         /* send read requests to remote servers */
         int rc = rm_send_remote_requests(thrd_ctrl, &tot_sz);
