@@ -47,4 +47,14 @@ typedef struct {
     int fid;
 } unifycr_index_t;
 
+/* defines header for read reply as written by request manager
+ * back to application client via shared memory, the data
+ * payload of length bytes immediately follows the header */
+typedef struct {
+    size_t offset; /* offset within file */
+    size_t length; /* number of bytes */
+    int src_fid;   /* global file id */
+    int errcode;   /* indicates whether read encountered error */
+} shm_meta_t;
+
 #endif /* UNIFYCR_META_H */

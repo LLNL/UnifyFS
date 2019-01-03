@@ -32,6 +32,7 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
 
@@ -57,7 +58,7 @@ extern char unifycr_log_timestamp[256];
 #elif defined(SYS_gettid)
 #define gettid() syscall(SYS_gettid)
 #else
-#error gettid syscal is not defined
+#error gettid syscall is not defined
 #endif
 
 #define LOG(level, ...) \
@@ -67,7 +68,7 @@ extern char unifycr_log_timestamp[256];
         strftime(unifycr_log_timestamp, sizeof(unifycr_log_timestamp), \
             "%Y-%m-%dT%H:%M:%S", unifycr_log_ltime); \
         fprintf(unifycr_log_stream, "%s rank=%d tid=%ld @ %s:%d in %s: ", \
-            unifycr_log_timestamp, glb_rank, gettid(), \
+            unifycr_log_timestamp, glb_rank, (long)gettid(), \
             __FILE__, __LINE__, __func__); \
         fprintf(unifycr_log_stream, __VA_ARGS__); \
         fprintf(unifycr_log_stream, "\n"); \

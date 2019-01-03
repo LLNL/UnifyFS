@@ -26,16 +26,20 @@
  * For details, see https://github.com/llnl/burstfs
  * Please read https://github.com/llnl/burstfs/LICNSE for full license text.
  */
+
 #include <assert.h>
-#include "mdhim.h"
-#include "indexes.h"
-#include "unifycr_log.h"
-#include "unifycr_meta.h"
-#include "unifycr_metadata.h"
+#include <sys/stat.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+
 #include "arraylist.h"
-#include "unifycr_const.h"
-#include "unifycr_global.h"
-#include "../../client/src/ucr_read_builder.h"
+#include "indexes.h"
+#include "mdhim.h"
+#include "unifycr_log.h"
+#include "unifycr_metadata.h"
+#include "unifycr_clientcalls_rpc.h"
+#include "ucr_read_builder.h"
 
 unifycr_key_t** unifycr_keys;
 unifycr_val_t** unifycr_vals;
@@ -59,7 +63,41 @@ int fattr_key_lens[MAX_FILE_CNT_PER_NODE] = {0};
 int fattr_val_lens[MAX_FILE_CNT_PER_NODE] = {0};
 
 struct index_t* unifycr_indexes[2];
-long max_recs_per_slice;
+size_t max_recs_per_slice;
+
+void debug_log_key_val(const char* ctx,
+                       unifycr_key_t* key,
+                       unifycr_val_t* val)
+{
+    if ((key != NULL) && (val != NULL)) {
+        LOGDBG("@%s - key(fid=%lu, offset=%lu), "
+               "val(del=%d, len=%lu, addr=%lu, app=%d, rank=%d)",
+               ctx, key->fid, key->offset,
+               val->delegator_id, val->len, val->addr, val->app_id, val->rank);
+    } else if (key != NULL) {
+        LOGDBG("@%s - key(fid=%lu, offset=%lu)",
+               ctx, key->fid, key->offset);
+    }
+}
+
+int unifycr_key_compare(unifycr_key_t* a, unifycr_key_t* b)
+{
+    assert((NULL != a) && (NULL != b));
+    if (a->fid == b->fid) {
+        if (a->offset == b->offset) {
+            return 0;
+        } else if (a->offset < b->offset) {
+            return -1;
+        } else {
+            return 1;
+        }
+    } else if (a->fid < b->fid) {
+        return -1;
+    } else {
+        return 1;
+    }
+}
+
 /**
 * initialize the key-value store
 */
@@ -127,7 +165,7 @@ int meta_init_store(unifycr_cfg_t* cfg)
     if (rc != 0) {
         return -1;
     }
-    max_recs_per_slice = range_sz;
+    max_recs_per_slice = (size_t) range_sz;
     db_opts->max_recs_per_slice = (uint64_t) range_sz;
 
     md = mdhimInit(&comm, db_opts);
@@ -207,37 +245,36 @@ int meta_init_indices()
     }
 
     return 0;
-
 }
 
 /**
 * store the file attribute to the key-value store
-* @param buf: file attribute received from the client
-* @param sock_id: the connection id in poll_set of
-* the delegator
+* @param ptr_fattr: file attribute received from the client
 * @return success/error code
 */
-int meta_process_attr_set(int gfid, const char* filename)
+int meta_process_attr_set(unifycr_file_attr_t* ptr_fattr)
 {
-    int rc = ULFS_SUCCESS;
+    int rc;
+    fattr_key_t local_key;
+    fattr_val_t local_val;
 
-    fattr_val_t fattr_vals_local;
-    memset(&fattr_vals_local, 0, sizeof(fattr_val_t));
+    assert(NULL != ptr_fattr);
 
-    strcpy(fattr_vals_local.fname, filename);
+    local_key = (fattr_key_t) ptr_fattr->gfid;
+    memset(&local_val, 0, sizeof(local_val));
+    strncpy(local_val.fname, ptr_fattr->filename, sizeof(local_val.fname));
+    local_val.file_attr = ptr_fattr->file_attr;
 
-    printf("Setting Attribute -- rank:%d, setting fattr key:%d, value:%s\n",
-           glb_rank, gfid, fattr_vals_local.fname);
+    /* LOGDBG("rank:%d, setting fattr key:%d, value:%s",
+     *        glb_rank, local_key, local_val.fname); */
     md->primary_index = unifycr_indexes[1];
-    brm = mdhimPut(md, &gfid, sizeof(fattr_key_t),
-                   &fattr_vals_local, sizeof(fattr_val_t),
+    brm = mdhimPut(md, &local_key, sizeof(fattr_key_t),
+                   &local_val, sizeof(fattr_val_t),
                    NULL, NULL);
     if (!brm || brm->error) {
         rc = (int)UNIFYCR_ERROR_MDHIM;
-    }
-
-    else {
-        rc = ULFS_SUCCESS;
+    } else {
+        rc = UNIFYCR_SUCCESS;
     }
 
     mdhim_full_release_msg(brm);
@@ -247,35 +284,33 @@ int meta_process_attr_set(int gfid, const char* filename)
 
 
 /* get the file attribute from the key-value store
-* @param gfid: the global file ID
+* @param ptr_fattr: file attribute to return to the client
 * @return success/error code
 */
 
-int meta_process_attr_get(int gfid, unifycr_file_attr_t* ptr_attr_val)
+int meta_process_attr_get(unifycr_file_attr_t* ptr_fattr)
 {
-    fattr_key_t fattr_keys_local = gfid;
-    fattr_val_t* tmp_ptr_attr;
-
     int rc;
 
-    md->primary_index = unifycr_indexes[1];
-    bgrm = mdhimGet(md, md->primary_index, &fattr_keys_local,
-                    sizeof(fattr_key_t), MDHIM_GET_EQ);
+    assert(NULL != ptr_fattr);
 
+    fattr_key_t local_key = (fattr_key_t) ptr_fattr->gfid;
+
+    md->primary_index = unifycr_indexes[1];
+    bgrm = mdhimGet(md, md->primary_index,
+                    &local_key, sizeof(fattr_key_t), MDHIM_GET_EQ);
     if (!bgrm || bgrm->error) {
         rc = (int)UNIFYCR_ERROR_MDHIM;
-    }
+    } else {
+        fattr_val_t* ptr_val = (fattr_val_t*) bgrm->values[0];
 
-    else {
-        tmp_ptr_attr = (fattr_val_t*)bgrm->values[0];
-        ptr_attr_val->gfid = fattr_keys_local;
+        /* LOGDBG("rank:%d, getting fattr key:%d",
+         *        glb_rank, ptr_fattr->gfid); */
+        ptr_fattr->file_attr = ptr_val->file_attr;
+        strncpy(ptr_fattr->filename, ptr_val->fname,
+                sizeof(ptr_fattr->filename));
 
-        printf("getting File Attribute: rank:%d, getting fattr key:%d\n",
-               glb_rank, fattr_keys_local);
-        ptr_attr_val->file_attr = tmp_ptr_attr->file_attr;
-        strcpy(ptr_attr_val->filename, tmp_ptr_attr->fname);
-
-        rc = ULFS_SUCCESS;
+        rc = UNIFYCR_SUCCESS;
     }
 
     mdhim_full_release_msg(bgrm);
@@ -295,11 +330,9 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
     app_config_t* app_config = (app_config_t*)arraylist_get(app_config_list,
                                app_id);
 
-    // int client_side_id = app_config->client_ranks[sock_id];
-
-    unsigned long num_entries =
-        *((unsigned long*)(app_config->shm_superblocks[client_side_id]
-                           + app_config->meta_offset));
+    size_t num_entries =
+        *((size_t*)(app_config->shm_superblocks[client_side_id]
+                    + app_config->meta_offset));
 
     /* indices are stored in the superblock shared memory
      *  created by the client*/
@@ -310,59 +343,52 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
 
     md->primary_index = unifycr_indexes[0];
 
-    int used_entries = 0;
-    int i;
+    size_t i;
+    size_t used_entries = 0;
     for (i = 0; i < num_entries; i++) {
-        if (meta_payload[i].fid == gfid) {
-            printf("setting mdata for gfid: %d, file_pos: %lu, mem_pos: %lu, "
-                   "length: %lu\n",
-                   meta_payload[i].fid, meta_payload[i].file_pos,
-                   meta_payload[i].mem_pos, meta_payload[i].length);
-            unifycr_keys[used_entries]->fid = meta_payload[i].fid;
-            unifycr_keys[used_entries]->offset = meta_payload[i].file_pos;
-            unifycr_vals[used_entries]->addr = meta_payload[i].mem_pos;
-            unifycr_vals[used_entries]->len = meta_payload[i].length;
-            unifycr_vals[used_entries]->delegator_id = glb_rank;
-            memcpy((char*) &(unifycr_vals[i]->app_rank_id),
-                &app_id, sizeof(int));
-            memcpy((char*) &(unifycr_vals[i]->app_rank_id) + sizeof(int),
-                &client_side_id, sizeof(int));
-
-            unifycr_key_lens[used_entries] = sizeof(unifycr_key_t);
-            unifycr_val_lens[used_entries] = sizeof(unifycr_val_t);
-            used_entries++;
+        if (gfid != meta_payload[i].fid) {
+            continue;
         }
+
+        unifycr_keys[used_entries]->fid = meta_payload[i].fid;
+        unifycr_keys[used_entries]->offset = meta_payload[i].file_pos;
+
+        unifycr_vals[used_entries]->addr = meta_payload[i].mem_pos;
+        unifycr_vals[used_entries]->len = meta_payload[i].length;
+        unifycr_vals[used_entries]->delegator_id = glb_rank;
+        unifycr_vals[used_entries]->app_id = app_id;
+        unifycr_vals[used_entries]->rank = client_side_id;
+
+        // debug_log_key_val("before put",
+        //                   unifycr_keys[used_entries],
+        //                   unifycr_vals[used_entries]);
+
+        unifycr_key_lens[used_entries] = sizeof(unifycr_key_t);
+        unifycr_val_lens[used_entries] = sizeof(unifycr_val_t);
+        used_entries++;
     }
 
-    // print_fsync_indices(unifycr_keys, unifycr_vals, num_entries);
+    // print_fsync_indices(unifycr_keys, unifycr_vals, used_entries);
 
     brm = mdhimBPut(md, (void**)(&unifycr_keys[0]), unifycr_key_lens,
                     (void**)(&unifycr_vals[0]), unifycr_val_lens, used_entries,
                     NULL, NULL);
     brmp = brm;
-    if (!brmp || brmp->error) {
-        ret = (int)UNIFYCR_ERROR_MDHIM;
-        LOG(LOG_DBG, "Rank - %d: Error inserting keys/values into MDHIM",
-            md->mdhim_rank);
-    }
-
     while (brmp) {
         if (brmp->error < 0) {
+            LOGDBG("mdhimBPut returned error %d", brmp->error);
             ret = (int)UNIFYCR_ERROR_MDHIM;
-            break;
         }
-
         brm = brmp;
         brmp = brmp->next;
         mdhim_full_release_msg(brm);
-
     }
 
     md->primary_index = unifycr_indexes[1];
 
     num_entries =
-        *((unsigned long*)(app_config->shm_superblocks[client_side_id]
-                           + app_config->fmeta_offset));
+        *((size_t*)(app_config->shm_superblocks[client_side_id]
+                    + app_config->fmeta_offset));
 
     /* file attributes are stored in the superblock shared memory
      * created by the client*/
@@ -370,77 +396,83 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
         (unifycr_file_attr_t*)(app_config->shm_superblocks[client_side_id]
                                + app_config->fmeta_offset + page_sz);
 
-
     used_entries = 0;
     for (i = 0; i < num_entries; i++) {
-        if (attr_payload[i].gfid == gfid) {
-            *fattr_keys[used_entries] = attr_payload[i].gfid;
-            fattr_vals[used_entries]->file_attr = attr_payload[i].file_attr;
-            strcpy(fattr_vals[used_entries]->fname, attr_payload[i].filename);
-
-            fattr_key_lens[used_entries] = sizeof(fattr_key_t);
-            fattr_val_lens[used_entries] = sizeof(fattr_val_t);
-            used_entries++;
+        if (gfid != attr_payload[i].gfid) {
+            continue;
         }
-    }
-    assert(used_entries == 1);
 
-    // should be changed to mdhimPut once assertion is validated
+        *fattr_keys[used_entries] = attr_payload[i].gfid;
+        fattr_vals[used_entries]->file_attr = attr_payload[i].file_attr;
+        strcpy(fattr_vals[used_entries]->fname, attr_payload[i].filename);
+
+        fattr_key_lens[used_entries] = sizeof(fattr_key_t);
+        fattr_val_lens[used_entries] = sizeof(fattr_val_t);
+        used_entries++;
+    }
+
     brm = mdhimBPut(md, (void**)(&fattr_keys[0]), fattr_key_lens,
                     (void**)(&fattr_vals[0]), fattr_val_lens, used_entries,
                     NULL, NULL);
     brmp = brm;
-    if (!brmp || brmp->error) {
-        ret = (int)UNIFYCR_ERROR_MDHIM;
-        LOG(LOG_DBG, "Rank - %d: Error inserting keys/values into MDHIM",
-            md->mdhim_rank);
-    }
-
     while (brmp) {
         if (brmp->error < 0) {
+            LOGDBG("mdhimBPut returned error %d", brmp->error);
             ret = (int)UNIFYCR_ERROR_MDHIM;
-            break;
         }
-
         brm = brmp;
         brmp = brmp->next;
         mdhim_full_release_msg(brm);
+    }
 
+    if (ret == (int)UNIFYCR_ERROR_MDHIM) {
+        LOGDBG("Rank - %d: Error inserting keys/values into MDHIM",
+               md->mdhim_rank);
     }
 
     return ret;
 }
 
-int meta_read_get(
-    int app_id,
-    int client_id,
-    int thrd_id,
-    int dbg_rank,
-    int gfid,
-    long offset,
-    long length,
-    msg_meta_t* del_req_set)
+/* get the locations of all the requested file segment from
+ * the key-value store.
+ * @param app_id: client's application id
+ * @param client_id: client-side process id
+ * @param thrd_id: the thread created for processing
+ *  its client's read requests.
+ * @param dbg_rank: the client process's rank in its
+ *  own application, used for debug purpose
+ * @param gfid: global file id
+ * @param offset: start offset for segment
+ * @param length: segment length
+ * @del_req_set: contains metadata information for all
+ *  the read requests, such as the locations of the
+ *  requested segments
+ * @return success/error code
+ */
+int meta_read_get(int app_id, int client_id, int thrd_id, int dbg_rank,
+                  int gfid, size_t offset, size_t length,
+                  msg_meta_t* del_req_set)
 {
     /* assume we'll succeed, set to error otherwise */
     int rc = (int)UNIFYCR_SUCCESS;
 
-    printf("in %s for app_id: %d, client_id: %d, thrd_id: %d\n",
-           __func__, app_id, client_id, thrd_id);
-    printf("fid: %d, offset: %ld, length: %ld\n", gfid, offset, length);
+    LOGDBG("app_id:%d, client_id:%d, thrd_id:%d, "
+           "fid:%d, offset:%zu, length:%zu",
+           app_id, client_id, thrd_id, gfid, offset, length);
 
     /* create key to describe first byte we'll read */
-    unifycr_keys[0]->fid    = gfid;
+    unifycr_keys[0]->fid = gfid;
     unifycr_keys[0]->offset = offset;
-    unifycr_key_lens[0]     = sizeof(unifycr_key_t);
 
     /* create key to describe last byte we'll read */
-    unifycr_keys[1]->fid    = gfid;
+    unifycr_keys[1]->fid = gfid;
     unifycr_keys[1]->offset = offset + length - 1;
-    unifycr_key_lens[1]     = sizeof(unifycr_key_t);
 
-    md->primary_index = unifycr_indexes[0];
+    unifycr_key_lens[0] = sizeof(unifycr_key_t);
+    unifycr_key_lens[1] = sizeof(unifycr_key_t);
 
     /* get list of values for these keys */
+    md->primary_index = unifycr_indexes[0];
     bgrm = mdhimBGet(md, md->primary_index, (void**)unifycr_keys,
                      unifycr_key_lens, 2, MDHIM_RANGE_BGET);
 
@@ -448,67 +480,55 @@ int meta_read_get(
     int tot_num = 0;
 
     /* iterate over each item returned by get */
-    bgrmp = bgrm;
-    while (bgrmp) {
+    while (bgrm) {
+        bgrmp = bgrm;
         /* check that we didn't hit an error with this item */
         if (bgrmp->error < 0) {
             rc = (int)UNIFYCR_ERROR_MDHIM;
         }
 
         /* iterate over each key and value in this item */
-        int i;
+        unifycr_key_t* key;
+        unifycr_val_t* val;
+        size_t i;
         for (i = 0; i < bgrmp->num_keys; i++) {
             /* get pointer to key and value */
-            unifycr_key_t* key = (unifycr_key_t*)bgrm->keys[i];
-            unifycr_val_t* val = (unifycr_val_t*)bgrm->values[i];
-
-            /* extract dest_app_id from value */
-            int dest_app;
-            char* ptr = (char*) &(val->app_rank_id);
-            memcpy(&dest_app, ptr, sizeof(int));
-            ptr += sizeof(int);
-
-            /* extract dest_client_id from value */
-            int dest_client;
-            memcpy(&dest_client, ptr, sizeof(int));
-            ptr += sizeof(int);
+            key = (unifycr_key_t*) bgrmp->keys[i];
+            val = (unifycr_val_t*) bgrmp->values[i];
 
             /* get pointer to next send_msg structure */
             send_msg_t* msg = &(del_req_set->msg_meta[tot_num]);
+            memset(msg, 0, sizeof(send_msg_t));
+            tot_num++;
 
-            /* dest_client_id and dest_app_id uniquely identifies the remote physical
-             * log file that contains the requested segments */
-            msg->dest_app_id    = dest_app;
-            msg->dest_client_id = dest_client;
-
-            /* physical offset of the requested file segment on the log file */
-            msg->dest_offset = val->addr;
-
-            /* rank of the remote delegator hosting log file */
+            /* rank of the remote delegator */
             msg->dest_delegator_rank = val->delegator_id;
 
-            msg->length = val->len;
+            /* dest_client_id and dest_app_id uniquely identify the remote
+             * physical log file that contains the requested segments */
+            msg->dest_app_id = val->app_id;
+            msg->dest_client_id = val->rank;
 
-            msg->src_delegator_rank = glb_rank;
+            /* physical offset of the requested file segment on the log file */
+            msg->dest_offset = (size_t) val->addr;
+            msg->length = (size_t) val->len;
 
             /* src_app_id and src_cli_id identifies the requested client */
             msg->src_cli_id = client_id;
             msg->src_app_id = app_id;
 
             /* src_offset is the logical offset of the shared file */
-            msg->src_fid      = key->fid;
-            msg->src_offset   = key->offset;
-            msg->src_thrd     = thrd_id;
-            msg->src_dbg_rank = dbg_rank;
+            msg->src_offset = (size_t) key->offset;
 
-            /* increment number of items we got */
-            tot_num++;
+            msg->src_dbg_rank = dbg_rank;
+            msg->src_delegator_rank = glb_rank;
+            msg->src_fid = (int) key->fid;
+            msg->src_thrd = thrd_id;
         }
 
         /* advance to next item in list */
-        bgrmp = bgrmp->next;
-        mdhim_full_release_msg(bgrm);
-        bgrm = bgrmp;
+        bgrm = bgrmp->next;
+        mdhim_full_release_msg(bgrmp);
     }
 
     /* record total number of entries */
@@ -519,98 +539,100 @@ int meta_read_get(
 
 /* get the locations of all the requested file segments from
  * the key-value store.
-* @param app_id: client's application id
-* @param client_id: client-side iiiikkijuprocess id
-* @param del_req_set: the set of read requests to be
-* @param thrd_id: the thread created for processing
-* its client's read requests.
-* @param dbg_rank: the client process's rank in its
-* own application, used for debug purpose
-* @param shm_reqbuf: the shared request memory that
-* contains all the client's read requests
-* @del_req_set: contains metadata information for all
-* the read requests, such as the locations of the
-* requested segments
-* @return success/error code
-*/
-int meta_batch_get(int app_id, int client_id,
-                   int thrd_id, int dbg_rank, void* reqbuf, int num,
+ * @param app_id: client's application id
+ * @param client_id: client-side process id
+ * @param thrd_id: the thread created for processing
+ *  its client's read requests.
+ * @param dbg_rank: the client process's rank in its
+ *  own application, used for debug purpose
+ * @param reqbuf: memory buffer that contains
+ *  the client's read requests
+ * @param req_cnt: number of read requests
+ * @del_req_set: contains metadata information for all
+ *  the read requests, such as the locations of the
+ *  requested segments
+ * @return success/error code
+ */
+int meta_batch_get(int app_id, int client_id, int thrd_id, int dbg_rank,
+                   void* reqbuf, size_t req_cnt,
                    msg_meta_t* del_req_set)
 {
-    printf("in %s for app_id: %d, client_id: %d, thrd_id: %d\n",
-           __func__, app_id, client_id, thrd_id);
-    //cli_req_t *tmp_cli_req = (cli_req_t *) shm_reqbuf;
+    LOGDBG("app_id:%d, client_id:%d, thrd_id:%d",
+           app_id, client_id, thrd_id);
+
     unifycr_ReadRequest_table_t readRequest = unifycr_ReadRequest_as_root(reqbuf);
     unifycr_Extent_vec_t extents = unifycr_ReadRequest_extents(readRequest);
     size_t extents_len = unifycr_Extent_vec_len(extents);
-    assert(extents_len == num);
-    int i, rc = 0;
-    for (i = 0; i < num; i++) {
-        printf("fid: %d, offset: %" PRIu64 ", length: %" PRIu64 "\n",
-               unifycr_Extent_fid(unifycr_Extent_vec_at(extents, i)),
-               unifycr_Extent_offset(unifycr_Extent_vec_at(extents, i)),
-               unifycr_Extent_length(unifycr_Extent_vec_at(extents, i)));
-        unifycr_keys[2 * i]->fid = unifycr_Extent_fid(
-                                       unifycr_Extent_vec_at(extents, i));
-        unifycr_keys[2 * i]->offset =
-            unifycr_Extent_offset(unifycr_Extent_vec_at(extents, i));
-        unifycr_key_lens[2 * i] = sizeof(unifycr_key_t);
-        unifycr_keys[2 * i + 1]->fid =
-            unifycr_Extent_fid(unifycr_Extent_vec_at(extents, i));
-        unifycr_keys[2 * i + 1]->offset =
-            unifycr_Extent_offset(unifycr_Extent_vec_at(extents, i)) +
-            unifycr_Extent_length(unifycr_Extent_vec_at(extents, i)) - 1;
-        unifycr_key_lens[2 * i + 1] = sizeof(unifycr_key_t);
+    assert(extents_len == req_cnt);
+
+    int fid;
+    size_t i, ndx, eoff, elen;
+    for (i = 0; i < extents_len; i++) {
+        ndx = 2 * i;
+        fid = unifycr_Extent_fid(unifycr_Extent_vec_at(extents, i));
+        eoff = unifycr_Extent_offset(unifycr_Extent_vec_at(extents, i));
+        elen = unifycr_Extent_length(unifycr_Extent_vec_at(extents, i));
+        LOGDBG("fid:%d, offset:%zu, length:%zu", fid, eoff, elen);
+
+        unifycr_keys[ndx]->fid = fid;
+        unifycr_keys[ndx]->offset = eoff;
+        unifycr_keys[ndx + 1]->fid = fid;
+        unifycr_keys[ndx + 1]->offset = eoff + elen - 1;
+        unifycr_key_lens[ndx] = sizeof(unifycr_key_t);
+        unifycr_key_lens[ndx + 1] = sizeof(unifycr_key_t);
     }
 
     md->primary_index = unifycr_indexes[0];
     bgrm = mdhimBGet(md, md->primary_index, (void**)unifycr_keys,
-                     unifycr_key_lens, 2 * num, MDHIM_RANGE_BGET);
+                     unifycr_key_lens, 2 * extents_len, MDHIM_RANGE_BGET);
 
+    int rc = 0;
     int tot_num = 0;
-    int dest_client, dest_app;
+    unifycr_key_t* key;
+    unifycr_val_t* val;
+    send_msg_t* msg;
 
-    bgrmp = bgrm;
-    while (bgrmp) {
+    while (bgrm) {
+        bgrmp = bgrm;
         if (bgrmp->error < 0) {
             rc = (int)UNIFYCR_ERROR_MDHIM;
         }
 
         for (i = 0; i < bgrmp->num_keys; i++) {
-            unifycr_key_t* tmp_key = (unifycr_key_t*)bgrm->keys[i];
-            unifycr_val_t* tmp_val = (unifycr_val_t*)bgrm->values[i];
+            key = (unifycr_key_t*) bgrmp->keys[i];
+            val = (unifycr_val_t*) bgrmp->values[i];
+            // debug_log_key_val("after get", key, val);
 
-            memcpy(&dest_app, (char*) &(tmp_val->app_rank_id), sizeof(int));
-            memcpy(&dest_client, (char*) &(tmp_val->app_rank_id)
-                   + sizeof(int), sizeof(int));
-
-            /* physical offset of the requested file segment on the log file*/
-            del_req_set->msg_meta[tot_num].dest_offset = tmp_val->addr;
-
-            /* rank of the remote delegator*/
-            del_req_set->msg_meta[tot_num].dest_delegator_rank = tmp_val->delegator_id;
-
-            /* dest_client_id and dest_app_id uniquely identifies the remote physical
-             * log file that contains the requested segments*/
-            del_req_set->msg_meta[tot_num].dest_client_id = dest_client;
-            del_req_set->msg_meta[tot_num].dest_app_id = dest_app;
-            del_req_set->msg_meta[tot_num].length = tmp_val->len;
-
-            /* src_app_id and src_cli_id identifies the requested client*/
-            del_req_set->msg_meta[tot_num].src_app_id = app_id;
-            del_req_set->msg_meta[tot_num].src_cli_id = client_id;
-
-            /* src_offset is the logical offset of the shared file*/
-            del_req_set->msg_meta[tot_num].src_offset = tmp_key->offset;
-            del_req_set->msg_meta[tot_num].src_delegator_rank = glb_rank;
-            del_req_set->msg_meta[tot_num].src_fid = tmp_key->fid;
-            del_req_set->msg_meta[tot_num].src_dbg_rank = dbg_rank;
-            del_req_set->msg_meta[tot_num].src_thrd = thrd_id;
+            msg = &(del_req_set->msg_meta[tot_num]);
+            memset(msg, 0, sizeof(send_msg_t));
             tot_num++;
+
+            /* rank of the remote delegator */
+            msg->dest_delegator_rank = val->delegator_id;
+
+            /* dest_client_id and dest_app_id uniquely identify the remote
+             * physical log file that contains the requested segments */
+            msg->dest_client_id = val->rank;
+            msg->dest_app_id = val->app_id;
+
+            /* physical offset of the requested file segment on the log file */
+            msg->dest_offset = (size_t) val->addr;
+            msg->length = (size_t) val->len;
+
+            /* src_app_id and src_cli_id identifies the requested client */
+            msg->src_app_id = app_id;
+            msg->src_cli_id = client_id;
+
+            /* src_offset is the logical offset of the shared file */
+            msg->src_offset = (size_t) key->offset;
+
+            msg->src_dbg_rank = dbg_rank;
+            msg->src_delegator_rank = glb_rank;
+            msg->src_fid = (int) key->fid;
+            msg->src_thrd = thrd_id;
         }
-        bgrmp = bgrmp->next;
-        mdhim_full_release_msg(bgrm);
-        bgrm = bgrmp;
+        bgrm = bgrmp->next;
+        mdhim_full_release_msg(bgrmp);
     }
 
     del_req_set->num = tot_num;
@@ -620,61 +642,33 @@ int meta_batch_get(int app_id, int client_id,
 }
 
 void print_bget_indices(int app_id, int cli_id,
-                        send_msg_t* index_set, int tot_num)
+                        send_msg_t* msgs, int tot_num)
 {
     int i;
-
-    long dest_offset;
-    int dest_delegator_rank;
-    int dest_client_id;
-    int dest_app_id;
-    long length;
-    int src_app_id;
-    int src_cli_id;
-    long src_offset;
-    int src_delegator_rank;
-    int src_fid;
-    int dbg_rank;
-
     for (i = 0; i < tot_num;  i++) {
-        dest_offset = index_set[i].dest_offset;
-        dest_delegator_rank = index_set[i].dest_delegator_rank;
-        dest_client_id = index_set[i].dest_client_id;
-        dest_app_id = index_set[i].dest_app_id;
-        length = index_set[i].length;
-        src_app_id = index_set[i].src_app_id;
-        src_cli_id = index_set[i].src_cli_id;
-        src_offset = index_set[i].src_offset;
-
-        src_delegator_rank = index_set[i].src_delegator_rank;
-        src_fid = index_set[i].src_fid;
-        dbg_rank = index_set[i].src_dbg_rank;
-
-        LOG(LOG_DBG, "index:dbg_rank:%d, dest_offset:%ld, "
-            "dest_del_rank:%d, dest_cli_id:%d, dest_app_id:%d, "
-            "length:%ld, src_app_id:%d, src_cli_id:%d, src_offset:%ld, "
-            "src_del_rank:%d, "
-            "src_fid:%d, num:%d", dbg_rank, dest_offset,
-            dest_delegator_rank, dest_client_id,
-            dest_app_id, length, src_app_id, src_cli_id,
-            src_offset, src_delegator_rank,
-            src_fid, tot_num);
-
+        LOGDBG("index:dbg_rank:%d, dest_offset:%zu, "
+               "dest_del_rank:%d, dest_cli_id:%d, dest_app_id:%d, "
+               "length:%zu, src_app_id:%d, src_cli_id:%d, src_offset:%zu, "
+               "src_del_rank:%d, src_fid:%d, num:%d",
+               msgs[i].src_dbg_rank, msgs[i].dest_offset,
+               msgs[i].dest_delegator_rank, msgs[i].dest_client_id,
+               msgs[i].dest_app_id, msgs[i].length,
+               msgs[i].src_app_id, msgs[i].src_cli_id,
+               msgs[i].src_offset, msgs[i].src_delegator_rank,
+               msgs[i].src_fid, tot_num);
     }
-
-
 }
 
 void print_fsync_indices(unifycr_key_t** unifycr_keys,
-                         unifycr_val_t** unifycr_vals, long num_entries)
+                         unifycr_val_t** unifycr_vals,
+                         size_t num_entries)
 {
-    long i;
+    size_t i;
     for (i = 0; i < num_entries; i++) {
-        LOG(LOG_DBG, "fid:%ld, offset:%ld, addr:%ld, len:%ld, del_id:%ld",
-            unifycr_keys[i]->fid, unifycr_keys[i]->offset,
-            unifycr_vals[i]->addr, unifycr_vals[i]->len,
-            unifycr_vals[i]->delegator_id);
-
+        LOGDBG("fid:%lu, offset:%lu, addr:%lu, len:%lu, del_id:%d",
+               unifycr_keys[i]->fid, unifycr_keys[i]->offset,
+               unifycr_vals[i]->addr, unifycr_vals[i]->len,
+               unifycr_vals[i]->delegator_id);
     }
 }
 

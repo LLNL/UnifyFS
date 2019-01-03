@@ -111,7 +111,7 @@ char cmd_buf[CMD_BUF_SIZE] = {0};
 
 int dbg_rank;
 int app_id;
-long unifycr_key_slice_range;
+size_t unifycr_key_slice_range;
 
 /* whether chunks should be allocated to
  * store file contents in memory */
@@ -520,7 +520,7 @@ inline int unifycr_get_fid_from_path(const char* path)
     int i = 0;
     while (i < unifycr_max_files) {
         if (unifycr_filelist[i].in_use &&
-                strcmp((void*)&unifycr_filelist[i].filename, path) == 0) {
+            strcmp((void*)&unifycr_filelist[i].filename, path) == 0) {
             DEBUG("File found: unifycr_filelist[%d].filename = %s\n",
                   i, (char*)&unifycr_filelist[i].filename);
             return i;
@@ -721,7 +721,7 @@ int unifycr_fid_is_dir_empty(const char* path)
              * also check to make sure that it's not the directory entry itself */
             char* strptr = strstr(path, unifycr_filelist[i].filename);
             if (strptr == unifycr_filelist[i].filename &&
-                    strcmp(path, unifycr_filelist[i].filename) != 0) {
+                strcmp(path, unifycr_filelist[i].filename) != 0) {
                 /* found a child item in path */
                 DEBUG("File found: unifycr_filelist[%d].filename = %s\n",
                       i, (char*)&unifycr_filelist[i].filename);
@@ -823,7 +823,7 @@ int unifycr_get_global_file_meta(int fid, int gfid, unifycr_file_attr_t* gfattr)
 
     unifycr_file_attr_t fmeta;
     int ret = unifycr_client_metaget_rpc_invoke(
-        &unifycr_rpc_context, &fmeta, fid, gfid);
+                  &unifycr_rpc_context, &fmeta, fid, gfid);
     if (ret == UNIFYCR_SUCCESS) {
         *gfattr = fmeta;
     }
@@ -1148,7 +1148,7 @@ int unifycr_fid_extend(int fid, off_t length)
 
     /* determine file storage type */
     if (meta->storage == FILE_STORAGE_FIXED_CHUNK ||
-            meta->storage == FILE_STORAGE_LOGIO) {
+        meta->storage == FILE_STORAGE_LOGIO) {
         /* file stored in fixed-size chunks */
         rc = unifycr_fid_store_fixed_extend(fid, meta, length);
     } else {
@@ -1587,14 +1587,14 @@ static void* unifycr_init_pointers(void* superblock)
     unifycr_chunkmetas = (unifycr_chunkmeta_t*)ptr;
     if (unifycr_use_memfs) {
         ptr += unifycr_max_files * unifycr_max_chunks *
-            sizeof(unifycr_chunkmeta_t);
+               sizeof(unifycr_chunkmeta_t);
     }
 
     /* if we're using spillover, reserve chunk meta data
      * for spill over chunks */
     if (unifycr_use_spillover) {
         ptr += unifycr_max_files * unifycr_spillover_max_chunks *
-           sizeof(unifycr_chunkmeta_t);
+               sizeof(unifycr_chunkmeta_t);
     }
 
     /* stack to manage free memory data chunks */
@@ -1738,7 +1738,7 @@ static void* unifycr_superblock_shmget(size_t size, key_t key)
 {
     /* define name for superblock shared memory region */
     snprintf(shm_super_name, sizeof(shm_super_name), "%d-super-%d",
-        app_id, key);
+             app_id, key);
     DEBUG("Key for superblock = %x\n", key);
 
     /* open shared memory file */
@@ -1974,7 +1974,7 @@ static int unifycr_init(int rank)
         /* get a superblock of shared memory and initialize our
          * global variables for this block */
         shm_super_buf = unifycr_superblock_shmget(
-            shm_super_size, unifycr_mount_shmget_key);
+                            shm_super_size, unifycr_mount_shmget_key);
         if (shm_super_buf == NULL) {
             printf("unifycr_superblock_shmget() failed\n");
             return UNIFYCR_FAILURE;
@@ -2052,21 +2052,23 @@ int unifycr_sync_to_del(unifycr_mount_in_t* in)
 {
     int num_procs_per_node = local_rank_cnt;
 
-    int req_buf_sz         = shm_req_size;
-    int recv_buf_sz        = shm_recv_size;
-    long superblock_sz     = shm_super_size;
+    size_t req_buf_sz    = shm_req_size;
+    size_t recv_buf_sz   = shm_recv_size;
+    size_t superblock_sz = shm_super_size;
 
-    void* meta_start = (void*)unifycr_indices.ptr_num_entries;
-    long meta_offset = meta_start - shm_super_buf;
-    long meta_size   = unifycr_max_index_entries * sizeof(unifycr_index_t);
+    void* meta_start   = (void*)unifycr_indices.ptr_num_entries;
+    size_t meta_offset = meta_start - shm_super_buf;
+    size_t meta_size   = unifycr_max_index_entries
+                         * sizeof(unifycr_index_t);
 
-    void* fmeta_start = (void*)unifycr_fattrs.ptr_num_entries;
-    long fmeta_offset = fmeta_start - shm_super_buf;
-    long fmeta_size   = unifycr_max_fattr_entries * sizeof(unifycr_file_attr_t);
+    void* fmeta_start   = (void*)unifycr_fattrs.ptr_num_entries;
+    size_t fmeta_offset = fmeta_start - shm_super_buf;
+    size_t fmeta_size   = unifycr_max_fattr_entries
+                          * sizeof(unifycr_file_attr_t);
 
-    void* data_start = (void*)unifycr_chunks;
-    long data_offset = data_start - shm_super_buf;
-    long data_size   = (long)unifycr_max_chunks * unifycr_chunk_size;
+    void* data_start   = (void*)unifycr_chunks;
+    size_t data_offset = data_start - shm_super_buf;
+    size_t data_size   = (size_t)unifycr_max_chunks * unifycr_chunk_size;
 
     char* external_spill_dir = malloc(UNIFYCR_MAX_FILENAME);
     strcpy(external_spill_dir, external_data_dir);
@@ -2264,8 +2266,8 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
     serv_addr.sun_family = AF_UNIX;
 
     if ((proc_id == 0) &&
-            (l_num_procs_per_node == 1) &&
-            (l_num_del_per_node == 1)) {
+        (l_num_procs_per_node == 1) &&
+        (l_num_del_per_node == 1)) {
         // use zero-index domain socket path
         snprintf(tmp_path, sizeof(tmp_path), "%s.%d",
                  SOCKET_PATH, getuid());
@@ -2746,7 +2748,7 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
  * to unifycr_client_rpc_init, frees structure
  * allocated and sets pcontect to NULL */
 static int unifycr_client_rpc_finalize(
-  unifycr_client_rpc_context_t** pcontext)
+    unifycr_client_rpc_context_t** pcontext)
 {
     if (pcontext != NULL && *pcontext != NULL) {
         /* define a temporary to refer to context */
@@ -2839,7 +2841,7 @@ int unifycr_unmount(void)
         int close_rc = close(client_sockfd);
         if (close_rc != 0) {
             LOGERR("Failed to close socket to server rc=%d (%s)",
-                errno, strerror(errno));
+                   errno, strerror(errno));
         }
     }
 

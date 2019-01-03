@@ -153,7 +153,7 @@ typedef struct {
     int rank_id;           /* rank of remote delegator to send to */
     int thrd_id;           /* thread id of remote delegator */
     int src_cli_rank;      /* rank of client that initiated read */
-    long src_sz;           /* total data size in read replies */
+    size_t src_sz;         /* total data size in read replies */
     int start_cursor;      /* offset within ack_list */
 } rank_ack_meta_t;
 
@@ -343,7 +343,7 @@ static int sm_cluster_reads(
         }
     }
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /* compare by rank and then thread in increasing order */
@@ -501,7 +501,7 @@ static int insert_ack_meta(
     /* increment the number of entries in our list */
     rank_ack_task->num++;
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /* send back ack to the remote delegator
@@ -586,7 +586,7 @@ static int sm_ack_remote_delegator(rank_ack_meta_t* ack_meta)
     /* add item to our list of pending sends */
     arraylist_add(pended_sends, ack_stat);
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /*
@@ -608,8 +608,8 @@ static int insert_to_ack_list(
     char* mem_addr,
     service_msgs_t* service_msgs,
     int index,
-    long src_offset,
-    long len,
+    size_t src_offset,
+    size_t len,
     int errcode)
 {
     int rc = 0;
@@ -650,11 +650,11 @@ static int insert_to_ack_list(
         rank_ack_meta_t* ack_meta = &rank_ack_task->ack_metas[pos];
 
         /* compute number of read replies waiting to be sent */
-        long num_entries = arraylist_size(ack_meta->ack_list);
-        long num_to_ack = num_entries - ack_meta->start_cursor;
+        int num_entries = arraylist_size(ack_meta->ack_list);
+        int num_to_ack = num_entries - ack_meta->start_cursor;
 
         /* number of bytes needed to pack existing read replies */
-        size_t curr_bytes = num_to_ack * sizeof(ack_meta_t) +
+        size_t curr_bytes = (num_to_ack * sizeof(ack_meta_t)) +
                             ack_meta->src_sz;
 
         /* number of bytes to pack this read reply */
@@ -686,7 +686,7 @@ static int insert_to_ack_list(
         }
     }
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /* insert the data read for each element in read task list to read
@@ -791,7 +791,7 @@ static int batch_insert_to_ack_list(
                            service_msgs, idx, offset, length, errcode);
     }
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /**
@@ -916,7 +916,7 @@ static int sm_wait_until_digested(task_set_t* read_task_set,
         if (ack_meta->start_cursor < tmp_sz) {
             /* got some read replies, send them */
             int ret_code = sm_ack_remote_delegator(ack_meta);
-            if (ret_code != ULFS_SUCCESS) {
+            if (ret_code != UNIFYCR_SUCCESS) {
                 return ret_code;
             }
         }
@@ -994,7 +994,7 @@ static int sm_wait_until_digested(task_set_t* read_task_set,
      * allocate them again */
     send_buf_list->size = 0;
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 static int compare_read_task(const void* a, const void* b)
@@ -1176,7 +1176,7 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
      * and send results to delegators */
     sm_wait_until_digested(read_task_set, service_msgs, rank_ack_task);
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /**
@@ -1246,14 +1246,14 @@ static int sm_decode_msg(char* recv_msg_buf)
         service_msgs.num++;
     }
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /* clean up state and resources allocated by service manager thread
  * before shutting down */
 static int sm_exit()
 {
-    int rc = ULFS_SUCCESS;
+    int rc = UNIFYCR_SUCCESS;
 
     arraylist_free(pended_reads);
     arraylist_free(pended_sends);

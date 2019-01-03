@@ -31,6 +31,7 @@ unifycrd_LDADD = $(top_builddir)/common/src/libunifycr_common.la \
                  -lpthread -lm -lstdc++ -lrt
 
 AM_CPPFLAGS = -I$(top_srcdir)/common/src \
+              -I$(top_srcdir)/client/src \
               -I$(top_srcdir)/meta/src \
               -I$(top_srcdir)/meta/src/uthash \
               -I$(top_srcdir)/meta/src/Mlog2

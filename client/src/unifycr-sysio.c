@@ -1051,7 +1051,7 @@ ssize_t UNIFYCR_WRAP(read)(int fd, void* buf, size_t count)
 
         read_req_t tmp_req;
         tmp_req.fid     = fid;
-        tmp_req.offset  = filedesc->pos;
+        tmp_req.offset  = (size_t) filedesc->pos;
         tmp_req.length  = count;
         tmp_req.errcode = UNIFYCR_SUCCESS;
         tmp_req.buf     = buf;
@@ -1178,7 +1178,7 @@ int UNIFYCR_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
             }
 
             reqs[i].fid     = fid;
-            reqs[i].offset  = aiocb_list[i]->aio_offset;
+            reqs[i].offset  = (size_t) aiocb_list[i]->aio_offset;
             reqs[i].length  = aiocb_list[i]->aio_nbytes;
             reqs[i].errcode = UNIFYCR_SUCCESS;
             reqs[i].buf     = (char*)aiocb_list[i]->aio_buf;
@@ -1204,23 +1204,21 @@ static int compare_index_entry(const void* a, const void* b)
     const unifycr_index_t* ptr_a = a;
     const unifycr_index_t* ptr_b = b;
 
-    if (ptr_a->fid > ptr_b->fid) {
+    if (ptr_a->fid != ptr_b->fid) {
+        if (ptr_a->fid < ptr_b->fid) {
+            return -1;
+        } else {
+            return 1;
+        }
+    }
+
+    if (ptr_a->file_pos == ptr_b->file_pos) {
+        return 0;
+    } else if (ptr_a->file_pos < ptr_b->file_pos) {
+        return -1;
+    } else {
         return 1;
     }
-
-    if (ptr_a->fid < ptr_b->fid) {
-        return -1;
-    }
-
-    if (ptr_a->file_pos > ptr_b->file_pos) {
-        return 1;
-    }
-
-    if (ptr_a->file_pos < ptr_b->file_pos) {
-        return -1;
-    }
-
-    return 0;
 }
 
 /* order by file id then by offset */
@@ -1229,28 +1227,26 @@ static int compare_read_req(const void* a, const void* b)
     const read_req_t* ptr_a = a;
     const read_req_t* ptr_b = b;
 
-    if (ptr_a->fid > ptr_b->fid) {
+    if (ptr_a->fid != ptr_b->fid) {
+        if (ptr_a->fid < ptr_b->fid) {
+            return -1;
+        } else {
+            return 1;
+        }
+    }
+
+    if (ptr_a->offset == ptr_b->offset) {
+        return 0;
+    } else if (ptr_a->offset < ptr_b->offset) {
+        return -1;
+    } else {
         return 1;
     }
-
-    if (ptr_a->fid < ptr_b->fid) {
-        return -1;
-    }
-
-    if (ptr_a->offset > ptr_b->offset) {
-        return 1;
-    }
-
-    if (ptr_a->offset < ptr_b->offset) {
-        return -1;
-    }
-
-    return 0;
 }
 
 /* returns index into read_req of item whose offset is
  * just below offset of target item (if one exists) */
-static int unifycr_locate_req(read_req_t* read_req, int count,
+static int unifycr_locate_req(read_req_t* read_reqs, int count,
                               read_req_t* match_req)
 {
     /* if list is empty, indicate that there is valid starting request */
@@ -1265,7 +1261,7 @@ static int unifycr_locate_req(read_req_t* read_req, int count,
 
     /* if we have two items, return index to item that must come before */
     if (count == 2) {
-        if (compare_read_req(match_req, &read_req[1]) < 0) {
+        if (compare_read_req(match_req, &read_reqs[1]) < 0) {
             /* second item is clearly bigger, so try first */
             return 0;
         }
@@ -1280,24 +1276,19 @@ static int unifycr_locate_req(read_req_t* read_req, int count,
     int right = count - 1;
     int mid   = (left + right) / 2;
 
-    /* iterate until we find an exact match or have cut the list
+    /* binary search until we find an exact match or have cut the list
      * to just two items */
-    int found = 0;
-    while (left + 1 < right) {
-        /* bail out if we find an exact match */
-        if (compare_read_req(match_req, &read_req[mid]) == 0) {
+    int cmp;
+    while ((left + 1) < right) {
+        cmp = compare_read_req(match_req, &read_reqs[mid]);
+        if (cmp == 0) {
             /* found exact match */
-            found = 1;
-            break;
-        }
-
-        /* if target if bigger than mid, set left bound to mid */
-        if (compare_read_req(match_req, &read_req[mid]) > 0) {
+            return mid;
+        } else if (cmp > 0) {
+            /* if target if bigger than mid, set left bound to mid */
             left = mid;
-        }
-
-        /* if target is smaller than mid, set right bounds to mid */
-        if (compare_read_req(match_req, &read_req[mid]) < 0) {
+        } else {
+            /* if target is smaller than mid, set right bounds to mid */
             right = mid;
         }
 
@@ -1305,13 +1296,8 @@ static int unifycr_locate_req(read_req_t* read_req, int count,
         mid = (left + right) / 2;
     }
 
-    /* return index of exact match if found one */
-    if (found == 1) {
-        return mid;
-    }
-
     /* got two items, let's pick one */
-    if (compare_read_req(match_req, &read_req[left]) < 0) {
+    if (compare_read_req(match_req, &read_reqs[left]) < 0) {
         /* target is smaller than left item,
          * return index to left of left item if we can */
         if (left == 0) {
@@ -1319,15 +1305,13 @@ static int unifycr_locate_req(read_req_t* read_req, int count,
             return 0;
         }
         return left - 1;
+    } else if (compare_read_req(match_req, &read_reqs[right]) < 0) {
+        /* target is smaller than right item,
+         * return index of item one less than right */
+        return right - 1;
     } else {
-        if (compare_read_req(match_req, &read_req[right]) < 0) {
-            /* target is smaller than right item,
-             * return index of item one less than right */
-            return right - 1;
-        } else {
-            /* target is greater or equal to right item */
-            return right;
-        }
+        /* target is greater or equal to right item */
+        return right;
     }
 }
 
@@ -1340,18 +1324,19 @@ static int unifycr_locate_req(read_req_t* read_req, int count,
  * */
 static int unifycr_split_read_requests(read_req_t* req,
                                        read_req_set_t* out_set,
-                                       long slice_range)
+                                       size_t slice_range)
 {
     /* compute offset of first and last byte in request */
-    long req_start = req->offset;
-    long req_end   = req->offset + req->length - 1;
+    size_t req_start = req->offset;
+    size_t req_end   = req->offset + req->length - 1;
 
     /* compute offset of first and lasy byte of slice
      * that contains first byte of request */
-    long slice_start = (req->offset / slice_range) * slice_range;
-    long slice_end   = slice_start + slice_range - 1;
+    size_t slice_start = (req->offset / slice_range) * slice_range;
+    size_t slice_end   = slice_start + slice_range - 1;
 
     /* initialize request count in output set */
+    memset(out_set, 0, sizeof(read_req_set_t));
     int count = 0;
 
     if (req_end <= slice_end) {
@@ -1376,12 +1361,12 @@ static int unifycr_split_read_requests(read_req_t* req,
         out_set->read_reqs[count].length = slice_end - req_start + 1;
         count++;
 
-        /* advance to next slice */
-        slice_start = slice_end + 1;
-        slice_end   = slice_start + slice_range - 1;
-
         /* account for all middle slices */
-        while (1) {
+        do {
+            /* advance to next slice */
+            slice_start = slice_end + 1;
+            slice_end   = slice_start + slice_range - 1;
+
             if (req_end <= slice_end) {
                 /* found the slice that contains end byte in read request */
                 break;
@@ -1393,11 +1378,7 @@ static int unifycr_split_read_requests(read_req_t* req,
             out_set->read_reqs[count].length  = slice_range;
             out_set->read_reqs[count].errcode = UNIFYCR_SUCCESS;
             count++;
-
-            /* advance to next slice */
-            slice_start = slice_end + 1;
-            slice_end   = slice_start + slice_range - 1;
-        }
+        } while (1);
 
         /* account for bytes in final slice */
         out_set->read_reqs[count].fid     = req->fid;
@@ -1432,12 +1413,14 @@ static int unifycr_split_read_requests(read_req_t* req,
  *
  * */
 static int unifycr_coalesce_read_reqs(read_req_t* read_req, int count,
-                                      read_req_set_t* tmp_set, long slice_range,
+                                      size_t slice_range,
                                       read_req_set_t* out_set)
 {
+    read_req_set_t tmp_set;
+
     /* initialize output and temporary sets */
     out_set->count = 0;
-    tmp_set->count = 0;
+    memset(&tmp_set, 0, sizeof(tmp_set));
 
     int i;
     int out_idx = 0;
@@ -1447,7 +1430,7 @@ static int unifycr_coalesce_read_reqs(read_req_t* read_req, int count,
 
         /* split this read request into parts based on slice range
          * store resulting requests in tmp_set */
-        unifycr_split_read_requests(&read_req[i], tmp_set, slice_range);
+        unifycr_split_read_requests(&read_req[i], &tmp_set, slice_range);
 
         /* look to merge last item in output set with first item
          * in split requests */
@@ -1456,11 +1439,11 @@ static int unifycr_coalesce_read_reqs(read_req_t* read_req, int count,
             read_req_t* out_req = &(out_set->read_reqs[out_idx - 1]);
 
             /* get pointer to first item in tmp_set */
-            read_req_t* tmp_req = &(tmp_set->read_reqs[0]);
+            read_req_t* tmp_req = &(tmp_set.read_reqs[0]);
 
             /* look to merge these items if they are contiguous */
             if (out_req->fid == tmp_req->fid &&
-                    out_req->offset + out_req->length == tmp_req->offset) {
+                out_req->offset + out_req->length == tmp_req->offset) {
                 /* refers to contiguous range in the same file,
                  * coalesce if also in the same slice */
                 uint64_t cur_slice = out_req->offset / slice_range;
@@ -1476,8 +1459,8 @@ static int unifycr_coalesce_read_reqs(read_req_t* read_req, int count,
         }
 
         /* tack on remaining items from tmp set into output set */
-        for (; tmp_idx < tmp_set->count; tmp_idx++) {
-            out_set->read_reqs[out_idx] = tmp_set->read_reqs[tmp_idx];
+        for (; tmp_idx < tmp_set.count; tmp_idx++) {
+            out_set->read_reqs[out_idx] = tmp_set.read_reqs[tmp_idx];
             out_set->count++;
             out_idx++;
         }
@@ -1544,7 +1527,7 @@ static int unifycr_match_received_ack(read_req_t* read_req, int count,
 
     /* check whether read reply is fully contained by first read request */
     if (compare_read_req(&match_start, &first_start) >= 0 &&
-            compare_read_req(&match_end,   &first_end)   <= 0) {
+        compare_read_req(&match_end,   &first_end)   <= 0) {
         /* read reply is fully contained within first read request
          *
          * first_s   first_e
@@ -1580,7 +1563,7 @@ static int unifycr_match_received_ack(read_req_t* read_req, int count,
 
     /* determine whether read reply is contained in a range of read requests */
     if (compare_read_req(&match_start, &first_start) >= 0 &&
-            compare_read_req(&match_end,   &last_end)    <= 0) {
+        compare_read_req(&match_end,   &last_end)    <= 0) {
         /* read reply spans multiple read requests
          *
          *  first_s   first_e  req_s req_e  req_s req_e  last_s    last_e
@@ -1787,6 +1770,7 @@ int unifycr_fd_logreadlist(read_req_t* read_req, int count)
     int* ptr_size = NULL;
     int* ptr_num = NULL;
 
+#if 0 /* TODO: when meta has correct file size, we can use this code */
     /* Adjust length for fitting the EOF. */
     for (i = 0; i < count; i++) {
         /* get pointer to read request */
@@ -1799,12 +1783,13 @@ int unifycr_fd_logreadlist(read_req_t* read_req, int count)
         }
 
         /* compute last byte of read request */
-        off_t last_offset = (off_t)req->offset + (off_t)req->length;
+        size_t last_offset = req->offset + req->length;
         if (last_offset > meta->size) {
             /* shorten the request to read just up to end */
             req->length = meta->size - req->offset;
         }
     }
+#endif
 
     /*
      * Todo: When the number of read requests exceed the
@@ -1818,9 +1803,12 @@ int unifycr_fd_logreadlist(read_req_t* read_req, int count)
     for (i = 0; i < count; i++) {
         /* look for global meta data for this local file id */
         tmp_meta_entry.fid = read_req[i].fid;
-        ptr_meta_entry = (unifycr_file_attr_t*)bsearch(&tmp_meta_entry,
-                         unifycr_fattrs.meta_entry, *unifycr_fattrs.ptr_num_entries,
-                         sizeof(unifycr_file_attr_t), compare_fattr);
+        ptr_meta_entry =
+            (unifycr_file_attr_t*) bsearch(&tmp_meta_entry,
+                                           unifycr_fattrs.meta_entry,
+                                           *unifycr_fattrs.ptr_num_entries,
+                                           sizeof(unifycr_file_attr_t),
+                                           compare_fattr);
 
         /* replace local file id with global file id in request */
         if (ptr_meta_entry != NULL) {
@@ -1836,7 +1824,7 @@ int unifycr_fd_logreadlist(read_req_t* read_req, int count)
 
     /* coalesce the contiguous read requests */
     unifycr_coalesce_read_reqs(read_req, count,
-                               &tmp_read_req_set, unifycr_key_slice_range,
+                               unifycr_key_slice_range,
                                &read_req_set);
 
     shm_meta_t* tmp_sh_meta;
@@ -1875,17 +1863,17 @@ int unifycr_fd_logreadlist(read_req_t* read_req, int count)
 
         /* invoke read rpc here */
         unifycr_client_mread_rpc_invoke(&unifycr_rpc_context, app_id,
-            local_rank_idx, ptr_meta_entry->gfid, read_req_set.count,
-            size, buffer);
+                                        local_rank_idx, ptr_meta_entry->gfid,
+                                        read_req_set.count, size, buffer);
 
         free(buffer);
     } else {
         /* got a single read request */
         int gfid = ptr_meta_entry->gfid;
-        uint64_t offset = read_req_set.read_reqs[0].offset;
-        uint64_t length = read_req_set.read_reqs[0].length;
+        size_t offset = read_req_set.read_reqs[0].offset;
+        size_t length = read_req_set.read_reqs[0].length;
         unifycr_client_read_rpc_invoke(&unifycr_rpc_context, app_id,
-            local_rank_idx, gfid, offset, length);
+                                       local_rank_idx, gfid, offset, length);
     }
 
     /*
@@ -2080,8 +2068,9 @@ uint32_t get_gfid(int fid)
     size_t num  = *unifycr_fattrs.ptr_num_entries;
     size_t size = sizeof(unifycr_file_attr_t);
 
-    unifycr_file_attr_t* entry = (unifycr_file_attr_t*)bsearch(
-        &target, entries, num, size, compare_fattr);
+    unifycr_file_attr_t* entry =
+        (unifycr_file_attr_t*) bsearch(&target, entries, num, size,
+                                       compare_fattr);
 
     uint32_t gfid;
     if (entry != NULL) {
@@ -2202,7 +2191,7 @@ void* UNIFYCR_WRAP(mmap)(void* addr, size_t length, int prot, int flags,
          * we'll need to track assigned memory region so that
          * we can identify our files on msync and munmap */
         fprintf(stderr, "Function not yet supported @ %s:%d\n",
-            __FILE__, __LINE__);
+                __FILE__, __LINE__);
         errno = ENODEV;
         return MAP_FAILED;
 

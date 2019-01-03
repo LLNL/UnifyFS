@@ -295,26 +295,19 @@ typedef struct {
 /*unifycr structures*/
 typedef struct {
     int fid;
-    long offset;
-    long length;
     int errcode;
+    size_t offset;
+    size_t length;
     char* buf;
 } read_req_t;
 
 typedef struct {
-    int src_fid;
-    long offset;
-    long length;
-    int errcode;
-} shm_meta_t; /*metadata format in the shared memory*/
-
-typedef struct {
-    off_t* ptr_num_entries;
+    size_t* ptr_num_entries;
     unifycr_index_t* index_entry;
 } unifycr_index_buf_t;
 
 typedef struct {
-    off_t* ptr_num_entries;
+    size_t* ptr_num_entries;
     unifycr_file_attr_t* meta_entry;
 } unifycr_fattr_buf_t;
 
@@ -329,7 +322,6 @@ typedef struct {
 } read_req_set_t;
 
 read_req_set_t read_req_set;
-read_req_set_t tmp_read_req_set;
 index_set_t tmp_index_set;
 
 extern unifycr_index_buf_t unifycr_indices;
@@ -349,7 +341,7 @@ extern unifycr_fattr_buf_t unifycr_fattrs;
 
 extern int dbg_rank;
 extern int app_id;
-extern long unifycr_key_slice_range;
+extern size_t unifycr_key_slice_range;
 
 /* -------------------------------
  * Global varaible declarations

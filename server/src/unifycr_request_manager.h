@@ -29,24 +29,20 @@
 
 #ifndef UNIFYCR_REQUEST_MANAGER_H
 #define UNIFYCR_REQUEST_MANAGER_H
+
 #include "unifycr_const.h"
 #include "unifycr_global.h"
-#include "arraylist.h"
 
 /* entry point for starting a request manager thread */
 void* rm_delegate_request_thread(void* arg);
 
 /* functions called by rpc handlers to assign work
  * to request managre threads */
-int rm_cmd_mread(
-    int app_id,
-    int client_id,
-    int gfid,
-    int req_num,
-    void* buffer
-);
+int rm_cmd_mread(int app_id, int client_id, int gfid,
+                 size_t req_num, void* reqbuf);
 
-int rm_cmd_read(int app_id, int client_id, int gfid,  long offset, long length);
+int rm_cmd_read(int app_id, int client_id, int gfid,
+                size_t offset, size_t length);
 
 /* function called by main thread to instruct
  * resource manager thread to exit,

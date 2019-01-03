@@ -30,18 +30,10 @@
 #ifndef UNIFYCR_METADATA_H
 #define UNIFYCR_METADATA_H
 
-#include <sys/stat.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
-#include "mdhim.h"
-#include "indexes.h"
-#include "arraylist.h"
 #include "unifycr_const.h"
-#include "unifycr_meta.h"
 #include "unifycr_global.h"
+#include "unifycr_meta.h"
 
-#include "../../client/src/unifycr_clientcalls_rpc.h"
 #define MANIFEST_FILE_NAME "mdhim_manifest_"
 
 typedef struct {
@@ -49,39 +41,47 @@ typedef struct {
     unsigned long offset;
 } unifycr_key_t;
 
+#define UNIFYCR_KEY_SZ (sizeof(unifycr_key_t))
+
+#define UNIFYCR_KEY_FID(keyp) (((unifycr_key_t*)keyp)->fid)
+#define UNIFYCR_KEY_OFF(keyp) (((unifycr_key_t*)keyp)->offset)
+
+int unifycr_key_compare(unifycr_key_t* a, unifycr_key_t* b);
+
 typedef struct {
-    unsigned long delegator_id;
-    unsigned long len;
     unsigned long addr;
-    unsigned long app_rank_id; /*include both app and rank id*/
+    unsigned long len;
+    int delegator_id;
+    int app_id;
+    int rank;
 } unifycr_val_t;
 
-typedef struct {
-    int fid;
-    long offset;
-    long length;
-} cli_req_t;
+#define UNIFYCR_VAL_SZ (sizeof(unifycr_val_t))
 
-extern arraylist_t* ulfs_keys;
-extern arraylist_t* ulfs_vals;
-extern arraylist_t* ulfs_metas;
+#define UNIFYCR_VAL_ADDR(valp) (((unifycr_val_t*)valp)->addr)
+#define UNIFYCR_VAL_LEN(valp) (((unifycr_val_t*)valp)->len)
+
+void debug_log_key_val(const char* ctx,
+                       unifycr_key_t* key,
+                       unifycr_val_t* val);
 
 int meta_sanitize();
 int meta_init_store(unifycr_cfg_t* cfg);
-void print_bget_indices(int app_id, int cli_id,
+void print_bget_indices(int app_id, int client_id,
                         send_msg_t* index_set, int tot_num);
-int meta_process_fsync(int app_id, int client_side_id, int gfid);
-int meta_read_get(int app_id, int client_id,
-                  int thrd_id, int dbg_rank, int gfid, long offset, long length,
+int meta_process_fsync(int app_id, int client_id, int gfid);
+int meta_read_get(int app_id, int client_id, int thrd_id, int dbg_rank,
+                  int gfid, size_t offset, size_t length,
                   msg_meta_t* del_req_set);
-int meta_batch_get(int app_id, int client_id,
-                   int thrd_id, int dbg_rank, void* reqbuf, int num,
+int meta_batch_get(int app_id, int client_id, int thrd_id, int dbg_rank,
+                   void* reqbuf, size_t req_cnt,
                    msg_meta_t* del_req_set);
 int meta_init_indices();
 int meta_free_indices();
 void print_fsync_indices(unifycr_key_t** unifycr_keys,
-                         unifycr_val_t** unifycr_vals, long num_entries);
-int meta_process_attr_set(int gfid, const char* filename);
-int meta_process_attr_get(int gfid, unifycr_file_attr_t* ptr_attr_val);
+                         unifycr_val_t** unifycr_vals, size_t num_entries);
+
+int meta_process_attr_get(unifycr_file_attr_t* ptr_attr_val);
+int meta_process_attr_set(unifycr_file_attr_t* ptr_attr_val);
 
 #endif

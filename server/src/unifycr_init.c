@@ -50,6 +50,7 @@
 #include "unifycr_request_manager.h"
 #include "unifycr_runstate.h"
 
+#include "unifycr_clientcalls_rpc.h"
 #include "unifycr_server.h"
 
 int* local_rank_lst;
@@ -525,7 +526,7 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    LOG(LOG_DBG, "finished service initialization");
+    LOGDBG("finished service initialization");
 
     MPI_Barrier(MPI_COMM_WORLD);
     while (1) {
@@ -559,7 +560,7 @@ int main(int argc, char* argv[])
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
 
-    LOG(LOG_DBG, "terminating service");
+    LOGDBG("terminating service");
     rc = unifycr_clean_runstate(&server_cfg);
 
     return 0;
