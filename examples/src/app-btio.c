@@ -56,7 +56,7 @@
 #include <strings.h>
 #include <unifycr.h>
 
-#define GEN_STR_LEN 1024
+#define TEST_STR_LEN 1024
 #define SZ_PER_ELEM 40 /*size of each data point in BTIO*/
 
 struct timeval readstart, readend;
@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
 
     int direction = 0, ranknum, rank, dir;
     long nr_grid_points = 0;
-    char fname[GEN_STR_LEN] = {0};
+    char fname[TEST_STR_LEN] = {0};
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &ranknum);

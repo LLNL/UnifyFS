@@ -54,7 +54,7 @@
 # include <unifycr.h>
 #endif
 
-#define GEN_STR_LEN 1024
+#define TEST_STR_LEN 1024
 
 struct timeval write_start, write_end;
 double write_time;
@@ -75,7 +75,7 @@ typedef struct {
 int main(int argc, char* argv[])
 {
     static const char* opts = "b:f:m:n:p:t:u:";
-    char tmpfname[GEN_STR_LEN], fname[GEN_STR_LEN], mntpt[GEN_STR_LEN];
+    char tmpfname[TEST_STR_LEN], fname[TEST_STR_LEN], mntpt[TEST_STR_LEN];
     size_t blk_sz = 0, num_blk = 0, tran_sz = 0, num_reqs = 0;
     size_t index, i, j, offset = 0;
     ssize_t rc;

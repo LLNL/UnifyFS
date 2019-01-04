@@ -1070,9 +1070,9 @@ int range_server_bget_op(struct mdhim_t *md, struct mdhim_bgetm_t *bgm, int sour
 										  get_value,
 										  get_value_len))
 						   != MDHIM_SUCCESS) {
-					 if (ret = index->mdhim_store->get_next(index->mdhim_store->db_handle,\
+					 if ((ret = index->mdhim_store->get_next(index->mdhim_store->db_handle,\
 										  get_key, get_key_len, get_value, \
-												get_value_len)!= MDHIM_SUCCESS) {
+												get_value_len)) != MDHIM_SUCCESS) {
 
 						 key_lens[num_records] = 0;
 						 value_lens[num_records] = 0;

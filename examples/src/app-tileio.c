@@ -61,7 +61,7 @@
 #include <strings.h>
 #include <unifycr.h>
 
-#define GEN_STR_LEN 1024
+#define TEST_STR_LEN 1024
 
 struct timeval readstart, readend;
 double readtime;
@@ -92,7 +92,7 @@ int main(int argc, char* argv[])
 {
     int direction = 0, ranknum, rank;
     long h_grid_points = 0, v_grid_points = 0;
-    char fname[GEN_STR_LEN] = {0};
+    char fname[TEST_STR_LEN] = {0};
     int sz_per_elem = 0;
     int r_ranks = 0; //, c_ranks;
 
