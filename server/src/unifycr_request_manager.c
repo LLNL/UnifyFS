@@ -81,8 +81,7 @@ static void print_send_msgs(send_msg_t* send_metas,
 {
     long i;
     for (i = 0; i < msg_cnt; i++) {
-        LOG(LOG_DBG, "print_send_msgs:dbg_rank:%d, \
-            src_offset:%ld, msg_cnt:%ld\n",
+        LOG(LOG_DBG, "dbg_rank:%d, src_offset:%ld, msg_cnt:%ld",
             dbg_rank, send_metas[i].src_offset, msg_cnt);
     }
 }
@@ -92,13 +91,14 @@ static void print_remote_del_reqs(int app_id, int cli_id,
 {
     int i;
     for (i = 0; i < del_req_stat->del_cnt; i++) {
-        LOG(LOG_DBG, "remote:dbg_rank:%d, remote_delegator:%d, req_cnt:%d===\n",
+        LOG(LOG_DBG, "remote:dbg_rank:%d, remote_delegator:%d, req_cnt:%d",
             dbg_rank, del_req_stat->req_stat->del_id,
             del_req_stat->req_stat->req_cnt);
         fflush(stdout);
     }
 }
 
+#if 0 // NOT CURRENTLY USED
 static void print_recv_msg(
     int app_id,
     int cli_id,
@@ -106,11 +106,13 @@ static void print_recv_msg(
     int thrd_id,
     shm_meta_t* msg)
 {
-    LOG(LOG_DBG, "recv_msg:dbg_rank:%d, app_id:%d, cli_id:%d, thrd_id:%d, \
-        fid:%d, offset:%ld, len:%ld\n",
+    LOG(LOG_DBG,
+        "recv_msg:dbg_rank:%d, app_id:%d, cli_id:%d, thrd_id:%d, "
+        "fid:%d, offset:%ld, len:%ld",
         dbg_rank, app_id, cli_id,  thrd_id, msg->src_fid,
         msg->offset, msg->length);
 }
+#endif
 
 /* order read requests by destination delegator rank */
 static int compare_delegators(const void* a, const void* b)
@@ -677,7 +679,7 @@ static int rm_process_received_msg(
 
     /* get pointer to flag in shared memory that we'll set
      * to signal to client that data is ready */
-    int* ptr_flag = (int*)shmbuf;
+    //int* ptr_flag = (int*)shmbuf;
     shmbuf += sizeof(int);
 
     /* get pointer to slot in shared memory to write bytes

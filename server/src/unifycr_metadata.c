@@ -342,7 +342,7 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
     brmp = brm;
     if (!brmp || brmp->error) {
         ret = (int)UNIFYCR_ERROR_MDHIM;
-        LOG(LOG_DBG, "Rank - %d: Error inserting keys/values into MDHIM\n",
+        LOG(LOG_DBG, "Rank - %d: Error inserting keys/values into MDHIM",
             md->mdhim_rank);
     }
 
@@ -392,7 +392,7 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
     brmp = brm;
     if (!brmp || brmp->error) {
         ret = (int)UNIFYCR_ERROR_MDHIM;
-        LOG(LOG_DBG, "Rank - %d: Error inserting keys/values into MDHIM\n",
+        LOG(LOG_DBG, "Rank - %d: Error inserting keys/values into MDHIM",
             md->mdhim_rank);
     }
 
@@ -426,7 +426,7 @@ int meta_read_get(
 
     printf("in %s for app_id: %d, client_id: %d, thrd_id: %d\n",
            __func__, app_id, client_id, thrd_id);
-    printf("fid: %d, offset: %d, length: %d\n", gfid, offset, length);
+    printf("fid: %d, offset: %ld, length: %ld\n", gfid, offset, length);
 
     /* create key to describe first byte we'll read */
     unifycr_keys[0]->fid    = gfid;
@@ -546,7 +546,7 @@ int meta_batch_get(int app_id, int client_id,
     assert(extents_len == num);
     int i, rc = 0;
     for (i = 0; i < num; i++) {
-        printf("fid: %d, offset: %d, length: %d\n",
+        printf("fid: %d, offset: %" PRIu64 ", length: %" PRIu64 "\n",
                unifycr_Extent_fid(unifycr_Extent_vec_at(extents, i)),
                unifycr_Extent_offset(unifycr_Extent_vec_at(extents, i)),
                unifycr_Extent_length(unifycr_Extent_vec_at(extents, i)));
@@ -654,7 +654,7 @@ void print_bget_indices(int app_id, int cli_id,
             "dest_del_rank:%d, dest_cli_id:%d, dest_app_id:%d, "
             "length:%ld, src_app_id:%d, src_cli_id:%d, src_offset:%ld, "
             "src_del_rank:%d, "
-            "src_fid:%d, num:%d\n", dbg_rank, dest_offset,
+            "src_fid:%d, num:%d", dbg_rank, dest_offset,
             dest_delegator_rank, dest_client_id,
             dest_app_id, length, src_app_id, src_cli_id,
             src_offset, src_delegator_rank,
@@ -670,7 +670,7 @@ void print_fsync_indices(unifycr_key_t** unifycr_keys,
 {
     long i;
     for (i = 0; i < num_entries; i++) {
-        LOG(LOG_DBG, "fid:%ld, offset:%ld, addr:%ld, len:%ld, del_id:%ld\n",
+        LOG(LOG_DBG, "fid:%ld, offset:%ld, addr:%ld, len:%ld, del_id:%ld",
             unifycr_keys[i]->fid, unifycr_keys[i]->offset,
             unifycr_vals[i]->addr, unifycr_vals[i]->len,
             unifycr_vals[i]->delegator_id);

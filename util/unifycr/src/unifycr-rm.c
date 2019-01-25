@@ -316,7 +316,7 @@ static int slurm_read_resource(unifycr_resource_t* resource)
         return -ENOMEM;
     }
     snprintf(cmd, len, cmd_fmt, hostfile);
-    system(cmd);
+    ret = system(cmd);
     free(cmd);
 
     ret = parse_hostfile(resource, hostfile, n_nodes);

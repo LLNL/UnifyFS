@@ -101,7 +101,7 @@ int sock_init_server(void)
     poll_set[0].events = POLLIN | POLLHUP;
     poll_set[0].revents = 0;
     num_fds++;
-    printf("completed sock init server\n");
+    LOG(LOG_DBG, "completed sock init server");
 
 #ifdef HAVE_PMIX_H
     // publish domain socket path
@@ -113,7 +113,7 @@ int sock_init_server(void)
 
 int sock_add(int fd)
 {
-    printf("sock_adding fd: %d\n");
+    LOG(LOG_DBG, "sock_adding fd: %d", fd);
     if (num_fds == MAX_NUM_CLIENTS) {
         return -1;
     }
@@ -155,7 +155,7 @@ int sock_notify_cli(int sock_id, int cmd)
 {
     memset(ack_buf[sock_id], 0, sizeof(ack_buf[sock_id]));
 
-    printf("sock notifying fd: %d\n", client_sockfd);
+    LOG(LOG_DBG, "sock notifying fd: %d", client_sockfd);
 
     memcpy(ack_buf[sock_id], &cmd, sizeof(int));
     int rc = write(client_sockfd,
@@ -181,7 +181,7 @@ int sock_wait_cli_cmd()
     if (rc <= 0) {
         return (int)UNIFYCR_ERROR_POLL;
     } else {
-        printf("in wait_cli_cmd\n");
+        LOG(LOG_DBG, "in wait_cli_cmd");
         for (i = 0; i < num_fds; i++) {
             if (poll_set[i].fd != -1 && poll_set[i].revents != 0) {
                 if (i == 0 && poll_set[i].revents == POLLIN) {
@@ -191,7 +191,7 @@ int sock_wait_cli_cmd()
                     client_sockfd = accept(server_sockfd,
                                            (struct sockaddr*)&client_address,
                                            (socklen_t*)&client_len);
-                    printf("calling sock_add for sock_id: %d\n", i);
+                    LOG(LOG_DBG, "calling sock_add for sock_id: %d", i);
                     rc = sock_add(client_sockfd);
                     if (rc < 0) {
                         return (int)UNIFYCR_ERROR_SOCKET_FD_EXCEED;

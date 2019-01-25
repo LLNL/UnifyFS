@@ -1850,19 +1850,15 @@ int unifycr_fd_logreadlist(read_req_t* read_req, int count)
         flatcc_builder_t builder;
         flatcc_builder_init(&builder);
 
+        /* create request vector */
         unifycr_Extent_vec_start(&builder);
-
-        /* allocate an entry for each request, get pointer to array */
-        unifycr_Extent_vec_extend(&builder, read_req_set.count);
-        unifycr_Extent_ref_t* v = unifycr_Extent_vec_edit(&builder);
 
         /* fill in values for each request entry */
         for (i = 0; i < read_req_set.count; i++) {
-            unifycr_Extent_ref_t ext = unifycr_Extent_create(&builder,
-                                       read_req_set.read_reqs[i].fid,
-                                       read_req_set.read_reqs[i].offset,
-                                       read_req_set.read_reqs[i].length);
-            v[i] = ext;
+            unifycr_Extent_vec_push_create(&builder,
+                                           read_req_set.read_reqs[i].fid,
+                                           read_req_set.read_reqs[i].offset,
+                                           read_req_set.read_reqs[i].length);
         }
 
         /* complete the array */

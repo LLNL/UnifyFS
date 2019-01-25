@@ -42,6 +42,7 @@
 #include "unifycr_sock.h"
 #include "unifycr_init.h"
 #include "unifycr_const.h"
+#include "unifycr_shm.h"
 #include "arraylist.h"
 #include "unifycr_global.h"
 #include "unifycr_cmd_handler.h"
@@ -813,19 +814,19 @@ static int unifycr_exit()
             /* release request buffer shared memory region */
             if (app->shm_req_bufs[j] != NULL) {
                 unifycr_shm_free(app->req_buf_name[j],
-                    app->req_buf_sz, &(app->shm_req_bufs[j]));
+                    app->req_buf_sz, (void**)&(app->shm_req_bufs[j]));
             }
 
             /* release receive buffer shared memory region */
             if (app->shm_recv_bufs[j] != NULL) {
                 unifycr_shm_free(app->recv_buf_name[j],
-                app->recv_buf_sz, &(app->shm_recv_bufs[j]));
+                app->recv_buf_sz, (void**)&(app->shm_recv_bufs[j]));
             }
 
             /* release super block shared memory region */
             if (app->shm_superblocks[j] != NULL) {
                 unifycr_shm_free(app->super_buf_name[j],
-                    app->superblock_sz, &(app->shm_superblocks[j]));
+                    app->superblock_sz, (void**)&(app->shm_superblocks[j]));
             }
 
             /* close spill log file and delete it */

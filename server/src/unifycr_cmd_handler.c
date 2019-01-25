@@ -451,13 +451,13 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
     /* detach from the request shared memory */
     unifycr_shm_free(app_config->req_buf_name[client_id],
                      app_config->req_buf_sz,
-                     &(app_config->shm_req_bufs[client_id]));
+                     (void**)&(app_config->shm_req_bufs[client_id]));
     app_config->shm_req_bufs[client_id] = NULL;
 
     /* detach from the read shared memory buffer */
     unifycr_shm_free(app_config->recv_buf_name[client_id],
                      app_config->recv_buf_sz,
-                     &(app_config->shm_recv_bufs[client_id]));
+                     (void**)&(app_config->shm_recv_bufs[client_id]));
     app_config->shm_recv_bufs[client_id] = NULL;
 
     /* destroy the sockets except for the ones for acks */
