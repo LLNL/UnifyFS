@@ -71,7 +71,7 @@ static void print_send_msgs(send_msg_t* send_metas,
 {
     int i;
     for (i = 0; i < msg_cnt; i++) {
-        LOGDBG("print_send_msgs:dbg_rank:%d, src_offset:%zu, msg_cnt:%d",
+        LOGDBG("rank:%d, src_offset:%zu, msg_cnt:%d",
                dbg_rank, send_metas[i].src_offset, msg_cnt);
     }
 }
@@ -81,7 +81,7 @@ static void print_remote_del_reqs(int app_id, int cli_id,
 {
     int i;
     for (i = 0; i < del_req_stat->del_cnt; i++) {
-        LOGDBG("remote:dbg_rank:%d, remote_delegator:%d, req_cnt:%d",
+        LOGDBG("remote: rank:%d, remote_delegator:%d, req_cnt:%d",
                dbg_rank, del_req_stat->req_stat[i].del_id,
                del_req_stat->req_stat[i].req_cnt);
     }
@@ -92,7 +92,7 @@ static void print_recv_msg(int app_id, int cli_id,
                            int dbg_rank, int thrd_id,
                            shm_meta_t* msg)
 {
-    LOGDBG("recv_msg:dbg_rank:%d, app_id:%d, cli_id:%d, thrd_id:%d, "
+    LOGDBG("recv_msg: rank:%d, app_id:%d, cli_id:%d, thrd_id:%d, "
            "fid:%d, offset:%ld, len:%ld",
            dbg_rank, app_id, cli_id, thrd_id, msg->src_fid,
            msg->offset, msg->length);

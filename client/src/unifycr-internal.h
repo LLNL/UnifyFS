@@ -101,15 +101,6 @@
  * -------------------------------
  */
 
-extern int unifycr_debug_level;
-
-#define DEBUG(fmt, ...) \
-do { \
-    if (unifycr_debug_level > 0) \
-        printf("unifycr: %s:%d: %s: " fmt "\n", \
-               __FILE__, __LINE__, __func__, ## __VA_ARGS__); \
-} while (0)
-
 /* define a macro to capture function name, file name, and line number
  * along with user-defined string */
 #define UNIFYCR_UNSUPPORTED(fmt, args...) \
@@ -339,7 +330,6 @@ extern void* shm_recv_buf;
 extern char cmd_buf[CMD_BUF_SIZE];
 extern unifycr_fattr_buf_t unifycr_fattrs;
 
-extern int dbg_rank;
 extern int app_id;
 extern size_t unifycr_key_slice_range;
 

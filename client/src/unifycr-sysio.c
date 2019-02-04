@@ -44,6 +44,7 @@
 #include "unifycr-internal.h"
 #include "unifycr_client.h"
 #include "ucr_read_builder.h"
+#include "unifycr_log.h"
 
 /* -------------------
  * define external variables
@@ -62,20 +63,20 @@ int UNIFYCR_WRAP(access)(const char* path, int mode)
     if (unifycr_intercept_path(path)) {
         /* check if path exists */
         if (unifycr_get_fid_from_path(path) < 0) {
-            DEBUG("access: unifycr_get_id_from path failed, returning -1, %s\n",
-                  path);
+            LOGDBG("access: unifycr_get_id_from path failed, returning -1, %s",
+                   path);
             errno = ENOENT;
             return -1;
         }
 
         /* currently a no-op */
-        DEBUG("access: path intercepted, returning 0, %s\n", path);
+        LOGDBG("access: path intercepted, returning 0, %s", path);
         return 0;
     } else {
-        DEBUG("access: calling MAP_OR_FAIL, %s\n", path);
+        LOGDBG("access: calling MAP_OR_FAIL, %s", path);
         MAP_OR_FAIL(access);
         int ret = UNIFYCR_REAL(access)(path, mode);
-        DEBUG("access: returning __real_access %d,%s\n", ret, path);
+        LOGDBG("access: returning __real_access %d, %s", ret, path);
         return ret;
     }
 }
@@ -178,11 +179,11 @@ int UNIFYCR_WRAP(rename)(const char* oldpath, const char* newpath)
         int fid = unifycr_get_fid_from_path(oldpath);
         if (fid < 0) {
             /* ERROR: oldname does not exist */
-            DEBUG("Couldn't find entry for %s in UNIFYCR\n", oldpath);
+            LOGDBG("Couldn't find entry for %s in UNIFYCR", oldpath);
             errno = ENOENT;
             return -1;
         }
-        DEBUG("orig file in position %d\n", fid);
+        LOGDBG("orig file in position %d", fid);
 
         /* check that new name is within bounds */
         size_t newpathlen = strlen(newpath) + 1;
@@ -206,8 +207,8 @@ int UNIFYCR_WRAP(rename)(const char* oldpath, const char* newpath)
         }
 
         /* finally overwrite the old name with the new name */
-        DEBUG("Changing %s to %s\n",
-              (char*)&unifycr_filelist[fid].filename, newpath);
+        LOGDBG("Changing %s to %s",
+               (char*)&unifycr_filelist[fid].filename, newpath);
         strcpy((void*)&unifycr_filelist[fid].filename, newpath);
 
         /* success */
@@ -235,7 +236,7 @@ int UNIFYCR_WRAP(truncate)(const char* path, off_t length)
         int fid = unifycr_get_fid_from_path(path);
         if (fid < 0) {
             /* ERROR: file does not exist */
-            DEBUG("Couldn't find entry for %s in UNIFYCR\n", path);
+            LOGDBG("Couldn't find entry for %s in UNIFYCR", path);
             errno = ENOENT;
             return -1;
         }
@@ -243,7 +244,7 @@ int UNIFYCR_WRAP(truncate)(const char* path, off_t length)
         /* truncate the file */
         int rc = unifycr_fid_truncate(fid, length);
         if (rc != UNIFYCR_SUCCESS) {
-            DEBUG("unifycr_fid_truncate failed for %s in UNIFYCR\n", path);
+            LOGDBG("unifycr_fid_truncate failed for %s in UNIFYCR", path);
             errno = EIO;
             return -1;
         }
@@ -265,7 +266,7 @@ int UNIFYCR_WRAP(unlink)(const char* path)
         int fid = unifycr_get_fid_from_path(path);
         if (fid < 0) {
             /* ERROR: file does not exist */
-            DEBUG("Couldn't find entry for %s in UNIFYCR\n", path);
+            LOGDBG("Couldn't find entry for %s in UNIFYCR", path);
             errno = ENOENT;
             return -1;
         }
@@ -273,7 +274,7 @@ int UNIFYCR_WRAP(unlink)(const char* path)
         /* check that it's not a directory */
         if (unifycr_fid_is_dir(fid)) {
             /* ERROR: is a directory */
-            DEBUG("Attempting to unlink a directory %s in UNIFYCR\n", path);
+            LOGDBG("Attempting to unlink a directory %s in UNIFYCR", path);
             errno = EISDIR;
             return -1;
         }
@@ -302,7 +303,7 @@ int UNIFYCR_WRAP(remove)(const char* path)
         int fid = unifycr_get_fid_from_path(path);
         if (fid < 0) {
             /* ERROR: file does not exist */
-            DEBUG("Couldn't find entry for %s in UNIFYCR\n", path);
+            LOGDBG("Couldn't find entry for %s in UNIFYCR", path);
             errno = ENOENT;
             return -1;
         }
@@ -311,7 +312,7 @@ int UNIFYCR_WRAP(remove)(const char* path)
         if (unifycr_fid_is_dir(fid)) {
             /* TODO: shall be equivalent to rmdir(path) */
             /* ERROR: is a directory */
-            DEBUG("Attempting to remove a directory %s in UNIFYCR\n", path);
+            LOGDBG("Attempting to remove a directory %s in UNIFYCR", path);
             errno = EISDIR;
             return -1;
         }
@@ -336,7 +337,7 @@ int UNIFYCR_WRAP(remove)(const char* path)
 int UNIFYCR_WRAP(stat)(const char* path, struct stat* buf)
 {
 
-    DEBUG("stat was called for %s....\n", path);
+    LOGDBG("stat was called for %s", path);
 
     if (unifycr_intercept_path(path)) {
         /* check that caller gave us a buffer to write to */
@@ -390,7 +391,7 @@ int UNIFYCR_WRAP(fstat)(int fd, struct stat* buf)
 {
     int ret = 0;
 
-    DEBUG("fstat was called for fd: %d....\n", fd);
+    LOGDBG("fstat was called for fd: %d", fd);
 
     if (!buf) {
         errno = EFAULT;
@@ -430,7 +431,7 @@ int UNIFYCR_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
     int found_global = 0;
     unifycr_file_attr_t gfattr = { 0, };
 
-    DEBUG("xstat was called for %s....\n", path);
+    LOGDBG("xstat was called for %s", path);
     if (unifycr_intercept_path(path)) {
         if (vers != _STAT_VER) {
             errno = EINVAL;
@@ -478,7 +479,7 @@ int UNIFYCR_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
     int found_global = 0;
     unifycr_file_attr_t gfattr = { 0, };
 
-    DEBUG("lxstat was called for %s....\n", path);
+    LOGDBG("lxstat was called for %s", path);
     if (unifycr_intercept_path(path)) {
         if (vers != _STAT_VER) {
             errno = EINVAL;
@@ -520,7 +521,7 @@ int UNIFYCR_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
 {
     int ret = 0;
 
-    DEBUG("fxstat was called for fd %d....\n", fd);
+    LOGDBG("fxstat was called for fd %d", fd);
 
     /* check whether we should intercept this file descriptor */
     if (unifycr_intercept_fd(&fd)) {
@@ -729,7 +730,7 @@ int UNIFYCR_WRAP(creat)(const char* path, mode_t mode)
         filedesc->pos   = pos;
         filedesc->read  = 0;
         filedesc->write = 1;
-        DEBUG("UNIFYCR_open generated fd %d for file %s\n", fd, path);
+        LOGDBG("UNIFYCR_open generated fd %d for file %s", fd, path);
 
         /* don't conflict with active system fds that range from 0 - (fd_limit) */
         int ret = fd + unifycr_fd_limit;
@@ -796,7 +797,7 @@ int UNIFYCR_WRAP(open)(const char* path, int flags, ...)
                           || ((flags & O_RDWR) == O_RDWR);
         filedesc->write = ((flags & O_WRONLY) == O_WRONLY)
                           || ((flags & O_RDWR) == O_RDWR);
-        DEBUG("UNIFYCR_open generated fd %d for file %s\n", fd, path);
+        LOGDBG("UNIFYCR_open generated fd %d for file %s", fd, path);
 
         /* don't conflict with active system fds that range from 0 - (fd_limit) */
         ret = fd + unifycr_fd_limit;
@@ -848,7 +849,7 @@ int UNIFYCR_WRAP(__open_2)(const char* path, int flags, ...)
 {
     int ret;
 
-    DEBUG("__open_2 was called for path %s....\n", path);
+    LOGDBG("__open_2 was called for path %s", path);
 
     /* if O_CREAT is set, we should also have some mode flags */
     int mode = 0;
@@ -861,7 +862,7 @@ int UNIFYCR_WRAP(__open_2)(const char* path, int flags, ...)
 
     /* check whether we should intercept this path */
     if (unifycr_intercept_path(path)) {
-        DEBUG("__open_2 was intercepted for path %s....\n", path);
+        LOGDBG("__open_2 was intercepted for path %s", path);
 
         /* Call open wrapper */
         if (flags & O_CREAT) {
@@ -912,7 +913,7 @@ off_t UNIFYCR_WRAP(lseek)(int fd, off_t offset, int whence)
         /* TODO: support SEEK_DATA and SEEK_HOLE? */
 
         /* compute final file position */
-        DEBUG("seeking from %ld\n", current_pos);
+        LOGDBG("seeking from %ld", current_pos);
         switch (whence) {
         case SEEK_SET:
             /* seek to offset */
@@ -930,7 +931,7 @@ off_t UNIFYCR_WRAP(lseek)(int fd, off_t offset, int whence)
             errno = EINVAL;
             return (off_t)(-1);
         }
-        DEBUG("seeking to %ld\n", current_pos);
+        LOGDBG("seeking to %ld", current_pos);
 
         /* set and return final file position */
         filedesc->pos = current_pos;
@@ -1088,7 +1089,7 @@ ssize_t UNIFYCR_WRAP(write)(int fd, const void* buf, size_t count)
 {
     ssize_t ret;
 
-    DEBUG("write was called for fd %d....\n", fd);
+    LOGDBG("write was called for fd %d", fd);
 
     /* check whether we should intercept this file descriptor */
     if (unifycr_intercept_fd(&fd)) {
@@ -2149,7 +2150,7 @@ int UNIFYCR_WRAP(flock)(int fd, int operation)
           switch (operation)
           {
               case LOCK_EX:
-                  DEBUG("locking file %d..\n", fid);
+                  LOGDBG("locking file %d", fid);
                   ret = pthread_spin_lock(&meta->fspinlock);
                   if ( ret ) {
                       perror("pthread_spin_lock() failed");
@@ -2164,7 +2165,7 @@ int UNIFYCR_WRAP(flock)(int fd, int operation)
                   break;
               case LOCK_UN:
                   ret = pthread_spin_unlock(&meta->fspinlock);
-                  DEBUG("unlocking file %d..\n", fid);
+                  LOGDBG("unlocking file %d", fid);
                   meta->flock_status = UNLOCKED;
                   break;
               default:
@@ -2297,7 +2298,7 @@ int UNIFYCR_WRAP(close)(int fd)
     /* check whether we should intercept this file descriptor */
     int origfd = fd;
     if (unifycr_intercept_fd(&fd)) {
-        DEBUG("closing fd %d\n", fd);
+        LOGDBG("closing fd %d", fd);
 
         /* TODO: what to do if underlying file has been deleted? */
 
