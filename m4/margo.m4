@@ -4,24 +4,15 @@ AC_DEFUN([UNIFYCR_AC_MARGO], [
   MARGO_OLD_CXXFLAGS=$CXXFLAGS
   MARGO_OLD_LDFLAGS=$LDFLAGS
 
-  AC_ARG_WITH([margo], [AC_HELP_STRING([--with-margo=PATH],
-    [path to installed libmargo [default=/usr/local]])], [
-    MARGO_CFLAGS="-I${withval}/include"
-    MARGO_LDFLAGS="-L${withval}/lib"
-    CFLAGS="$CFLAGS ${MARGO_CFLAGS}"
-    CXXFLAGS="$CXXFLAGS ${MARGO_CFLAGS}"
-    LDFLAGS="$LDFLAGS ${MARGO_LDFLAGS}"
-  ], [])
-
-  AC_CHECK_LIB([margo], [margo_init_opt],
-    [MARGO_LIBS="-lmargo"
-     AC_SUBST(MARGO_CFLAGS)
-     AC_SUBST(MARGO_LDFLAGS)
-     AC_SUBST(MARGO_LIBS)
-    ],
-    [AC_MSG_ERROR([couldn't find a suitable libmargo, use --with-margo=PATH])],
-    []
-  )
+  PKG_CHECK_MODULES([MARGO],[margo],
+   [
+    AC_SUBST(MARGO_CFLAGS)
+    AC_SUBST(MARGO_LIBS)
+   ],
+   [AC_MSG_ERROR(m4_normalize([
+     couldn't find a suitable libmargo, set environment variable
+     PKG_CONFIG_PATH=paths/for/{mercury,argobots,margo}/lib/pkgconfig
+   ]))])
 
   # restore flags
   CFLAGS=$MARGO_OLD_CFLAGS
