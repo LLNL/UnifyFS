@@ -21,7 +21,9 @@ How to Build UnifyCR
 ---------------------------
 
 To install all dependencies and set up your build environment, we recommend
-using the `Spack package manager <https://github.com/spack/spack>`_.
+using the `Spack package manager <https://github.com/spack/spack>`_. If you
+already have Spack, make sure you have the latest release or if using a clone
+of their develop branch, ensure you have pulled the latest changes.
 
 Building with Spack
 ********************
@@ -102,10 +104,10 @@ If you use Dotkit then replace ``spack load`` with ``spack use``.
     $ 
     $ git clone https://xgitlab.cels.anl.gov/sds/sds-repo.git sds-repo.git
     $ cd sds-repo.git
-    $   spack repo add .
+    $ spack repo add .
     $ cd ..
+    $
     $ spack install margo
-    $ spack install argobots
 
 .. tip::
 
@@ -141,16 +143,26 @@ latest release in progress) of `GOTCHA <https://github.com/LLNL/GOTCHA/releases>
 And leveldb (if not already installed on your system):
 `leveldb <https://github.com/google/leveldb/releases/tag/v1.20>`_
 
+To get flatcc `flatcc <https://github.com/dvidelabs/flatcc>`_
+
 To download and install Margo and its dependencies (Mercury and Argobots)
 follow the instructions here: `Margo <https://xgitlab.cels.anl.gov/sds/margo>`_
 
-To get flatcc `flatcc <https://github.com/dvidelabs/flatcc>`_
+.. important::
+
+    Margo uses pkg-config to ensure it compiles and links correctly with all of
+    its dependencies' libraries. When building without Spack, you'll need to
+    manually set the ``PKG_CONFIG_PATH`` environment variable and include in
+    that variable the paths for the ``.pc`` files for Mercury, Argobots, and
+    Margo separated by colons.
 
 Then to build UnifyCR:
 
 .. code-block:: Bash
 
-    $ ./configure --prefix=/path/to/install --enable-debug --with-gotcha=/path/to/gotcha --with-leveldb=/path/to/leveldb --with-mercury=/path/to/mercury --with-argobots=/path/to/argobots --with-margo=/path/to/margo --with-flatcc=/path/to/flatcc
+    $ export PKG_CONFIG_PATH=path/to/mercury/lib/pkgconfig:path/to/argobots/lib/pkgconfig:path/to/margo/lib/pkgconfig
+    $ ./autogen.sh
+    $ ./configure --prefix=/path/to/install --enable-debug --with-gotcha=/path/to/gotcha --with-leveldb=/path/to/leveldb  --with-flatcc=/path/to/flatcc
     $ make
     $ make install
 
