@@ -567,6 +567,37 @@ static void unifycr_fsync_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(unifycr_fsync_rpc)
 
+
+/* given an app_id, client_id, global file id,
+ * return current file size */
+static void unifycr_filesize_rpc(hg_handle_t handle)
+{
+    /* get input params */
+    unifycr_read_in_t in;
+    int ret = HG_Get_input(handle, &in);
+    assert(ret == HG_SUCCESS);
+
+    /* read data for a single read request from client,
+     * returns data to client through shared memory */
+    size_t filesize;
+    ret = rm_cmd_filesize(in.app_id, in.local_rank_idx,
+        in.gfid, &filesize);
+
+    /* build our output values */
+    unifycr_filesize_out_t out;
+    out.ret      = (int32_t)   ret;
+    out.filesize = (hg_size_t) filesize;
+
+    /* return to caller */
+    hg_return_t hret = margo_respond(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* free margo resources */
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(unifycr_filesize_rpc)
+
 /* given an app_id, client_id, global file id, an offset, and a length,
  * initiate read operation to lookup and return data,
  * client synchronizes with server again later when data is available

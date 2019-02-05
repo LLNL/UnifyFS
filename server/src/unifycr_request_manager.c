@@ -31,6 +31,7 @@
 #include <poll.h>
 #include <time.h>
 #include <string.h>
+#include <stdint.h>
 #include "unifycr_log.h"
 #include "unifycr_request_manager.h"
 #include "unifycr_const.h"
@@ -120,6 +121,69 @@ static int compare_delegators(const void* a, const void* b)
  * These functions are called by the rpc handler to assign work
  * to the request manager thread
  ***********************/
+
+/* given an app_id, client_id and global file id,
+ * compute and return file size for specified file
+ */
+int rm_cmd_filesize(
+    int app_id,    /* app_id for requesting client */
+    int client_id, /* client_id for requesting client */
+    int gfid,      /* global file id of read request */
+    size_t* outsize) /* output file size */
+{
+    /* get pointer to app structure for this app id */
+    app_config_t* app_config =
+        (app_config_t*)arraylist_get(app_config_list, app_id);
+
+    /* get thread id for this client */
+    int thrd_id = app_config->thrd_idxs[client_id];
+
+    /* look up thread control structure */
+    thrd_ctrl_t* thrd_ctrl =
+        (thrd_ctrl_t*)arraylist_get(thrd_list, thrd_id);
+
+    /* wait for lock for shared data structures holding requests
+     * and condition variable */
+    pthread_mutex_lock(&thrd_ctrl->thrd_lock);
+
+    /* set offset and length to request *all* key/value pairs
+     * for this file */
+    size_t offset = 0;
+
+    /* want to pick the highest integer offset value a file
+     * could have here */
+    // TODO: would like to unsed max for unsigned long, but
+    // that fails to return any keys for some reason
+    size_t length = (SIZE_MAX >> 1) - 1;
+
+    /* get the locations of all the read requests from the
+     * key-value store*/
+    int rc = meta_read_get(app_id, client_id, thrd_id, 0,
+                           gfid, offset, length, thrd_ctrl->del_req_set);
+
+    /* compute our file size by iterating over each file
+     * segment and taking the max logical offset */
+    int i;
+    size_t filesize = 0;
+    for (i = 0; i < thrd_ctrl->del_req_set->num; i++) {
+        /* get pointer to next send_msg structure */
+        send_msg_t* msg = &(thrd_ctrl->del_req_set->msg_meta[i]);
+
+        /* get last byte offset for this segment of the file */
+        size_t last_offset = msg->src_offset + msg->length;
+
+        /* update our filesize if this offset is bigger than the current max */
+        if (last_offset > filesize) {
+            filesize = last_offset;
+        }
+    }
+
+    /* done updating shared variables, release the lock */
+    pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
+
+    *outsize = filesize;
+    return rc;
+}
 
 /* read function for one requested extent,
  * called from rpc handler to fill shared data structures

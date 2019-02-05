@@ -57,8 +57,10 @@ UNIFYCR_DECL(remove, int, (const char* path));
 UNIFYCR_DECL(rename, int, (const char* oldpath, const char* newpath));
 UNIFYCR_DECL(truncate, int, (const char* path, off_t length));
 UNIFYCR_DECL(stat, int, (const char* path, struct stat* buf));
-UNIFYCR_DECL(__lxstat, int, (int vers, const char* path, struct stat* buf));
+//UNIFYCR_DECL(fstat, int, (int fd, struct stat* buf));
 UNIFYCR_DECL(__xstat, int, (int vers, const char* path, struct stat* buf));
+UNIFYCR_DECL(__lxstat, int, (int vers, const char* path, struct stat* buf));
+UNIFYCR_DECL(__fxstat, int, (int vers, int fd, struct stat* buf));
 
 /* ---------------------------------------
  * POSIX wrappers: file descriptors

@@ -345,6 +345,19 @@ int main(int argc, char** argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
+    if (rank == 0) {
+        errno = 0;
+        struct stat sbuf;
+        int stat_rc = stat(targetfile, &sbuf);
+        if (stat_rc == 0) {
+            test_print(rank, "stat(%s) says filesize = %llu",
+                targetfile, (unsigned long long)sbuf.st_size);
+        } else {
+            test_print(rank, "stat(%s) failed: errno=%d (%s)",
+                targetfile, errno, strerror(errno));
+        }
+    }
+
     if (!standard && unmount) {
         unifycr_unmount();
     }

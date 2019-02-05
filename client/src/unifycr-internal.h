@@ -483,6 +483,9 @@ int unifycr_fid_is_dir_empty(const char* path);
 /* return current size of given file id */
 off_t unifycr_fid_size(int fid);
 
+/* fill in limited amount of stat information for global file id */
+int unifycr_gfid_stat(int gfid, struct stat* buf);
+
 /* fill in limited amount of stat information */
 int unifycr_fid_stat(int fid, struct stat* buf);
 

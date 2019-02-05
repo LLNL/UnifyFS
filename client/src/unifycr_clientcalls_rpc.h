@@ -79,6 +79,17 @@ MERCURY_GEN_PROC(unifycr_fsync_in_t,
                  ((int32_t)(gfid)))
 DECLARE_MARGO_RPC_HANDLER(unifycr_fsync_rpc)
 
+/* given an app_id, client_id, global file id,
+ * return filesize for given file */
+MERCURY_GEN_PROC(unifycr_filesize_out_t,
+                 ((int32_t)(ret))
+                 ((hg_size_t)(filesize)))
+MERCURY_GEN_PROC(unifycr_filesize_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(local_rank_idx))
+                 ((int32_t)(gfid)))
+DECLARE_MARGO_RPC_HANDLER(unifycr_filesize_rpc)
+
 /* given an app_id, client_id, global file id, an offset, and a length,
  * initiate read operation to lookup and return data,
  * client synchronizes with server again later when data is available
