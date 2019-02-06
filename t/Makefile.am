@@ -13,6 +13,17 @@ TESTS = \
 	9010-stop-unifycrd.t \
 	9020-mountpoint-empty.t
 
+0100-sysio-gotcha.log: 0001-setup.log
+0200-stdio-gotcha.log: 0001-setup.log
+0500-sysio-static.log: 0001-setup.log
+0600-stdio-static.log: 0001-setup.log
+9005-unifycr-unmount.log: 0100-sysio-gotcha.log \
+	0200-stdio-gotcha.log \
+	0500-sysio-static.log \
+	0600-stdio-static.log
+9010-stop-unifycrd.log: 9005-unifycr-unmount.log
+9020-mountpoint-empty.log: 9010-stop-unifycrd.log
+
 check_SCRIPTS = \
 	0001-setup.t \
 	0100-sysio-gotcha.t \

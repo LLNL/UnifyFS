@@ -1,6 +1,10 @@
 language: c
 sudo: required
 
+env:
+  global:
+    - MAKEFLAGS="-j"
+
 before_install:
   # The default environment variable $CC is known to interfere with
   # MPI projects.

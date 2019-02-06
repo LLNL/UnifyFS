@@ -126,6 +126,11 @@ sysio_suite in `t/Makefile.am`_ and `t/sys/sysio_suite.c`_:
     - Add this file to `t/Makefile.am`_ in the ``TESTS`` and ``check_SCRIPTS``
       variables and add the name of the file (but with a .t extension) this
       script runs to the ``libexec_PROGRAMS`` variable
+    - If your suite depends on another suite finishing first (i.e., if
+      *0001-setup.t* needs to complete first) then add the dependencies for
+      your *<####-suite-name>.log* file followed by any *.log* file(s) it
+      depends on. These are added to `t/Makefile.am`_ after the ``TESTS``
+      variable. This allows for the test to be run in parallel if need be
 
     You can then create the test suite file and any tests to be run in this
     suite.
