@@ -368,10 +368,6 @@ margo_instance_id unifycr_server_rpc_init()
 #endif
 }
 
-#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
-extern int local_rank_idx;
-#endif
-
 /*
  * Perform steps to create a daemon process:
  *
@@ -434,6 +430,7 @@ int main(int argc, char* argv[])
 {
     int provided;
     int rc;
+    int srvr_rank_idx = 0;
     bool daemon = true;
     char dbg_fname[UNIFYCR_MAX_FILENAME] = {0};
 
@@ -476,10 +473,6 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
-    local_rank_idx = find_rank_idx(glb_rank, local_rank_lst,
-                                   local_rank_cnt);
-#endif
     snprintf(dbg_fname, sizeof(dbg_fname), "%s/%s.%d",
              server_cfg.log_dir, server_cfg.log_file, glb_rank);
 
@@ -504,14 +497,19 @@ int main(int argc, char* argv[])
 
     //TODO: replace with unifycr_server_rpc_init??
     margo_instance_id mid = unifycr_server_rpc_init();
-    rc = sock_init_server();
+
+#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
+    srvr_rank_idx = find_rank_idx(glb_rank, local_rank_lst,
+                                  local_rank_cnt);
+#endif
+    rc = sock_init_server(srvr_rank_idx);
     if (rc != 0) {
         LOG(LOG_ERR, "%s",
             unifycr_error_enum_description(UNIFYCR_ERROR_SOCKET));
         exit(1);
     }
 
-    /*launch the service manager*/
+    /* launch the service manager */
     rc = pthread_create(&data_thrd, NULL, sm_service_reads, NULL);
     if (rc != 0) {
         LOG(LOG_ERR, "%s",

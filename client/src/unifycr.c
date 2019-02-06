@@ -2257,35 +2257,25 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
         return -1;
     }
 
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sun_family = AF_UNIX;
-
-    if ((proc_id == 0) &&
-        (l_num_procs_per_node == 1) &&
-        (l_num_del_per_node == 1)) {
-        // use zero-index domain socket path
-        snprintf(tmp_path, sizeof(tmp_path), "%s.%d",
-                 SOCKET_PATH, getuid());
+    /* calculate delegator assignment */
+    nprocs_per_del = l_num_procs_per_node / l_num_del_per_node;
+    if ((l_num_procs_per_node % l_num_del_per_node) != 0) {
+        nprocs_per_del++;
+    }
+    snprintf(tmp_path, sizeof(tmp_path), "%s.%d.%d",
+             SOCKET_PATH, getuid(), (proc_id / nprocs_per_del));
 
 #ifdef HAVE_PMIX_H
-        // lookup domain socket path in PMIx
-        if (unifycr_pmix_lookup(pmix_key_unifycrd_socket, 0, &pmix_path) == 0) {
-            memset(tmp_path, 0, sizeof(tmp_path));
-            snprintf(tmp_path, sizeof(tmp_path), "%s", pmix_path);
-            free(pmix_path);
-        }
-#endif
-    } else {
-        /* calculate delegator assignment */
-        nprocs_per_del = l_num_procs_per_node / l_num_del_per_node;
-        if ((l_num_procs_per_node % l_num_del_per_node) != 0) {
-            nprocs_per_del++;
-        }
-
-        snprintf(tmp_path, sizeof(tmp_path), "%s%d",
-                 SOCKET_PATH, proc_id / nprocs_per_del);
+    // lookup domain socket path in PMIx
+    if (unifycr_pmix_lookup(pmix_key_unifycrd_socket, 0, &pmix_path) == 0) {
+        memset(tmp_path, 0, sizeof(tmp_path));
+        snprintf(tmp_path, sizeof(tmp_path), "%s", pmix_path);
+        free(pmix_path);
     }
+#endif
 
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sun_family = AF_UNIX;
     strcpy(serv_addr.sun_path, tmp_path);
     len = sizeof(serv_addr);
     result = connect(client_sockfd, (struct sockaddr*)&serv_addr, len);
