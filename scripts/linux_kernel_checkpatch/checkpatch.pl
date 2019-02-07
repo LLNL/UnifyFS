@@ -5210,6 +5210,13 @@ sub process {
 				# with additional single statement blocks inside of them.
 				$allowed = 0;
 			}
+
+			# Allow any conditional directives
+			if ($line =~ /^(.*#)/) {
+				#print "APW: ALLOWED: pre<$1>\n";
+				$allowed = 1;
+			}
+
 			# Check the post-context.
 			if (defined $chunks[1]) {
 				my ($cond, $block) = @{$chunks[1]};
