@@ -20,6 +20,7 @@ typedef struct ClientRpcContext {
     hg_addr_t svr_addr;
     hg_id_t unifycr_filesize_rpc_id;
     hg_id_t unifycr_read_rpc_id;
+    hg_id_t unifycr_mread_rpc_id;
     hg_id_t unifycr_mount_rpc_id;
     hg_id_t unifycr_unmount_rpc_id;
     hg_id_t unifycr_metaget_rpc_id;

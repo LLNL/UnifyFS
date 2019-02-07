@@ -439,7 +439,7 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
  * @param client_id: client-side process id
  * @param thrd_id: the thread created for processing
  *  its client's read requests.
- * @param dbg_rank: the client process's rank in its
+ * @param cli_rank: the client process's rank in its
  *  own application, used for debug purpose
  * @param gfid: global file id
  * @param offset: start offset for segment
@@ -449,7 +449,7 @@ int meta_process_fsync(int app_id, int client_side_id, int gfid)
  *  requested segments
  * @return success/error code
  */
-int meta_read_get(int app_id, int client_id, int thrd_id, int dbg_rank,
+int meta_read_get(int app_id, int client_id, int thrd_id, int cli_rank,
                   int gfid, size_t offset, size_t length,
                   msg_meta_t* del_req_set)
 {
@@ -520,7 +520,7 @@ int meta_read_get(int app_id, int client_id, int thrd_id, int dbg_rank,
             /* src_offset is the logical offset of the shared file */
             msg->src_offset = (size_t) key->offset;
 
-            msg->src_dbg_rank = dbg_rank;
+            msg->src_dbg_rank = cli_rank;
             msg->src_delegator_rank = glb_rank;
             msg->src_fid = (int) key->fid;
             msg->src_thrd = thrd_id;

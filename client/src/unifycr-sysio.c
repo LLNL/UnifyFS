@@ -1813,23 +1813,25 @@ int unifycr_fd_logreadlist(read_req_t* read_req, int count)
         //unifycr_ReadRequest_end_as_root(&builder);
 
         /* allocate our buffer to be sent */
-        size_t size;
+        size_t size = 0;
         void* buffer = flatcc_builder_finalize_buffer(&builder, &size);
         assert(buffer);
-
-        flatcc_builder_clear(&builder);
+        LOGDBG("mread: n_reqs:%zu, flatcc buffer (%p) sz:%zu",
+               read_req_set.count, buffer, size);
 
         /* invoke read rpc here */
         unifycr_client_mread_rpc_invoke(&unifycr_rpc_context, app_id,
                                         local_rank_idx, ptr_meta_entry->gfid,
                                         read_req_set.count, size, buffer);
 
+        flatcc_builder_clear(&builder);
         free(buffer);
     } else {
         /* got a single read request */
         int gfid = ptr_meta_entry->gfid;
         size_t offset = read_req_set.read_reqs[0].offset;
         size_t length = read_req_set.read_reqs[0].length;
+        LOGDBG("read: offset:%zu, len:%zu", offset, length);
         unifycr_client_read_rpc_invoke(&unifycr_rpc_context, app_id,
                                        local_rank_idx, gfid, offset, length);
     }
