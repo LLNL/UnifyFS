@@ -2207,6 +2207,12 @@ static int unifycr_client_rpc_init(
                        unifycr_read_out_t,
                        NULL);
 
+    (*unifycr_rpc_context)->unifycr_mread_rpc_id =
+        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_mread_rpc",
+                       unifycr_mread_in_t,
+                       unifycr_mread_out_t,
+                       NULL);
+
     (*unifycr_rpc_context)->unifycr_mount_rpc_id   =
         MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_mount_rpc",
                        unifycr_mount_in_t,
@@ -2236,12 +2242,6 @@ static int unifycr_client_rpc_init(
         MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_filesize_rpc",
                        unifycr_filesize_in_t,
                        unifycr_filesize_out_t,
-                       NULL);
-
-    (*unifycr_rpc_context)->unifycr_read_rpc_id =
-        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_read_rpc",
-                       unifycr_read_in_t,
-                       unifycr_read_out_t,
                        NULL);
 
     /* resolve server address */

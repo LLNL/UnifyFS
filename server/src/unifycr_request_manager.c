@@ -68,34 +68,35 @@
  * have been transferred. */
 
 static void print_send_msgs(send_msg_t* send_metas,
-                            int msg_cnt, int dbg_rank)
+                            int msg_cnt)
 {
     int i;
     for (i = 0; i < msg_cnt; i++) {
-        LOGDBG("rank:%d, src_offset:%zu, msg_cnt:%d",
-               dbg_rank, send_metas[i].src_offset, msg_cnt);
+        LOGDBG("src_offset:%zu, byte_cnt:%zu",
+               send_metas[i].src_offset,
+               send_metas[i].length);
     }
 }
 
 static void print_remote_del_reqs(int app_id, int cli_id,
-                                  int dbg_rank, del_req_stat_t* del_req_stat)
+                                  del_req_stat_t* del_req_stat)
 {
     int i;
     for (i = 0; i < del_req_stat->del_cnt; i++) {
-        LOGDBG("remote: rank:%d, remote_delegator:%d, req_cnt:%d",
-               dbg_rank, del_req_stat->req_stat[i].del_id,
+        LOGDBG("remote_delegator:%d, req_cnt:%d",
+               del_req_stat->req_stat[i].del_id,
                del_req_stat->req_stat[i].req_cnt);
     }
 }
 
 #if 0 // NOT CURRENTLY USED
 static void print_recv_msg(int app_id, int cli_id,
-                           int dbg_rank, int thrd_id,
+                           int thrd_id,
                            shm_meta_t* msg)
 {
-    LOGDBG("recv_msg: rank:%d, app_id:%d, cli_id:%d, thrd_id:%d, "
+    LOGDBG("recv_msg: app_id:%d, cli_id:%d, thrd_id:%d, "
            "fid:%d, offset:%ld, len:%ld",
-           dbg_rank, app_id, cli_id, thrd_id, msg->src_fid,
+           app_id, cli_id, thrd_id, msg->src_fid,
            msg->offset, msg->length);
 }
 #endif
@@ -197,15 +198,15 @@ int rm_cmd_read(
     size_t offset, /* logical file offset of read request */
     size_t length) /* number of bytes to read */
 {
-    /* rank to print debug messages */
-    int dbg_rank = -1;
-
     /* get pointer to app structure for this app id */
     app_config_t* app_config =
         (app_config_t*)arraylist_get(app_config_list, app_id);
 
     /* get thread id for this client */
     int thrd_id = app_config->thrd_idxs[client_id];
+
+    /* client app rank for debugging */
+    int cli_rank = app_config->dbg_ranks[client_id];
 
     /* look up thread control structure */
     thrd_ctrl_t* thrd_ctrl =
@@ -217,7 +218,7 @@ int rm_cmd_read(
 
     /* get the locations of all the read requests from the
      * key-value store*/
-    int rc = meta_read_get(app_id, client_id, thrd_id, 0,
+    int rc = meta_read_get(app_id, client_id, thrd_id, cli_rank,
                            gfid, offset, length, thrd_ctrl->del_req_set);
 
     /* sort read requests to be sent to the same delegators. */
@@ -227,7 +228,7 @@ int rm_cmd_read(
 
     /* debug print */
     print_send_msgs(thrd_ctrl->del_req_set->msg_meta,
-                    thrd_ctrl->del_req_set->num, dbg_rank);
+                    thrd_ctrl->del_req_set->num);
 
     /* get pointer to list of delegator stat objects to record
      * delegator rank and count of requests for each delegator */
@@ -247,8 +248,8 @@ int rm_cmd_read(
     int del_cnt = 0;
     int i;
     for (i = 1; i < thrd_ctrl->del_req_set->num; i++) {
-        int cur_rank  = msg_meta[i    ].dest_delegator_rank;
-        int prev_rank = msg_meta[i - 1].dest_delegator_rank;
+        int cur_rank = msg_meta[i].dest_delegator_rank;
+        int prev_rank = msg_meta[i-1].dest_delegator_rank;
         if (cur_rank == prev_rank) {
             /* another message for the current delegator */
             req_stat[del_cnt].req_cnt++;
@@ -269,8 +270,7 @@ int rm_cmd_read(
     thrd_ctrl->del_req_stat->del_cnt = del_cnt;
 
     /* debug print */
-    print_remote_del_reqs(app_id, thrd_id, dbg_rank,
-                          thrd_ctrl->del_req_stat);
+    print_remote_del_reqs(app_id, thrd_id, thrd_ctrl->del_req_stat);
 
     /* wake up the request manager thread for the requesting client */
     if (!thrd_ctrl->has_waiting_delegator) {
@@ -339,7 +339,7 @@ int rm_cmd_mread(int app_id, int client_id, int gfid,
           thrd_ctrl->del_req_set->num,
           sizeof(send_msg_t), compare_delegators);
     print_send_msgs(thrd_ctrl->del_req_set->msg_meta,
-                    thrd_ctrl->del_req_set->num, dbg_rank);
+                    thrd_ctrl->del_req_set->num);
     thrd_ctrl->del_req_stat->req_stat[0].req_cnt = 1;
 
     int i, del_cnt = 0;
@@ -363,8 +363,7 @@ int rm_cmd_mread(int app_id, int client_id, int gfid,
 
     thrd_ctrl->del_req_stat->del_cnt = del_cnt;
 
-    print_remote_del_reqs(app_id, thrd_id, dbg_rank,
-                          thrd_ctrl->del_req_stat);
+    print_remote_del_reqs(app_id, thrd_id, thrd_ctrl->del_req_stat);
 
     LOGDBG("wake up the service thread for the requesting client");
     /*wake up the service thread for the requesting client*/

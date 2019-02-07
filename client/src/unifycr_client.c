@@ -340,7 +340,7 @@ int32_t unifycr_client_mread_rpc_invoke(unifycr_client_rpc_context_t**
     /* fill in input struct */
     hret = margo_create((*unifycr_rpc_context)->mid,
                         (*unifycr_rpc_context)->svr_addr,
-                        (*unifycr_rpc_context)->unifycr_read_rpc_id,
+                        (*unifycr_rpc_context)->unifycr_mread_rpc_id,
                         &handle);
     assert(hret == HG_SUCCESS);
     hret = margo_bulk_create((*unifycr_rpc_context)->mid, 1, &buffer, &size,
