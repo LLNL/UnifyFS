@@ -336,7 +336,6 @@ int UNIFYCR_WRAP(remove)(const char* path)
 
 int UNIFYCR_WRAP(stat)(const char* path, struct stat* buf)
 {
-
     LOGDBG("stat was called for %s", path);
 
     if (unifycr_intercept_path(path)) {
@@ -346,37 +345,15 @@ int UNIFYCR_WRAP(stat)(const char* path, struct stat* buf)
             return -1;
         }
 
-        /* look for local file id for path */
-        int fid = unifycr_get_fid_from_path(path);
-        int found_local = (fid >= 0);
-
         /* get global file id for path */
         int gfid = unifycr_generate_gfid(path);
 
-        /* look for stat struct on global file */
-        unifycr_file_attr_t gfattr = { 0, };
-        int ret = unifycr_get_global_file_meta(fid, gfid, &gfattr);
-        int found_global = (ret == UNIFYCR_SUCCESS);
-
-        if (!found_global) {
-            /* the local entry is obsolete and should be discarded. */
-            if (found_local) {
-                /* delete local file */
-                ret = unifycr_fid_unlink(fid);
-                if (ret != UNIFYCR_SUCCESS) {
-                    /* failed to delete local copy */
-                    errno = unifycr_err_map_to_errno(ret);
-                    return -1;
-                }
-            }
-
-            /* no stat structure exists for global file */
-            errno = ENOENT;
+        /* lookup stat info for global file id */
+        int ret = unifycr_gfid_stat(gfid, buf);
+        if (ret != UNIFYCR_SUCCESS) {
+            errno = unifycr_err_map_to_errno(ret);
             return -1;
         }
-
-        /* copy stat structure to user's buffer */
-        *buf = gfattr.file_attr;
 
         /* success */
         return 0;
@@ -387,31 +364,41 @@ int UNIFYCR_WRAP(stat)(const char* path, struct stat* buf)
     }
 }
 
+#if 0
 int UNIFYCR_WRAP(fstat)(int fd, struct stat* buf)
 {
-    int ret = 0;
-
     LOGDBG("fstat was called for fd: %d", fd);
 
-    if (!buf) {
-        errno = EFAULT;
-        return -1;
-    }
+    /* check whether we should intercept this file descriptor */
+    if (unifycr_intercept_fd(&fd)) {
+        if (!buf) {
+            errno = EFAULT;
+            return -1;
+        }
 
-    /* get the file id for this file descriptor */
-    int fid = unifycr_get_fid_from_fd(fd);
-    if (fid < 0) {
-        errno = EBADF;
-        return -1;
-    }
+        /* get the file id for this file descriptor */
+        int fid = unifycr_get_fid_from_fd(fd);
+        if (fid < 0) {
+            errno = EBADF;
+            return -1;
+        }
 
-    ret = unifycr_fid_stat(fid, buf);
-    if (ret < 0) {
-        errno = EBADF;
-    }
+        /* lookup stat info for this file id */
+        int ret = unifycr_fid_stat(fid, buf);
+        if (ret < 0) {
+            errno = unifycr_err_map_to_errno(ret);
+            return -1;
+        }
 
-    return ret;
+        /* success */
+        return 0;
+    } else {
+        MAP_OR_FAIL(fstat);
+        int ret = UNIFYCR_REAL(fstat)(fd, buf);
+        return ret;
+    }
 }
+#endif
 
 /*
  * NOTE on __xstat(2), __lxstat(2), and __fxstat(2)
@@ -424,14 +411,8 @@ int UNIFYCR_WRAP(fstat)(int fd, struct stat* buf)
 
 int UNIFYCR_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
 {
-    int ret = 0;
-    int fid = -1;
-    int gfid = -1;
-    int found_local = 0;
-    int found_global = 0;
-    unifycr_file_attr_t gfattr = { 0, };
-
     LOGDBG("xstat was called for %s", path);
+
     if (unifycr_intercept_path(path)) {
         if (vers != _STAT_VER) {
             errno = EINVAL;
@@ -443,84 +424,61 @@ int UNIFYCR_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
             return -1;
         }
 
-        gfid = unifycr_generate_gfid(path);
-        fid = unifycr_get_fid_from_path(path);
+        /* get global file id for path */
+        int gfid = unifycr_generate_gfid(path);
 
-        found_global =
-            (unifycr_get_global_file_meta(fid, gfid, &gfattr) == UNIFYCR_SUCCESS);
-        found_local = (fid >= 0);
-
-        if (!found_global) {
-            /* the local entry is obsolete and should be discarded. */
-            if (found_local) {
-                unifycr_fid_unlink(fid);    /* this always returns success */
-            }
-
-            errno = ENOENT;
+        /* lookup stat info for global file id */
+        int ret = unifycr_gfid_stat(gfid, buf);
+        if (ret != UNIFYCR_SUCCESS) {
+            errno = unifycr_err_map_to_errno(ret);
             return -1;
         }
 
-        *buf = gfattr.file_attr;
-
+        /* success */
         return 0;
     } else {
         MAP_OR_FAIL(__xstat);
-        ret = UNIFYCR_REAL(__xstat)(vers, path, buf);
+        int ret = UNIFYCR_REAL(__xstat)(vers, path, buf);
         return ret;
     }
 }
 
 int UNIFYCR_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
 {
-    int ret = 0;
-    int fid = -1;
-    int gfid = -1;
-    int found_local = 0;
-    int found_global = 0;
-    unifycr_file_attr_t gfattr = { 0, };
-
     LOGDBG("lxstat was called for %s", path);
+
     if (unifycr_intercept_path(path)) {
         if (vers != _STAT_VER) {
             errno = EINVAL;
             return -1;
         }
+
         if (!buf) {
             errno = EFAULT;
             return -1;
         }
 
-        gfid = unifycr_generate_gfid(path);
-        fid = unifycr_get_fid_from_path(path);
+        /* get global file id for path */
+        int gfid = unifycr_generate_gfid(path);
 
-        found_global =
-            (unifycr_get_global_file_meta(fid, gfid, &gfattr) == UNIFYCR_SUCCESS);
-        found_local = (fid >= 0);
-
-        if (!found_global) {
-            /* the local entry is obsolete and should be discarded. */
-            if (found_local) {
-                unifycr_fid_unlink(fid);    /* this always returns success */
-            }
-
-            errno = ENOENT;
+        /* lookup stat info for global file id */
+        int ret = unifycr_gfid_stat(gfid, buf);
+        if (ret != UNIFYCR_SUCCESS) {
+            errno = unifycr_err_map_to_errno(ret);
             return -1;
         }
 
-        *buf = gfattr.file_attr;
-
+        /* success */
         return 0;
     } else {
         MAP_OR_FAIL(__lxstat);
-        ret = UNIFYCR_REAL(__lxstat)(vers, path, buf);
+        int ret = UNIFYCR_REAL(__lxstat)(vers, path, buf);
         return ret;
     }
 }
 
 int UNIFYCR_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
 {
-    int ret = 0;
-
     LOGDBG("fxstat was called for fd %d", fd);
 
     /* check whether we should intercept this file descriptor */
@@ -530,31 +488,30 @@ int UNIFYCR_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
             return -1;
         }
 
-        if (fd < 0) {
-            errno = EBADF;
-            return -1;
-        }
-
         if (!buf) {
             errno = EINVAL;
             return -1;
         }
 
+        /* get the file id for this file descriptor */
         int fid = unifycr_get_fid_from_fd(fd);
-
         if (fid < 0) {
-            return UNIFYCR_ERROR_BADF;
+            errno = EBADF;
+            return -1;
         }
 
-        ret = unifycr_fid_stat(fid, buf);
-        if (ret < 0) {
-            errno = ENOENT;
+        /* lookup stat info for this file id */
+        int ret = unifycr_fid_stat(fid, buf);
+        if (ret != UNIFYCR_SUCCESS) {
+            errno = unifycr_err_map_to_errno(ret);
+            return -1;
         }
 
-        return ret;
+        /* success */
+        return 0;
     } else {
         MAP_OR_FAIL(__fxstat);
-        ret = UNIFYCR_REAL(__fxstat)(vers, fd, buf);
+        int ret = UNIFYCR_REAL(__fxstat)(vers, fd, buf);
         return ret;
     }
 }

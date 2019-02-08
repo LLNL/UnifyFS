@@ -819,48 +819,70 @@ int unifycr_get_global_file_meta(int fid, int gfid, unifycr_file_attr_t* gfattr)
 
     unifycr_file_attr_t fmeta;
     int ret = unifycr_client_metaget_rpc_invoke(
-                  &unifycr_rpc_context, &fmeta, fid, gfid);
+                  &unifycr_rpc_context, gfid, &fmeta);
     if (ret == UNIFYCR_SUCCESS) {
         *gfattr = fmeta;
+         gfattr->fid = fid;
     }
 
     return ret;
 }
 
+/* fill in limited amount of stat information for global file id */
+int unifycr_gfid_stat(int gfid, struct stat* buf)
+{
+    /* check that we have an output buffer to write to */
+    if (!buf) {
+        return UNIFYCR_ERROR_INVAL;
+    }
+
+    /* zero out user's stat buffer */
+    memset(buf, 0, sizeof(struct stat));
+
+    /* lookup stat data for global file id */
+    unifycr_file_attr_t fattr;
+    int ret = unifycr_client_metaget_rpc_invoke(
+                  &unifycr_rpc_context, gfid, &fattr);
+    if (ret != UNIFYCR_SUCCESS) {
+        return UNIFYCR_ERROR_IO;
+    }
+
+    /* execute rpc to get file size */
+    size_t filesize;
+    ret = unifycr_client_filesize_rpc_invoke(&unifycr_rpc_context,
+        app_id, local_rank_idx, gfid, &filesize);
+    if (ret != UNIFYCR_SUCCESS) {
+        return UNIFYCR_ERROR_IO;
+    }
+
+    /* copy stat structure */
+    *buf = fattr.file_attr;
+
+    /* set the file size */
+    buf->st_size = filesize;
+
+    return UNIFYCR_SUCCESS;
+}
+
 /* fill in limited amount of stat information */
 int unifycr_fid_stat(int fid, struct stat* buf)
 {
-    int ret = 0;
-    int gfid = -1;
-    unifycr_filemeta_t* meta = NULL;
-    unifycr_file_attr_t gfattr = { 0, };
-
-    if (!buf) {
-        return -EINVAL;
-    }
-
-    meta = unifycr_get_meta_from_fid(fid);
+    /* check that fid is defined */
+    unifycr_filemeta_t* meta = unifycr_get_meta_from_fid(fid);
     if (meta == NULL) {
-        return -UNIFYCR_ERROR_IO;
+        return UNIFYCR_ERROR_IO;
     }
 
-    gfid = unifycr_gfid_from_fid(fid);
+    /* get global file id corresponding to local file id */
+    int gfid = unifycr_gfid_from_fid(fid);
 
-    ret = unifycr_get_global_file_meta(fid, gfid, &gfattr);
+    /* lookup stat info for global file id */
+    int ret = unifycr_gfid_stat(gfid, buf);
     if (ret != UNIFYCR_SUCCESS) {
-        return -UNIFYCR_ERROR_IO;
+        return UNIFYCR_ERROR_IO;
     }
 
-    *buf = gfattr.file_attr;
-
-    /* set the file size */
-    /*
-     * FIXME: this should be set correctly in the global entry, when file is
-     * closed
-     */
-    buf->st_size = meta->size;
-
-    return 0;
+    return UNIFYCR_SUCCESS;
 }
 
 /* allocate a file id slot for a new file
@@ -2208,6 +2230,12 @@ static int unifycr_client_rpc_init(
     (*unifycr_rpc_context)->unifycr_fsync_rpc_id =
         MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_fsync_rpc",
                        unifycr_fsync_in_t, unifycr_fsync_out_t,
+                       NULL);
+
+    (*unifycr_rpc_context)->unifycr_filesize_rpc_id =
+        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_filesize_rpc",
+                       unifycr_filesize_in_t,
+                       unifycr_filesize_out_t,
                        NULL);
 
     (*unifycr_rpc_context)->unifycr_read_rpc_id =

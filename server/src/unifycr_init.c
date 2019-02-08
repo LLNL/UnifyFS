@@ -189,6 +189,10 @@ static margo_instance_id setup_sm_target()
                    unifycr_fsync_in_t, unifycr_fsync_out_t,
                    unifycr_fsync_rpc);
 
+    MARGO_REGISTER(mid, "unifycr_filesize_rpc",
+                   unifycr_filesize_in_t, unifycr_filesize_out_t,
+                   unifycr_filesize_rpc);
+
     MARGO_REGISTER(mid, "unifycr_read_rpc",
                    unifycr_read_in_t, unifycr_read_out_t,
                    unifycr_read_rpc);

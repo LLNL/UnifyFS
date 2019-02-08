@@ -44,6 +44,8 @@ int rm_cmd_mread(int app_id, int client_id, int gfid,
 int rm_cmd_read(int app_id, int client_id, int gfid,
                 size_t offset, size_t length);
 
+int rm_cmd_filesize(int app_id, int client_id, int gfid, size_t* outsize);
+
 /* function called by main thread to instruct
  * resource manager thread to exit,
  * returns UNIFYCR_SUCCESS on success */

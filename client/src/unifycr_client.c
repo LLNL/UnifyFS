@@ -29,12 +29,11 @@ static int set_global_file_meta(unifycr_metaset_in_t* in,
     return UNIFYCR_SUCCESS;
 }
 
-static int get_global_file_meta(int fid, int gfid, unifycr_metaget_out_t* out,
+static int get_global_file_meta(int gfid, unifycr_metaget_out_t* out,
                                 unifycr_file_attr_t* file_meta)
 {
     memset(file_meta, 0, sizeof(unifycr_file_attr_t));
 
-    file_meta->fid  = fid;
     file_meta->gfid = gfid;
     strcpy(file_meta->filename, out->filename);
     file_meta->file_attr.st_size = out->st_size;
@@ -152,9 +151,8 @@ int32_t unifycr_client_metaset_rpc_invoke(unifycr_client_rpc_context_t**
 /* invokes the client metaget rpc function by calling get_global_file_meta */
 int32_t unifycr_client_metaget_rpc_invoke(unifycr_client_rpc_context_t**
                                           unifycr_rpc_context,
-                                          unifycr_file_attr_t* file_meta,
-                                          int32_t fid,
-                                          int32_t gfid)
+                                          int32_t gfid,
+                                          unifycr_file_attr_t* file_meta)
 {
     hg_handle_t handle;
     unifycr_metaget_in_t in;
@@ -181,7 +179,7 @@ int32_t unifycr_client_metaget_rpc_invoke(unifycr_client_rpc_context_t**
     LOGDBG("Got metaget  response ret: %d", (int)out.ret);
     if (out.ret == ACK_SUCCESS) {
         /* fill in results  */
-        get_global_file_meta(fid, gfid, &out, file_meta);
+        get_global_file_meta(gfid, &out, file_meta);
     }
 
     margo_free_output(handle, &out);
@@ -227,6 +225,53 @@ int32_t unifycr_client_fsync_rpc_invoke(unifycr_client_rpc_context_t**
     margo_free_output(handle, &out);
     margo_destroy(handle);
     return out.ret;
+}
+
+/* invokes the client filesize rpc function */
+uint32_t unifycr_client_filesize_rpc_invoke(unifycr_client_rpc_context_t**
+                                            unifycr_rpc_context,
+                                            int32_t app_id,
+                                            int32_t local_rank_idx,
+                                            int32_t gfid,
+                                            hg_size_t* outsize)
+{
+    printf("invoking the filesize rpc function in client\n");
+
+    /* get handle to rpc function */
+    hg_handle_t handle;
+    hg_return_t hret = margo_create((*unifycr_rpc_context)->mid,
+                        (*unifycr_rpc_context)->svr_addr,
+                        (*unifycr_rpc_context)->unifycr_filesize_rpc_id,
+                        &handle);
+    assert(hret == HG_SUCCESS);
+    assert(hret == HG_SUCCESS);
+
+    /* fill in input struct */
+    unifycr_filesize_in_t in;
+    in.app_id         = app_id;
+    in.local_rank_idx = local_rank_idx;
+    in.gfid           = gfid;
+
+    /* call rpc function */
+    hret = margo_forward(handle, &in);
+    assert(hret == HG_SUCCESS);
+    printf("Forwarded\n");
+
+    /* decode response */
+    unifycr_filesize_out_t out;
+    hret = margo_get_output(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* save output from function */
+    printf("Got response in read, ret: %d\n", out.ret);
+    uint32_t ret = (uint32_t) out.ret;
+    *outsize     = (hg_size_t) out.filesize;
+
+    /* free resources */
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+
+    return ret;
 }
 
 /* invokes the client read rpc function */

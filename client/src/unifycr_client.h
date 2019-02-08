@@ -18,6 +18,7 @@ typedef struct ClientRpcContext {
     hg_context_t* hg_context;
     hg_class_t* hg_class;
     hg_addr_t svr_addr;
+    hg_id_t unifycr_filesize_rpc_id;
     hg_id_t unifycr_read_rpc_id;
     hg_id_t unifycr_mount_rpc_id;
     hg_id_t unifycr_unmount_rpc_id;
@@ -45,17 +46,23 @@ int32_t unifycr_client_metaset_rpc_invoke(unifycr_client_rpc_context_t**
                                           unifycr_rpc_context,
                                           unifycr_file_attr_t* f_meta);
 
-int32_t unifycr_client_metaget_rpc_invoke(unifycr_client_rpc_context_t**
-                                          unifycr_rpc_context,
-                                          unifycr_file_attr_t* f_meta,
-                                          int32_t fid,
-                                          int32_t gfid);
+int32_t unifycr_client_metaget_rpc_invoke(
+    unifycr_client_rpc_context_t** unifycr_rpc_context,
+    int32_t gfid,
+    unifycr_file_attr_t* f_meta);
 
 int32_t unifycr_client_fsync_rpc_invoke(unifycr_client_rpc_context_t**
                                         unifycr_rpc_context,
                                         int32_t app_id,
                                         int32_t local_rank_idx,
                                         int32_t gfid);
+
+uint32_t unifycr_client_filesize_rpc_invoke(unifycr_client_rpc_context_t**
+                                            unifycr_rpc_context,
+                                            int32_t app_id,
+                                            int32_t local_rank_idx,
+                                            int32_t gfid,
+                                            hg_size_t* filesize);
 
 int32_t unifycr_client_read_rpc_invoke(unifycr_client_rpc_context_t**
                                        unifycr_rpc_context,
