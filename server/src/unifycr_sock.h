@@ -37,7 +37,7 @@ extern int server_sockfd;
 extern int client_sockfd;
 extern struct pollfd poll_set[MAX_NUM_CLIENTS];
 
-int sock_init_server(void);
+int sock_init_server(int srvr_id);
 int sock_add(int fd);
 void sock_reset();
 int sock_wait_cli_cmd();

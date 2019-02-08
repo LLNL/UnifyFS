@@ -230,8 +230,4 @@ extern int *local_rank_lst;
 extern int local_rank_cnt;
 extern size_t max_recs_per_slice;
 
-#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
-extern int local_rank_idx;
-#endif
-
 #endif
