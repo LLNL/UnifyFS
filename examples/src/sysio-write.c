@@ -146,7 +146,7 @@ static void report_result(void)
                     "I/O request size:          %llu B\n"
                     "Aggregate write bandwidth: %lf MB/s\n"
                     "Min. write bandwidth:      %lf MB/s\n"
-                    "Total Write time:          %lf sec. (%lf for fsync)\n\n",
+                    "Total Write time:          %lf sec. (%lf for fsync)\n",
                     total_ranks,
                     1.0 * blocksize * nblocks / (1 << 20),
                     1.0 * total_ranks * blocksize * nblocks / (1 << 20),
@@ -283,25 +283,25 @@ int main(int argc, char** argv)
     }
 
     if (pattern < 0) {
-        test_print_once(rank, "pattern should be 'n1' or 'nn'\n");
+        test_print_once(rank, "pattern should be 'n1' or 'nn'");
         exit(-1);
     }
 
     if (blocksize < chunksize || blocksize % chunksize > 0) {
         test_print_once(rank, "blocksize should be larger than "
-                        "and divisible by chunksize.\n");
+                        "and divisible by chunksize.");
         exit(-1);
     }
 
     if (chunksize % (1 << 10) > 0) {
         test_print_once(rank, "chunksize and blocksize should be divisible "
-                        "by 1024.\n");
+                        "by 1024.");
         exit(-1);
     }
 
     if (static_linked(program) && standard) {
         test_print_once(rank, "--standard, -s option only works when "
-                        "dynamically linked.\n");
+                        "dynamically linked.");
         exit(-1);
     }
 
@@ -345,16 +345,32 @@ int main(int argc, char** argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
+    /* have rank 0 check the expected file size matches actual file size */
     if (rank == 0) {
+        /* compute expected size of file after all procs have written,
+         * each process writes nblocks in groups of nchunks each of
+         * which is chunksize bytes */
+        uint64_t nchunks = blocksize / chunksize;
+        off_t expected_size = (off_t)nblocks * (off_t)nchunks *
+            (off_t)chunksize * (off_t)total_ranks;
+
+        /* get stat data for the file */
         errno = 0;
         struct stat sbuf;
         int stat_rc = stat(targetfile, &sbuf);
         if (stat_rc == 0) {
-            test_print(rank, "stat(%s) says filesize = %llu",
-                targetfile, (unsigned long long)sbuf.st_size);
+            /* check that stat size matches expected size */
+            if (sbuf.st_size != expected_size) {
+                test_print(rank, "%s size incorrect got %llu, expected %llu",
+                    targetfile, (unsigned long long)sbuf.st_size,
+                    (unsigned long long)expected_size);
+                ret = 1;
+            }
         } else {
-            test_print(rank, "stat(%s) failed: errno=%d (%s)",
-                targetfile, errno, strerror(errno));
+            /* our call to stat failed */
+            test_print(rank, "stat(%s) failed:",
+                targetfile);
+            ret = 1;
         }
     }
 
