@@ -259,20 +259,20 @@ int main(int argc, char** argv)
 
     ret = stat(srcpath, &sb);
     if (ret < 0) {
-        test_print(rank, "stat failed on \"%s\"\n", srcpath);
+        test_print(rank, "stat failed on \"%s\"", srcpath);
         goto out;
     }
 
     ret = resolve_dstpath(argv[optind]);
     if (ret) {
-        test_print(rank, "cannot resolve the destination path \"%s\" (%s)\n",
+        test_print(rank, "cannot resolve the destination path \"%s\" (%s)",
                    dstpath, strerror(ret));
         goto out;
     }
 
     ret = do_copy();
     if (ret) {
-        test_print(rank, "copy failed (%d: %s)\n", ret, strerror(ret));
+        test_print(rank, "copy failed (%d: %s)", ret, strerror(ret));
     }
 
     free(dstpath);

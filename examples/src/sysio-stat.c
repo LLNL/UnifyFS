@@ -193,7 +193,7 @@ int main(int argc, char** argv)
 
     ret = stat(filename, &sb);
     if (ret < 0) {
-        test_print(rank, "stat failed on \"%s\"\n", filename);
+        test_print(rank, "stat failed on \"%s\"", filename);
     } else {
         dump_stat(rank, &sb);
     }
