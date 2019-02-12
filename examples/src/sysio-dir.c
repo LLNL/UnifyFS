@@ -280,7 +280,7 @@ int main(int argc, char** argv)
 
     if (static_linked(program) && standard) {
         test_print_once(rank, "--standard, -s option only works when "
-                        "dynamically linked.\n");
+                        "dynamically linked.");
         exit(-1);
     }
 
@@ -301,7 +301,7 @@ int main(int argc, char** argv)
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (singletest) {
-        test_print_once(rank, "only testing %s ..\n",
+        test_print_once(rank, "only testing %s ..",
                         singletest_names[singletest]);
         ret = test_funcs[singletest]();
         if (ret < 0) {

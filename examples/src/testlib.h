@@ -43,7 +43,11 @@ void test_print(int rank, const char* fmt, ...)
 
     if (errno) {
         fprintf(stdout, " (errno=%d, %s)\n", errno, strerror(errno));
+    } else {
+        fprintf(stdout, "\n");
     }
+
+    fflush(stdout);
 }
 
 static inline
@@ -60,7 +64,11 @@ void test_print_once(int rank, const char* fmt, ...)
 
         if (errno) {
             fprintf(stdout, " (errno=%d, %s)\n", errno, strerror(errno));
+        } else {
+            fprintf(stdout, "\n");
         }
+
+        fflush(stdout);
     }
 }
 

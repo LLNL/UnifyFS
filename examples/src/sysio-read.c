@@ -95,7 +95,7 @@ static int do_read(void)
 
                 ret = lipsum_check(buf, chunksize, offset, &epos);
                 if (ret < 0) {
-                    test_print(rank, "lipsum check failed at offset %llu.\n",
+                    test_print(rank, "lipsum check failed at offset %llu.",
                                (unsigned long long) epos);
                     return -1;
                 }
@@ -154,7 +154,7 @@ static int do_listread(void)
             ret = lipsum_check((const char*) current->aio_buf, chunksize,
                                current->aio_offset, &epos);
             if (ret < 0) {
-                test_print(rank, "lipsum check failed at offset %llu.\n",
+                test_print(rank, "lipsum check failed at offset %llu.",
                            (unsigned long long) epos);
                 return -1;
             }
@@ -194,7 +194,7 @@ static void report_result(void)
                     "I/O request size:         %llu B\n"
                     "Aggregate read bandwidth: %lf MB/s\n"
                     "Min. read bandwidth:      %lf MB/s\n"
-                    "Total Read time:          %lf sec.\n\n",
+                    "Total Read time:          %lf sec.\n",
                     total_ranks,
                     1.0 * blocksize * nblocks / (1 << 20),
                     1.0 * total_ranks * blocksize * nblocks / (1 << 20),
@@ -331,31 +331,31 @@ int main(int argc, char** argv)
     }
 
     if (pattern < 0) {
-        test_print_once(rank, "pattern should be 'n1' or 'nn'\n");
+        test_print_once(rank, "pattern should be 'n1' or 'nn'");
         exit(-1);
     }
 
     if (blocksize < chunksize || blocksize % chunksize > 0) {
         test_print_once(rank, "blocksize should be larger than "
-                        "and divisible by chunksize.\n");
+                        "and divisible by chunksize.");
         exit(-1);
     }
 
     if (chunksize % (1 << 10) > 0) {
         test_print_once(rank, "chunksize and blocksize should be divisible "
-                        "by 1024.\n");
+                        "by 1024.");
         exit(-1);
     }
 
     if (static_linked(program) && standard) {
         test_print_once(rank, "--standard, -s option only works when "
-                        "dynamically linked.\n");
+                        "dynamically linked.");
         exit(-1);
     }
 
     if (use_listio && use_pread) {
         test_print_once(rank,
-                        "--listio and --pread should be set exclusively\n");
+                        "--listio and --pread should be set exclusively");
         exit(-1);
     }
 

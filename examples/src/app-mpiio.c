@@ -190,7 +190,7 @@ static void report_result(void)
                     "I/O request size:        %llu B\n"
                     "Aggregate I/O bandwidth: %lf MB/s\n"
                     "Min. I/O bandwidth:      %lf MB/s\n"
-                    "Total I/O time:          %lf sec.\n\n",
+                    "Total I/O time:          %lf sec.\n",
                     total_ranks,
                     type ? "read" : "write",
                     1.0 * blocksize * nblocks / (1 << 20),
@@ -316,25 +316,25 @@ int main(int argc, char* argv[])
     }
 
     if (type == -1) {
-        test_print_once(rank, "type should be 'write' or 'read'\n");
+        test_print_once(rank, "type should be 'write' or 'read'");
         exit(-1);
     }
 
     if (blocksize < chunksize || blocksize % chunksize > 0) {
         test_print_once(rank, "blocksize should be larger than "
-                        "and divisible by chunksize.\n");
+                        "and divisible by chunksize.");
         exit(-1);
     }
 
     if (chunksize % (1 << 10) > 0) {
         test_print_once(rank, "chunksize and blocksize should be divisible "
-                        "by 1024.\n");
+                        "by 1024.");
         exit(-1);
     }
 
     if (static_linked(program) && standard) {
         test_print_once(rank, "--standard, -s option only works when "
-                        "dynamically linked.\n");
+                        "dynamically linked.");
         exit(-1);
     }
 
