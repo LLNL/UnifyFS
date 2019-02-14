@@ -281,7 +281,6 @@ AC_SUBST(LDFLAGS)
 AC_SUBST(__CP_LOG_PATH)
 AC_SUBST(CP_WRAPPERS)
 AC_SUBST(DISABLE_LDPRELOAD)
-AC_OUTPUT(client/unifycr-config)
 
 AC_CONFIG_FILES([Makefile
                  common/Makefile
@@ -300,8 +299,14 @@ AC_CONFIG_FILES([Makefile
                  t/Makefile
                  t/lib/Makefile
                  util/Makefile
+                 util/scripts/Makefile
+                 util/scripts/lsfcsm/Makefile
                  util/unifycr/Makefile
                  util/unifycr/src/Makefile])
+
+AC_CONFIG_FILES([client/unifycr-config], [chmod +x client/unifycr-config])
+AC_CONFIG_FILES([util/scripts/lsfcsm/unifycr_lsfcsm_prolog], [chmod +x util/scripts/lsfcsm/unifycr_lsfcsm_prolog])
+AC_CONFIG_FILES([util/scripts/lsfcsm/unifycr_lsfcsm_epilog], [chmod +x util/scripts/lsfcsm/unifycr_lsfcsm_epilog])
 
 UNIFYCR_VERSION=${PACKAGE_VERSION}
 AC_SUBST(UNIFYCR_VERSION)

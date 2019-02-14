@@ -1,0 +1,12 @@
+#!/bin/bash
+
+bindir=@unifycr_bin_path@
+unifycrd=$bindir/unifycrd
+
+if [[ -x $(type -p pkill) ]]; then
+    pkill unifycrd
+elif [[ -x $(type -p pidof) ]]; then
+    pid=$(pidof -s $unifycrd)
+    [[ -n $pid ]] && kill $pid
+fi
+

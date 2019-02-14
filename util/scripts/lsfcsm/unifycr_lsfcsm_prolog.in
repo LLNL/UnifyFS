@@ -1,0 +1,18 @@
+#!/bin/bash
+
+bindir=@unifycr_bin_path@
+unifycrd=$bindir/unifycrd
+
+if [[ -f /etc/rc.d/init.d/functions ]]; then
+    source /etc/rc.d/init.d/functions
+    daemon --user=$CSM_USER_NAME $unifycrd
+elif [[ -x $(type -p runuser) ]]; then
+    runuser -s /bin/bash $CSM_USER_NAME -c $unifycrd
+elif [[ -x $(type -p su) ]]; then
+    su -s /bin/bash $CSM_USER_NAME -c $unifycrd
+else
+    # WHAT KIND OF SYSTEM IS THIS?
+    echo "ERROR: $0 - unable to run unifycrd as user $CSM_USER_NAME"
+    exit 1
+fi
+
