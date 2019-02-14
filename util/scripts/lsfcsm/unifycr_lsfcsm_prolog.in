@@ -1,0 +1,25 @@
+#!/bin/bash
+
+bindir=@unifycr_bin_path@
+unifycrd=$bindir/unifycrd
+
+exec &>> /var/log/unifycr-lsfcsm.$CSM_PRIMARY_JOB_ID
+
+echo "Starting UnifyCR daemon"
+
+if [[ -f /etc/rc.d/init.d/functions ]]; then
+    source /etc/rc.d/init.d/functions
+    echo "running: daemon --user=$CSM_USER_NAME $unifycrd"
+    daemon --user=$CSM_USER_NAME $unifycrd &
+elif [[ -x $(type -p runuser) ]]; then
+    echo "running: runuser -s /bin/bash $CSM_USER_NAME -c $unifycrd"
+    runuser -s /bin/bash $CSM_USER_NAME -c $unifycrd &
+elif [[ -x $(type -p su) ]]; then
+    echo "running: su -s /bin/bash $CSM_USER_NAME -c $unifycrd"
+    su -s /bin/bash $CSM_USER_NAME -c $unifycrd &
+else
+    # WHAT KIND OF SYSTEM IS THIS?
+    echo "ERROR: $0 - unable to run unifycrd as user $CSM_USER_NAME"
+    exit 1
+fi
+
