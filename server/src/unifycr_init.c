@@ -52,6 +52,9 @@
 
 #include "unifycr_clientcalls_rpc.h"
 #include "unifycr_server.h"
+#include "unifycr_servercalls_rpc.h"
+#include "unifycr_server.h"
+#include "unifycr_rpc_util.h"
 
 int* local_rank_lst;
 int local_rank_cnt;
@@ -64,24 +67,9 @@ arraylist_t* thrd_list;
 int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
 
 unifycr_cfg_t server_cfg;
+ServerRpcContext_t* unifycr_server_rpc_context;
 
 static const int IO_POOL_SIZE = 2;
-
-/* publishes server RPC address to a place where clients can find it */
-static void addr_publish_server_rpc(const char* addr)
-{
-    /* TODO: support other publish modes like PMIX */
-
-    /* write server address to /dev/shm/ for client on node to
-     * read from */
-    FILE* fp = fopen("/dev/shm/svr_id", "w+");
-    if (fp != NULL) {
-        fprintf(fp, "%s", addr);
-        fclose(fp);
-    } else {
-        LOGERR("Error writing server rpc addr to file `/dev/shm/svr_id'");
-    }
-}
 
 /* find_address - Resolves a name string to an address structure.
  *
@@ -121,7 +109,7 @@ static int find_address(
     printf("addr string:%s\n", addr_string);
 
     /* publish rpc address of server for local clients */
-    addr_publish_server_rpc(addr_self_string);
+    rpc_publish_server_addr(addr_self_string);
 
     return 0;
 }
@@ -135,73 +123,74 @@ static margo_instance_id setup_sm_target()
 {
     /* initialize margo */
     hg_return_t hret;
-    margo_instance_id mid;
     hg_addr_t addr_self;
     char addr_self_string[128];
     hg_size_t addr_self_string_sz = 128;
-    mid = margo_init(SMSVR_ADDR_STR, MARGO_SERVER_MODE,
-                     1, 1);
-    assert(mid);
+
+    /* create rpc server context to store information needed to call rpcs */
+    unifycr_server_rpc_context = malloc(sizeof(ServerRpcContext_t));
+    assert(unifycr_server_rpc_context);
+
+    unifycr_server_rpc_context->mid = margo_init(SMSVR_ADDR_STR,
+                                                 MARGO_SERVER_MODE, 1, 1);
+    assert(unifycr_server_rpc_context->mid);
 
     /* figure out what address this server is listening on */
-    hret = margo_addr_self(mid, &addr_self);
+    hret = margo_addr_self(unifycr_server_rpc_context->mid, &addr_self);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_addr_self()");
-        margo_finalize(mid);
+        margo_finalize(unifycr_server_rpc_context->mid);
         return NULL;
     }
-    hret = margo_addr_to_string(mid, addr_self_string,
-                                &addr_self_string_sz, addr_self);
+    hret = margo_addr_to_string(unifycr_server_rpc_context->mid,
+                                addr_self_string, &addr_self_string_sz,
+                                addr_self);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_addr_to_string()");
-        margo_addr_free(mid, addr_self);
-        margo_finalize(mid);
+        margo_addr_free(unifycr_server_rpc_context->mid, addr_self);
+        margo_finalize(unifycr_server_rpc_context->mid);
         return NULL;
     }
-    margo_addr_free(mid, addr_self);
+    margo_addr_free(unifycr_server_rpc_context->mid, addr_self);
 
-    printf("# accepting RPCs on address \"%s\"\n", addr_self_string);
+    printf("# accepting RPCs on server address \"%s\"\n", addr_self_string);
 
     /* publish rpc address of server for local clients */
-    addr_publish_server_rpc(addr_self_string);
+    rpc_publish_server_addr(addr_self_string);
 
-    //margo_instance_id mid = margo_init_pool(*progress_pool, handler_pool,
-    //                                    hg_context);
-    //assert(mid);
-
-    MARGO_REGISTER(mid, "unifycr_mount_rpc",
+    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_mount_rpc",
                    unifycr_mount_in_t, unifycr_mount_out_t,
                    unifycr_mount_rpc);
 
-    MARGO_REGISTER(mid, "unifycr_unmount_rpc",
+    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_unmount_rpc",
                      unifycr_unmount_in_t, unifycr_unmount_out_t,
                      unifycr_unmount_rpc);
 
-    MARGO_REGISTER(mid, "unifycr_metaget_rpc",
+    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_metaget_rpc",
                    unifycr_metaget_in_t, unifycr_metaget_out_t,
                    unifycr_metaget_rpc);
 
-    MARGO_REGISTER(mid, "unifycr_metaset_rpc",
+    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_metaset_rpc",
                    unifycr_metaset_in_t, unifycr_metaset_out_t,
                    unifycr_metaset_rpc);
 
-    MARGO_REGISTER(mid, "unifycr_fsync_rpc",
+    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_fsync_rpc",
                    unifycr_fsync_in_t, unifycr_fsync_out_t,
                    unifycr_fsync_rpc);
 
-    MARGO_REGISTER(mid, "unifycr_filesize_rpc",
+    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_filesize_rpc",
                    unifycr_filesize_in_t, unifycr_filesize_out_t,
                    unifycr_filesize_rpc);
 
-    MARGO_REGISTER(mid, "unifycr_read_rpc",
+    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_read_rpc",
                    unifycr_read_in_t, unifycr_read_out_t,
-                   unifycr_read_rpc);
+                   unifycr_read_rpc)
 
-    MARGO_REGISTER(mid, "unifycr_mread_rpc",
+    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_mread_rpc",
                    unifycr_mread_in_t, unifycr_mread_out_t,
                    unifycr_mread_rpc);
 
-    return mid;
+    return unifycr_server_rpc_context->mid;
 }
 
 /* setup_verbs_target - Initializes the inter-server target.
@@ -430,6 +419,26 @@ static void daemonize(void)
     }
 }
 
+/* free resources allocated when setting up server
+ * frees structure allocated and sets pcontect to NULL */
+static int unifycr_server_rpc_finalize(ServerRpcContext_t** pcontext)
+{
+    if (pcontext != NULL && *pcontext != NULL) {
+        /* define a temporary to refer to context */
+        ServerRpcContext_t* ctx = *pcontext;
+
+        /* shut down margo */
+        margo_finalize(ctx->mid);
+
+        /* free memory allocated for context structure,
+         * and set caller's pointer to NULL */
+        free(ctx);
+        *pcontext = NULL;
+    }
+
+    return UNIFYCR_SUCCESS;
+}
+
 int main(int argc, char* argv[])
 {
     int provided;
@@ -559,6 +568,9 @@ int main(int argc, char* argv[])
     }
 
     margo_wait_for_finalize(mid);
+
+    unifycr_server_rpc_finalize(&unifycr_server_rpc_context);
+
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
 

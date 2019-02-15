@@ -13,6 +13,10 @@ BASE_SRCS = \
   rm_enumerator.c \
   tinyexpr.h \
   tinyexpr.c \
+  unifycr_server.h \
+  unifycr_servercalls_rpc.h \
+  unifycr_client.h \
+  unifycr_clientcalls_rpc.h \
   unifycr_const.h \
   unifycr_configurator.h \
   unifycr_configurator.c \
@@ -20,6 +24,8 @@ BASE_SRCS = \
   unifycr_runstate.c \
   unifycr_meta.h \
   unifycr_pmix.h \
+  unifycr_rpc_util.h \
+  unifycr_rpc_util.c \
   unifycr_log.h \
   unifycr_log.c \
   unifycr_shm.h \

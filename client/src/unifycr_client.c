@@ -63,6 +63,7 @@ int32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t**
     hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
     free((void*)in.external_spill_dir);
+    free((void*)in.client_addr_str);
 
     /* decode response */
     hret = margo_get_output(handle, &out);

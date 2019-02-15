@@ -1,12 +1,12 @@
 #ifndef __UNIFYCR_CLIENT_H
 #define __UNIFYCR_CLIENT_H
 
-/*******************************************************************************
+/************************************************
  * unifycr_client.h
  *
  * Declarations for the unifycr client interface.
  *
- * ******************************************************************************/
+ * ************************************************/
 
 #include "unifycr-internal.h"
 
@@ -30,12 +30,6 @@ typedef struct ClientRpcContext {
 
 /* global rpc context (probably should find a better spot for this) */
 extern unifycr_client_rpc_context_t* unifycr_rpc_context;
-
-/*
-int unifycr_client_rpc_init(char* svr_addr_str,
-                             unifycr_client_rpc_context_t**
-                             unifycr_rpc_context);
-*/
 
 int32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t**
                                         unifycr_rpc_context);
