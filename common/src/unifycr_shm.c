@@ -34,7 +34,7 @@ void* unifycr_shm_alloc(const char* name, size_t size)
 
     /* open shared memory file */
     errno = 0;
-    int fd = shm_open(name, MMAP_OPEN_FLAG, MMAP_OPEN_MODE);
+    int fd = shm_open(name, O_RDWR | O_CREAT, S_IRWXU | S_IRWXG);
     if (fd == -1) {
         /* failed to open shared memory */
         LOGERR("Failed to open shared memory %s errno=%d (%s)",
