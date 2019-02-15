@@ -63,6 +63,9 @@
 
 #include "unifycr_client.h"
 #include "unifycr_clientcalls_rpc.h"
+#include "unifycr_server.h"
+#include "unifycr_servercalls_rpc.h"
+#include "unifycr_rpc_util.h"
 
 #include "unifycr_log.h"
 
@@ -2102,6 +2105,38 @@ int unifycr_sync_to_del(unifycr_mount_in_t* in)
     char* external_spill_dir = malloc(UNIFYCR_MAX_FILENAME);
     strcpy(external_spill_dir, external_data_dir);
 
+    /* vars used to get margo address of this client */
+    hg_return_t hret;
+    hg_addr_t addr_self;
+    char addr_self_string[128];
+    hg_size_t addr_self_string_sz = 128;
+
+    /* figure out what address this client is listening on */
+    hret = margo_addr_self((unifycr_rpc_context)->mid, &addr_self);
+
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_addr_self()");
+        margo_finalize((unifycr_rpc_context)->mid);
+        return NULL;
+    }
+
+    hret = margo_addr_to_string((unifycr_rpc_context)->mid, addr_self_string,
+                                &addr_self_string_sz, addr_self);
+
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_addr_to_string()");
+        margo_addr_free((unifycr_rpc_context)->mid, addr_self);
+        margo_finalize((unifycr_rpc_context)->mid);
+        return NULL;
+    }
+
+    margo_addr_free((unifycr_rpc_context)->mid, addr_self);
+
+    /* resolve server address */
+    char* client_addr_str =
+        (char*)malloc((strlen(addr_self_string) + 1) * sizeof(char));
+    strcpy(client_addr_str, addr_self_string);
+
     in->app_id             = app_id;
     in->local_rank_idx     = local_rank_idx;
     in->dbg_rank           = glb_rank;
@@ -2116,6 +2151,7 @@ int unifycr_sync_to_del(unifycr_mount_in_t* in)
     in->data_offset        = data_offset;
     in->data_size          = data_size;
     in->external_spill_dir = external_spill_dir;
+    in->client_addr_str    = client_addr_str;
 
     return UNIFYCR_SUCCESS;
 }
@@ -2190,9 +2226,16 @@ static int unifycr_init_req_shm(int local_rank_idx, int app_id)
 
 /* unifycr_init_rpc is replacing unifycr_init_socket */
 static int unifycr_client_rpc_init(
+    int local_rank_idx,
+    int app_id,
     char* svr_addr_str,
     unifycr_client_rpc_context_t** unifycr_rpc_context)
 {
+    /* initialize margo */
+    hg_return_t hret;
+    hg_addr_t addr_self;
+    hg_size_t addr_self_string_sz = 128;
+
     *unifycr_rpc_context = malloc(sizeof(unifycr_client_rpc_context_t));
     assert(*unifycr_rpc_context);
 
@@ -2207,9 +2250,10 @@ static int unifycr_client_rpc_init(
 
     /* initialize margo */
     LOGDBG("svr_addr_str:%s", svr_addr_str);
-    (*unifycr_rpc_context)->mid = margo_init(proto, MARGO_CLIENT_MODE,
-                                  1, 0);
+    (*unifycr_rpc_context)->mid = margo_init(proto, MARGO_SERVER_MODE,
+                                  1, 1);
     assert((*unifycr_rpc_context)->mid);
+
     margo_diag_start((*unifycr_rpc_context)->mid);
 
     /* register read rpc with mercury */
@@ -2586,36 +2630,6 @@ static int CountTasksPerNode(int rank, int numTasks)
     return 0;
 }
 
-/* returns server rpc address in newly allocated string
- * to be freed by caller, returns NULL if not found */
-static char* addr_lookup_server_rpc()
-{
-    /* returns NULL if we can't find server address */
-    char* str = NULL;
-
-    /* TODO: support other lookup methods here like PMIX */
-
-    /* read server address string from well-known file name in ramdisk */
-    FILE* fp = fopen("/dev/shm/svr_id", "r");
-    if (fp != NULL) {
-        /* opened the file, now read the address string */
-        char addr_string[50];
-        int rc = fscanf(fp, "%s", addr_string);
-        if (rc == 1) {
-            /* read the server address, dup a copy of it */
-            str = strdup(addr_string);
-        }
-        fclose(fp);
-    }
-
-    /* print server address (debugging) */
-    if (str != NULL) {
-        LOGDBG("rpc address: %s", str);
-    }
-
-    return str;
-}
-
 /**
  * mount a file system at a given prefix
  * subtype: 0-> log-based file system;
@@ -2711,12 +2725,13 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
      ************************/
 
     /* open rpc connection to server */
-    char* addr_string = addr_lookup_server_rpc();
+    char* addr_string = rpc_lookup_server_addr();
     if (addr_string == NULL) {
         LOGERR("Failed to find server address");
         return UNIFYCR_FAILURE;
     }
-    unifycr_client_rpc_init(addr_string, &unifycr_rpc_context);
+    unifycr_client_rpc_init(local_rank_idx, app_id, addr_string,
+                            &unifycr_rpc_context);
     free(addr_string);
 
     /* call client rpc function here (which calls unifycr_sync_to_del)

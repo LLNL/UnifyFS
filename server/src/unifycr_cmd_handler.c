@@ -38,6 +38,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
+#include "unifycr_rpc_util.h"
 #include "unifycr_log.h"
 #include "unifycr_global.h"
 #include "unifycr_meta.h"
@@ -48,7 +49,8 @@
 #include "unifycr_sock.h"
 #include "unifycr_metadata.h"
 #include "unifycr_shm.h"
-#include "../../client/src/unifycr_clientcalls_rpc.h"
+#include "unifycr_server.h"
+#include "unifycr_clientcalls_rpc.h"
 
 /**
  * attach to the client-side shared memory
@@ -368,6 +370,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
             tmp_config->shm_superblocks[i]     = NULL;
             tmp_config->spill_log_fds[i]       = -1;
             tmp_config->spill_index_log_fds[i] = -1;
+            tmp_config->client_addr[i]         = HG_ADDR_NULL;
         }
 
         /* insert new app_config into our list, indexed by app_id */
@@ -376,6 +379,13 @@ static void unifycr_mount_rpc(hg_handle_t handle)
             ret = rc;
         }
     }
+
+    /* convert client_addr_str sent in input struct to margo hg_addr_t,
+     * which is the address type needed to call rpc functions, etc */
+    hg_return_t hret =
+        margo_addr_lookup(unifycr_server_rpc_context->mid,
+                          in.client_addr_str,
+                          &(tmp_config->client_addr[client_id]));
 
     /* record client id of process on this node */
     tmp_config->client_ranks[client_id] = client_id;
@@ -413,7 +423,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     out.max_recs_per_slice = max_recs_per_slice;
 
     /* send output back to caller */
-    hg_return_t hret = margo_respond(handle, &out);
+    hret = margo_respond(handle, &out);
     assert(hret == HG_SUCCESS);
 
     /* free margo resources */
@@ -462,6 +472,10 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
 
     /* destroy the sockets except for the ones for acks */
     sock_sanitize_cli(client_id);
+
+    /* free margo hg_addr_t client addresses in app_config struct */
+    margo_addr_free(unifycr_server_rpc_context->mid,
+                    app_config->client_addr[client_id]);
 
     /* build output structure to return to caller */
     unifycr_unmount_out_t out;

@@ -15,8 +15,7 @@ unifycrd_SOURCES = arraylist.c \
                    unifycr_sock.c \
                    unifycr_sock.h \
                    unifycr_global.h \
-                   unifycr_setup.h \
-                   unifycr_server.h
+                   unifycr_setup.h
 
 unifycrd_LDFLAGS = -static
 

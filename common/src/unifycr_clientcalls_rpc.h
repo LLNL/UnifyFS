@@ -1,15 +1,17 @@
 #ifndef __UNIFYCR_CLIENTCALLS_RPC_H
 #define __UNIFYCR_CLIENTCALLS_RPC_H
 
-/*******************************************************************************
+/*****************************************
  * unifycr_clientcalls_rpc.h
- * Declarations for the RPC shared-memory interfaces to the UCR server.
- ********************************************************************************/
+ * Declarations for the RPC shared-memory
+ * interfaces to the UCR server.
+ *******************************************/
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <margo.h>
+#include <mercury_types.h>
 #include <mercury.h>
 #include <mercury_proc_string.h>
 
@@ -32,6 +34,7 @@ MERCURY_GEN_PROC(unifycr_mount_in_t,
                  ((int32_t)(local_rank_idx))
                  ((int32_t)(dbg_rank))
                  ((int32_t)(num_procs_per_node))
+                 ((hg_const_string_t)(client_addr_str))
                  ((hg_size_t)(req_buf_sz))
                  ((hg_size_t)(recv_buf_sz))
                  ((hg_size_t)(superblock_sz))
