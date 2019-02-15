@@ -38,6 +38,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
+#include "unifycr_util.h"
 #include "unifycr_log.h"
 #include "unifycr_global.h"
 #include "unifycr_meta.h"
@@ -48,6 +49,7 @@
 #include "unifycr_sock.h"
 #include "unifycr_metadata.h"
 #include "unifycr_shm.h"
+#include "unifycr_server.h"
 #include "../../client/src/unifycr_clientcalls_rpc.h"
 
 /**
@@ -368,6 +370,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
             tmp_config->shm_superblocks[i]     = NULL;
             tmp_config->spill_log_fds[i]       = -1;
             tmp_config->spill_index_log_fds[i] = -1;
+            tmp_config->client_addr[i]         = HG_ADDR_NULL;
         }
 
         /* insert new app_config into our list, indexed by app_id */
@@ -382,6 +385,16 @@ static void unifycr_mount_rpc(hg_handle_t handle)
 
     /* record global rank of client process for debugging */
     tmp_config->dbg_ranks[client_id] = in.dbg_rank;
+
+    /* record client id of process on this node */
+    tmp_config->client_addr[client_id] = client_id;
+
+    /* lookup client address for this app id and store in app config list */
+    char* client_addr_str = addr_lookup_client(app_id, client_id);
+    ret = margo_addr_lookup(unifycr_server_rpc_context->mid,
+                            client_addr_str,
+                            &(tmp_config->client_addr[client_id]));
+    free(client_addr_str);
 
     /* attach to shared memory regions of this client */
     rc = attach_to_shm(tmp_config, app_id, client_id);

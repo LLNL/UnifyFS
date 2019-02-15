@@ -21,20 +21,8 @@ typedef struct ServerRpcContext {
     margo_instance_id mid;
     hg_context_t* hg_context;
     hg_class_t* hg_class ;
-    hg_id_t unifycr_read_rpc_id;
-    hg_id_t unifycr_fsync_rpc_id;
-    hg_id_t unifycr_mount_rpc_id;
-    hg_id_t unifycr_unmount_rpc_id;
-    hg_id_t unifycr_metaget_rpc_id;
-    hg_id_t unifycr_metaset_rpc_id;
-    //hg_id_t write_rpc_id;
-    //hg_id_t chkdir_rpc_id;
-    //hg_id_t addfile_rpc_id;
-    //hg_id_t open_rpc_id;
-    //hg_id_t close_rpc_id;
-    //hg_id_t getfilestat_rpc_id;
-    //hg_id_t getdircontents_rpc_id;
-    //hg_id_t readtransfer_rpc_id;
+    hg_addr_t client_addr;
+    /* TODO: rpc id's executed on client go here */
 } ServerRpcContext_t;
 
 static const char* SMSVR_ADDR_STR   = "na+sm://";
@@ -46,19 +34,8 @@ extern bool usetcp;
 extern uint16_t total_rank;
 extern uint16_t my_rank;
 
-typedef struct ServerAddress {
-    char* string_address;
-    hg_addr_t svr_addr;
-} ServerAddress_t;
-
-extern char** server_addresses;
-
-extern ServerRpcContext_t* unifycr_rpc_context;
+extern ServerRpcContext_t* unifycr_server_rpc_context;
 
 margo_instance_id unifycr_server_rpc_init();
-
-void unifycr_server_addresses_init();
-
-int unifycr_inter_server_client_init();
 
 #endif

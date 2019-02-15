@@ -32,6 +32,7 @@
 
 #include <pthread.h>
 #include <stdlib.h>
+#include <margo.h>
 #include "unifycr_configurator.h"
 #include "arraylist.h"
 
@@ -200,6 +201,9 @@ typedef struct {
     char *shm_superblocks[MAX_NUM_CLIENTS]; /* superblock data */
     char *shm_req_bufs[MAX_NUM_CLIENTS];    /* read request shm */
     char *shm_recv_bufs[MAX_NUM_CLIENTS];   /* read reply shm */
+
+    /* client address for rpc invocation */
+    hg_addr_t* client_addr[MAX_NUM_CLIENTS];
 
     /* file names */
     char super_buf_name[MAX_NUM_CLIENTS][UNIFYCR_MAX_FILENAME];
