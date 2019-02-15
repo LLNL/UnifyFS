@@ -1768,7 +1768,19 @@ static void* unifycr_superblock_shmget(size_t size, key_t key)
 
     /* init our global variables to point to spots in superblock */
     unifycr_init_pointers(addr);
-    unifycr_init_structures();
+
+    /* initialize structures in superblock if it's newly allocated,
+     * we depend on shm_open setting all bytes to 0 to know that
+     * it is not initialized */
+    int32_t initialized = *(int32_t*)addr;
+    if (initialized == 0) {
+        /* not yet initialized, so initialize values within superblock */
+        unifycr_init_structures();
+
+        /* superblock structure has been initialized,
+         * so set flag to indicate that fact */
+        *(int32_t*)addr = 0xDEADBEEF;
+    }
 
     /* return starting memory address of super block */
     return addr;

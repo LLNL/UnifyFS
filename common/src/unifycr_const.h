@@ -79,8 +79,6 @@
 
 // Client and Command Handler
 #define CMD_BUF_SIZE (2 * KIB)
-#define MMAP_OPEN_FLAG (O_RDWR|O_CREAT)
-#define MMAP_OPEN_MODE 00777
 
 // Client
 #define UNIFYCR_MAX_FILES 128
