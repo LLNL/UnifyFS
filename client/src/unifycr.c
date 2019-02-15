@@ -2739,18 +2739,14 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
      ************************/
 
     /* add mount point as a new directory in the file list */
-    if (unifycr_get_fid_from_path(prefix) >= 0) {
-        /* we can't mount this location, because it already exists */
-        LOGERR("can't mount this location, because it already exists");
-        errno = EEXIST;
-        return -1;
-    } else {
-        /* claim an entry in our file list */
+    if (unifycr_get_fid_from_path(prefix) < 0) {
+        /* no entry exists for mount point, so create one */
         int fid = unifycr_fid_create_directory(prefix);
         if (fid < 0) {
             /* if there was an error, return it */
-            LOGERR("fid %d < 0", fid);
-            return fid;
+            LOGERR("failed to create directory entry for mount point: `%s'",
+                prefix);
+            return UNIFYCR_FAILURE;
         }
     }
 
