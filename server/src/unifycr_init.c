@@ -828,20 +828,20 @@ static int unifycr_exit()
         for (j = 0; j < MAX_NUM_CLIENTS; j++) {
             /* release request buffer shared memory region */
             if (app->shm_req_bufs[j] != NULL) {
-                unifycr_shm_free(app->req_buf_name[j],
-                    app->req_buf_sz, (void**)&(app->shm_req_bufs[j]));
+                unifycr_shm_free(app->req_buf_name[j], app->req_buf_sz,
+                                 (void**)&(app->shm_req_bufs[j]));
             }
 
             /* release receive buffer shared memory region */
             if (app->shm_recv_bufs[j] != NULL) {
-                unifycr_shm_free(app->recv_buf_name[j],
-                app->recv_buf_sz, (void**)&(app->shm_recv_bufs[j]));
+                unifycr_shm_free(app->recv_buf_name[j], app->recv_buf_sz,
+                                 (void**)&(app->shm_recv_bufs[j]));
             }
 
             /* release super block shared memory region */
             if (app->shm_superblocks[j] != NULL) {
-                unifycr_shm_free(app->super_buf_name[j],
-                    app->superblock_sz, (void**)&(app->shm_superblocks[j]));
+                unifycr_shm_free(app->super_buf_name[j], app->superblock_sz,
+                                 (void**)&(app->shm_superblocks[j]));
             }
 
             /* close spill log file and delete it */

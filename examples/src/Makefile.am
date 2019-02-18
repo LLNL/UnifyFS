@@ -1,15 +1,21 @@
-libexec_PROGRAMS = sysio-write-gotcha sysio-write-static \
-                  sysio-read-gotcha sysio-read-static \
-                  sysio-writeread-gotcha sysio-writeread-static sysio-writeread-posix \
-                  sysio-writeread2-gotcha sysio-writeread2-static \
-                  sysio-dir-gotcha sysio-dir-static \
-                  sysio-stat-gotcha sysio-stat-static \
-                  sysio-cp-gotcha sysio-cp-static \
-                  app-mpiio-gotcha app-mpiio-static \
-                  app-btio-gotcha app-btio-static \
-                  app-tileio-gotcha app-tileio-static
+libexec_PROGRAMS = \
+  sysio-write-gotcha sysio-write-static \
+  sysio-read-gotcha sysio-read-static \
+  sysio-writeread-gotcha sysio-writeread-static sysio-writeread-posix \
+  sysio-writeread2-gotcha sysio-writeread2-static \
+  sysio-dir-gotcha sysio-dir-static \
+  sysio-stat-gotcha sysio-stat-static \
+  sysio-cp-gotcha sysio-cp-static \
+  writeread-posix writeread-gotcha writeread-static \
+  cr-posix cr-gotcha cr-static \
+  app-mpiio-gotcha app-mpiio-static \
+  app-btio-gotcha app-btio-static \
+  app-tileio-gotcha app-tileio-static
 
-noinst_HEADERS = testlib.h
+noinst_HEADERS = \
+  testlib.h \
+  testutil.h \
+  testutil_rdwr.h
 
 test_gotcha_ldadd = $(top_builddir)/client/src/libunifycr_gotcha.la -lrt -lm $(MPI_CLDFLAGS) $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 test_static_ldadd = $(top_builddir)/client/src/libunifycr.la -lrt -lm
@@ -91,6 +97,36 @@ sysio_cp_static_CPPFLAGS = $(test_cppflags)
 sysio_cp_static_LDADD   = $(test_static_ldadd)
 sysio_cp_static_LDFLAGS = $(test_static_ldflags)
 
+writeread_posix_SOURCES  = writeread.c
+writeread_posix_CPPFLAGS = $(AM_CPPFLAGS) -DDISABLE_UNIFYCR $(MPI_CFLAGS)
+writeread_posix_LDADD    = -lrt -lm
+writeread_posix_LDFLAGS  = $(AM_LDFLAGS) $(MPI_CLDFLAGS)
+
+writeread_gotcha_SOURCES  = writeread.c
+writeread_gotcha_CPPFLAGS = $(test_cppflags)
+writeread_gotcha_LDADD    = $(test_gotcha_ldadd)
+writeread_gotcha_LDFLAGS  = $(AM_LDFLAGS)
+
+writeread_static_SOURCES  = writeread.c
+writeread_static_CPPFLAGS = $(test_cppflags)
+writeread_static_LDADD    = $(test_static_ldadd)
+writeread_static_LDFLAGS  = $(test_static_ldflags)
+
+cr_posix_SOURCES  = checkpoint-restart.c
+cr_posix_CPPFLAGS = $(AM_CPPFLAGS) -DDISABLE_UNIFYCR $(MPI_CFLAGS)
+cr_posix_LDADD    = -lrt -lm
+cr_posix_LDFLAGS  = $(AM_LDFLAGS) $(MPI_CLDFLAGS)
+
+cr_gotcha_SOURCES  = checkpoint-restart.c
+cr_gotcha_CPPFLAGS = $(test_cppflags)
+cr_gotcha_LDADD    = $(test_gotcha_ldadd)
+cr_gotcha_LDFLAGS  = $(AM_LDFLAGS)
+
+cr_static_SOURCES  = checkpoint-restart.c
+cr_static_CPPFLAGS = $(test_cppflags)
+cr_static_LDADD    = $(test_static_ldadd)
+cr_static_LDFLAGS  = $(test_static_ldflags)
+
 app_mpiio_gotcha_SOURCES = app-mpiio.c
 app_mpiio_gotcha_CPPFLAGS = $(test_cppflags)
 app_mpiio_gotcha_LDADD   = $(test_gotcha_ldadd)
@@ -122,8 +158,9 @@ app_tileio_static_LDADD   = $(test_static_ldadd)
 app_tileio_static_LDFLAGS = $(test_static_ldflags)
 
 if HAVE_HDF5
-libexec_PROGRAMS += app-hdf5-create-gotcha \
-                   app-hdf5-writeread-gotcha
+libexec_PROGRAMS += \
+  app-hdf5-create-gotcha \
+  app-hdf5-writeread-gotcha
 
 app_hdf5_create_gotcha_SOURCES = app-hdf5-create.c
 app_hdf5_create_gotcha_CPPFLAGS = $(test_cppflags) $(HDF5_CPPFLAGS)

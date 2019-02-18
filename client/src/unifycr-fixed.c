@@ -392,6 +392,8 @@ static int unifycr_logio_chunk_write(
     /* split the write requests larger than unifycr_key_slice_range into
      * the ones smaller than unifycr_key_slice_range
      * */
+    index_set_t tmp_index_set;
+    memset(&tmp_index_set, 0, sizeof(tmp_index_set));
     unifycr_split_index(&cur_idx, &tmp_index_set,
                         unifycr_key_slice_range);
 

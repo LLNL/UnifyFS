@@ -73,9 +73,6 @@ static int attach_to_shm(
     /* define name of superblock region for this client */
     sprintf(shm_name, "%d-super-%d", app_id, client_side_id);
 
-    /* copy name of superblock region */
-    strcpy(app_config->super_buf_name[client_side_id], shm_name);
-
     /* attach to superblock */
     void* addr = unifycr_shm_alloc(shm_name, app_config->superblock_sz);
     if (addr == NULL) {
@@ -84,14 +81,14 @@ static int attach_to_shm(
     }
     app_config->shm_superblocks[client_side_id] = addr;
 
+    /* copy name of superblock region */
+    strcpy(app_config->super_buf_name[client_side_id], shm_name);
+
     /* attach shared request buffer, a request buffer is created by each
      * client to convey the client-side read request to the delegator */
 
     /* define name of request buffer region for this client */
     sprintf(shm_name, "%d-req-%d", app_id, client_side_id);
-
-    /* copy name of request buffer region */
-    strcpy(app_config->req_buf_name[client_side_id], shm_name);
 
     /* attach to request buffer region */
     addr = unifycr_shm_alloc(shm_name, app_config->req_buf_sz);
@@ -101,15 +98,15 @@ static int attach_to_shm(
     }
     app_config->shm_req_bufs[client_side_id] = addr;
 
+    /* copy name of request buffer region */
+    strcpy(app_config->req_buf_name[client_side_id], shm_name);
+
     /* initialize shared receive buffer, a request buffer is created
      * by each client for the delegator to temporarily buffer the
      * received data for this client */
 
     /* define name of receive buffer region for this client */
     sprintf(shm_name, "%d-recv-%d", app_id, client_side_id);
-
-    /* copy name of request buffer region */
-    strcpy(app_config->recv_buf_name[client_side_id], shm_name);
 
     /* attach to request buffer region */
     addr = unifycr_shm_alloc(shm_name, app_config->recv_buf_sz);
@@ -118,6 +115,9 @@ static int attach_to_shm(
         return (int)UNIFYCR_ERROR_SHMEM;
     }
     app_config->shm_recv_bufs[client_side_id] = addr;
+
+    /* copy name of request buffer region */
+    strcpy(app_config->recv_buf_name[client_side_id], shm_name);
 
     return ULFS_SUCCESS;
 }
@@ -459,16 +459,18 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
     rm_cmd_exit(thrd_ctrl);
 
     /* detach from the request shared memory */
-    unifycr_shm_free(app_config->req_buf_name[client_id],
-                     app_config->req_buf_sz,
-                     (void**)&(app_config->shm_req_bufs[client_id]));
-    app_config->shm_req_bufs[client_id] = NULL;
+    if (NULL != app_config->shm_req_bufs[client_id]) {
+        unifycr_shm_free(app_config->req_buf_name[client_id],
+                         app_config->req_buf_sz,
+                         (void**)&(app_config->shm_req_bufs[client_id]));
+    }
 
     /* detach from the read shared memory buffer */
-    unifycr_shm_free(app_config->recv_buf_name[client_id],
-                     app_config->recv_buf_sz,
-                     (void**)&(app_config->shm_recv_bufs[client_id]));
-    app_config->shm_recv_bufs[client_id] = NULL;
+    if (NULL != app_config->shm_recv_bufs[client_id]) {
+        unifycr_shm_free(app_config->recv_buf_name[client_id],
+                         app_config->recv_buf_sz,
+                         (void**)&(app_config->shm_recv_bufs[client_id]));
+    }
 
     /* destroy the sockets except for the ones for acks */
     sock_sanitize_cli(client_id);

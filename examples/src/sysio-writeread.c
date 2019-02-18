@@ -137,15 +137,15 @@ int main(int argc, char* argv[])
     }
 
     size_t n_tran_per_blk = blk_sz / tran_sz;
+    double rank_mib = (double)(blk_sz * num_blk) / 1048576;
+    double total_mib = rank_mib * num_rank;
 
     char* buf = malloc(tran_sz);
-
     if (buf == NULL) {
         return -1;
     }
 
     int byte = (int)'0' + rank;
-
     memset(buf, byte, tran_sz);
 
 #ifndef NO_UNIFYCR
@@ -165,15 +165,14 @@ int main(int argc, char* argv[])
     }
 
     int open_flags = O_CREAT | O_RDWR;
-
     fd = open(tmpfname, open_flags, 0644);
     if (fd < 0) {
         printf("open file failure\n");
         fflush(stdout);
         return -1;
     }
-    MPI_Barrier(MPI_COMM_WORLD);
 
+    MPI_Barrier(MPI_COMM_WORLD);
     gettimeofday(&write_start, NULL);
 
     for (i = 0; i < num_blk; i++) {
@@ -196,6 +195,7 @@ int main(int argc, char* argv[])
     fsync(fd);
 
     gettimeofday(&write_end, NULL);
+    free(buf);
 
     meta_time += 1000000 * (write_end.tv_sec - meta_start.tv_sec)
                  + write_end.tv_usec - meta_start.tv_usec;
@@ -205,9 +205,20 @@ int main(int argc, char* argv[])
                   + write_end.tv_usec - write_start.tv_usec;
     write_time = write_time / 1000000;
 
-    MPI_Barrier(MPI_COMM_WORLD);
+    double agg_write_bw, max_write_time;
+    double write_bw = rank_mib / write_time;
+    MPI_Reduce(&write_bw, &agg_write_bw, 1, MPI_DOUBLE, MPI_SUM,
+               0, MPI_COMM_WORLD);
+    MPI_Reduce(&write_time, &max_write_time, 1, MPI_DOUBLE, MPI_MAX,
+               0, MPI_COMM_WORLD);
+    double min_write_bw = total_mib / max_write_time;
 
-    free(buf);
+    if (rank == 0) {
+        printf("Aggregate Write BW is %.3lf MiB/s\n"
+               "  Minimum Write BW is %.3lf MiB/s\n\n",
+               agg_write_bw, min_write_bw);
+        fflush(stdout);
+    }
 
     /* read buffer */
     char* read_buf = calloc(num_blk, blk_sz);
@@ -255,67 +266,43 @@ int main(int argc, char* argv[])
         }
     }
 
+    MPI_Barrier(MPI_COMM_WORLD);
     gettimeofday(&read_start, NULL);
 
     ret = lio_listio(LIO_WAIT, cb_list, num_reqs, NULL);
-
     if (ret < 0) {
         perror("lio_listio failed");
     }
 
     gettimeofday(&read_end, NULL);
 
+    close(fd);
+    free(read_buf);
+
     read_time = (read_end.tv_sec - read_start.tv_sec) * 1000000
                 + read_end.tv_usec - read_start.tv_usec;
     read_time = read_time / 1000000;
 
-    close(fd);
-    free(read_buf);
+    double agg_read_bw, max_read_time;
+    double read_bw = rank_mib / read_time;
+    MPI_Reduce(&read_bw, &agg_read_bw, 1, MPI_DOUBLE, MPI_SUM,
+               0, MPI_COMM_WORLD);
+    MPI_Reduce(&read_time, &max_read_time, 1, MPI_DOUBLE, MPI_MAX,
+               0, MPI_COMM_WORLD);
+    double min_read_bw = total_mib / max_read_time;
 
-    MPI_Barrier(MPI_COMM_WORLD);
+    if (rank == 0) {
+        printf("Aggregate Read BW is %.3lf MiB/s\n"
+               "  Minimum Read BW is %.3lf MiB/s\n\n",
+               agg_read_bw, min_read_bw);
+        fflush(stdout);
+    }
 
 #ifndef NO_UNIFYCR
     if (use_unifycr) {
         unifycr_unmount();
     }
 #endif
-
-    double rank_mib = (double)(blk_sz * num_blk) / 1048576;
-
-    double total_mib = rank_mib * num_rank;
-
-    double write_bw = rank_mib / write_time;
-
-    double read_bw = rank_mib / read_time;
-
-    double agg_write_bw, agg_read_bw;
-    double max_write_time, max_read_time;
-
-    MPI_Reduce(&write_bw, &agg_write_bw, 1, MPI_DOUBLE, MPI_SUM,
-               0, MPI_COMM_WORLD);
-
-    MPI_Reduce(&write_time, &max_write_time, 1, MPI_DOUBLE, MPI_MAX,
-               0, MPI_COMM_WORLD);
-
-    double min_write_bw = total_mib / max_write_time;
-
-    MPI_Reduce(&read_bw, &agg_read_bw, 1, MPI_DOUBLE, MPI_SUM,
-               0, MPI_COMM_WORLD);
-
-    MPI_Reduce(&read_time, &max_read_time, 1, MPI_DOUBLE, MPI_MAX,
-               0, MPI_COMM_WORLD);
-
-    double min_read_bw = total_mib / max_read_time;
-
-    if (rank == 0) {
-        printf("Aggregate Write BW is %.3lf MiB/s\n"
-               "  Minimum Write BW is %.3lf MiB/s\n\n",
-               agg_write_bw, min_write_bw);
-        printf("Aggregate Read BW is %.3lf MiB/s\n"
-               "  Minimum Read BW is %.3lf MiB/s\n\n",
-               agg_read_bw, min_read_bw);
-        fflush(stdout);
-    }
 
     MPI_Finalize();
 
