@@ -49,10 +49,8 @@ int32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t**
     unifycr_mount_in_t in;
     unifycr_mount_out_t out;
     hg_return_t hret;
+    int32_t ret;
 
-    LOGDBG("invoking the mount rpc function in client");
-
-    /* fill in input struct */
     hret = margo_create((*unifycr_rpc_context)->mid,
                         (*unifycr_rpc_context)->svr_addr,
                         (*unifycr_rpc_context)->unifycr_mount_rpc_id, &handle);
@@ -60,6 +58,8 @@ int32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t**
 
     /* fill in input struct by calling unifycr_sync_to_del */
     unifycr_sync_to_del(&in);
+
+    LOGDBG("invoking the mount rpc function in client");
     hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
     free((void*)in.external_spill_dir);
@@ -68,13 +68,15 @@ int32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t**
     /* decode response */
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
+    ret = out.ret;
+    LOGDBG("Got response ret=%" PRIi32, ret);
 
     unifycr_key_slice_range = out.max_recs_per_slice;
     LOGDBG("set unifycr_key_slice_range=%zu", unifycr_key_slice_range);
 
     margo_free_output(handle, &out);
     margo_destroy(handle);
-    return out.ret;
+    return ret;
 }
 
 /* function invokes the unmount rpc
@@ -86,9 +88,7 @@ int32_t unifycr_client_unmount_rpc_invoke(unifycr_client_rpc_context_t**
     unifycr_unmount_in_t in;
     unifycr_unmount_out_t out;
     hg_return_t hret;
-    int ret;
-
-    LOGDBG("invoking the unmount rpc function in client");
+    int32_t ret;
 
     hret = margo_create((*unifycr_rpc_context)->mid,
                             (*unifycr_rpc_context)->svr_addr,
@@ -100,6 +100,7 @@ int32_t unifycr_client_unmount_rpc_invoke(unifycr_client_rpc_context_t**
     in.app_id = app_id;
     in.local_rank_idx = local_rank_idx;
 
+    LOGDBG("invoking the unmount rpc function in client");
     hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 
@@ -107,6 +108,7 @@ int32_t unifycr_client_unmount_rpc_invoke(unifycr_client_rpc_context_t**
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
     ret = out.ret;
+    LOGDBG("Got response ret=%" PRIi32, ret);
 
     margo_free_output(handle, &out);
     margo_destroy(handle);
@@ -122,31 +124,30 @@ int32_t unifycr_client_metaset_rpc_invoke(unifycr_client_rpc_context_t**
     unifycr_metaset_in_t in;
     unifycr_metaset_out_t out;
     hg_return_t hret;
+    int32_t ret;
 
-    LOGDBG("invoking the metaset rpc function in client");
-
-    /* fill in input struct */
     hret = margo_create((*unifycr_rpc_context)->mid,
                         (*unifycr_rpc_context)->svr_addr,
                         (*unifycr_rpc_context)->unifycr_metaset_rpc_id,
                         &handle);
     assert(hret == HG_SUCCESS);
 
-    /* fill in input struct by calling unifycr_sync_to_del */
+    /* fill in input struct */
     set_global_file_meta(&in, f_meta);
 
+    LOGDBG("invoking the metaset rpc function in client");
     hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 
     /* decode response */
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
-
-    LOGDBG("Got response ret: %d", (int)out.ret);
+    ret = out.ret;
+    LOGDBG("Got response ret=%" PRIi32, ret);
 
     margo_free_output(handle, &out);
     margo_destroy(handle);
-    return out.ret;
+    return ret;
 }
 
 /* invokes the client metaget rpc function by calling get_global_file_meta */
@@ -159,33 +160,34 @@ int32_t unifycr_client_metaget_rpc_invoke(unifycr_client_rpc_context_t**
     unifycr_metaget_in_t in;
     unifycr_metaget_out_t out;
     hg_return_t hret;
+    int32_t ret;
 
-    LOGDBG("invoking the metaget rpc function in client");
-
-    /* fill in input struct */
     hret = margo_create((*unifycr_rpc_context)->mid,
                         (*unifycr_rpc_context)->svr_addr,
                         (*unifycr_rpc_context)->unifycr_metaget_rpc_id,
                         &handle);
     assert(hret == HG_SUCCESS);
 
+    /* fill in input struct */
     in.gfid = gfid;
+    LOGDBG("invoking the metaget rpc function in client");
     hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 
     /* decode response */
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
+    ret = out.ret;
+    LOGDBG("Got response ret=%" PRIi32, ret);
 
-    LOGDBG("Got metaget  response ret: %d", (int)out.ret);
-    if (out.ret == ACK_SUCCESS) {
+    if (ret == (int32_t)UNIFYCR_SUCCESS) {
         /* fill in results  */
         get_global_file_meta(gfid, &out, file_meta);
     }
 
     margo_free_output(handle, &out);
     margo_destroy(handle);
-    return out.ret;
+    return ret;
 }
 
 /* invokes the client fsync rpc function */
@@ -199,10 +201,8 @@ int32_t unifycr_client_fsync_rpc_invoke(unifycr_client_rpc_context_t**
     unifycr_fsync_in_t in;
     unifycr_fsync_out_t out;
     hg_return_t hret;
+    int32_t ret;
 
-    LOGDBG("invoking the fsync rpc function in client");
-
-    /* fill in input struct */
     hret = margo_create((*unifycr_rpc_context)->mid,
                         (*unifycr_rpc_context)->svr_addr,
                         (*unifycr_rpc_context)->unifycr_fsync_rpc_id,
@@ -214,18 +214,19 @@ int32_t unifycr_client_fsync_rpc_invoke(unifycr_client_rpc_context_t**
     in.local_rank_idx = local_rank_idx;
     in.gfid           = gfid;
 
+    LOGDBG("invoking the fsync rpc function in client");
     hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 
     /* decode response */
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
-
-    LOGDBG("Got response ret: %d", (int)out.ret);
+    ret = out.ret;
+    LOGDBG("Got response ret=%" PRIi32, ret);
 
     margo_free_output(handle, &out);
     margo_destroy(handle);
-    return out.ret;
+    return ret;
 }
 
 /* invokes the client filesize rpc function */
@@ -236,7 +237,7 @@ uint32_t unifycr_client_filesize_rpc_invoke(unifycr_client_rpc_context_t**
                                             int32_t gfid,
                                             hg_size_t* outsize)
 {
-    printf("invoking the filesize rpc function in client\n");
+    uint32_t ret;
 
     /* get handle to rpc function */
     hg_handle_t handle;
@@ -244,7 +245,6 @@ uint32_t unifycr_client_filesize_rpc_invoke(unifycr_client_rpc_context_t**
                         (*unifycr_rpc_context)->svr_addr,
                         (*unifycr_rpc_context)->unifycr_filesize_rpc_id,
                         &handle);
-    assert(hret == HG_SUCCESS);
     assert(hret == HG_SUCCESS);
 
     /* fill in input struct */
@@ -254,24 +254,23 @@ uint32_t unifycr_client_filesize_rpc_invoke(unifycr_client_rpc_context_t**
     in.gfid           = gfid;
 
     /* call rpc function */
+    LOGDBG("invoking the filesize rpc function in client");
     hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
-    printf("Forwarded\n");
 
     /* decode response */
     unifycr_filesize_out_t out;
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
+    ret = (uint32_t) out.ret;
+    LOGDBG("Got response ret=%" PRIu32, ret);
 
     /* save output from function */
-    printf("Got response in read, ret: %d\n", out.ret);
-    uint32_t ret = (uint32_t) out.ret;
     *outsize     = (hg_size_t) out.filesize;
 
     /* free resources */
     margo_free_output(handle, &out);
     margo_destroy(handle);
-
     return ret;
 }
 
@@ -288,15 +287,13 @@ int32_t unifycr_client_read_rpc_invoke(unifycr_client_rpc_context_t**
     unifycr_read_in_t in;
     unifycr_read_out_t out;
     hg_return_t hret;
-
-    LOGDBG("invoking the read rpc function in client");
+    int32_t ret;
 
     /* fill in input struct */
     hret = margo_create((*unifycr_rpc_context)->mid,
                         (*unifycr_rpc_context)->svr_addr,
                         (*unifycr_rpc_context)->unifycr_read_rpc_id,
                         &handle);
-    assert(hret == HG_SUCCESS);
     assert(hret == HG_SUCCESS);
 
     /* fill in input struct */
@@ -306,19 +303,19 @@ int32_t unifycr_client_read_rpc_invoke(unifycr_client_rpc_context_t**
     in.offset         = offset;
     in.length         = length;
 
+    LOGDBG("invoking the read rpc function in client");
     hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
-    LOGDBG("Forwarded");
 
     /* decode response */
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
-
-    LOGDBG("Got response in read, ret: %d", (int)out.ret);
+    ret = out.ret;
+    LOGDBG("Got response ret=%" PRIi32, ret);
 
     margo_free_output(handle, &out);
     margo_destroy(handle);
-    return out.ret;
+    return ret;
 }
 
 /* invokes the client mread rpc function */
@@ -335,8 +332,7 @@ int32_t unifycr_client_mread_rpc_invoke(unifycr_client_rpc_context_t**
     unifycr_mread_in_t in;
     unifycr_mread_out_t out;
     hg_return_t hret;
-
-    LOGDBG("invoking the read rpc function in client");
+    int32_t ret;
 
     /* fill in input struct */
     hret = margo_create((*unifycr_rpc_context)->mid,
@@ -344,6 +340,7 @@ int32_t unifycr_client_mread_rpc_invoke(unifycr_client_rpc_context_t**
                         (*unifycr_rpc_context)->unifycr_mread_rpc_id,
                         &handle);
     assert(hret == HG_SUCCESS);
+
     hret = margo_bulk_create((*unifycr_rpc_context)->mid, 1, &buffer, &size,
                              HG_BULK_READ_ONLY, &in.bulk_handle);
     assert(hret == HG_SUCCESS);
@@ -355,19 +352,19 @@ int32_t unifycr_client_mread_rpc_invoke(unifycr_client_rpc_context_t**
     in.read_count     = read_count;
     in.bulk_size      = size;
 
+    LOGDBG("invoking the read rpc function in client");
     hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
-    LOGDBG("Forwarded");
 
     /* decode response */
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
-
-    LOGDBG("Got response ret: %d", (int)out.ret);
+    ret = out.ret;
+    LOGDBG("Got response ret=%" PRIi32, ret);
 
     margo_bulk_free(in.bulk_handle);
     margo_free_output(handle, &out);
     margo_destroy(handle);
-    return out.ret;
+    return ret;
 }
 

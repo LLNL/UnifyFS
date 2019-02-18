@@ -814,8 +814,6 @@ int unifycr_set_global_file_meta(const char* path, int fid, int gfid,
 
 int unifycr_get_global_file_meta(int fid, int gfid, unifycr_file_attr_t* gfattr)
 {
-    int rc = 0;
-
     if (!gfattr) {
         return -EINVAL;
     }
@@ -2863,6 +2861,9 @@ static int unifycr_finalize(void)
  */
 int unifycr_unmount(void)
 {
+    int rc;
+    int ret = UNIFYCR_SUCCESS;
+
     /************************
      * tear down connection to server
      ************************/
@@ -2874,16 +2875,20 @@ int unifycr_unmount(void)
     /* close socket to server */
     if (client_sockfd >= 0) {
         errno = 0;
-        int close_rc = close(client_sockfd);
-        if (close_rc != 0) {
-            LOGERR("Failed to close socket to server rc=%d (%s)",
+        rc = close(client_sockfd);
+        if (rc != 0) {
+            LOGERR("Failed to close() socket to server errno=%d (%s)",
                    errno, strerror(errno));
         }
     }
 
     /* invoke unmount rpc to tell server we're disconnecting */
     LOGDBG("calling unmount");
-    int ret = unifycr_client_unmount_rpc_invoke(&unifycr_rpc_context);
+    rc = unifycr_client_unmount_rpc_invoke(&unifycr_rpc_context);
+    if (rc) {
+        LOGERR("unifycr_client_unmount_rpc_invoke() failed");
+        ret = UNIFYCR_FAILURE;
+    }
 
     /* free resources allocated in client_rpc_init */
     unifycr_client_rpc_finalize(&unifycr_rpc_context);
@@ -2908,8 +2913,9 @@ int unifycr_unmount(void)
      ************************/
 
     /* clean up configuration */
-    int tmp_rc = unifycr_config_fini(&client_cfg);
-    if (tmp_rc) {
+    rc = unifycr_config_fini(&client_cfg);
+    if (rc) {
+        LOGERR("unifycr_config_fini() failed");
         ret = UNIFYCR_FAILURE;
     }
 

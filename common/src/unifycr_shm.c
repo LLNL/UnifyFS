@@ -93,7 +93,7 @@ void* unifycr_shm_alloc(const char* name, size_t size)
 }
 
 /* unmaps shared memory region from memory, and releases it,
- * caller should povider the address of a pointer to the region
+ * caller should provide the address of a pointer to the region
  * in paddr, sets paddr to NULL on return,
  * returns UNIFYCR_SUCCESS on success */
 int unifycr_shm_free(const char* name, size_t size, void** paddr)
@@ -112,7 +112,7 @@ int unifycr_shm_free(const char* name, size_t size, void** paddr)
         errno = 0;
         int rc = munmap(addr, size);
         if (rc == -1) {
-            /* failed to open shared memory */
+            /* failed to unmap shared memory */
             LOGERR("Failed to unmap shared memory %s errno=%d (%s)",
                    name, errno, strerror(errno));
 
@@ -123,10 +123,12 @@ int unifycr_shm_free(const char* name, size_t size, void** paddr)
         errno = 0;
         rc = shm_unlink(name);
         if (rc == -1) {
-            /* failed to open shared memory */
-            LOGERR("Failed to unlink shared memory %s errno=%d (%s)",
-                   name, errno, strerror(errno));
-
+            int err = errno;
+            if (ENOENT != err) {
+                /* failed to remove shared memory */
+                LOGERR("Failed to unlink shared memory %s errno=%d (%s)",
+                       name, err, strerror(err));
+            }
             /* not fatal, so keep going */
         }
     }
