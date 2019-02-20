@@ -2,7 +2,7 @@
  * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2017-2019, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -38,6 +38,9 @@
 #include "unifycr_global.h"
 #include "unifycr_metadata.h"
 #include "unifycr_sock.h"
+
+#include "unifycr_clientcalls_rpc.h"
+#include "ucr_read_builder.h"
 
 /* One request manager thread is created for each client that a
  * delegator serves.  The main thread of the delegator assigns
@@ -118,6 +121,69 @@ static int compare_delegators(const void* a, const void* b)
     }
 }
 
+unifycr_key_t** alloc_key_array(int elems)
+{
+    int size = elems * (sizeof(unifycr_key_t*) + sizeof(unifycr_key_t));
+
+    void* mem_block = calloc(size, sizeof(char));
+
+    unifycr_key_t** array_ptr = mem_block;
+    unifycr_key_t* key_ptr = (unifycr_key_t*)(array_ptr + elems);
+
+    for (int i = 0; i < elems; i++) {
+        array_ptr[i] = &key_ptr[i];
+    }
+
+    return (unifycr_key_t**)mem_block;
+}
+
+fattr_key_t** alloc_attr_key_array(int elems)
+{
+    int size = elems * (sizeof(fattr_key_t*) + sizeof(fattr_key_t));
+
+    void* mem_block = calloc(size, sizeof(char));
+
+    fattr_key_t** array_ptr = mem_block;
+    fattr_key_t* key_ptr = (fattr_key_t*)(array_ptr + elems);
+
+    for (int i = 0; i < elems; i++) {
+        array_ptr[i] = &key_ptr[i];
+    }
+
+    return (fattr_key_t**)mem_block;
+}
+
+unifycr_val_t** alloc_value_array(int elems)
+{
+    int size = elems * (sizeof(unifycr_val_t*) + sizeof(unifycr_val_t));
+
+    void* mem_block = calloc(size, sizeof(char));
+
+    unifycr_val_t** array_ptr = mem_block;
+    unifycr_val_t* key_ptr = (unifycr_val_t*)(array_ptr + elems);
+
+    for (int i = 0; i < elems; i++) {
+        array_ptr[i] = &key_ptr[i];
+    }
+
+    return (unifycr_val_t**)mem_block;
+}
+
+void free_key_array(unifycr_key_t** array)
+{
+    free(array);
+}
+
+void free_value_array(unifycr_val_t** array)
+{
+    free(array);
+}
+
+void free_attr_key_array(fattr_key_t** array)
+{
+    free(array);
+}
+
 /************************
  * These functions are called by the rpc handler to assign work
  * to the request manager thread
@@ -159,9 +225,63 @@ int rm_cmd_filesize(
 
     /* get the locations of all the read requests from the
      * key-value store*/
-    int rc = meta_read_get(app_id, client_id, thrd_id, 0,
-                           gfid, offset, length, thrd_ctrl->del_req_set);
+    int num_vals;
+    int unifycr_key_lens[2] = {sizeof(unifycr_key_t), sizeof(unifycr_key_t)};
 
+    unifycr_key_t key1, key2;
+    unifycr_key_t* unifycr_keys[2] = {&key1, &key2};
+    unifycr_keyval_t* keyvals;
+
+    /* create key to describe first byte we'll read */
+    unifycr_keys[0]->fid = gfid;
+    unifycr_keys[0]->offset = offset;
+
+    /* create key to describe last byte we'll read */
+    unifycr_keys[1]->fid = gfid;
+    unifycr_keys[1]->offset = offset + length - 1;
+
+    int rc = unifycr_get_file_extents(2, unifycr_keys, unifycr_key_lens,
+                                      &num_vals, &keyvals);
+
+    if (UNIFYCR_SUCCESS != rc || keyvals == NULL) {
+        // we need to let the client know that there was an error
+        fprintf(stderr, "Unable to get values for file extends");
+        fflush(NULL);
+    }
+
+    // set up the thread_control delegator request set
+    // TODO: make this a function
+    for (int i = 0; i < num_vals; i++) {
+        send_msg_t* meta = &thrd_ctrl->del_req_set->msg_meta[i];
+
+        /* physical offset of the requested file segment on the log file */
+        meta->dest_offset = keyvals[i].val.addr;
+
+        /* rank of the remote delegator */
+        meta->dest_delegator_rank = keyvals[i].val.delegator_id;
+
+        /* dest_client_id and dest_app_id uniquely identify the remote
+         * physical log file that contains the requested segments */
+        meta->dest_app_id = keyvals[i].val.app_id;
+        meta->dest_client_id = keyvals[i].val.rank;
+        meta->length = (size_t)keyvals[i].val.len;
+
+        /* src_app_id and src_cli_id identifies the requested client */
+        meta->src_app_id = app_id;
+        meta->src_cli_id = client_id;
+
+        /* src_offset is the logical offset of the shared file */
+        meta->src_offset = keyvals[i].key.offset;
+        meta->src_delegator_rank = glb_rank;
+        meta->src_fid = keyvals[i].key.fid;
+        //meta->src_dbg_rank = dbg_rank;
+        meta->src_thrd = thrd_id;
+    }
+
+    thrd_ctrl->del_req_set->num = num_vals;
+
+    // cleanup
+    free(keyvals);
     /* compute our file size by iterating over each file
      * segment and taking the max logical offset */
     int i;
@@ -218,9 +338,63 @@ int rm_cmd_read(
 
     /* get the locations of all the read requests from the
      * key-value store*/
-    int rc = meta_read_get(app_id, client_id, thrd_id, cli_rank,
-                           gfid, offset, length, thrd_ctrl->del_req_set);
+    int num_vals;
+    int unifycr_key_lens[2] = {sizeof(unifycr_key_t), sizeof(unifycr_key_t)};
 
+    unifycr_key_t key1, key2;
+    unifycr_key_t* unifycr_keys[2] = {&key1, &key2};
+    unifycr_keyval_t* keyvals;
+
+    /* create key to describe first byte we'll read */
+    unifycr_keys[0]->fid = gfid;
+    unifycr_keys[0]->offset = offset;
+
+    /* create key to describe last byte we'll read */
+    unifycr_keys[1]->fid = gfid;
+    unifycr_keys[1]->offset = offset + length - 1;
+
+    int rc = unifycr_get_file_extents(2, unifycr_keys, unifycr_key_lens,
+                                      &num_vals, &keyvals);
+
+    if (UNIFYCR_SUCCESS != rc || keyvals == NULL) {
+        // we need to let the client know that there was an error
+        fprintf(stderr, "Unable to get values for file extends");
+        fflush(NULL);
+    }
+
+    // set up the thread_control delegator request set
+    // TODO: make this a function
+    for (int i = 0; i < num_vals; i++) {
+        send_msg_t* meta = &thrd_ctrl->del_req_set->msg_meta[i];
+
+        /* physical offset of the requested file segment on the log file */
+        meta->dest_offset = keyvals[i].val.addr;
+
+        /* rank of the remote delegator */
+        meta->dest_delegator_rank = keyvals[i].val.delegator_id;
+
+        /* dest_client_id and dest_app_id uniquely identify the remote
+         * physical log file that contains the requested segments */
+        meta->dest_app_id = keyvals[i].val.app_id;
+        meta->dest_client_id = keyvals[i].val.rank;
+        meta->length = (size_t)keyvals[i].val.len;
+
+        /* src_app_id and src_cli_id identifies the requested client */
+        meta->src_app_id = app_id;
+        meta->src_cli_id = client_id;
+
+        /* src_offset is the logical offset of the shared file */
+        meta->src_offset = keyvals[i].key.offset;
+        meta->src_delegator_rank = glb_rank;
+        meta->src_fid = keyvals[i].key.fid;
+        //meta->src_dbg_rank = dbg_rank;
+        meta->src_thrd = thrd_id;
+    }
+
+    thrd_ctrl->del_req_set->num = num_vals;
+
+    // cleanup
+    free(keyvals);
     /* sort read requests to be sent to the same delegators. */
     qsort(thrd_ctrl->del_req_set->msg_meta,
           thrd_ctrl->del_req_set->num,
@@ -321,15 +495,116 @@ int rm_cmd_mread(int app_id, int client_id, int gfid,
     int thrd_id = app_config->thrd_idxs[client_id];
     thrd_ctrl_t* thrd_ctrl = (thrd_ctrl_t*)arraylist_get(thrd_list, thrd_id);
 
-    pthread_mutex_lock(&thrd_ctrl->thrd_lock);
 
-    /* get the locations of all the read requests from the key-value store*/
-    LOGDBG("calling meta_batch_get with req_num:%zu, thrd_id:%d",
-           req_num, thrd_id);
-    rc = meta_batch_get(app_id, client_id, thrd_id, 0,
-                        reqbuf, req_num,
-                        thrd_ctrl->del_req_set);
-    LOGDBG("completed meta_batch_get, rc=%d", rc);
+    unifycr_key_t** unifycr_keys;
+    int* unifycr_key_lens;
+    int num_vals;
+
+    pthread_mutex_lock(&thrd_ctrl->thrd_lock);
+    unifycr_keyval_t* keyvals;
+    keyvals = calloc(sizeof(unifycr_keyval_t), 1024);
+
+     /* get the locations of all the read requests from the key-value store */
+    LOGDBG("app_id:%d, client_id:%d, thrd_id:%d",
+           app_id, client_id, thrd_id);
+
+    unifycr_ReadRequest_table_t readRequest =
+                                            unifycr_ReadRequest_as_root(reqbuf);
+    unifycr_Extent_vec_t extents = unifycr_ReadRequest_extents(readRequest);
+    size_t extents_len = unifycr_Extent_vec_len(extents);
+    assert(extents_len == req_num);
+
+    // allocate key storage
+    // TODO: might want to get this from a memory pool
+    unifycr_keys = alloc_key_array(req_num * 2);
+
+    unifycr_key_lens = calloc(req_num * 2, sizeof(int));
+    if (unifycr_key_lens == NULL) {
+        // this is a fatal error
+        // TODO: we need better error handling
+        fprintf(stderr, "Error allocating buffer in %s\n", __FILE__);
+        exit(-1);
+    }
+
+    /* get keys from client request
+     * The loop is creating a tuple of keys for each read request. The tuple
+     * defines the start and the end offset of the read request. The
+     * implementation of mdhim will return all key-value pairs that fall within
+     * the range of this tuple.
+     * TODO: make this a function
+     * TODO: this is specific to the mdhim in the source tree and not portable
+     *       to other KV-stores. This needs to be reviseted to utilize some
+     *       other mechanism to retrieve all relevant key-value pairs from the
+     *       KV-store.
+     */
+    size_t key_cnt = 0;
+    int fid;
+    size_t i, ndx, eoff, elen;
+    for (i = 0; i < req_num; i++) {
+        ndx = 2 * i;
+        fid = unifycr_Extent_fid(unifycr_Extent_vec_at(extents, i));
+        eoff = unifycr_Extent_offset(unifycr_Extent_vec_at(extents, i));
+        elen = unifycr_Extent_length(unifycr_Extent_vec_at(extents, i));
+        LOGDBG("fid:%d, offset:%zu, length:%zu", fid, eoff, elen);
+
+        key_cnt += 2;
+
+        //unifycr_keys[ndx] = &keys[ndx];
+        //unifycr_keys[ndx + 1] = &keys[ndx+1];
+
+        unifycr_keys[ndx]->fid = fid;
+        unifycr_keys[ndx]->offset = eoff;
+        unifycr_keys[ndx + 1]->fid = fid;
+        unifycr_keys[ndx + 1]->offset = eoff + elen - 1;
+        unifycr_key_lens[ndx] = sizeof(unifycr_key_t);
+        unifycr_key_lens[ndx + 1] = sizeof(unifycr_key_t);
+    }
+
+    rc = unifycr_get_file_extents(key_cnt, unifycr_keys, unifycr_key_lens,
+                                  &num_vals, &keyvals);
+
+    if (UNIFYCR_SUCCESS != rc || keyvals == NULL) {
+        // we need to let the client know that there was an error
+        fprintf(stderr, "Unable to get values for file extends");
+        fflush(NULL);
+    }
+
+    // set up the thread_control delegator request set
+    // TODO: make this a function
+    for (i = 0; i < num_vals; i++) {
+        send_msg_t* meta = &thrd_ctrl->del_req_set->msg_meta[i];
+
+        /* physical offset of the requested file segment on the log file */
+        meta->dest_offset = keyvals[i].val.addr;
+
+        /* rank of the remote delegator */
+        meta->dest_delegator_rank = keyvals[i].val.delegator_id;
+
+        /* dest_client_id and dest_app_id uniquely identify the remote
+         * physical log file that contains the requested segments */
+        meta->dest_app_id = keyvals[i].val.app_id;
+        meta->dest_client_id = keyvals[i].val.rank;
+        meta->length = (size_t)keyvals[i].val.len;
+
+        /* src_app_id and src_cli_id identifies the requested client */
+        meta->src_app_id = app_id;
+        meta->src_cli_id = client_id;
+
+        /* src_offset is the logical offset of the shared file */
+        meta->src_offset = keyvals[i].key.offset;
+        meta->src_delegator_rank = glb_rank;
+        meta->src_fid = keyvals[i].key.fid;
+        meta->src_dbg_rank = dbg_rank;
+        meta->src_thrd = thrd_id;
+    }
+
+    thrd_ctrl->del_req_set->num = num_vals;
+
+    // cleanup
+    free(keyvals);
+    free_key_array(unifycr_keys);
+    free(unifycr_key_lens);
+
 
     /*
      * group together the read requests
@@ -342,7 +617,7 @@ int rm_cmd_mread(int app_id, int client_id, int gfid,
                     thrd_ctrl->del_req_set->num);
     thrd_ctrl->del_req_stat->req_stat[0].req_cnt = 1;
 
-    int i, del_cnt = 0;
+    int del_cnt = 0;
     thrd_ctrl->del_req_stat->req_stat[0].del_id =
         thrd_ctrl->del_req_set->msg_meta[0].dest_delegator_rank;
 
@@ -425,6 +700,155 @@ int rm_cmd_exit(thrd_ctrl_t* thrd_ctrl)
     pthread_join(thrd_ctrl->thrd, &status);
 
     return UNIFYCR_SUCCESS;
+}
+
+/*
+ * synchronize all the indices and file attributes
+ * to the key-value store
+ * @param sock_id: the connection id in poll_set of the delegator
+ * @return success/error code
+ */
+int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
+{
+    int ret = 0;
+
+    unifycr_key_t** unifycr_keys;
+    unifycr_val_t** unifycr_vals;
+    int* unifycr_key_lens = NULL;
+    int* unifycr_val_lens = NULL;
+
+    fattr_key_t** fattr_keys = NULL;
+    unifycr_file_attr_t** fattr_vals = NULL;
+    int* fattr_key_lens = NULL;
+    int* fattr_val_lens = NULL;
+    size_t i, attr_num_entries, extent_num_entries;
+
+    app_config_t* app_config = (app_config_t*)arraylist_get(app_config_list,
+                                app_id);
+
+    extent_num_entries =
+        *((size_t*)(app_config->shm_superblocks[client_side_id]
+                    + app_config->meta_offset));
+
+    /*
+     * indices are stored in the superblock shared memory
+     * created by the client
+     */
+    int page_sz = getpagesize();
+    unifycr_index_t* meta_payload =
+        (unifycr_index_t*)(app_config->shm_superblocks[client_side_id]
+                           + app_config->meta_offset + page_sz);
+
+    // allocate storage for values
+    // TODO: possibly get this from memory pool
+    //unifycr_keys = calloc(extent_num_entries, sizeof(unifycr_key_t*));
+    unifycr_keys = alloc_key_array(extent_num_entries);
+
+    //unifycr_vals = calloc(extent_num_entries, sizeof(unifycr_val_t*));
+    unifycr_vals = alloc_value_array(extent_num_entries);
+    unifycr_key_lens = calloc(extent_num_entries, sizeof(int));
+    unifycr_val_lens = calloc(extent_num_entries, sizeof(int));
+
+    // file extends
+    for (i = 0; i < extent_num_entries; i++) {
+        unifycr_keys[i]->fid = meta_payload[i].fid;
+        unifycr_keys[i]->offset = meta_payload[i].file_pos;
+
+        unifycr_vals[i]->addr = meta_payload[i].mem_pos;
+        unifycr_vals[i]->len = meta_payload[i].length;
+        unifycr_vals[i]->delegator_id = glb_rank;
+        unifycr_vals[i]->app_id = app_id;
+        unifycr_vals[i]->rank = client_side_id;
+
+
+        LOG(LOG_DBG, "Set keys fid:%d, offset:%zu, length: %zu\n",
+            unifycr_keys[i]->fid,  unifycr_keys[i]->offset,
+            unifycr_vals[i]->len);
+
+        unifycr_key_lens[i] = sizeof(unifycr_key_t);
+        unifycr_val_lens[i] = sizeof(unifycr_val_t);
+    }
+
+    ret = unifycr_set_file_extents(extent_num_entries, unifycr_keys,
+                                   unifycr_key_lens, unifycr_vals,
+                                   unifycr_val_lens);
+    if (ret != UNIFYCR_SUCCESS) {
+        // TODO: need propper error handling
+        fprintf(stderr, "Error in unifycr_set_file_extents\n"); fflush(NULL);
+        goto rm_cmd_fsync_exit;
+    }
+
+    // file attributes
+    attr_num_entries =
+        *((size_t*)(app_config->shm_superblocks[client_side_id]
+                    + app_config->fmeta_offset));
+
+    /*
+     * file attributes are stored in the superblock shared memory
+     * created by the client
+     */
+    unifycr_file_attr_t* attr_payload =
+        (unifycr_file_attr_t*)(app_config->shm_superblocks[client_side_id]
+                               + app_config->fmeta_offset + page_sz);
+
+    // allocate storage for values
+    // TODO: possibly get this from memory pool
+    fattr_keys = alloc_attr_key_array(attr_num_entries);
+    fattr_vals = calloc(attr_num_entries, sizeof(unifycr_file_attr_t*));
+    fattr_key_lens = calloc(attr_num_entries, sizeof(int));
+    fattr_val_lens = calloc(attr_num_entries, sizeof(int));
+
+    for (i = 0; i < attr_num_entries; i++) {
+        *fattr_keys[i] = attr_payload[i].gfid;
+        fattr_vals[i] = &(attr_payload[i]);
+        fattr_key_lens[i] = sizeof(fattr_key_t);
+        fattr_val_lens[i] = sizeof(fattr_val_t);
+    }
+
+    ret = unifycr_set_file_attributes(attr_num_entries, fattr_keys,
+                                      fattr_key_lens, fattr_vals,
+                                      fattr_val_lens);
+    if (ret != UNIFYCR_SUCCESS) {
+        // TODO: need propper error handling
+        goto rm_cmd_fsync_exit;
+    }
+
+rm_cmd_fsync_exit:
+    // clean up memory
+
+    if (NULL != unifycr_keys) {
+        free_key_array(unifycr_keys);
+    }
+
+    if (NULL != unifycr_vals) {
+        free_value_array(unifycr_vals);
+    }
+
+    if (NULL != unifycr_key_lens) {
+        free(unifycr_key_lens);
+    }
+
+    if (NULL != unifycr_val_lens) {
+        free(unifycr_val_lens);
+    }
+
+    if (NULL != fattr_keys) {
+        free_attr_key_array(fattr_keys);
+    }
+
+    if (NULL != fattr_vals) {
+        free(fattr_vals);
+    }
+
+    if (NULL != fattr_key_lens) {
+        free(fattr_key_lens);
+    }
+
+    if (NULL != fattr_val_lens) {
+        free(fattr_val_lens);
+    }
+
+    return ret;
 }
 
 /************************

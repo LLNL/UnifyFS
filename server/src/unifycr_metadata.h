@@ -2,7 +2,7 @@
  * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2017-2019, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -36,17 +36,19 @@
 
 #define MANIFEST_FILE_NAME "mdhim_manifest_"
 
+/**
+ * Key for a file extent
+ */
 typedef struct {
-    unsigned long fid;
+    /** file id */
+    int fid;
+    /** offset */
     unsigned long offset;
 } unifycr_key_t;
 
 #define UNIFYCR_KEY_SZ (sizeof(unifycr_key_t))
-
 #define UNIFYCR_KEY_FID(keyp) (((unifycr_key_t*)keyp)->fid)
 #define UNIFYCR_KEY_OFF(keyp) (((unifycr_key_t*)keyp)->offset)
-
-int unifycr_key_compare(unifycr_key_t* a, unifycr_key_t* b);
 
 typedef struct {
     unsigned long addr;
@@ -57,9 +59,20 @@ typedef struct {
 } unifycr_val_t;
 
 #define UNIFYCR_VAL_SZ (sizeof(unifycr_val_t))
-
 #define UNIFYCR_VAL_ADDR(valp) (((unifycr_val_t*)valp)->addr)
 #define UNIFYCR_VAL_LEN(valp) (((unifycr_val_t*)valp)->len)
+
+/**
+ * key-value tuple for a file extent
+ */
+typedef struct {
+    /** key */
+    unifycr_key_t key;
+    /** value */
+    unifycr_val_t val;
+} unifycr_keyval_t;
+
+int unifycr_key_compare(unifycr_key_t* a, unifycr_key_t* b);
 
 void debug_log_key_val(const char* ctx,
                        unifycr_key_t* key,
@@ -69,19 +82,69 @@ int meta_sanitize();
 int meta_init_store(unifycr_cfg_t* cfg);
 void print_bget_indices(int app_id, int client_id,
                         send_msg_t* index_set, int tot_num);
-int meta_process_fsync(int app_id, int client_id, int gfid);
-int meta_read_get(int app_id, int client_id, int thrd_id, int dbg_rank,
-                  int gfid, size_t offset, size_t length,
-                  msg_meta_t* del_req_set);
-int meta_batch_get(int app_id, int client_id, int thrd_id, int dbg_rank,
-                   void* reqbuf, size_t req_cnt,
-                   msg_meta_t* del_req_set);
+
 int meta_init_indices();
 int meta_free_indices();
 void print_fsync_indices(unifycr_key_t** unifycr_keys,
                          unifycr_val_t** unifycr_vals, size_t num_entries);
 
-int meta_process_attr_get(unifycr_file_attr_t* ptr_attr_val);
-int meta_process_attr_set(unifycr_file_attr_t* ptr_attr_val);
+/**
+ * Retrieve a File attribute from the KV-Store.
+ *
+ * @param [in] gfid
+ * @param[out] *ptr_attr_val
+ * @return UNIFYCR_SUCCESS on success
+ */
+int unifycr_get_file_attribute(int gfid,
+                               unifycr_file_attr_t* ptr_attr_val);
+
+/**
+ * Store a File attribute to the KV-Store.
+ *
+ * @param[in] *ptr_attr_val
+ * @return UNIFYCR_SUCCESS on success
+ */
+int unifycr_set_file_attribute(unifycr_file_attr_t* ptr_attr_val);
+
+/**
+ * Store File attributes to the KV-Store.
+ *
+ * @param[in] num_entries number of key value pairs to store
+ * @param[in] keys array storing the keys
+ * @param[in] key_lens array with the length of the elements in \p keys
+ * @param[in] vals array with the values
+ * @param[in] val_lens array with the length of the elements in \p vals
+ */
+int unifycr_set_file_attributes(int num_entries,
+                                fattr_key_t** keys, int* key_lens,
+                                unifycr_file_attr_t** vals, int* val_lens);
+
+/**
+ * Retrieve File extents from the KV-Store.
+ *
+ * @param[in] num_keys number of keys
+ * @param[in] keys array of keys to retrieve the values for
+ * @param[in] key_lens array with the length of the key in \p keys
+ * @param[out] num_values number of values in the keyval array
+ * @param[out] keyval array containing the key-value tuples found
+ * @return UNIFYCR_SUCCESS on success
+ */
+int unifycr_get_file_extents(int num_keys,
+                             unifycr_key_t** keys, int* key_lens,
+                             int* num_values, unifycr_keyval_t** keyval);
+
+/**
+ * Store File extents in the KV-Store.
+ *
+ * @param [in] num_entries number of key value pairs to store
+ * @param[in] keys array storing the keys
+ * @param[in] key_lens array with the length of the elements in \p keys
+ * @param[in] vals array with the values
+ * @param[in] val_lens array with the length of the elements in \p vals
+ * @return UNIFYCR_SUCCESS on success
+ */
+int unifycr_set_file_extents(int num_entries, unifycr_key_t** keys,
+                             int* key_lens, unifycr_val_t** vals,
+                             int* val_lens);
 
 #endif
