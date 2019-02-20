@@ -2,7 +2,7 @@
  * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2017-2019, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -50,5 +50,13 @@ int rm_cmd_filesize(int app_id, int client_id, int gfid, size_t* outsize);
  * resource manager thread to exit,
  * returns UNIFYCR_SUCCESS on success */
 int rm_cmd_exit(thrd_ctrl_t* thrd_ctrl);
+
+/*
+ * synchronize all the indices and file attributes
+ * to the key-value store
+ * @param sock_id: the connection id in poll_set of the delegator
+ * @return success/error code
+ */
+int rm_cmd_fsync(int app_id, int client_side_id, int gfid);
 
 #endif
