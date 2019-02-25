@@ -464,7 +464,7 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
     sock_sanitize_cli(client_id);
 
     /* build output structure to return to caller */
-    unifycr_mount_out_t out;
+    unifycr_unmount_out_t out;
     out.ret = UNIFYCR_SUCCESS;
 
     /* send output back to caller */
