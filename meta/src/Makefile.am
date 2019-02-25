@@ -27,7 +27,8 @@ libmdhim_a_SOURCES = Mlog2/mlog2.c \
                      mdhim.h \
                      uthash/uthash.h
 
-libmdhim_a_LDFLAGS = $(AM_LDFLAGS) $(LEVELDB_LDFLAGS) $(LEVELDB_LIBS) $(MPI_CLDFLAGS)
+# target_LDFLAGS is not valid for library archive targets
+#libmdhim_a_LDFLAGS = $(AM_LDFLAGS) $(LEVELDB_LDFLAGS) $(LEVELDB_LIBS) $(MPI_CLDFLAGS)
 
 AM_CPPFLAGS = -I$(top_srcdir)/meta/src/Mlog2 \
               -I$(top_srcdir)/meta/src/uthash \
