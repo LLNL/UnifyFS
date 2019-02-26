@@ -39,14 +39,30 @@ unifycrd_cleanup
 unifycrd_start_daemon
 
 #
-# Make sure unifycrd stays running for 5 seconds to catch cases where
+# Make sure the unifycrd process starts.
+#
+if ! process_is_running unifycrd 5 ; then
+    echo not ok 1 - unifycrd started
+    exit 1
+fi
+
+#
+# Make sure unifycrd stays running for 5 more seconds to catch cases where
 # it dies during initialization.
 #
 if process_is_not_running unifycrd 5; then
     echo not ok 1 - unifycrd running
     exit 1
-else
-    echo ok 1 - unifycrd running
 fi
 
+#
+# Make sure unifycrd successfully generated client runstate file
+#
+uid=$(id -u)
+if ! test -f $UNIFYCR_META_DB_PATH/unifycr-runstate.conf.$uid ; then
+    echo not ok 1 - unifycrd runstate
+    exit 1
+fi
+
+echo ok 1 - unifycrd running
 exit 0

@@ -1,4 +1,4 @@
-SUBDIRS = src tests
+SUBDIRS = src
 
 bin_SCRIPTS = unifycr-config
 

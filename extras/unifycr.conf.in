@@ -1,0 +1,42 @@
+# unifycr.conf
+
+# NOTE: settings with default values are commented out
+#
+# COMMENT STYLE:
+#  '#' start of line comment character
+#  ';' end of line comment character, must be preceded by a space
+
+# SECTION: top-level configuration
+[unifycr]
+# consistency = "LAMINATED" ; NONE | LAMINATED | POSIX
+# daemonize = on            ; servers will become daemons
+debug = on                  ; enable debug output (default: off)
+# mountpoint = "/unifycr"   ; mountpoint (i.e., prefix path)
+
+# SECTION: client settings
+[client]
+max_files = 64 ; max open files per client (default: 128)
+
+# SECTION: log settings
+[log]
+# dir = /tmp          ; log file directory path
+# file = unifycrd.log ; log file name (server rank will be appended)
+verbosity = 5         ; logging verbosity level [0-5] (default: 0)
+
+# SECTION: metadata settings
+[meta]
+# db_name = "unifycr_metadb" ; metadata datbase name
+db_path = "/var/tmp"         ; metadata database directory path (default: /tmp)
+
+# SECTION: shared memory segment settings
+[shmem]
+chunk_mem = 67108864 ; segment size for data chunks (default: 256 MiB)
+# single = off       ; use single region for all clients
+
+# SECTION: spillover local to each node
+[spillover]
+# enabled = on          ; enable spillover to local storage
+# data_dir = "/mnt/ssd" ; directory path for data spillover
+# meta_dir = "/mnt/ssd" ; directory path for metadata spillover
+size = 268435456        ; data spillover max size (default: 1 GiB)
+

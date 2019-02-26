@@ -29,27 +29,28 @@
 
 #ifndef UNIFYCR_SOCK_H
 #define UNIFYCR_SOCK_H
-#include <poll.h>
-#include  "unifycr_const.h"
 
-#define DEF_SOCK_PATH "/tmp/unifycr_server_sock"
-#define UNIFYCR_SOCK_TIMEOUT 5000
+#include <poll.h>
+#include "unifycr_const.h"
 
 extern int server_sockfd;
+extern int client_sockfd;
 extern struct pollfd poll_set[MAX_NUM_CLIENTS];
 
-int sock_init_server(int local_rank_idx);
+int sock_init_server(int srvr_id);
 int sock_add(int fd);
 void sock_reset();
 int sock_wait_cli_cmd();
-char *sock_get_cmd_buf(int sock_id);
+char* sock_get_cmd_buf(int sock_id);
 int sock_handle_error(int sock_error_no);
 int sock_get_id();
 int sock_get_error_id();
 int sock_ack_cli(int sock_id, int ret_sz);
 int sock_sanitize();
-char *sock_get_ack_buf(int sock_id);
+void sock_sanitize_cli(int client_id);
+char* sock_get_ack_buf(int sock_id);
 int sock_remove(int idx);
 int sock_notify_cli(int sock_id, int cmd);
-char *sock_get_cmd_buf(int sock_id);
+char* sock_get_cmd_buf(int sock_id);
+
 #endif

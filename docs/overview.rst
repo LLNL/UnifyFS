@@ -15,7 +15,7 @@ daemon.
 High Level Design
 ---------------------------
 
-.. image:: design-high-lvl.png
+.. image:: images/design-high-lvl.png
 
 UnifyCR will present a shared namespace (e.g., /unifycr as a mount point) to 
 all compute nodes in a users job allocation. There are two main components of 

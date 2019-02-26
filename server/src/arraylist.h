@@ -33,18 +33,18 @@
 #define DEF_ARR_CAP 1024
 
 typedef struct {
-    long cap;
-    long size;
-    void **elems;
+    int cap;
+    int size;
+    void** elems;
 } arraylist_t;
 
-arraylist_t *arraylist_create();
-int arraylist_add(arraylist_t *arr, void *elem);
-int arraylist_reset(arraylist_t *arr);
-int arraylist_free(arraylist_t *arr);
-int arraylist_insert(arraylist_t *arr, int pos, void *elem);
-void *arraylist_get(arraylist_t *arr, int pos);
-int arraylist_capacity(arraylist_t *arr);
-int arraylist_size(arraylist_t *arr);
+arraylist_t* arraylist_create(void);
+int arraylist_add(arraylist_t* arr, void* elem);
+int arraylist_reset(arraylist_t* arr);
+int arraylist_free(arraylist_t* arr);
+int arraylist_insert(arraylist_t* arr, int pos, void* elem);
+void* arraylist_get(arraylist_t* arr, int pos);
+int arraylist_capacity(arraylist_t* arr);
+int arraylist_size(arraylist_t* arr);
 
 #endif

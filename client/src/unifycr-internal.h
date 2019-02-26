@@ -43,40 +43,63 @@
 #ifndef UNIFYCR_INTERNAL_H
 #define UNIFYCR_INTERNAL_H
 
-/* this is overkill to include all of these here, but just to get things working... */
-#include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/resource.h>
-#include <fcntl.h>
-#include <stdarg.h>
-#include <string.h>
-#include <time.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <sys/uio.h>
-#include <sys/mman.h>
-#include <search.h>
+#include "config.h"
+
+#ifdef HAVE_OFF64_T
+#define _FILE_OFFSET_BITS 64
+#define _LARGEFILE64_SOURCE
+#else
+#define off64_t int64_t
+#endif
+
+/* -------------------------------
+ * Common includes
+ * -------------------------------
+ */
+#include <aio.h>
 #include <assert.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <libgen.h>
 #include <limits.h>
+#include <poll.h>
+#include <search.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/mman.h>
+#include <sys/resource.h>
+#include <sys/shm.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <sys/un.h>
+#include <time.h>
+#include <unistd.h>
+#include <wchar.h>
+#include <dirent.h>
+
+#define _GNU_SOURCE
+#include <pthread.h>
+#include <sched.h>
 
 #include "utlist.h"
 #include "uthash.h"
 
+#include "unifycr.h"
+#include "unifycr_configurator.h"
+#include "unifycr_meta.h"
+#include "unifycr-stack.h"
+
+
 /* -------------------------------
  * Defines and types
- * ------------------------------- */
-
-/* TODO: move common includes to another file */
-#include "unifycr-defs.h"
-#define DEBUG(fmt, ...) \
-do { \
-    if (unifycr_debug_level > 0) \
-        printf("unifycr: %s:%d: %s: " fmt "\n", \
-               __FILE__, __LINE__, __func__, ## __VA_ARGS__); \
-} while (0)
+ * -------------------------------
+ */
 
 /* define a macro to capture function name, file name, and line number
  * along with user-defined string */
@@ -117,7 +140,6 @@ do { \
 /* we need the dlsym function */
 #define __USE_GNU
 #include <dlfcn.h>
-#include <stdlib.h>
 
 /* define a static variable called __real_open to record address of
  * real open call and initialize it to NULL */
@@ -152,9 +174,11 @@ do { \
 
 /* we don't need a variable to record the address of the real function,
  * just declare the existence of __real_open so the compiler knows the
- * prototype of this function (linker will provide it) */
+ * prototype of this function (linker will provide it), also need to
+ * declare prototype for __wrap_open */
 #define UNIFYCR_DECL(name,ret,args) \
       extern ret __real_ ## name args;  \
+      ret __wrap_ ## name args;
 
 /* we define our wrapper function as __wrap_open instead of open */
 #define UNIFYCR_WRAP(name) __wrap_ ## name
@@ -167,28 +191,9 @@ do { \
 
 #endif
 
-#define UNIFYCR_SUCCESS     0
-#define UNIFYCR_FAILURE    -1
-#define UNIFYCR_ERR_NOSPC  -2
-#define UNIFYCR_ERR_IO     -3
-#define UNIFYCR_ERR_NAMETOOLONG -4
-#define UNIFYCR_ERR_NOENT  -5
-#define UNIFYCR_ERR_EXIST  -6
-#define UNIFYCR_ERR_NOTDIR -7
-#define UNIFYCR_ERR_NFILE  -8
-#define UNIFYCR_ERR_INVAL  -9
-#define UNIFYCR_ERR_OVERFLOW -10
-#define UNIFYCR_ERR_FBIG   -11
-#define UNIFYCR_ERR_BADF   -12
-#define UNIFYCR_ERR_ISDIR  -13
-#define UNIFYCR_ERR_NOMEM  -14
-
-#ifndef HAVE_OFF64_T
-typedef int64_t off64_t;
-#endif
-
 /* structure to represent file descriptors */
 typedef struct {
+    int   fid;   /* local file id associated with fd */
     off_t pos;   /* current file pointer */
     int   read;  /* whether file is opened for read */
     int   write; /* whether file is opened for write */
@@ -202,13 +207,14 @@ enum unifycr_stream_orientation {
 
 /* structure to represent FILE* streams */
 typedef struct {
+    int    sid;      /* index within unifycr_streams */
     int    err;      /* stream error indicator flag */
     int    eof;      /* stream end-of-file indicator flag */
     int    fd;       /* file descriptor associated with stream */
     int    append;   /* whether file is opened in append mode */
     int    orient;   /* stream orientation, UNIFYCR_STREAM_ORIENTATION_{NULL,BYTE,WIDE} */
 
-    void  *buf;      /* pointer to buffer */
+    void*  buf;      /* pointer to buffer */
     int    buffree;  /* whether we need to free buffer */
     int    buftype;  /* _IOFBF fully buffered, _IOLBF line buffered, _IONBF unbuffered */
     size_t bufsize;  /* size of buffer in bytes */
@@ -216,13 +222,21 @@ typedef struct {
     size_t buflen;   /* number of bytes active in buffer */
     size_t bufdirty; /* whether data in buffer needs to be flushed */
 
-    unsigned char *ubuf; /* ungetc buffer (we store bytes from end) */
+    unsigned char* ubuf; /* ungetc buffer (we store bytes from end) */
     size_t ubufsize;     /* size of ungetc buffer in bytes */
     size_t ubuflen;      /* number of active bytes in buffer */
 
-    unsigned char *_p; /* pointer to character in buffer */
+    unsigned char* _p; /* pointer to character in buffer */
     size_t         _r; /* number of bytes left at pointer */
 } unifycr_stream_t;
+
+/* structure to represent DIR* streams */
+typedef struct {
+    int dirid; /* index within unifycr_dirstreams */
+    int fid;   /* local file id of directory for this stream */
+    int fd;    /* file descriptor associated with stream */
+    off_t pos; /* position within directory stream */
+} unifycr_dirstream_t;
 
 enum flock_enum {
     UNLOCKED,
@@ -247,7 +261,7 @@ typedef struct {
 
 typedef struct {
     off_t size;                     /* current file size */
-    off_t real_size;                                /* real size of the file for logio*/
+    off_t log_size;                 /* real size of the file for logio*/
     int is_dir;                     /* is this file a directory */
     pthread_spinlock_t fspinlock;   /* file lock variable */
     enum flock_enum flock_status;   /* file lock status */
@@ -255,54 +269,37 @@ typedef struct {
     int storage;                    /* FILE_STORAGE specifies file data management */
 
     off_t chunks;                   /* number of chunks allocated to file */
-    unifycr_chunkmeta_t *chunk_meta; /* meta data for chunks */
-
+    unifycr_chunkmeta_t* chunk_meta; /* meta data for chunks */
 } unifycr_filemeta_t;
 
-/* path to fid lookup struct */
+/* struct used to map a full path to its local file id,
+ * an array of these is kept and a simple linear search
+ * is used to find a match */
 typedef struct {
-    int in_use; /* flag incidating whether slot is in use */
-    const char filename[UNIFYCR_MAX_FILENAME];
+    /* flag incidating whether slot is in use */
+    int in_use;
+
     /* full path and name of file */
+    const char filename[UNIFYCR_MAX_FILENAME];
 } unifycr_filename_t;
 
 /*unifycr structures*/
 typedef struct {
     int fid;
-    long offset;
-    long length;
-    char *buf;
-
+    int errcode;
+    size_t offset;
+    size_t length;
+    char* buf;
 } read_req_t;
 
 typedef struct {
-    int src_fid;
-    long offset;
-    long length;
-} shm_meta_t; /*metadata format in the shared memory*/
-
-typedef struct {
-    off_t file_pos;
-    off_t mem_pos;
-    size_t length;
-    int fid;
-} unifycr_index_t;
-
-typedef struct {
-    off_t *ptr_num_entries;
-    unifycr_index_t *index_entry;
+    size_t* ptr_num_entries;
+    unifycr_index_t* index_entry;
 } unifycr_index_buf_t;
 
 typedef struct {
-    int fid;
-    int gfid;
-    char filename[UNIFYCR_MAX_FILENAME];
-    struct stat file_attr;
-} unifycr_fattr_t;
-
-typedef struct {
-    off_t *ptr_num_entries;
-    unifycr_fattr_t *meta_entry;
+    size_t* ptr_num_entries;
+    unifycr_file_attr_t* meta_entry;
 } unifycr_fattr_buf_t;
 
 typedef struct {
@@ -310,56 +307,31 @@ typedef struct {
     int count;
 } index_set_t;
 
-typedef enum {
-    UNIFYCRFS,
-    UNIFYCR_LOG,
-    UNIFYCR_STRIPE,
-} fs_type_t;
-
 typedef struct {
     read_req_t read_reqs[UNIFYCR_MAX_READ_CNT];
     int count;
 } read_req_set_t;
 
 read_req_set_t read_req_set;
-read_req_set_t tmp_read_req_set;
 index_set_t tmp_index_set;
 
-extern int *local_rank_lst;
+extern unifycr_index_buf_t unifycr_indices;
+extern unsigned long unifycr_max_index_entries;
+extern long unifycr_spillover_max_chunks;
+
+extern int* local_rank_lst;
 extern int local_rank_cnt;
 extern int local_rank_idx;
 extern int local_del_cnt;
 extern int client_sockfd;
 extern struct pollfd cmd_fd;
-extern long shm_req_size;
-extern long shm_recv_size;
-extern char *shm_recvbuf;
-extern char *shm_reqbuf;
-extern fs_type_t fs_type;
-extern char cmd_buf[GEN_STR_LEN];
-extern char ack_msg[3];
+extern void* shm_req_buf;
+extern void* shm_recv_buf;
+extern char cmd_buf[CMD_BUF_SIZE];
 extern unifycr_fattr_buf_t unifycr_fattrs;
 
-
-extern int glb_superblock_size;
-extern int dbg_rank;
 extern int app_id;
-extern int glb_size;
-extern int reqbuf_fd;
-extern int recvbuf_fd;
-extern int superblock_fd;
-extern long unifycr_key_slice_range;
-
-/* -------------------------------
- * Common includes
- * ------------------------------- */
-
-/* TODO: move common includes to another file */
-#include "unifycr.h"
-#include "unifycr-stack.h"
-#include "unifycr-fixed.h"
-#include "unifycr-sysio.h"
-#include "unifycr-stdio.h"
+extern size_t unifycr_key_slice_range;
 
 /* -------------------------------
  * Global varaible declarations
@@ -369,15 +341,6 @@ extern long unifycr_key_slice_range;
 #define UNIFYCR_CLI_TIME_OUT 5000
 
 typedef enum {
-    COMM_MOUNT,
-    COMM_META,
-    COMM_READ,
-    COMM_UNMOUNT,
-    COMM_DIGEST,
-    COMM_SYNC_DEL,
-} cmd_lst_t;
-
-typedef enum {
     ACK_SUCCESS,
     ACK_FAIL,
 } ack_status_t;
@@ -385,11 +348,14 @@ typedef enum {
 /* keep track of what we've initialized */
 extern int unifycr_initialized;
 
-/* list of file names */
-extern unifycr_filename_t *unifycr_filelist;
+/* list of file name structures of fixed length,
+ * used to map a full path to its local file id,
+ * an array of these is kept and a simple linear search
+ * is used to find a match */
+extern unifycr_filename_t* unifycr_filelist;
 
 /* mount directory */
-extern char  *unifycr_mount_prefix;
+extern char*  unifycr_mount_prefix;
 extern size_t unifycr_mount_prefixlen;
 
 /* array of file descriptors */
@@ -398,6 +364,21 @@ extern rlim_t unifycr_fd_limit;
 
 /* array of file streams */
 extern unifycr_stream_t unifycr_streams[UNIFYCR_MAX_FILEDESCS];
+
+/* array of directory streams */
+extern unifycr_dirstream_t unifycr_dirstreams[UNIFYCR_MAX_FILEDESCS];
+
+/* stack of free file descriptor values,
+ * each is an index into unifycr_fds array */
+extern void* unifycr_fd_stack;
+
+/* stack of free streams,
+ * each is an index into unifycr_streams array */
+extern void* unifycr_stream_stack;
+
+/* stack of directory streams,
+ * each is an index into unifycr_dirstreams array */
+extern void* unifycr_dirstream_stack;
 
 extern int unifycr_use_memfs;
 extern int unifycr_use_spillover;
@@ -412,9 +393,9 @@ unifycr_chunk_mask; /* mask applied to logical offset to determine physical offs
 extern long
 unifycr_max_chunks; /* maximum number of chunks that fit in memory */
 
-extern void *free_chunk_stack;
-extern void *free_spillchunk_stack;
-extern char *unifycr_chunks;
+extern void* free_chunk_stack;
+extern void* free_spillchunk_stack;
+extern char* unifycr_chunks;
 int unifycr_spilloverblock;
 
 /* -------------------------------
@@ -422,8 +403,8 @@ int unifycr_spilloverblock;
  * ------------------------------- */
 
 /* single function to route all unsupported wrapper calls through */
-int unifycr_unsupported(const char *fn_name, const char *file, int line,
-                        const char *fmt, ...);
+int unifycr_unsupported(const char* fn_name, const char* file, int line,
+                        const char* fmt, ...);
 
 /* returns 1 if two input parameters will overflow their type when
  * added together */
@@ -442,29 +423,43 @@ int unifycr_stack_lock();
 int unifycr_stack_unlock();
 
 /* sets flag if the path is a special path */
-int unifycr_intercept_path(const char *path);
+int unifycr_intercept_path(const char* path);
 
 /* given an fd, return 1 if we should intercept this file, 0 otherwise,
  * convert fd to new fd value if needed */
-int unifycr_intercept_fd(int *fd);
+int unifycr_intercept_fd(int* fd);
 
 /* given a FILE*, returns 1 if we should intercept this file,
  * 0 otherwise */
-int unifycr_intercept_stream(FILE *stream);
+int unifycr_intercept_stream(FILE* stream);
+
+/* given a DIR*, returns 1 if we should intercept this directory,
+ * 0 otherwise */
+int unifycr_intercept_dirstream(DIR* dirp);
 
 /* given a path, return the file id */
-int unifycr_get_fid_from_path(const char *path);
+int unifycr_get_fid_from_path(const char* path);
 
 /* given a file descriptor, return the file id */
 int unifycr_get_fid_from_fd(int fd);
 
+/* initialze file descriptor structure corresponding to fd value */
+int unifycr_fd_init(int fd);
+
+/* initialze file stream structure corresponding to id value */
+int unifycr_stream_init(int sid);
+
+/* initialze directory stream descriptor structure
+ * corresponding to id value */
+int unifycr_dirstream_init(int dirid);
+
 /* return address of file descriptor structure or NULL if fd is out
  * of range */
-unifycr_fd_t *unifycr_get_filedesc_from_fd(int fd);
+unifycr_fd_t* unifycr_get_filedesc_from_fd(int fd);
 
 /* given a file id, return a pointer to the meta data,
  * otherwise return NULL */
-unifycr_filemeta_t *unifycr_get_meta_from_fid(int fid);
+unifycr_filemeta_t* unifycr_get_meta_from_fid(int fid);
 
 /* given an UNIFYCR error code, return corresponding errno code */
 int unifycr_err_map_to_errno(int rc);
@@ -483,13 +478,16 @@ int unifycr_fid_is_dir(int fid);
  * e.g. ../dirname will not work
  * returns 1 for yes it is empty
  * returns 0 for no */
-int unifycr_fid_is_dir_empty(const char *path);
+int unifycr_fid_is_dir_empty(const char* path);
 
 /* return current size of given file id */
 off_t unifycr_fid_size(int fid);
 
+/* fill in limited amount of stat information for global file id */
+int unifycr_gfid_stat(int gfid, struct stat* buf);
+
 /* fill in limited amount of stat information */
-int unifycr_fid_stat(int fid, struct stat *buf);
+int unifycr_fid_stat(int fid, struct stat* buf);
 
 /* allocate a file id slot for a new file
  * return the fid or -1 on error */
@@ -500,21 +498,21 @@ int unifycr_fid_free(int fid);
 
 /* add a new file and initialize metadata
  * returns the new fid, or negative value on error */
-int unifycr_fid_create_file(const char *path);
+int unifycr_fid_create_file(const char* path);
 
 /* add a new directory and initialize metadata
  * returns the new fid, or a negative value on error */
-int unifycr_fid_create_directory(const char *path);
+int unifycr_fid_create_directory(const char* path);
 
 /* read count bytes from file starting from pos and store into buf,
  * all bytes are assumed to exist, so checks on file size should be
  * done before calling this routine */
-int unifycr_fid_read(int fid, off_t pos, void *buf, size_t count);
+int unifycr_fid_read(int fid, off_t pos, void* buf, size_t count);
 
 /* write count bytes from buf into file starting at offset pos,
  * all bytes are assumed to be allocated to file, so file should
  * be extended before calling this routine */
-int unifycr_fid_write(int fid, off_t pos, const void *buf, size_t count);
+int unifycr_fid_write(int fid, off_t pos, const void* buf, size_t count);
 
 /* given a file id, write zero bytes to region of specified offset
  * and length, assumes space is already reserved */
@@ -533,8 +531,8 @@ int unifycr_fid_truncate(int fid, off_t length);
 /* opens a new file id with specified path, access flags, and permissions,
  * fills outfid with file id and outpos with position for current file pointer,
  * returns UNIFYCR error code */
-int unifycr_fid_open(const char *path, int flags, mode_t mode, int *outfid,
-                     off_t *outpos);
+int unifycr_fid_open(const char* path, int flags, mode_t mode, int* outfid,
+                     off_t* outpos);
 
 int unifycr_fid_close(int fid);
 
@@ -542,17 +540,20 @@ int unifycr_fid_close(int fid);
 int unifycr_fid_unlink(int fid);
 
 
-/*functions used in UnifyCR*/
-int unifycr_split_index(unifycr_index_t *cur_idx, index_set_t *index_set,
-                        long slice_range);
-int unifycr_split_read_requests(read_req_t *cur_read_req,
-                                read_req_set_t *read_req_set,
-                                long slice_range);
-int unifycr_coalesce_read_reqs(read_req_t *read_req, int count,
-                               read_req_set_t *tmp_read_req_set, long unifycr_key_slice_range,
-                               read_req_set_t *read_req_set);
-int unifycr_match_received_ack(read_req_t *read_req, int count,
-                               read_req_t *match_req);
-int unifycr_locate_req(read_req_t *read_req, int count,
-                       read_req_t *match_req);
+/* functions used in UnifyCR */
+
+int unifycr_generate_gfid(const char* path);
+
+int unifycr_set_global_file_meta(const char* path, int fid, int gfid,
+                                 struct stat* sb);
+
+int unifycr_get_global_file_meta(int fid, int gfid,
+                                 unifycr_file_attr_t* gfattr);
+
+// These require types/structures defined above
+#include "unifycr-fixed.h"
+#include "unifycr-stdio.h"
+#include "unifycr-sysio.h"
+#include "unifycr-dirops.h"
+
 #endif /* UNIFYCR_INTERNAL_H */

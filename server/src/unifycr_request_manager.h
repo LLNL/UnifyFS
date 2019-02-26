@@ -29,36 +29,26 @@
 
 #ifndef UNIFYCR_REQUEST_MANAGER_H
 #define UNIFYCR_REQUEST_MANAGER_H
+
 #include "unifycr_const.h"
 #include "unifycr_global.h"
-#include "arraylist.h"
 
-typedef struct {
-    int src_fid;
-    long offset;
-    long length;
-} shm_meta_t; /*metadata format in the shared memory*/
+/* entry point for starting a request manager thread */
+void* rm_delegate_request_thread(void* arg);
 
-void *rm_delegate_request_thread(void *arg);
-int rm_read_remote_data(int sock_id, int num);
-int rm_send_remote_requests(thrd_ctrl_t *thrd_ctrl,
-                            int thrd_tag, long *tot_sz);
-int rm_pack_send_requests(char *req_msg_buf,
-                          send_msg_t *send_metas, int req_num,
-                          long *tot_sz);
+/* functions called by rpc handlers to assign work
+ * to request managre threads */
+int rm_cmd_mread(int app_id, int client_id, int gfid,
+                 size_t req_num, void* reqbuf);
 
-int compare_delegators(const void *a, const void *b);
-int rm_pack_send_msg(int rank, char *send_msg_buf,
-                     send_msg_t *send_metas, int meta_num,
-                     long *tot_sz);
-int rm_receive_remote_message(int app_id,
-                              int sock_id, long tot_sz);
-void print_recv_msg(int app_id,
-                    int cli_id, int dbg_rank, int thrd_id, shm_meta_t *msg);
-int rm_process_received_msg(int app_id, int sock_id,
-                            char *recv_msg_buf, long *ptr_tot_sz);
-void print_remote_del_reqs(int app_id, int cli_id,
-                           int dbg_rank, del_req_stat_t *del_req_stat);
-void print_send_msgs(send_msg_t *send_metas,
-                     long msg_cnt, int dbg_rank);
+int rm_cmd_read(int app_id, int client_id, int gfid,
+                size_t offset, size_t length);
+
+int rm_cmd_filesize(int app_id, int client_id, int gfid, size_t* outsize);
+
+/* function called by main thread to instruct
+ * resource manager thread to exit,
+ * returns UNIFYCR_SUCCESS on success */
+int rm_cmd_exit(thrd_ctrl_t* thrd_ctrl);
+
 #endif
