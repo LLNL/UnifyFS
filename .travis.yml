@@ -6,15 +6,24 @@ before_install:
   # MPI projects.
   - test -n $CC && unset CC
   - sudo apt-get -qq update
-  - sudo apt-get install --yes -qq build-essential autoconf libtool
+  - sudo apt-get install --yes -qq build-essential autoconf libtool cmake
   - sudo apt-get install --yes -qq libopenmpi-dev openmpi-bin
+  - sudo apt-get install --yes -qq libhdf5-openmpi-dev
   - (cd $HOME/spack; git describe) || git clone https://github.com/spack/spack $HOME/spack
-  - $HOME/spack/bin/spack install leveldb
-  - $HOME/spack/bin/spack install gotcha
   - $HOME/spack/bin/spack install environment-modules
+  - $HOME/spack/bin/spack install leveldb
+  - $HOME/spack/bin/spack install gotcha@0.0.2
+  - $HOME/spack/bin/spack install flatcc
+  # insall margo with spack
+  - git config --global http.sslVerify false
+  - git clone https://xgitlab.cels.anl.gov/sds/sds-repo.git $HOME/sds-repo.git
+  - $HOME/spack/bin/spack repo add $HOME/sds-repo.git
+  - $HOME/spack/bin/spack install margo
+  - git config --global http.sslVerify true
+  # prepare build environment
   - . $HOME/spack/share/spack/setup-env.sh
   - spack load environment-modules
-  - source <(spack module loads gotcha leveldb)
+  - source <(spack module tcl loads leveldb gotcha@0.0.2 flatcc mercury argobots margo)
   - eval $(./scripts/git_log_test_env.sh)
   - export TEST_CHECKPATCH_SKIP_FILES
 
@@ -29,7 +38,9 @@ before_cache:
 script:
   # Force git to update the shallow clone and include tags so git-describe works
   - git fetch --unshallow --tags
-  - sh autogen.sh && ./configure && make -k && make distcheck
+  - sh autogen.sh
+  - ./configure || cat config.log
+  - make -k && make distcheck
   - ./scripts/checkpatch.sh || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
 
 after_failure:

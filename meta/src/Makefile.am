@@ -27,10 +27,15 @@ libmdhim_a_SOURCES = Mlog2/mlog2.c \
                      mdhim.h \
                      uthash/uthash.h
 
-AM_CPPFLAGS = -I$(top_srcdir)/meta/src/Mlog2 \
-              -I$(top_srcdir)/meta/src/uthash
+# target_LDFLAGS is not valid for library archive targets
+#libmdhim_a_LDFLAGS = $(AM_LDFLAGS) $(LEVELDB_LDFLAGS) $(LEVELDB_LIBS) $(MPI_CLDFLAGS)
 
-AM_CFLAGS = -DLEVELDB_SUPPORT $(LEVELDB_CFLAGS)
+AM_CPPFLAGS = -I$(top_srcdir)/meta/src/Mlog2 \
+              -I$(top_srcdir)/meta/src/uthash \
+              -I$(top_srcdir)/common/src \
+              -I$(top_srcdir)/server/src
+
+AM_CFLAGS = -DLEVELDB_SUPPORT $(LEVELDB_CFLAGS) $(MPI_CFLAGS)
 AM_CFLAGS += -Wall
 
 CLEANFILES =

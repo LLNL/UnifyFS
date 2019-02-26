@@ -39,11 +39,14 @@
 
 #include "uthash.h"
 #include "mdhim_options.h"
+#include "mpi.h"
 
 #define PRIMARY_INDEX 1
 #define SECONDARY_INDEX 2
 #define LOCAL_INDEX 3
 #define REMOTE_INDEX 4
+
+struct mdhim_t; // avoid circular #include chain
 
 typedef struct rangesrv_info rangesrv_info;
 /* 
@@ -59,7 +62,6 @@ struct rangesrv_info {
 	void *first_key;
 
 	UT_hash_handle hh;         /* makes this structure hashable */
-
 };
 
 /* 

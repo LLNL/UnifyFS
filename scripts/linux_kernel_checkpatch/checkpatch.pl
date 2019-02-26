@@ -3070,14 +3070,18 @@ sub process {
 			     "Block comments use * on subsequent lines\n" . $hereprev);
 		}
 
-# Block comments use */ on trailing lines
-		if ($rawline !~ m@^\+[ \t]*\*/[ \t]*$@ &&	#trailing */
-		    $rawline !~ m@^\+.*/\*.*\*/[ \t]*$@ &&	#inline /*...*/
-		    $rawline !~ m@^\+.*\*{2,}/[ \t]*$@ &&	#trailing **/
-		    $rawline =~ m@^\+[ \t]*.+\*\/[ \t]*$@) {	#non blank */
-			WARN("BLOCK_COMMENT_STYLE",
-			     "Block comments use a trailing */ on a separate line\n" . $herecurr);
-		}
+# ATM: cruise/burstfs has lots of this
+# kill this to allow for single line comments like:
+#   /* this is a comment */
+#
+## Block comments use */ on trailing lines
+#		if ($rawline !~ m@^\+[ \t]*\*/[ \t]*$@ &&	#trailing */
+#		    $rawline !~ m@^\+.*/\*.*\*/[ \t]*$@ &&	#inline /*...*/
+#		    $rawline !~ m@^\+.*\*{2,}/[ \t]*$@ &&	#trailing **/
+#		    $rawline =~ m@^\+[ \t]*.+\*\/[ \t]*$@) {	#non blank */
+#			WARN("BLOCK_COMMENT_STYLE",
+#			     "Block comments use a trailing */ on a separate line\n" . $herecurr);
+#		}
 
 # Block comment * alignment
 		if ($prevline =~ /$;[ \t]*$/ &&			#ends in comment
@@ -3136,46 +3140,50 @@ sub process {
 			$last_blank_line = $linenr;
 		}
 
-# check for missing blank lines after declarations
-		if ($sline =~ /^\+\s+\S/ &&			#Not at char 1
-			# actual declarations
-		    ($prevline =~ /^\+\s+$Declare\s*$Ident\s*[=,;:\[]/ ||
-			# function pointer declarations
-		     $prevline =~ /^\+\s+$Declare\s*\(\s*\*\s*$Ident\s*\)\s*[=,;:\[\(]/ ||
-			# foo bar; where foo is some local typedef or #define
-		     $prevline =~ /^\+\s+$Ident(?:\s+|\s*\*\s*)$Ident\s*[=,;\[]/ ||
-			# known declaration macros
-		     $prevline =~ /^\+\s+$declaration_macros/) &&
-			# for "else if" which can look like "$Ident $Ident"
-		    !($prevline =~ /^\+\s+$c90_Keywords\b/ ||
-			# other possible extensions of declaration lines
-		      $prevline =~ /(?:$Compare|$Assignment|$Operators)\s*$/ ||
-			# not starting a section or a macro "\" extended line
-		      $prevline =~ /(?:\{\s*|\\)$/) &&
-			# looks like a declaration
-		    !($sline =~ /^\+\s+$Declare\s*$Ident\s*[=,;:\[]/ ||
-			# function pointer declarations
-		      $sline =~ /^\+\s+$Declare\s*\(\s*\*\s*$Ident\s*\)\s*[=,;:\[\(]/ ||
-			# foo bar; where foo is some local typedef or #define
-		      $sline =~ /^\+\s+$Ident(?:\s+|\s*\*\s*)$Ident\s*[=,;\[]/ ||
-			# known declaration macros
-		      $sline =~ /^\+\s+$declaration_macros/ ||
-			# start of struct or union or enum
-		      $sline =~ /^\+\s+(?:union|struct|enum|typedef)\b/ ||
-			# start or end of block or continuation of declaration
-		      $sline =~ /^\+\s+(?:$|[\{\}\.\#\"\?\:\(\[])/ ||
-			# bitfield continuation
-		      $sline =~ /^\+\s+$Ident\s*:\s*\d+\s*[,;]/ ||
-			# other possible extensions of declaration lines
-		      $sline =~ /^\+\s+\(?\s*(?:$Compare|$Assignment|$Operators)/) &&
-			# indentation of previous and current line are the same
-		    (($prevline =~ /\+(\s+)\S/) && $sline =~ /^\+$1\S/)) {
-			if (WARN("LINE_SPACING",
-				 "Missing a blank line after declarations\n" . $hereprev) &&
-			    $fix) {
-				fix_insert_line($fixlinenr, "\+");
-			}
-		}
+# ATM: kill this to allow for lines like:
+#   int foo = function();
+#   if (foo) {
+#
+## check for missing blank lines after declarations
+#		if ($sline =~ /^\+\s+\S/ &&			#Not at char 1
+#			# actual declarations
+#		    ($prevline =~ /^\+\s+$Declare\s*$Ident\s*[=,;:\[]/ ||
+#			# function pointer declarations
+#		     $prevline =~ /^\+\s+$Declare\s*\(\s*\*\s*$Ident\s*\)\s*[=,;:\[\(]/ ||
+#			# foo bar; where foo is some local typedef or #define
+#		     $prevline =~ /^\+\s+$Ident(?:\s+|\s*\*\s*)$Ident\s*[=,;\[]/ ||
+#			# known declaration macros
+#		     $prevline =~ /^\+\s+$declaration_macros/) &&
+#			# for "else if" which can look like "$Ident $Ident"
+#		    !($prevline =~ /^\+\s+$c90_Keywords\b/ ||
+#			# other possible extensions of declaration lines
+#		      $prevline =~ /(?:$Compare|$Assignment|$Operators)\s*$/ ||
+#			# not starting a section or a macro "\" extended line
+#		      $prevline =~ /(?:\{\s*|\\)$/) &&
+#			# looks like a declaration
+#		    !($sline =~ /^\+\s+$Declare\s*$Ident\s*[=,;:\[]/ ||
+#			# function pointer declarations
+#		      $sline =~ /^\+\s+$Declare\s*\(\s*\*\s*$Ident\s*\)\s*[=,;:\[\(]/ ||
+#			# foo bar; where foo is some local typedef or #define
+#		      $sline =~ /^\+\s+$Ident(?:\s+|\s*\*\s*)$Ident\s*[=,;\[]/ ||
+#			# known declaration macros
+#		      $sline =~ /^\+\s+$declaration_macros/ ||
+#			# start of struct or union or enum
+#		      $sline =~ /^\+\s+(?:union|struct|enum|typedef)\b/ ||
+#			# start or end of block or continuation of declaration
+#		      $sline =~ /^\+\s+(?:$|[\{\}\.\#\"\?\:\(\[])/ ||
+#			# bitfield continuation
+#		      $sline =~ /^\+\s+$Ident\s*:\s*\d+\s*[,;]/ ||
+#			# other possible extensions of declaration lines
+#		      $sline =~ /^\+\s+\(?\s*(?:$Compare|$Assignment|$Operators)/) &&
+#			# indentation of previous and current line are the same
+#		    (($prevline =~ /\+(\s+)\S/) && $sline =~ /^\+$1\S/)) {
+#			if (WARN("LINE_SPACING",
+#				 "Missing a blank line after declarations\n" . $hereprev) &&
+#			    $fix) {
+#				fix_insert_line($fixlinenr, "\+");
+#			}
+#		}
 
 # check for spaces at the beginning of a line.
 # Exceptions:
@@ -3778,7 +3786,9 @@ sub process {
 			my ($ident, $from, $to) = ($1, $2, $2);
 
 			# Should start with a space.
-			$to =~ s/^(\S)/ $1/;
+			#$to =~ s/^(\S)/ $1/;
+			# UNIFYCR: Should not start with a space.
+			$to =~ s/^\s+(\S)/$1/;
 			# Should not end with a space.
 			$to =~ s/\s+$//;
 			# '*'s should not have spaces between.
@@ -3802,10 +3812,20 @@ sub process {
 			#print "BB<$1>\n";
 			my ($match, $from, $to, $ident) = ($1, $2, $2, $3);
 
+			# Change to enforce char* <name> instead of char *<name>
+
 			# Should start with a space.
-			$to =~ s/^(\S)/ $1/;
+			# $to =~ s/^(\S)/ $1/;
+
+			# Should not start with a space.
+			$to =~ s/^\s+//;
+
 			# Should not end with a space.
-			$to =~ s/\s+$//;
+			# $to =~ s/\s+$//;
+
+			# Should end with a space.
+			$to =~ s/(\S)$/$1 /;
+
 			# '*'s should not have spaces between.
 			while ($to =~ s/\*\s+\*/\*\*/) {
 			}
@@ -4296,14 +4316,16 @@ sub process {
 							}
 						}
 					} elsif ($ctx =~ /Wx[^WCE]|[^WCE]xW/) {
-						if (ERROR("SPACING",
-							  "need consistent spacing around '$op' $at\n" . $hereptr)) {
-							$good = rtrim($fix_elements[$n]) . " " . trim($fix_elements[$n + 1]) . " ";
-							if (defined $fix_elements[$n + 2]) {
-								$fix_elements[$n + 2] =~ s/^\s+//;
-							}
-							$line_fixed = 1;
-						}
+						# UNIFYCR: trips on things like "extern FILE* dbg_stream;"
+						#
+						#if (ERROR("SPACING",
+						#	  "need consistent spacing around '$op' $at\n" . $hereptr)) {
+						#	$good = rtrim($fix_elements[$n]) . " " . trim($fix_elements[$n + 1]) . " ";
+						#	if (defined $fix_elements[$n + 2]) {
+						#		$fix_elements[$n + 2] =~ s/^\s+//;
+						#	}
+						#	$line_fixed = 1;
+						#}
 					}
 
 				# A colon needs no spaces before when it is
@@ -5100,7 +5122,9 @@ sub process {
 
 					substr($block, 0, length($cond), '');
 
-					$seen++ if ($block =~ /^\s*{/);
+					# Changed what is seen to blocks that don't start with an
+					# open brace {
+					$seen++ if ($block !~ /^\s*{/);
 
 					#print "cond<$cond> block<$block> allowed<$allowed[$allow]>\n";
 					if (statement_lines($cond) > 1) {
@@ -5122,14 +5146,34 @@ sub process {
 					foreach (@allowed) {
 						$sum_allowed += $_;
 					}
-					if ($sum_allowed == 0) {
+# Changed what is seen above so this block is only entered when blocks of code
+# are seen that don't start with an open brace {.
+#
+# Now this will catch:
+#                     if (foo == bar)
+#                         do this;
+#                     else
+#                         do that;
+# as well as:
+#            if (foo == bar) {
+#                do this;
+#                and do that;
+#            } else
+#                do that;
+#
+					if ($sum_allowed == 0 || ($sum_allowed != $allow &&
+						$seen != $allow)) {
 						WARN("BRACES",
-						     "braces {} are not necessary for any arm of this statement\n" . $herectx);
-					} elsif ($sum_allowed != $allow &&
-						 $seen != $allow) {
-						CHK("BRACES",
 						    "braces {} should be used on all arms of this statement\n" . $herectx);
 					}
+#					if ($sum_allowed == 0) {
+#						WARN("BRACES",
+#						     "braces {} are not necessary for any arm of this statement\n" . $herectx);
+#					} elseif ($sum_allowed != $allow &&
+#					          seen != $allow) {
+#					         CHK("BRACES",
+#					             "braces {} should be used on all arms of this statement\n" . $herectx);
+#					}
 				}
 			}
 		}
@@ -5162,29 +5206,39 @@ sub process {
 			}
 			if (statement_block_size($block) > 1) {
 				#print "APW: ALLOWED: lines block<$block>\n";
+				# Changed to not make an exception for single statement blocks
+				# with additional single statement blocks inside of them.
+				$allowed = 0;
+			}
+
+			# Allow any conditional directives
+			if ($line =~ /^(.*#)/) {
+				#print "APW: ALLOWED: pre<$1>\n";
 				$allowed = 1;
 			}
+
 			# Check the post-context.
 			if (defined $chunks[1]) {
 				my ($cond, $block) = @{$chunks[1]};
 				if (defined $cond) {
 					substr($block, 0, length($cond), '');
 				}
-				if ($block =~ /^\s*\{/) {
+				if ($block !~ /^\s*\{/) {
 					#print "APW: ALLOWED: chunk-1 block<$block>\n";
 					$allowed = 1;
 				}
 			}
-			if ($level == 0 && $block =~ /^\s*\{/ && !$allowed) {
+			# Changed what is looked for here and above in order to enforce all
+			# single statement blocks having braces {}
+			if ($level == 0 && $block !~ /^\s*\{/ && !$allowed) {
 				my $herectx = $here . "\n";
 				my $cnt = statement_rawlines($block);
 
 				for (my $n = 0; $n < $cnt; $n++) {
 					$herectx .= raw_line($linenr, $n) . "\n";
 				}
-
 				WARN("BRACES",
-				     "braces {} are not necessary for single statement blocks\n" . $herectx);
+				     "braces {} are necessary for single statement blocks\n" . $herectx);
 			}
 		}
 

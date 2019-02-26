@@ -44,17 +44,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include "mdhim.h"
-#include "range_server.h"
-#include "partitioner.h"
-#include "mdhim_options.h"
-#include "ds_leveldb.h"
-#include "uthash.h"
 
-#define UNIFYCR_FID(key) *(long *)key
-#define UNIFYCR_OFFSET(key) *((long *)key + 1)
-#define UNIFYCR_ADDR(val) *((long *)val + 2)
-#define UNIFYCR_LEN(val) *((long *)val + 1)
+#include "ds_leveldb.h"
+#include "mdhim.h"
+#include "mdhim_options.h"
+#include "partitioner.h"
+#include "range_server.h"
+#include "unifycr_metadata.h"
+#include "uthash.h"
 
 int recv_counter = 0;
 
@@ -87,32 +84,13 @@ struct timeval statstart, statend;
 double starttime=0;
 
 int putflag = 1;
+
 int unifycr_compare(const char* a, const char* b) {
-	int ret;
-
-	long offset, old_offset;
-	long fid, old_fid;
-
-	fid = *((unsigned long *)a);
-	old_fid = *((unsigned long *)b);
-
-	offset = *((unsigned long *)a+1);
-	old_offset = *((unsigned long *)b+1);
-
-	ret = fid - old_fid;
-
-	if (ret != 0)
-			return ret;
-	else {
-		if (offset - old_offset > 0)
-				return 1;
-		else if(offset - old_offset < 0)
-				return -1;
-		else
-				return 0;
-	}
-
-	return ret;
+	int rc;
+	unifycr_key_t *keya = (unifycr_key_t *)a;
+	unifycr_key_t *keyb = (unifycr_key_t *)b;
+	rc = unifycr_key_compare(keya, keyb);
+	return rc;
 }
 
 void add_timing(struct timeval start, struct timeval end, int num, 
@@ -769,8 +747,8 @@ int range_server_commit(struct mdhim_t *md, struct mdhim_basem_t *im, int source
 int range_server_bget(struct mdhim_t *md, struct mdhim_bgetm_t *bgm, int source) {
 	putflag = 0;
 	int ret;
-	void **values;
-	int32_t *value_lens;
+	void **values = NULL;
+	int32_t *value_lens = NULL;
 	int i;
 	struct mdhim_bgetrm_t *bgrm;
 	int error = 0;
@@ -780,9 +758,8 @@ int range_server_bget(struct mdhim_t *md, struct mdhim_bgetm_t *bgm, int source)
 
 	gettimeofday(&start, NULL);
 	if (bgm->op != MDHIM_RANGE_BGET) {
-		values = malloc(sizeof(void *) * bgm->num_keys);
-		value_lens = malloc(sizeof(int32_t) * bgm->num_keys);
-		memset(value_lens, 0, sizeof(int32_t) * bgm->num_keys);
+		values = (void **) calloc(bgm->num_keys, sizeof(void *));
+		value_lens = (int32_t *) calloc(bgm->num_keys, sizeof(int32_t));
 	}
 	//Get the index referenced the message
 	index = find_index(md, (struct mdhim_basem_t *) bgm);
@@ -794,20 +771,15 @@ int range_server_bget(struct mdhim_t *md, struct mdhim_bgetm_t *bgm, int source)
 	}
 
 	if (bgm->op == MDHIM_RANGE_BGET) {
-		values = malloc(sizeof(void *) * bgm->num_keys/2);
-		value_lens = malloc(sizeof(int32_t) * bgm->num_keys/2);
-		memset(value_lens, 0, sizeof(int) * bgm->num_keys/2);
-
-		void **ret_keys = malloc(bgm->num_keys * sizeof(char *)/2);
-		int32_t *ret_key_lens = malloc(bgm->num_keys * sizeof(int32_t));
-		memset(ret_key_lens, 0, sizeof(int) * bgm->num_keys/2);
-
+		void **ret_keys;
+		int32_t *ret_key_lens;
+		int num_ranges = bgm->num_keys / 2;
 		int out_record_cnt = 0;
-		levedb_batch_ranges(index->mdhim_store->db_handle,
+		leveldb_batch_ranges(index->mdhim_store->db_handle,
                                     (char **)bgm->keys, bgm->key_lens,
                                     (char ***)&ret_keys, &ret_key_lens,
                                     (char ***)&values, &value_lens,
-                                    bgm->num_keys, &out_record_cnt);
+                                    num_ranges, &out_record_cnt);
 
 		if (source != md->mdhim_rank) {
 			for (i = 0; i < bgm->num_keys; i++) {
@@ -1070,9 +1042,9 @@ int range_server_bget_op(struct mdhim_t *md, struct mdhim_bgetm_t *bgm, int sour
 										  get_value,
 										  get_value_len))
 						   != MDHIM_SUCCESS) {
-					 if (ret = index->mdhim_store->get_next(index->mdhim_store->db_handle,\
+					 if ((ret = index->mdhim_store->get_next(index->mdhim_store->db_handle,\
 										  get_key, get_key_len, get_value, \
-												get_value_len)!= MDHIM_SUCCESS) {
+												get_value_len)) != MDHIM_SUCCESS) {
 
 						 key_lens[num_records] = 0;
 						 value_lens[num_records] = 0;
@@ -1141,11 +1113,11 @@ int range_server_bget_op(struct mdhim_t *md, struct mdhim_bgetm_t *bgm, int sour
 		*get_key_len = bgm->key_lens[0];
 		key_lens[0] = *get_key_len;
 
-		error = mdhim_levedb_batch_next(index->mdhim_store->db_handle,
-						(char **)keys, key_lens,
-						(char **)values, value_lens,
-						bgm->num_keys * bgm->num_recs,
-						&num_records);
+		error = mdhim_leveldb_batch_next(index->mdhim_store->db_handle,
+                                                 (char **)keys, key_lens,
+                                                 (char **)values, value_lens,
+                                                 bgm->num_keys * bgm->num_recs,
+                                                 &num_records);
 
 	}
 

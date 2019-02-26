@@ -16,7 +16,7 @@ AM_SILENT_RULES([yes])
 
 AM_MAINTAINER_MODE([disable])
 
-AC_PROG_CC([mpicc])
+AC_PROG_CC_STDC
 AC_PROG_AWK
 AC_PROG_CPP
 AC_PROG_INSTALL
@@ -46,7 +46,7 @@ AC_CHECK_TYPES([ptrdiff_t])
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h limits.h stdlib.h string.h sys/socket.h sys/time.h])
 AC_CHECK_HEADERS([unistd.h arpa/inet.h inttypes.h netdb.h netinet/in.h])
-AC_CHECK_HEADERS([stddef.h stdint.h strings.h syslog.h])
+AC_CHECK_HEADERS([stddef.h stdint.h libgen.h strings.h syslog.h])
 AC_CHECK_HEADERS([inttypes.h wchar.h wctype.h])
 AC_CHECK_HEADER([openssl/md5.h], [], [AC_MSG_FAILURE([
         *** openssl/md5.h missing, openssl-devel package required])])
@@ -58,7 +58,19 @@ AC_FUNC_REALLOC
 AC_FUNC_STRTOD
 AC_CHECK_FUNCS([ftruncate getpagesize gettimeofday memset socket floor])
 AC_CHECK_FUNCS([gethostbyname strcasecmp strdup strerror strncasecmp strrchr])
-AC_CHECK_FUNCS([gethostname strstr strtoumax strtol uname])
+AC_CHECK_FUNCS([gethostname strstr strtoumax strtol uname posix_fallocate])
+
+# PMIx support build option
+AC_ARG_ENABLE([pmix],
+              AC_HELP_STRING([--enable-pmix],
+                             [Enable PMIx build options.]))
+if test "x$enable_pmix" = "xyes"; then
+AC_CHECK_HEADERS([pmix.h],
+                 [AM_CONDITIONAL([USE_PMIX], [true])],
+                 [AM_CONDITIONAL([USE_PMIX], [false])])
+else
+AM_CONDITIONAL([USE_PMIX], [false])
+fi
 
 # Debug build
 AC_ARG_ENABLE([debug],
@@ -68,14 +80,13 @@ AC_ARG_ENABLE([debug],
 BUILD_DEBUG=no
 if test "x$enable_debug" = "xyes"; then
         BUILD_DEBUG=yes
-        CFLAGS=`echo $CFLAGS | sed -e s/O2/O0/`
+        CFLAGS=`echo $CFLAGS | sed -e s/O2/O1/`
 else
         BUILD_DEBUG=no
 fi
 AC_SUBST(CFLAGS)
 
 CHECK_NUMA
-CHECK_ARCH
 
 AC_ARG_WITH(pkgconfigdir,
             [  --with-pkgconfigdir=DIR      pkgconfig file in DIR @<:@LIBDIR/pkgconfig@:>@],
@@ -114,46 +125,36 @@ AC_C_BIGENDIAN
 
 dnl temporarily set large file flags just for this test; we don't want
 dnl it to propagate to the makefile because of zlib bugs
-old_cflags="$CFLAGS"
-CFLAGS="$CFLAGS -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE"
 AC_MSG_CHECKING(for off64_t)
 AC_TRY_COMPILE(
     [
-    #include <stdio.h>
-    #include <unistd.h>
+    #define _FILE_OFFSET_BITS 64
+    #define _LARGEFILE64_SOURCE
     #include <sys/types.h>
-    #include <sys/stat.h>
-    #include <fcntl.h>
-    #include <stdarg.h>
-    #include <string.h>
-    #include <time.h>
-    #include <stdlib.h>
-    #include <errno.h>
-    #include <sys/uio.h>
-    #include <pthread.h>
-    #include <sys/mman.h>
-    #include <search.h>
-    #include <assert.h>
     ],
     [ off64_t off; ],
     AC_MSG_RESULT(yes)
     AC_DEFINE(HAVE_OFF64_T, 1, Define if off64_t type is defined),
     AC_MSG_RESULT(no)
 )
-CFLAGS="$old_cflags"
 
 AC_CHECK_HEADERS(mntent.h sys/mount.h)
 
-# check leveldb
-PKG_CHECK_MODULES([LEVELDB], [leveldb], ,
-    AC_CHECK_LIB([leveldb], [leveldb_create_default_env],
-        [AC_SUBST([LEVELDB_LIBS], [-lleveldb])
-         AC_SUBST([LEVELDB_CFLAGS], [-I/usr/include/leveldb])
-        ],
-        AC_MSG_ERROR(['leveldb is required to build unifycr.'])))
+# look for MPI and set flags
+LX_FIND_MPI
+
+# look for leveldb library, sets LEVELDB_CFLAGS/LDFLAGS/LIBS
+UNIFYCR_AC_LEVELDB
 
 # look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
 UNIFYCR_AC_GOTCHA
+
+UNIFYCR_AC_MARGO
+UNIFYCR_AC_FLATCC
+
+# HDF found?
+AX_LIB_HDF5
+AM_CONDITIONAL([HAVE_HDF5], [test x$with_hdf5 = xyes])
 
 # libc functions wrapped by unifycr
 
@@ -173,6 +174,7 @@ CP_WRAPPERS+=",-wrap,creat"
 CP_WRAPPERS+=",-wrap,creat64"
 CP_WRAPPERS+=",-wrap,open"
 CP_WRAPPERS+=",-wrap,open64"
+CP_WRAPPERS+=",-wrap,__open_2"
 CP_WRAPPERS+=",-wrap,read"
 CP_WRAPPERS+=",-wrap,write"
 CP_WRAPPERS+=",-wrap,readv"
@@ -196,56 +198,56 @@ CP_WRAPPERS+=",-wrap,__fxstat"
 CP_WRAPPERS+=",-wrap,close"
 
 # FILE* functions
-#CP_WRAPPERS+=",-wrap,fclose"
-#CP_WRAPPERS+=",-wrap,fflush"
-#CP_WRAPPERS+=",-wrap,fopen"
-#CP_WRAPPERS+=",-wrap,freopen"
-#CP_WRAPPERS+=",-wrap,setbuf"
-#CP_WRAPPERS+=",-wrap,setvbuf"
-#
-#CP_WRAPPERS+=",-wrap,fprintf"
-#CP_WRAPPERS+=",-wrap,fscanf"
-#CP_WRAPPERS+=",-wrap,vfprintf"
-#CP_WRAPPERS+=",-wrap,vfscanf"
-#
-#CP_WRAPPERS+=",-wrap,fgetc"
-#CP_WRAPPERS+=",-wrap,fgets"
-#CP_WRAPPERS+=",-wrap,fputc"
-#CP_WRAPPERS+=",-wrap,fputs"
-#CP_WRAPPERS+=",-wrap,getc"
-#CP_WRAPPERS+=",-wrap,putc"
-#CP_WRAPPERS+=",-wrap,ungetc"
-#
-#CP_WRAPPERS+=",-wrap,fread"
-#CP_WRAPPERS+=",-wrap,fwrite"
-#
-#CP_WRAPPERS+=",-wrap,fgetpos"
-#CP_WRAPPERS+=",-wrap,fseek"
-#CP_WRAPPERS+=",-wrap,fsetpos"
-#CP_WRAPPERS+=",-wrap,ftell"
-#CP_WRAPPERS+=",-wrap,rewind"
-#
-#CP_WRAPPERS+=",-wrap,clearerr"
-#CP_WRAPPERS+=",-wrap,feof"
-#CP_WRAPPERS+=",-wrap,ferror"
-#
-#CP_WRAPPERS+=",-wrap,fseeko"
-#CP_WRAPPERS+=",-wrap,ftello"
-#CP_WRAPPERS+=",-wrap,fileno"
+CP_WRAPPERS+=",-wrap,fclose"
+CP_WRAPPERS+=",-wrap,fflush"
+CP_WRAPPERS+=",-wrap,fopen"
+CP_WRAPPERS+=",-wrap,freopen"
+CP_WRAPPERS+=",-wrap,setbuf"
+CP_WRAPPERS+=",-wrap,setvbuf"
+
+CP_WRAPPERS+=",-wrap,fprintf"
+CP_WRAPPERS+=",-wrap,fscanf"
+CP_WRAPPERS+=",-wrap,vfprintf"
+CP_WRAPPERS+=",-wrap,vfscanf"
+
+CP_WRAPPERS+=",-wrap,fgetc"
+CP_WRAPPERS+=",-wrap,fgets"
+CP_WRAPPERS+=",-wrap,fputc"
+CP_WRAPPERS+=",-wrap,fputs"
+CP_WRAPPERS+=",-wrap,getc"
+CP_WRAPPERS+=",-wrap,putc"
+CP_WRAPPERS+=",-wrap,ungetc"
+
+CP_WRAPPERS+=",-wrap,fread"
+CP_WRAPPERS+=",-wrap,fwrite"
+
+CP_WRAPPERS+=",-wrap,fgetpos"
+CP_WRAPPERS+=",-wrap,fseek"
+CP_WRAPPERS+=",-wrap,fsetpos"
+CP_WRAPPERS+=",-wrap,ftell"
+CP_WRAPPERS+=",-wrap,rewind"
+
+CP_WRAPPERS+=",-wrap,clearerr"
+CP_WRAPPERS+=",-wrap,feof"
+CP_WRAPPERS+=",-wrap,ferror"
+
+CP_WRAPPERS+=",-wrap,fseeko"
+CP_WRAPPERS+=",-wrap,ftello"
+CP_WRAPPERS+=",-wrap,fileno"
 
 # wide character FILE* functions
-#CP_WRAPPERS+=",-wrap,fwprintf"
-#CP_WRAPPERS+=",-wrap,fwscanf"
-#CP_WRAPPERS+=",-wrap,vfwprintf"
-#CP_WRAPPERS+=",-wrap,vfwscanf"
-#CP_WRAPPERS+=",-wrap,fgetwc"
-#CP_WRAPPERS+=",-wrap,fgetws"
-#CP_WRAPPERS+=",-wrap,fputwc"
-#CP_WRAPPERS+=",-wrap,fputws"
-#CP_WRAPPERS+=",-wrap,fwide"
-#CP_WRAPPERS+=",-wrap,getwc"
-#CP_WRAPPERS+=",-wrap,putwc"
-#CP_WRAPPERS+=",-wrap,ungetwc"
+CP_WRAPPERS+=",-wrap,fwprintf"
+CP_WRAPPERS+=",-wrap,fwscanf"
+CP_WRAPPERS+=",-wrap,vfwprintf"
+CP_WRAPPERS+=",-wrap,vfwscanf"
+CP_WRAPPERS+=",-wrap,fgetwc"
+CP_WRAPPERS+=",-wrap,fgetws"
+CP_WRAPPERS+=",-wrap,fputwc"
+CP_WRAPPERS+=",-wrap,fputws"
+CP_WRAPPERS+=",-wrap,fwide"
+CP_WRAPPERS+=",-wrap,getwc"
+CP_WRAPPERS+=",-wrap,putwc"
+CP_WRAPPERS+=",-wrap,ungetwc"
 
 # ,-u,__wrap___fxstat64,-u,pthread_mutex_lock,-u,pthread_mutex_unlock
 
@@ -268,8 +270,10 @@ eval unifycr_bin_path=$bindir
 prefix=$savePrefix
 exec_prefix=$saveExecprefix
 
-CFLAGS="$old_cflags"
-LIBS="$old_libs"
+# autoconf<=2.69, runstatedir is not configurable.
+if test "x$runstatedir" = x; then
+        AC_SUBST([runstatedir], ['${localstatedir}/run'])
+fi
 
 AC_SUBST(unifycr_lib_path)
 AC_SUBST(unifycr_bin_path)
@@ -278,19 +282,26 @@ AC_SUBST(__CP_LOG_PATH)
 AC_SUBST(CP_WRAPPERS)
 AC_SUBST(DISABLE_LDPRELOAD)
 AC_OUTPUT(client/unifycr-config)
-AC_OUTPUT(client/unifycr-runtime-config.h)
 
 AC_CONFIG_FILES([Makefile
+                 common/Makefile
+                 common/src/Makefile
                  meta/Makefile
                  meta/src/Makefile
                  server/Makefile
                  server/src/Makefile
                  client/Makefile
                  client/src/Makefile
-                 client/tests/Makefile
+                 client/unifycr.pc
+                 examples/Makefile
+                 examples/src/Makefile
+                 extras/Makefile
+                 extras/unifycr.conf
                  t/Makefile
                  t/lib/Makefile
-                 client/unifycr.pc])
+                 util/Makefile
+                 util/unifycr/Makefile
+                 util/unifycr/src/Makefile])
 
 UNIFYCR_VERSION=${PACKAGE_VERSION}
 AC_SUBST(UNIFYCR_VERSION)

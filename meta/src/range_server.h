@@ -92,10 +92,6 @@ int range_server_init_comm(struct mdhim_t *md);
 int range_server_stop(struct mdhim_t *md);
 int range_server_add_oreq(struct mdhim_t *md, MPI_Request *req, void *msg); //Add an outstanding request
 int range_server_clean_oreqs(struct mdhim_t *md); //Clean outstanding reqs
-int levedb_batch_ranges(void *dbh, char **key, int *key_len,\
-		char ***out_key, int **out_key_len,\
-			char ***out_val, int **out_val_len,\
-				int tot_records, int *out_records_cnt);
 int unifycr_compare(const char *a, const char *b);
 
 #endif

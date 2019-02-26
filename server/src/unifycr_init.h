@@ -37,7 +37,7 @@
  * each application launched by srun.
  * */
 typedef struct {
-    char hostname[ULFS_MAX_FILENAME];
+    char hostname[HOST_NAME_MAX];
     int rank;
 } name_rank_pair_t;
 
@@ -47,9 +47,13 @@ typedef struct {
 } thread_ctrl_t;
 
 static int CountTasksPerNode(int rank, int numTasks);
-static int compare_name_rank_pair(const void *a, const void *b);
-static int compare_int(const void *a, const void *b);
+static int compare_name_rank_pair(const void* a, const void* b);
+static int compare_int(const void* a, const void* b);
+
+#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
 static int find_rank_idx(int my_rank,
-                         int *local_rank_lst, int local_rank_cnt);
+                         int* local_rank_lst, int local_rank_cnt);
+#endif
+
 static int unifycr_exit();
 #endif

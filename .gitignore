@@ -1,4 +1,4 @@
-clocal.m4
+aclocal.m4
 autom4te.cache
 build
 config.*
@@ -48,16 +48,39 @@ log
 
 # project files
 server/src/unifycrd
+util/unifycr/src/unifycr
 
 # generated package files
 client/unifycr-config
 client/unifycr.pc
+extras/unifycr.conf
+libtool
+m4/libtool.m4
+m4/ltoptions.m4
+m4/ltsugar.m4
+m4/ltversion.m4
+m4/lt~obsolete.m4
+meta/src/Mlog2/.dirstamp
+t/sys/.dirstamp
 
 # test files
-client/tests/test_read_gotcha
-client/tests/test_read_static
-client/tests/test_write_gotcha
-client/tests/test_write_static
+client/unifycr-runtime-config.h
+examples/src/app-btio-gotcha
+examples/src/app-btio-static
+examples/src/app-mpiio-gotcha
+examples/src/app-mpiio-static
+examples/src/sysio-read-gotcha
+examples/src/sysio-read-static
+examples/src/app-tileio-gotcha
+examples/src/app-tileio-static
+examples/src/sysio-write-gotcha
+examples/src/sysio-write-static
+examples/src/sysio-writeread-gotcha
+examples/src/sysio-writeread-static
+examples/src/sysio-writeread2-gotcha
+examples/src/sysio-writeread2-static
+examples/src/app-hdf5-create-gotcha
+examples/src/app-hdf5-writeread-gotcha
 t/sys/open.t
 t/test-results/
 t/unifycr_unmount.t

@@ -49,7 +49,7 @@
  * reserve space up to length */
 int unifycr_fid_store_fixed_extend(
     int fid,                 /* file id to reserve space for */
-    unifycr_filemeta_t *meta, /* meta data for file */
+    unifycr_filemeta_t* meta, /* meta data for file */
     off_t length             /* number of bytes to reserve for file */
 );
 
@@ -57,7 +57,7 @@ int unifycr_fid_store_fixed_extend(
  * give back space down to length */
 int unifycr_fid_store_fixed_shrink(
     int fid,                 /* file id to free space for */
-    unifycr_filemeta_t *meta, /* meta data for file */
+    unifycr_filemeta_t* meta, /* meta data for file */
     off_t length             /* number of bytes to reserve for file */
 );
 
@@ -65,9 +65,9 @@ int unifycr_fid_store_fixed_shrink(
  * returns UNIFYCR error code */
 int unifycr_fid_store_fixed_read(
     int fid,                 /* file id to read from */
-    unifycr_filemeta_t *meta, /* meta data for file */
+    unifycr_filemeta_t* meta, /* meta data for file */
     off_t pos,               /* position within file to read from */
-    void *buf,               /* user buffer to store data in */
+    void* buf,               /* user buffer to store data in */
     size_t count             /* number of bytes to read */
 );
 
@@ -75,9 +75,9 @@ int unifycr_fid_store_fixed_read(
  * returns UNIFYCR error code */
 int unifycr_fid_store_fixed_write(
     int fid,                 /* file id to write to */
-    unifycr_filemeta_t *meta, /* meta data for file */
+    unifycr_filemeta_t* meta, /* meta data for file */
     off_t pos,               /* position within file to write to */
-    const void *buf,         /* user buffer holding data */
+    const void* buf,         /* user buffer holding data */
     size_t count             /* number of bytes to write */
 );
 

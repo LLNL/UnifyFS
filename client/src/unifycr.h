@@ -43,10 +43,17 @@
 #ifndef UNIFYCR_H
 #define UNIFYCR_H
 
-#include <poll.h>
+#include <stddef.h>      // size_t
+#include <sys/types.h>   // off_t
+
 #include <limits.h>
-#include <sys/socket.h>
-#include <sys/un.h>
+
+#include "unifycr_const.h"
+
+#ifndef HOST_NAME_MAX
+# define HOST_NAME_MAX 256
+#endif
+
 /* TODO: namespace C */
 
 /* linked list of chunk information given to an external library wanting
@@ -54,38 +61,25 @@
 typedef struct {
     off_t chunk_id;
     int location;
-    void *chunk_mr;
+    void* chunk_mr;
     off_t spillover_offset;
-    struct chunk_list_t *next;
+    struct chunk_list_t* next;
 } chunk_list_t;
 
 /*data structures defined for unifycr********************/
-
-#define MMAP_OPEN_FLAG O_RDWR|O_CREAT
-#define MMAP_OPEN_MODE 00777
 
 typedef struct {
     char hostname[HOST_NAME_MAX];
     int rank;
 } name_rank_pair_t;
 
+#if 0
 int unifycr_mount(const char prefix[], int rank, size_t size,
                   int l_app_id, int subtype);
+#endif
+int unifycr_mount(const char prefix[], int rank, size_t size,
+                  int l_app_id);
 int unifycr_unmount(void);
-int compare_fattr(const void *a, const void *b);
-
-/* mount memfs at some prefix location */
-int unifycrfs_mount(const char prefix[], size_t size, int rank);
-
-/* get information about the chunk data region
- * for external async libraries to register during their init */
-size_t unifycr_get_data_region(void **ptr);
-
-/* get a list of chunks for a given file (useful for RDMA, etc.) */
-chunk_list_t *unifycr_get_chunk_list(char *path);
-
-/* debug function to print list of chunks constituting a file
- * and to test above function*/
-void unifycr_print_chunk_list(char *path);
+int compare_fattr(const void* a, const void* b);
 
 #endif /* UNIFYCR_H */

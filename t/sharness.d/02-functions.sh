@@ -26,7 +26,7 @@ process_is_running()
     local i=0
 
     while test "$i" -le "$max_loops"; do
-        if ! test -z $(pidof $proc) ; then
+        if ! test -z "$(pidof $proc)" ; then
             return 0
         else
             sleep .5
@@ -51,7 +51,7 @@ process_is_not_running()
     local i=0
 
     while test "$i" -le "$max_loops"; do
-        if test -z $(pidof $proc) ; then
+        if test -z "$(pidof $proc)" ; then
             return 0
         else
             sleep .5
@@ -68,11 +68,11 @@ unifycrd_start_daemon()
         return 1
     fi
 
-    if ! test -d $UNIFYCR_META_DB_PATH &&
+    if ! test -d "$UNIFYCR_META_DB_PATH" &&
        ! mkdir $UNIFYCR_META_DB_PATH; then
             return 1
     fi
-    ( $UNIFYCRD < /dev/null > /dev/null 2>&1 & )
+    $UNIFYCRD
 }
 
 # Kill UnifyCR daemon.

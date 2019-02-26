@@ -4,9 +4,9 @@
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
-    char *unifycr_root;
+    char* unifycr_root;
     int rank_num;
     int rank;
     int rc;
@@ -22,14 +22,15 @@ int main(int argc, char *argv[])
     /*
      * Verify unifycr_mount succeeds.
      */
-    rc = unifycr_mount(unifycr_root, rank, rank_num, 0, 1);
+    rc = unifycr_mount(unifycr_root, rank, rank_num, 0);
     ok(rc == 0, "unifycr_mount at %s (rc=%d)", unifycr_root, rc);
 
     rc = unifycr_unmount();
     ok(rc == 0, "unifycr_unmount succeeds (rc=%d)", rc);
 
-    MPI_Finalize();
     done_testing();
+
+    MPI_Finalize();
 
     return 0;
 }

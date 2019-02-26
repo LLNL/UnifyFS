@@ -15,8 +15,8 @@
         display: block;
         width: 700px;
         background-color: #E0;
-        overflow: scroll; !important 
-    }   
+        overflow: scroll; !important
+    }
     table.scrollwide td {
         white-space: nowrap;
     }
@@ -44,5 +44,5 @@
     }
 
     .rst-versions{
-        border-top:solid 10px #222c32;        
+        border-top:solid 10px #222c32;
     }

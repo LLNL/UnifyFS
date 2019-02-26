@@ -1,4 +1,4 @@
-SUBDIRS = meta server client t
+SUBDIRS = common meta server client examples extras t util
 
 CONFIG = ordered
 
