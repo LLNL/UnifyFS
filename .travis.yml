@@ -1,5 +1,6 @@
 language: c
 sudo: required
+dist: xenial
 
 before_install:
   # The default environment variable $CC is known to interfere with
