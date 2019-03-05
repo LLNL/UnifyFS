@@ -532,7 +532,7 @@ static int sm_ack_remote_delegator(rank_ack_meta_t* ack_meta)
     if (send_buf_list->elems[send_buf_list->size] == NULL) {
         /* need to allocate a new buffer */
         send_buf_list->elems[send_buf_list->size] =
-            malloc(SEND_BLOCK_SIZE);
+            malloc(SENDRECV_BUF_LEN);
     }
 
     /* get pointer to send buffer */
@@ -662,7 +662,7 @@ static int insert_to_ack_list(
 
         /* check whether we can fit this data into the
          * existing send block */
-        if (curr_bytes + bytes > SEND_BLOCK_SIZE) {
+        if (curr_bytes + bytes > SENDRECV_BUF_LEN) {
             /* not enough room, send the current list of read replies */
             rc = sm_ack_remote_delegator(ack_meta);
 
@@ -1286,7 +1286,7 @@ void* sm_service_reads(void* ctx)
 {
     /* allocate a buffer to hold read data before packing
      * into send buffers */
-    read_buf = calloc(1, READ_BUF_SZ);
+    read_buf = malloc(READ_BUF_SZ);
     if (read_buf == NULL) {
         // TODO: we need a better way to handle this case
         fprintf(stderr, "Error allocating buffer!!!\n");
@@ -1441,7 +1441,7 @@ void* sm_service_reads(void* ctx)
                         /* for smaller bursts, set delay proportionally
                          * to burst size we just processed */
                         bursty_interval =
-                            (long)((double)burst_data_sz / 1048576) *
+                            (long)((double)burst_data_sz / MIB) *
                             SLEEP_SLICE_PER_UNIT;
                     }
 

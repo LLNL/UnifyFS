@@ -767,7 +767,7 @@ static int rm_receive_remote_message(
 
     /* get number of receives to post and size of each buffer */
     int recv_buf_cnt = RECV_BUF_CNT;
-    int recv_buf_len = (int) RECV_BUF_LEN;
+    int recv_buf_len = (int) SENDRECV_BUF_LEN;
 
     /* post a window of receive buffers for incoming data */
     int i;

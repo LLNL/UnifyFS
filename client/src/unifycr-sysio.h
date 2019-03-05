@@ -45,6 +45,9 @@
 
 #include "unifycr-internal.h"
 
+#define AIOCB_ERROR_CODE(cbp) (cbp->__error_code)
+#define AIOCB_RETURN_VAL(cbp) (cbp->__return_value)
+
 /* ---------------------------------------
  * POSIX wrappers: paths
  * --------------------------------------- */

@@ -53,24 +53,23 @@
 #define UNIFYCR_MAX_FILENAME KIB
 
 // Metadata
-#define MAX_META_PER_SEND (512*KIB)
 #define MAX_FILE_CNT_PER_NODE KIB
 
 // Request Manager
-#define RECV_BUF_CNT 1
-#define RECV_BUF_LEN (MIB + 128*KIB)
-#define REQ_BUF_LEN (128*MIB + 4*KIB + 128*KIB)
-#define SHM_WAIT_INTERVAL 10
+#define RECV_BUF_CNT 4              /* number of remote read buffers */
+#define SENDRECV_BUF_LEN (8 * MIB)  /* remote read buffer size */
+#define MAX_META_PER_SEND 512       /* max read request count per server */
+#define REQ_BUF_LEN (MAX_META_PER_SEND * 128) /* read requests (send_msg_t) */
+#define SHM_WAIT_INTERVAL 100 /* unit: ns */
 
 // Service Manager
-#define MIN_SLEEP_INTERVAL 10
-#define SLEEP_INTERVAL 100 /* unit: us */
-#define SLEEP_SLICE_PER_UNIT 10
-#define READ_BLOCK_SIZE MIB
-#define SEND_BLOCK_SIZE (MIB + 128*KIB)
-#define READ_BUF_SZ GIB
-#define LARGE_BURSTY_DATA (500 * MIB)
+#define LARGE_BURSTY_DATA (512 * MIB)
 #define MAX_BURSTY_INTERVAL 10000 /* unit: us */
+#define MIN_SLEEP_INTERVAL 10     /* unit: us */
+#define SLEEP_INTERVAL 100        /* unit: us */
+#define SLEEP_SLICE_PER_UNIT 10   /* unit: us */
+#define READ_BLOCK_SIZE MIB
+#define READ_BUF_SZ GIB
 
 // Request and Service Managers, Command Handler
 #define MAX_NUM_CLIENTS 64 /* app processes per server */
@@ -92,26 +91,12 @@
 #define UNIFYCR_SHMEM_RECV_SIZE (MIB + 128*KIB)
 #define UNIFYCR_INDEX_BUF_SIZE  (20 * MIB)
 #define UNIFYCR_FATTR_BUF_SIZE MIB
-#define UNIFYCR_MAX_SPLIT_CNT MIB
-#define UNIFYCR_MAX_READ_CNT MIB
+#define UNIFYCR_MAX_READ_CNT KIB
 
-// Following are not currently used:
-// #define ACK_MSG_SZ 8
-// #define C_CLI_SEND_BUF_SIZE 1048576
-// #define C_CLI_RECV_BUF_SIZE 1048576
-// #define DATA_BUF_LEN (1048576 + 4096 + 131072)
-// #define IP_STR_LEN 20
-// #define MAX_CQ_SIZE 2*NUM_CLI
-// #define MAX_NUM_CONNS 10
-// /* number of messages one server sends to each of another server */
-// #define NUM_MSG 32768
-// #define NUM_OF_READ_TASKS 65536
-// #define PORT_STR_LEN 10
-// #define SH_BUF_SIZE 1048576
-// /* buffer size on the service manager for read clustering and pipelining */
-// #define SERVICE_MEM_POOL_SIZE 2147483648
+/* max read size = UNIFYCR_MAX_SPLIT_CNT * META_DEFAULT_RANGE_SZ */
+#define UNIFYCR_MAX_SPLIT_CNT KIB
 
-/* ****************** Metadata/MDHIM Default Values ******************** */
+// Metadata/MDHIM Default Values
 #define META_DEFAULT_DB_NAME unifycr_db
 #define META_DEFAULT_SERVER_RATIO 1
 #define META_DEFAULT_RANGE_SZ MIB

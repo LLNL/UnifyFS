@@ -147,7 +147,7 @@ typedef struct {
 
     /* memory for posting receives for incoming read reply messages
      * from the service threads */
-    char del_recv_msg_buf[RECV_BUF_CNT][RECV_BUF_LEN];
+    char del_recv_msg_buf[RECV_BUF_CNT][SENDRECV_BUF_LEN];
 
     /* flag set by main thread indicating whether request
      * manager thread should exit */

@@ -312,9 +312,6 @@ typedef struct {
     int count;
 } read_req_set_t;
 
-read_req_set_t read_req_set;
-index_set_t tmp_index_set;
-
 extern unifycr_index_buf_t unifycr_indices;
 extern unsigned long unifycr_max_index_entries;
 extern long unifycr_spillover_max_chunks;
