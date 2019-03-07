@@ -56,24 +56,39 @@
 #endif
 
 static inline
+double bytes_to_kib(size_t bytes)
+{
+    return (double)bytes / KIB;
+}
+
+static inline
+double bytes_to_mib(size_t bytes)
+{
+    return (double)bytes / MIB;
+}
+
+static inline
+double bytes_to_gib(size_t bytes)
+{
+    return (double)bytes / GIB;
+}
+
+static inline
 double bandwidth_kib(size_t bytes, double seconds)
 {
-    double kib = (double)bytes / (double)KIB;
-    return kib/seconds;
+    return bytes_to_kib(bytes) / seconds;
 }
 
 static inline
 double bandwidth_mib(size_t bytes, double seconds)
 {
-    double mib = (double)bytes / (double)MIB;
-    return mib/seconds;
+    return bytes_to_mib(bytes) / seconds;
 }
 
 static inline
 double bandwidth_gib(size_t bytes, double seconds)
 {
-    double gib = (double)bytes / (double)GIB;
-    return gib/seconds;
+    return bytes_to_gib(bytes) / seconds;
 }
 
 #define IO_PATTERN_N1 (0)

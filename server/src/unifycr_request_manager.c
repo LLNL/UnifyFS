@@ -28,6 +28,7 @@
  */
 
 #include <mpi.h>
+#include <assert.h>
 #include <poll.h>
 #include <time.h>
 #include <string.h>
@@ -881,18 +882,19 @@ static int rm_pack_send_requests(
      *   (int) cmd - specifies type of message (XFER_COMM_DATA)
      *   (int) req_num - number of requests in message
      *   {sequence of send_meta_t requests} */
+    size_t packed_size = (2 * sizeof(int)) + (req_cnt * sizeof(send_msg_t));
 
     /* get pointer to start of send buffer */
     char* ptr = req_msg_buf;
-    memset(ptr, 0, REQ_BUF_LEN);
+    memset(ptr, 0, packed_size);
 
     /* pack command */
     int cmd = XFER_COMM_DATA;
-    memcpy(ptr, &cmd, sizeof(int));
+    *((int*)ptr) = cmd;
     ptr += sizeof(int);
 
     /* pack request count */
-    memcpy(ptr, &req_cnt, sizeof(int));
+    *((int*)ptr) = req_cnt;
     ptr += sizeof(int);
 
     /* pack each request into the send buffer,
@@ -912,7 +914,7 @@ static int rm_pack_send_requests(
     (*tot_sz) += bytes;
 
     /* return number of bytes used to pack requests */
-    size_t packed_size = ptr - req_msg_buf;
+    assert(packed_size == (ptr - req_msg_buf));
     return (int)packed_size;
 }
 

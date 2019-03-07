@@ -589,7 +589,7 @@ DEFINE_MARGO_RPC_HANDLER(unifycr_fsync_rpc)
 static void unifycr_filesize_rpc(hg_handle_t handle)
 {
     /* get input params */
-    unifycr_read_in_t in;
+    unifycr_filesize_in_t in;
     int ret = HG_Get_input(handle, &in);
     assert(ret == HG_SUCCESS);
 
