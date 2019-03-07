@@ -50,7 +50,7 @@
 #include <sys/time.h>
 #include <aio.h>
 
-#ifndef NO_UNIFYCR
+#ifndef DISABLE_UNIFYCR
 # include <unifycr.h>
 #endif
 
@@ -148,7 +148,7 @@ int main(int argc, char* argv[])
     int byte = (int)'0' + rank;
     memset(buf, byte, tran_sz);
 
-#ifndef NO_UNIFYCR
+#ifndef DISABLE_UNIFYCR
     if (use_unifycr) {
         ret = unifycr_mount(mntpt, rank, num_rank, 0);
         if (UNIFYCR_SUCCESS != ret) {
@@ -298,7 +298,7 @@ int main(int argc, char* argv[])
         fflush(stdout);
     }
 
-#ifndef NO_UNIFYCR
+#ifndef DISABLE_UNIFYCR
     if (use_unifycr) {
         unifycr_unmount();
     }

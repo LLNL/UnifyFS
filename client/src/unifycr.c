@@ -2115,7 +2115,7 @@ int unifycr_sync_to_del(unifycr_mount_in_t* in)
     if (hret != HG_SUCCESS) {
         LOGERR("margo_addr_self()");
         margo_finalize((unifycr_rpc_context)->mid);
-        return NULL;
+        return UNIFYCR_FAILURE;
     }
 
     hret = margo_addr_to_string((unifycr_rpc_context)->mid, addr_self_string,
@@ -2125,7 +2125,7 @@ int unifycr_sync_to_del(unifycr_mount_in_t* in)
         LOGERR("margo_addr_to_string()");
         margo_addr_free((unifycr_rpc_context)->mid, addr_self);
         margo_finalize((unifycr_rpc_context)->mid);
-        return NULL;
+        return UNIFYCR_FAILURE;
     }
 
     margo_addr_free((unifycr_rpc_context)->mid, addr_self);

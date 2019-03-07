@@ -56,9 +56,9 @@
 #define MAX_FILE_CNT_PER_NODE KIB
 
 // Request Manager
-#define RECV_BUF_CNT 4              /* number of remote read buffers */
-#define SENDRECV_BUF_LEN (8 * MIB)  /* remote read buffer size */
-#define MAX_META_PER_SEND 512       /* max read request count per server */
+#define RECV_BUF_CNT 4               /* number of remote read buffers */
+#define SENDRECV_BUF_LEN (8 * MIB)   /* remote read buffer size */
+#define MAX_META_PER_SEND (64 * KIB) /* max read request count per server */
 #define REQ_BUF_LEN (MAX_META_PER_SEND * 128) /* read requests (send_msg_t) */
 #define SHM_WAIT_INTERVAL 100 /* unit: ns */
 
@@ -94,7 +94,7 @@
 #define UNIFYCR_MAX_READ_CNT KIB
 
 /* max read size = UNIFYCR_MAX_SPLIT_CNT * META_DEFAULT_RANGE_SZ */
-#define UNIFYCR_MAX_SPLIT_CNT KIB
+#define UNIFYCR_MAX_SPLIT_CNT (4 * KIB)
 
 // Metadata/MDHIM Default Values
 #define META_DEFAULT_DB_NAME unifycr_db
