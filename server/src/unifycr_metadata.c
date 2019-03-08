@@ -463,20 +463,27 @@ int unifycr_get_file_extents(int num_keys, unifycr_key_t** keys,
             return rc;
         }
 
-       for (i = 0; i < bgrmp->num_keys; i++) {
-            tmp_key = (unifycr_key_t*)bgrm->keys[i];
-            tmp_val = (unifycr_val_t*)bgrm->values[i];
-            (*keyval)[tot_num].key.fid = tmp_key->fid;
-            (*keyval)[tot_num].key.offset = tmp_key->offset;
+        if (tot_num < MAX_META_PER_SEND) {
+            for (i = 0; i < bgrmp->num_keys; i++) {
+                tmp_key = (unifycr_key_t*)bgrm->keys[i];
+                tmp_val = (unifycr_val_t*)bgrm->values[i];
+                (*keyval)[tot_num].key.fid = tmp_key->fid;
+                (*keyval)[tot_num].key.offset = tmp_key->offset;
 
-            (*keyval)[tot_num].val.addr = tmp_val->addr;
-            (*keyval)[tot_num].val.app_id = tmp_val->app_id;
-            (*keyval)[tot_num].val.delegator_id = tmp_val->delegator_id;
-            (*keyval)[tot_num].val.addr = tmp_val->len;
-            tot_num++;
-       }
-       bgrm = bgrmp->next;
-       mdhim_full_release_msg(bgrmp);
+                (*keyval)[tot_num].val.addr = tmp_val->addr;
+                (*keyval)[tot_num].val.app_id = tmp_val->app_id;
+                (*keyval)[tot_num].val.delegator_id = tmp_val->delegator_id;
+                (*keyval)[tot_num].val.addr = tmp_val->len;
+                tot_num++;
+                if (MAX_META_PER_SEND == tot_num) {
+                    fprintf(stderr, "Error: maximum number of values!\n");
+                    rc = UNIFYCR_FAILURE;
+                    break;
+                }
+            }
+        }
+        bgrm = bgrmp->next;
+        mdhim_full_release_msg(bgrmp);
     }
 
     *num_values = tot_num;
