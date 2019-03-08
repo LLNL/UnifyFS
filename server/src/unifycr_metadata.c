@@ -476,7 +476,7 @@ int unifycr_get_file_extents(int num_keys, unifycr_key_t** keys,
                 (*keyval)[tot_num].val.addr = tmp_val->len;
                 tot_num++;
                 if (MAX_META_PER_SEND == tot_num) {
-                    fprintf(stderr, "Error: maximum number of values!\n");
+                    LOGERR("Error: maximum number of values!");
                     rc = UNIFYCR_FAILURE;
                     break;
                 }
