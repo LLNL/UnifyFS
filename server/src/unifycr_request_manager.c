@@ -231,6 +231,7 @@ int rm_cmd_filesize(
     unifycr_key_t key1, key2;
     unifycr_key_t* unifycr_keys[2] = {&key1, &key2};
     unifycr_keyval_t* keyvals;
+    keyvals = calloc(sizeof(unifycr_keyval_t), MAX_META_PER_SEND);
 
     /* create key to describe first byte we'll read */
     unifycr_keys[0]->fid = gfid;
@@ -502,7 +503,7 @@ int rm_cmd_mread(int app_id, int client_id, int gfid,
 
     pthread_mutex_lock(&thrd_ctrl->thrd_lock);
     unifycr_keyval_t* keyvals;
-    keyvals = calloc(sizeof(unifycr_keyval_t), 1024);
+    keyvals = calloc(sizeof(unifycr_keyval_t), MAX_META_PER_SEND);
 
      /* get the locations of all the read requests from the key-value store */
     LOGDBG("app_id:%d, client_id:%d, thrd_id:%d",
