@@ -2,7 +2,7 @@ libexec_PROGRAMS = \
   cr-posix cr-gotcha cr-static \
   read-posix read-gotcha read-static \
   write-posix write-gotcha write-static \
-  writeread-posix writeread-gotcha writeread-static \
+  writeread-posix writeread-gotcha writeread-static writeread-ftn \
   sysio-write-gotcha sysio-write-static \
   sysio-read-gotcha sysio-read-static \
   sysio-writeread-gotcha sysio-writeread-static sysio-writeread-posix \
@@ -32,8 +32,15 @@ noinst_HEADERS = \
 test_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) \
    -I$(top_srcdir)/client/src -I$(top_srcdir)/common/src
 
+test_ftn_flags   = $(AM_FCFLAGS) $(MPI_FFLAGS) \
+   -I$(top_srcdir)/client/src -I$(top_srcdir)/common/src
+test_ftn_ldadd   = $(top_builddir)/client/src/libunifycrf.la -lrt -lm $(FCLIBS)
+test_ftn_ldflags = $(AM_LDFLAGS) $(MPI_FLDFLAGS) \
+    $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
+
 test_gotcha_ldadd   = $(top_builddir)/client/src/libunifycr_gotcha.la -lrt -lm
-test_gotcha_ldflags = $(AM_LDFLAGS) $(MPI_CLDFLAGS) $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
+test_gotcha_ldflags = $(AM_LDFLAGS) $(MPI_CLDFLAGS) \
+    $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 
 test_posix_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) -DDISABLE_UNIFYCR
 test_posix_ldadd    = -lrt -lm
@@ -179,6 +186,11 @@ writeread_static_SOURCES  = writeread.c
 writeread_static_CPPFLAGS = $(test_cppflags)
 writeread_static_LDADD    = $(test_static_ldadd)
 writeread_static_LDFLAGS  = $(test_static_ldflags)
+
+writeread_ftn_SOURCES  = writeread.f90
+writeread_ftn_FCFLAGS  = $(test_ftn_flags)
+writeread_ftn_LDADD    = $(test_ftn_ldadd)
+writeread_ftn_LDFLAGS  = $(test_ftn_ldflags)
 
 app_mpiio_gotcha_SOURCES  = app-mpiio.c
 app_mpiio_gotcha_CPPFLAGS = $(test_cppflags)
