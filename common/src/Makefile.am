@@ -1,5 +1,7 @@
 lib_LTLIBRARIES = libunifycr_common.la
 
+include_HEADERS = unifycr_const.h err_enumerator.h
+
 libunifycr_commondir = $(includedir)
 
 BASE_SRCS = \

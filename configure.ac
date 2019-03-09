@@ -25,6 +25,11 @@ AC_PROG_MAKE_SET
 AC_PROG_RANLIB
 AC_PROG_LIBTOOL
 
+# fortran support
+AC_PROG_FC
+AC_FC_LIBRARY_LDFLAGS
+AC_FC_DUMMY_MAIN
+
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_MODE_T
 AC_TYPE_OFF_T
@@ -152,6 +157,9 @@ AC_CHECK_HEADERS(mntent.h sys/mount.h)
 
 # look for MPI and set flags
 LX_FIND_MPI
+AC_LANG_PUSH([Fortran])
+LX_FIND_MPI
+AC_LANG_POP
 
 # look for leveldb library, sets LEVELDB_CFLAGS/LDFLAGS/LIBS
 UNIFYCR_AC_LEVELDB
