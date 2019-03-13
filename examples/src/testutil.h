@@ -998,7 +998,8 @@ int test_init(int argc, char** argv,
 #ifndef DISABLE_UNIFYCR
         if (cfg->debug) {
             test_pause(cfg, "Before unifycr_mount()");
-        }        rc = unifycr_mount(cfg->mountpt, cfg->rank, cfg->n_ranks, 0);
+        }
+        rc = unifycr_mount(cfg->mountpt, cfg->rank, cfg->n_ranks, 0);
         if (rc) {
             test_print(cfg, "ERROR: unifycr_mount() failed (rc=%d)", rc);
             test_abort(cfg, rc);

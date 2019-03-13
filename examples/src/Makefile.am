@@ -1,4 +1,8 @@
 libexec_PROGRAMS = \
+  cr-posix cr-gotcha cr-static \
+  read-posix read-gotcha read-static \
+  write-posix write-gotcha write-static \
+  writeread-posix writeread-gotcha writeread-static \
   sysio-write-gotcha sysio-write-static \
   sysio-read-gotcha sysio-read-static \
   sysio-writeread-gotcha sysio-writeread-static sysio-writeread-posix \
@@ -6,9 +10,6 @@ libexec_PROGRAMS = \
   sysio-dir-gotcha sysio-dir-static \
   sysio-stat-gotcha sysio-stat-static \
   sysio-cp-gotcha sysio-cp-static \
-  write-posix write-gotcha write-static \
-  writeread-posix writeread-gotcha writeread-static \
-  cr-posix cr-gotcha cr-static \
   app-mpiio-gotcha app-mpiio-static \
   app-btio-gotcha app-btio-static \
   app-tileio-gotcha app-tileio-static
@@ -119,6 +120,36 @@ sysio_cp_static_CPPFLAGS = $(test_cppflags)
 sysio_cp_static_LDADD    = $(test_static_ldadd)
 sysio_cp_static_LDFLAGS  = $(test_static_ldflags)
 
+cr_posix_SOURCES  = checkpoint-restart.c
+cr_posix_CPPFLAGS = $(test_posix_cppflags)
+cr_posix_LDADD    = $(test_posix_ldadd)
+cr_posix_LDFLAGS  = $(test_posix_ldflags)
+
+cr_gotcha_SOURCES  = checkpoint-restart.c
+cr_gotcha_CPPFLAGS = $(test_cppflags)
+cr_gotcha_LDADD    = $(test_gotcha_ldadd)
+cr_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+cr_static_SOURCES  = checkpoint-restart.c
+cr_static_CPPFLAGS = $(test_cppflags)
+cr_static_LDADD    = $(test_static_ldadd)
+cr_static_LDFLAGS  = $(test_static_ldflags)
+
+read_posix_SOURCES  = read.c
+read_posix_CPPFLAGS = $(test_posix_cppflags)
+read_posix_LDADD    = $(test_posix_ldadd)
+read_posix_LDFLAGS  = $(test_posix_ldflags)
+
+read_gotcha_SOURCES  = read.c
+read_gotcha_CPPFLAGS = $(test_cppflags)
+read_gotcha_LDADD    = $(test_gotcha_ldadd)
+read_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+read_static_SOURCES  = read.c
+read_static_CPPFLAGS = $(test_cppflags)
+read_static_LDADD    = $(test_static_ldadd)
+read_static_LDFLAGS  = $(test_static_ldflags)
+
 write_posix_SOURCES  = write.c
 write_posix_CPPFLAGS = $(test_posix_cppflags)
 write_posix_LDADD    = $(test_posix_ldadd)
@@ -148,21 +179,6 @@ writeread_static_SOURCES  = writeread.c
 writeread_static_CPPFLAGS = $(test_cppflags)
 writeread_static_LDADD    = $(test_static_ldadd)
 writeread_static_LDFLAGS  = $(test_static_ldflags)
-
-cr_posix_SOURCES  = checkpoint-restart.c
-cr_posix_CPPFLAGS = $(test_posix_cppflags)
-cr_posix_LDADD    = $(test_posix_ldadd)
-cr_posix_LDFLAGS  = $(test_posix_ldflags)
-
-cr_gotcha_SOURCES  = checkpoint-restart.c
-cr_gotcha_CPPFLAGS = $(test_cppflags)
-cr_gotcha_LDADD    = $(test_gotcha_ldadd)
-cr_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
-
-cr_static_SOURCES  = checkpoint-restart.c
-cr_static_CPPFLAGS = $(test_cppflags)
-cr_static_LDADD    = $(test_static_ldadd)
-cr_static_LDFLAGS  = $(test_static_ldflags)
 
 app_mpiio_gotcha_SOURCES  = app-mpiio.c
 app_mpiio_gotcha_CPPFLAGS = $(test_cppflags)
