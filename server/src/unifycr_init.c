@@ -27,16 +27,17 @@
  * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
-#include <mpi.h>
-#include <unistd.h>
-#include <errno.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <sys/mman.h>
-#include <pthread.h>
-#include <string.h>
 #include <assert.h>
+#include <errno.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <mpi.h>
+
 #include "unifycr_metadata.h"
 #include "unifycr_log.h"
 #include "unifycr_sock.h"
@@ -61,7 +62,6 @@ int local_rank_cnt;
 int glb_rank, glb_size;
 
 arraylist_t* app_config_list;
-pthread_t data_thrd;
 arraylist_t* thrd_list;
 
 int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
@@ -70,49 +70,6 @@ unifycr_cfg_t server_cfg;
 ServerRpcContext_t* unifycr_server_rpc_context;
 
 static const int IO_POOL_SIZE = 2;
-
-/* find_address - Resolves a name string to an address structure.
- *
- */
-static int find_address(
-    hg_class_t* hg_class,
-    hg_context_t* hg_context,
-    const char* arg,
-    char* addr_string)
-{
-    /* figure out what address this server is listening on */
-    hg_addr_t addr_self;
-    int ret = HG_Addr_self(hg_class, &addr_self);
-    if (ret != HG_SUCCESS) {
-        LOGERR("HG_Addr_self()");
-        HG_Context_destroy(hg_context);
-        HG_Finalize(hg_class);
-        return (-1);
-    }
-    char addr_self_string[128];
-    hg_size_t addr_self_string_sz = 128;
-    ret = HG_Addr_to_string(hg_class, addr_self_string,
-                            &addr_self_string_sz, addr_self);
-    if (ret != HG_SUCCESS) {
-        LOGERR("HG_Addr_self()");
-        HG_Context_destroy(hg_context);
-        HG_Finalize(hg_class);
-        return (-1);
-    }
-    HG_Addr_free(hg_class, addr_self);
-
-    printf("%s\n", addr_self_string);
-
-    //add to address string here
-    addr_string = strcpy(addr_string, addr_self_string);
-
-    printf("addr string:%s\n", addr_string);
-
-    /* publish rpc address of server for local clients */
-    rpc_publish_server_addr(addr_self_string);
-
-    return 0;
-}
 
 /* setup_sm_target - Initializes the shared-memory target.
  *
@@ -193,10 +150,54 @@ static margo_instance_id setup_sm_target()
     return unifycr_server_rpc_context->mid;
 }
 
+
+#if 0
+/* find_address - Resolves a name string to an address structure.
+ *
+ */
+static int find_address(
+    hg_class_t* hg_class,
+    hg_context_t* hg_context,
+    const char* arg,
+    char* addr_string)
+{
+    /* figure out what address this server is listening on */
+    hg_addr_t addr_self;
+    int ret = HG_Addr_self(hg_class, &addr_self);
+    if (ret != HG_SUCCESS) {
+        LOGERR("HG_Addr_self()");
+        HG_Context_destroy(hg_context);
+        HG_Finalize(hg_class);
+        return (-1);
+    }
+    char addr_self_string[128];
+    hg_size_t addr_self_string_sz = 128;
+    ret = HG_Addr_to_string(hg_class, addr_self_string,
+                            &addr_self_string_sz, addr_self);
+    if (ret != HG_SUCCESS) {
+        LOGERR("HG_Addr_self()");
+        HG_Context_destroy(hg_context);
+        HG_Finalize(hg_class);
+        return (-1);
+    }
+    HG_Addr_free(hg_class, addr_self);
+
+    printf("%s\n", addr_self_string);
+
+    //add to address string here
+    addr_string = strcpy(addr_string, addr_self_string);
+
+    printf("addr string:%s\n", addr_string);
+
+    /* publish rpc address of server for local clients */
+    rpc_publish_server_addr(addr_self_string);
+
+    return 0;
+}
+
 /* setup_verbs_target - Initializes the inter-server target.
  *
  */
-#if 0
 static margo_instance_id setup_verbs_target(ABT_pool& progress_pool)
 {
     hg_class_t* hg_class;
@@ -293,6 +294,7 @@ static margo_instance_id setup_verbs_target(ABT_pool& progress_pool)
     return mid;
 }
 #endif
+
 /* unifycr_server_rpc_init - Initializes the server-side RPC functionality
  *                       for inter-server communication.
  *
@@ -420,7 +422,7 @@ static void daemonize(void)
 }
 
 /* free resources allocated when setting up server
- * frees structure allocated and sets pcontect to NULL */
+ * frees structure allocated and sets pcontext to NULL */
 static int unifycr_server_rpc_finalize(ServerRpcContext_t** pcontext)
 {
     if (pcontext != NULL && *pcontext != NULL) {
@@ -439,12 +441,35 @@ static int unifycr_server_rpc_finalize(ServerRpcContext_t** pcontext)
     return UNIFYCR_SUCCESS;
 }
 
+static int time_to_exit;
+void exit_request(int sig)
+{
+#ifdef HAVE_STRSIGNAL
+    const char* sigstr = strsignal(sig);
+    LOGDBG("got signal %s", sigstr);
+#endif
+
+    switch (sig) {
+    case SIGINT:
+    case SIGQUIT:
+    case SIGTERM:
+        time_to_exit = 1;
+        LOGDBG("exit requested");
+        break;
+    default:
+        LOGERR("unhandled signal %d", sig);
+        break;
+    }
+}
+
 int main(int argc, char* argv[])
 {
     int provided;
     int rc;
     int srvr_rank_idx = 0;
     bool daemon = true;
+    pthread_t svcmgr_thrd;
+    struct sigaction sa;
     char dbg_fname[UNIFYCR_MAX_FILENAME] = {0};
 
     rc = unifycr_config_init(&server_cfg, argc, argv);
@@ -465,8 +490,15 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+    // setup clean termination by signal
+    memset(&sa, 0, sizeof(struct sigaction));
+    sa.sa_handler = exit_request;
+    rc = sigemptyset(&sa.sa_mask);
+    rc = sigaction(SIGINT, &sa, NULL);
+    rc = sigaction(SIGQUIT, &sa, NULL);
+    rc = sigaction(SIGTERM, &sa, NULL);
 
+    rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
     if (rc != MPI_SUCCESS) {
         exit(1);
     }
@@ -481,103 +513,90 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
+    // start logging
+    snprintf(dbg_fname, sizeof(dbg_fname), "%s/%s.%d",
+             server_cfg.log_dir, server_cfg.log_file, glb_rank);
+    rc = unifycr_log_open(dbg_fname);
+    if (rc != UNIFYCR_SUCCESS) {
+        LOGERR("%s", unifycr_error_enum_description((unifycr_error_e)rc));
+    }
+
     rc = CountTasksPerNode(glb_rank, glb_size);
     if (rc < 0) {
         exit(1);
     }
 
-    snprintf(dbg_fname, sizeof(dbg_fname), "%s/%s.%d",
-             server_cfg.log_dir, server_cfg.log_file, glb_rank);
-
-    rc = unifycr_log_open(dbg_fname);
-    if (rc != ULFS_SUCCESS)
-        LOG(LOG_ERR, "%s",
-            unifycr_error_enum_description((unifycr_error_e)rc));
-
     app_config_list = arraylist_create();
     if (app_config_list == NULL) {
-        LOG(LOG_ERR, "%s",
-            unifycr_error_enum_description(UNIFYCR_ERROR_NOMEM));
+        LOGERR("%s", unifycr_error_enum_description(UNIFYCR_ERROR_NOMEM));
         exit(1);
     }
 
     thrd_list = arraylist_create();
     if (thrd_list == NULL) {
-        LOG(LOG_ERR, "%s",
-            unifycr_error_enum_description(UNIFYCR_ERROR_NOMEM));
+        LOGERR("%s", unifycr_error_enum_description(UNIFYCR_ERROR_NOMEM));
         exit(1);
     }
 
-    //TODO: replace with unifycr_server_rpc_init??
+    LOGDBG("initializing rpc service");
     margo_instance_id mid = unifycr_server_rpc_init();
 
+    LOGDBG("creating server domain socket");
 #if defined(UNIFYCR_MULTIPLE_DELEGATORS)
     srvr_rank_idx = find_rank_idx(glb_rank, local_rank_lst,
                                   local_rank_cnt);
 #endif
     rc = sock_init_server(srvr_rank_idx);
     if (rc != 0) {
-        LOG(LOG_ERR, "%s",
-            unifycr_error_enum_description(UNIFYCR_ERROR_SOCKET));
+        LOGERR("%s", unifycr_error_enum_description(UNIFYCR_ERROR_SOCKET));
         exit(1);
     }
 
     /* launch the service manager */
-    rc = pthread_create(&data_thrd, NULL, sm_service_reads, NULL);
+    LOGDBG("launching service manager thread");
+    rc = pthread_create(&svcmgr_thrd, NULL, sm_service_reads, NULL);
     if (rc != 0) {
-        LOG(LOG_ERR, "%s",
-            unifycr_error_enum_description(UNIFYCR_ERROR_THRDINIT));
+        LOGERR("%s", unifycr_error_enum_description(UNIFYCR_ERROR_THRDINIT));
         exit(1);
     }
 
+    LOGDBG("initializing metadata store");
     rc = meta_init_store(&server_cfg);
     if (rc != 0) {
-        LOG(LOG_ERR, "%s",
-            unifycr_error_enum_description(UNIFYCR_ERROR_MDINIT));
+        LOGERR("%s", unifycr_error_enum_description(UNIFYCR_ERROR_MDINIT));
         exit(1);
     }
 
     LOGDBG("finished service initialization");
 
     MPI_Barrier(MPI_COMM_WORLD);
+    int timeout_ms = 2000; /* in milliseconds */
     while (1) {
-        rc = sock_wait_cli_cmd();
-#if 0
-        if (rc != ULFS_SUCCESS) {
-            int ret = sock_handle_error(rc);
-            if (ret != 0) {
-                LOG(LOG_ERR, "%s",
-                    unifycr_error_enum_description((unifycr_error_e)ret));
-                exit(1);
-            }
-
-        } else {
-            int sock_id = sock_get_id();
-            if (sock_id != 0) {
-                char* cmd = sock_get_cmd_buf(sock_id);
-                //TODO: remove this loop and replace with rpc calls?
-                int cmd_rc = delegator_handle_command(cmd, sock_id);
-                if (cmd_rc != ULFS_SUCCESS) {
-                    LOG(LOG_ERR, "%s",
-                        unifycr_error_enum_description((unifycr_error_e)ret));
-                    return ret;
-                }
+        rc = sock_wait_cmd(timeout_ms);
+        if (rc != UNIFYCR_SUCCESS) {
+            // we ignore disconnects, they are expected
+            if (rc != UNIFYCR_ERROR_SOCK_DISCONNECT) {
+                LOGDBG("domain socket error %s",
+                       unifycr_error_enum_description((unifycr_error_e)rc));
+                time_to_exit = 1;
             }
         }
-#endif
+        if (time_to_exit) {
+            LOGDBG("starting service shutdown");
+            break;
+        }
     }
 
-    margo_wait_for_finalize(mid);
+    LOGDBG("stopping service manager thread");
+    int exit_cmd = XFER_COMM_EXIT;
+    MPI_Send(&exit_cmd, sizeof(int), MPI_CHAR, glb_rank,
+             CLI_DATA_TAG, MPI_COMM_WORLD);
+    rc = pthread_join(svcmgr_thrd, NULL);
 
-    unifycr_server_rpc_finalize(&unifycr_server_rpc_context);
-
-    MPI_Barrier(MPI_COMM_WORLD);
-    MPI_Finalize();
-
-    LOGDBG("terminating service");
+    LOGDBG("cleaning run state");
     rc = unifycr_clean_runstate(&server_cfg);
 
-    return 0;
+    return unifycr_exit();
 }
 
 /**
@@ -796,17 +815,31 @@ static int compare_name_rank_pair(const void* a, const void* b)
 
 static int unifycr_exit()
 {
-    int rc = ULFS_SUCCESS;
+    int rc = UNIFYCR_SUCCESS;
 
-    /* notify the threads of request manager to exit*/
+    /* shutdown rpc service */
+    LOGDBG("stopping rpc service");
+    unifycr_server_rpc_finalize(&unifycr_server_rpc_context);
+    rpc_clean_server_addr();
+
+    /* close remaining sockets */
+    LOGDBG("closing sockets");
+    sock_sanitize();
+
+    /* shutdown the metadata service*/
+    LOGDBG("stopping metadata service");
+    meta_sanitize();
+
+    /* TODO: notify the service threads to exit */
+
+    /* notify the request manager threads to exit*/
+    LOGDBG("stopping request manager threads");
     int i, j;
     for (i = 0; i < arraylist_size(thrd_list); i++) {
-        /* wait for resource manager thread to exit */
+        /* request and wait for request manager thread exit */
         thrd_ctrl_t* thrd_ctrl = (thrd_ctrl_t*)arraylist_get(thrd_list, i);
         rm_cmd_exit(thrd_ctrl);
     }
-
-    /* all threads have joined back, so release our control strucutres */
     arraylist_free(thrd_list);
 
     /* sanitize the shared memory and delete the log files
@@ -858,14 +891,11 @@ static int unifycr_exit()
         }
     }
 
-    /* shutdown the metadata service*/
-    meta_sanitize();
+    LOGDBG("finalizing MPI");
+    MPI_Finalize();
 
-    /* TODO: notify the service threads to exit */
-
-    /* destroy the sockets except for the ones
-     * for acks*/
-    sock_sanitize();
+    LOGDBG("all done!");
+    unifycr_log_close();
 
     return rc;
 }

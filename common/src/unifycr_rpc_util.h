@@ -21,5 +21,8 @@ void rpc_publish_server_addr(const char* addr);
 /* lookup address of server */
 char* rpc_lookup_server_addr(void);
 
+/* remove server rpc address file */
+void rpc_clean_server_addr(void);
+
 #endif // UNIFYCR_UTIL_H
 

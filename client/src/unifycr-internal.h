@@ -268,6 +268,8 @@ typedef struct {
 
     int storage;                    /* FILE_STORAGE specifies file data management */
 
+    int needs_sync;                 /* have unsynced writes */
+
     off_t chunks;                   /* number of chunks allocated to file */
     unifycr_chunkmeta_t* chunk_meta; /* meta data for chunks */
 } unifycr_filemeta_t;

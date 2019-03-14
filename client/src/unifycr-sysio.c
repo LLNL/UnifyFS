@@ -645,10 +645,9 @@ int unifycr_fd_write(int fd, off_t pos, const void* buf, size_t count)
 
     /* finally write specified data to file */
     int write_rc = unifycr_fid_write(fid, pos, buf, count);
-
-    if (meta->storage == FILE_STORAGE_LOGIO) {
-        unifycr_filemeta_t* meta = unifycr_get_meta_from_fid(fid);
-        if (write_rc == 0) {
+    if (write_rc == 0) {
+        meta->needs_sync = 1;
+        if (meta->storage == FILE_STORAGE_LOGIO) {
             meta->size = newpos;
             meta->log_size = pos + count;
         }
@@ -2118,6 +2117,11 @@ int UNIFYCR_WRAP(fsync)(int fd)
             return -1;
         }
 
+        unifycr_filemeta_t* meta = unifycr_get_meta_from_fid(fid);
+        if (!meta->needs_sync) {
+            return 0;
+        }
+
         /* if using spill over, fsync spillover data to disk */
         if (unifycr_use_spillover) {
             int ret = __real_fsync(unifycr_spilloverblock);
@@ -2130,7 +2134,6 @@ int UNIFYCR_WRAP(fsync)(int fd)
         }
 
         /* if using LOGIO, call fsync rpc */
-        unifycr_filemeta_t* meta = unifycr_get_meta_from_fid(fid);
         if (meta->storage == FILE_STORAGE_LOGIO) {
             /* invoke fsync rpc to register index metadata with server */
             uint32_t gfid = get_gfid(fid);
@@ -2139,6 +2142,9 @@ int UNIFYCR_WRAP(fsync)(int fd)
                                             local_rank_idx,
                                             gfid);
         }
+
+        meta->needs_sync = 0;
+        return 0;
     } else {
         MAP_OR_FAIL(fsync);
         int ret = UNIFYCR_REAL(fsync)(fd);

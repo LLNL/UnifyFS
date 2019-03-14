@@ -346,6 +346,7 @@ int rm_cmd_read(
     unifycr_key_t key1, key2;
     unifycr_key_t* unifycr_keys[2] = {&key1, &key2};
     unifycr_keyval_t* keyvals;
+    keyvals = calloc(sizeof(unifycr_keyval_t), MAX_META_PER_SEND);
 
     /* create key to describe first byte we'll read */
     unifycr_keys[0]->fid = gfid;
@@ -671,6 +672,12 @@ int rm_cmd_exit(thrd_ctrl_t* thrd_ctrl)
     /* grab the lock */
     pthread_mutex_lock(&thrd_ctrl->thrd_lock);
 
+    if (thrd_ctrl->exited) {
+        /* already done */
+        pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
+        return UNIFYCR_SUCCESS;
+    }
+
     /* if delegator thread is not waiting in critical
      * section, let's wait on it to come back */
     if (!thrd_ctrl->has_waiting_delegator) {
@@ -686,11 +693,6 @@ int rm_cmd_exit(thrd_ctrl_t* thrd_ctrl)
     /* inform delegator thread that it's time to exit */
     thrd_ctrl->exit_flag = 1;
 
-    /* free storage holding shared data structures */
-    free(thrd_ctrl->del_req_set);
-    free(thrd_ctrl->del_req_stat->req_stat);
-    free(thrd_ctrl->del_req_stat);
-
     /* signal delegator thread */
     pthread_cond_signal(&thrd_ctrl->thrd_cond);
 
@@ -700,6 +702,12 @@ int rm_cmd_exit(thrd_ctrl_t* thrd_ctrl)
     /* wait for delegator thread to exit */
     void* status;
     pthread_join(thrd_ctrl->thrd, &status);
+    thrd_ctrl->exited = 1;
+
+    /* free storage holding shared data structures */
+    free(thrd_ctrl->del_req_set);
+    free(thrd_ctrl->del_req_stat->req_stat);
+    free(thrd_ctrl->del_req_stat);
 
     return UNIFYCR_SUCCESS;
 }
@@ -1320,6 +1328,8 @@ void* rm_delegate_request_thread(void* arg)
         /* release lock */
         pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
     }
+
+    LOGDBG("thread exiting");
 
     return NULL;
 }

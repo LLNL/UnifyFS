@@ -941,6 +941,7 @@ int unifycr_fid_create_file(const char* path)
     meta->is_dir  = 0;
     meta->log_size = 0;
     meta->storage = FILE_STORAGE_NULL;
+    meta->needs_sync = 0;
     meta->flock_status = UNLOCKED;
 
     /* PTHREAD_PROCESS_SHARED allows Process-Shared Synchronization*/

@@ -20,6 +20,8 @@
 #include "unifycr_log.h"
 #include "unifycr_rpc_util.h"
 
+#define SRVR_RPC_ADDR_FILE "/dev/shm/unifycrd_id"
+
 /* publishes server RPC address */
 void rpc_publish_server_addr(const char* addr)
 {
@@ -27,12 +29,12 @@ void rpc_publish_server_addr(const char* addr)
 
     /* write server address to /dev/shm/ for client on node to
      * read from */
-    FILE* fp = fopen("/dev/shm/unifycrd_id", "w+");
+    FILE* fp = fopen(SRVR_RPC_ADDR_FILE, "w+");
     if (fp != NULL) {
         fprintf(fp, "%s", addr);
         fclose(fp);
     } else {
-        LOGERR("Error writing server rpc addr to file `/dev/shm/unifycrd_id'");
+        LOGERR("Error writing server rpc addr file " SRVR_RPC_ADDR_FILE);
     }
 }
 
@@ -47,7 +49,7 @@ char* rpc_lookup_server_addr(void)
     /* TODO: support other lookup methods here like PMIX */
 
     /* read server address string from well-known file name in ramdisk */
-    FILE* fp = fopen("/dev/shm/unifycrd_id", "r");
+    FILE* fp = fopen(SRVR_RPC_ADDR_FILE, "r");
     if (fp != NULL) {
         /* opened the file, now read the address string */
         char addr_string[256];
@@ -61,8 +63,22 @@ char* rpc_lookup_server_addr(void)
 
     /* print server address (debugging) */
     if (str != NULL) {
-        LOGDBG("rpc address: %s", str);
+        LOGDBG("found server rpc address: %s", str);
     }
 
     return str;
 }
+
+/* remove server RPC address file */
+void rpc_clean_server_addr(void)
+{
+    /* TODO: support other publish modes like PMIX */
+
+    /* write server address to /dev/shm/ for client on node to
+     * read from */
+    int rc = unlink(SRVR_RPC_ADDR_FILE);
+    if (rc != 0) {
+        LOGERR("Error removing server rpc addr file " SRVR_RPC_ADDR_FILE);
+    }
+}
+

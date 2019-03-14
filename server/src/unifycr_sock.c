@@ -44,22 +44,18 @@
 #include "unifycr_setup.h"
 #include "unifycr_sock.h"
 
-int server_rank_idx;
-
-int server_sockfd;
-int client_sockfd;
-int num_fds = 0;
-
-//int thrd_pipe_fd[2] = {0};
-
+char sock_path[UNIFYCR_MAX_FILENAME];
+int server_sockfd = -1;
+int num_fds;
 struct pollfd poll_set[MAX_NUM_CLIENTS];
 struct sockaddr_un server_address;
+
+int detached_sock_idx = -1;
+int cur_sock_idx = -1;
+
 char cmd_buf[MAX_NUM_CLIENTS][CMD_BUF_SIZE];
 char ack_buf[MAX_NUM_CLIENTS][CMD_BUF_SIZE];
 int ack_msg[3] = {0};
-
-int detached_sock_id = -1;
-int cur_sock_id = 1;
 
 /**
 * initialize the listening socket on this delegator
@@ -67,22 +63,26 @@ int cur_sock_id = 1;
 */
 int sock_init_server(int srvr_id)
 {
-    int rc;
-    char sock_path[UNIFYCR_MAX_FILENAME];
+    int i, rc;
+
+    for (i = 0; i < MAX_NUM_CLIENTS; i++) {
+        poll_set[i].fd = -1;
+    }
+
+    num_fds = 0;
 
     snprintf(sock_path, sizeof(sock_path), "%s.%d.%d",
              SOCKET_PATH, getuid(), srvr_id);
+    LOGDBG("domain socket path is %s", sock_path);
+    unlink(sock_path); // remove domain socket leftover from prior run
 
     server_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
 
     memset(&server_address, 0, sizeof(server_address));
     server_address.sun_family = AF_UNIX;
     strcpy(server_address.sun_path, sock_path);
-    int server_len = sizeof(server_address);
-    unlink(sock_path);
-
     rc = bind(server_sockfd, (struct sockaddr*)&server_address,
-              (socklen_t)server_len);
+              (socklen_t)sizeof(server_address));
     if (rc != 0) {
         close(server_sockfd);
         return -1;
@@ -93,14 +93,8 @@ int sock_init_server(int srvr_id)
         close(server_sockfd);
         return -1;
     }
-    LOGDBG("domain socket path is %s", sock_path);
 
-    int flag = fcntl(server_sockfd, F_GETFL);
-    fcntl(server_sockfd, F_SETFL, flag | O_NONBLOCK);
-    poll_set[0].fd = server_sockfd; //add
-    poll_set[0].events = POLLIN | POLLHUP;
-    poll_set[0].revents = 0;
-    num_fds++;
+    sock_add(server_sockfd); // puts server fd at index 0 of poll_set
     LOGDBG("completed sock init server");
 
 #ifdef HAVE_PMIX_H
@@ -111,14 +105,42 @@ int sock_init_server(int srvr_id)
     return 0;
 }
 
+void sock_sanitize_client(int client_idx)
+{
+    /* close socket for this client id
+     * and set fd back to -1 */
+    if (poll_set[client_idx].fd != -1) {
+        close(poll_set[client_idx].fd);
+        poll_set[client_idx].fd = -1;
+    }
+}
+
+int sock_sanitize(void)
+{
+    int i;
+    for (i = 0; i < num_fds; i++) {
+        sock_sanitize_client(i);
+    }
+
+    if (server_sockfd != -1) {
+        server_sockfd = -1;
+        unlink(sock_path);
+    }
+
+    return 0;
+}
+
 int sock_add(int fd)
 {
-    LOGDBG("sock_adding fd: %d", fd);
     if (num_fds == MAX_NUM_CLIENTS) {
+        LOGERR("exceeded MAX_NUM_CLIENTS");
         return -1;
     }
+
     int flag = fcntl(fd, F_GETFL);
     fcntl(fd, F_SETFL, flag | O_NONBLOCK);
+
+    LOGDBG("sock_adding fd: %d", fd);
     poll_set[num_fds].fd = fd;
     poll_set[num_fds].events = POLLIN | POLLHUP;
     poll_set[num_fds].revents = 0;
@@ -126,24 +148,94 @@ int sock_add(int fd)
     return 0;
 }
 
-void sock_reset()
+void sock_reset(void)
 {
     int i;
-
+    cur_sock_idx = -1;
+    detached_sock_idx = -1;
     for (i = 0; i < num_fds; i++) {
         poll_set[i].events = POLLIN | POLLHUP;
         poll_set[i].revents = 0;
     }
 }
 
-int sock_remove(int idx)
+int sock_remove(int client_idx)
 {
     /* in this case, we simply disable the disconnected
      * file descriptor. */
-    poll_set[idx].fd = -1;
+    poll_set[client_idx].fd = -1;
     return 0;
 }
 
+/*
+ * wait for the client-side command
+ * */
+
+int sock_wait_cmd(int poll_timeout)
+{
+    int rc, i, client_fd;
+
+    sock_reset();
+    rc = poll(poll_set, num_fds, poll_timeout);
+    if (rc < 0) {
+        return (int)UNIFYCR_ERROR_POLL;
+    } else if (rc == 0) { // timeout
+        return (int)UNIFYCR_SUCCESS;
+    } else {
+        LOGDBG("poll detected socket activity");
+        for (i = 0; i < num_fds; i++) {
+            if (poll_set[i].fd == -1) {
+                continue;
+            }
+            if (i == 0) { // listening socket
+                if (poll_set[i].revents & POLLIN) {
+                    int client_len = sizeof(struct sockaddr_un);
+                    struct sockaddr_un client_address;
+                    client_fd = accept(server_sockfd,
+                                       (struct sockaddr*)&client_address,
+                                       (socklen_t*)&client_len);
+                    LOGDBG("accepted client on socket %d", client_fd);
+                    rc = sock_add(client_fd);
+                    if (rc < 0) {
+                        return (int)UNIFYCR_ERROR_SOCKET_FD_EXCEED;
+                    }
+                } else if (poll_set[i].revents & POLLERR) {
+                    // unknown error on listening socket
+                    return (int)UNIFYCR_ERROR_SOCK_LISTEN;
+                }
+            } else { // (i != 0) client sockets
+                rc = 0;
+                if (poll_set[i].revents & POLLIN) {
+                    ssize_t bytes_read = read(poll_set[i].fd,
+                                              cmd_buf[i], CMD_BUF_SIZE);
+                    if (bytes_read == 0) {
+                        rc = (int)UNIFYCR_ERROR_SOCK_DISCONNECT;
+                    } else { // read a client command
+                        cur_sock_idx = i;
+                        return UNIFYCR_SUCCESS;
+                    }
+                } else if (poll_set[i].revents & POLLHUP) {
+                    rc = (int)UNIFYCR_ERROR_SOCK_DISCONNECT;
+                } else if (poll_set[i].revents & POLLERR) {
+                    // unknown error on client socket
+                    rc = (int)UNIFYCR_ERROR_SOCK_OTHER;
+                }
+                if (rc) {
+                    if (rc == (int)UNIFYCR_ERROR_SOCK_DISCONNECT) {
+                        sock_remove(i);
+                        detached_sock_idx = i;
+                    }
+                    return rc;
+                }
+            }
+        }
+    }
+
+    return UNIFYCR_SUCCESS;
+
+}
+
+#if 0 // DEPRECATED DUE TO MARGO
 /*
  * send command to the client to let the client digest the
  * data in the shared receive buffer
@@ -151,143 +243,52 @@ int sock_remove(int idx)
  * @param: cmd: command type
  *
  * */
-int sock_notify_cli(int sock_id, int cmd)
+int sock_notify_client(int client_idx, int cmd)
 {
-    memset(ack_buf[sock_id], 0, sizeof(ack_buf[sock_id]));
-
     LOGDBG("sock notifying fd: %d", client_sockfd);
 
-    memcpy(ack_buf[sock_id], &cmd, sizeof(int));
-    int rc = write(client_sockfd,
-                   ack_buf[sock_id], sizeof(ack_buf[sock_id]));
+    memset(ack_buf[client_idx], 0, sizeof(ack_buf[client_idx]));
+    memcpy(ack_buf[client_idx], &cmd, sizeof(int));
 
-    if (rc < 0) {
-        return (int)UNIFYCR_ERROR_WRITE;
-    }
-    return ULFS_SUCCESS;
-}
-
-
-/*
- * wait for the client-side command
- * */
-
-int sock_wait_cli_cmd()
-{
-    int rc, i;
-
-    sock_reset();
-    rc = poll(poll_set, num_fds, -1);
-    if (rc <= 0) {
-        return (int)UNIFYCR_ERROR_POLL;
-    } else {
-        LOGDBG("in wait_cli_cmd");
-        for (i = 0; i < num_fds; i++) {
-            if (poll_set[i].fd != -1 && poll_set[i].revents != 0) {
-                if (i == 0 && poll_set[i].revents == POLLIN) {
-                    int client_len = sizeof(struct sockaddr_un);
-
-                    struct sockaddr_un client_address;
-                    client_sockfd = accept(server_sockfd,
-                                           (struct sockaddr*)&client_address,
-                                           (socklen_t*)&client_len);
-                    LOGDBG("accepted client on socket %d", client_sockfd);
-                    rc = sock_add(client_sockfd);
-                    if (rc < 0) {
-                        return (int)UNIFYCR_ERROR_SOCKET_FD_EXCEED;
-                    } else {
-                        cur_sock_id = i;
-                        return ULFS_SUCCESS;
-                    }
-                } else if (i != 0 && poll_set[i].revents == POLLIN) {
-                    int bytes_read = read(poll_set[i].fd,
-                                          cmd_buf[i], CMD_BUF_SIZE);
-                    if (bytes_read == 0) {
-                        sock_remove(i);
-                        detached_sock_id = i;
-                        return (int)UNIFYCR_ERROR_SOCK_DISCONNECT;
-                    }
-                    cur_sock_id = i;
-                    return ULFS_SUCCESS;
-                } else {
-                    if (i == 0) {
-                        return (int)UNIFYCR_ERROR_SOCK_LISTEN;
-                    } else {
-                        detached_sock_id = i;
-                        if (i != 0 && poll_set[i].revents == POLLHUP) {
-                            sock_remove(i);
-                            return (int)UNIFYCR_ERROR_SOCK_DISCONNECT;
-                        } else {
-                            sock_remove(i);
-                            return (int)UNIFYCR_ERROR_SOCK_OTHER;
-
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    return ULFS_SUCCESS;
-
-}
-
-int sock_ack_cli(int sock_id, int ret_sz)
-{
-    int rc = write(poll_set[sock_id].fd,
-                   ack_buf[sock_id], ret_sz);
+    ssize_t rc = write(client_sockfd, ack_buf[client_idx],
+                       sizeof(ack_buf[client_idx]));
     if (rc < 0) {
         return (int)UNIFYCR_ERROR_SOCK_OTHER;
     }
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
+}
+
+int sock_ack_client(int client_idx, int ret_sz)
+{
+    ssize_t rc = write(poll_set[client_idx].fd, ack_buf[client_idx], ret_sz);
+    if (rc < 0) {
+        return (int)UNIFYCR_ERROR_SOCK_OTHER;
+    }
+    return UNIFYCR_SUCCESS;
 }
 
 int sock_handle_error(int sock_error_no)
 {
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
-int sock_get_error_id()
+char* sock_get_cmd_buf(int client_idx)
 {
-    return detached_sock_id;
+    return (char*) cmd_buf[client_idx];
 }
 
-char* sock_get_cmd_buf(int sock_id)
+char* sock_get_ack_buf(int client_idx)
 {
-    return cmd_buf[sock_id];
+    return (char*) ack_buf[client_idx];
 }
 
-char* sock_get_ack_buf(int sock_id)
+int sock_get_id(void)
 {
-    return (char*)ack_buf[sock_id];
+    return cur_sock_idx;
 }
 
-int sock_get_id()
+int sock_get_error_id(void)
 {
-    return 0;
+    return detached_sock_idx;
 }
-
-void sock_sanitize_cli(int client_id)
-{
-    /* close socket for this client id
-     * and set fd back to -1 */
-    close(poll_set[client_id].fd);
-    poll_set[client_id].fd = -1;
-}
-
-int sock_sanitize()
-{
-    int i;
-    char tmp_str[UNIFYCR_MAX_FILENAME] = {0};
-
-    for (i = 0; i < num_fds; i++) {
-        if (poll_set[i].fd > 0) {
-            close(poll_set[i].fd);
-        }
-    }
-
-    snprintf(tmp_str, sizeof(tmp_str), "%s%d",
-             SOCKET_PATH, server_rank_idx);
-    unlink(tmp_str);
-    return 0;
-}
+#endif // DEPRECATED DUE TO MARGO
