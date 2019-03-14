@@ -149,9 +149,11 @@ typedef struct {
      * from the service threads */
     char del_recv_msg_buf[RECV_BUF_CNT][SENDRECV_BUF_LEN];
 
-    /* flag set by main thread indicating whether request
-     * manager thread should exit */
+    /* flag set to indicate request manager thread should exit */
     int exit_flag;
+
+    /* flag set after thread has exited and join completed */
+    int exited;
 
     /* app_id this thread is serving */
     int app_id;
@@ -228,7 +230,6 @@ extern arraylist_t *thrd_list;
 
 int invert_sock_ids[MAX_NUM_CLIENTS];
 
-extern pthread_t data_thrd;
 extern int glb_rank, glb_size;
 extern int *local_rank_lst;
 extern int local_rank_cnt;

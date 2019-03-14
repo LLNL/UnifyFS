@@ -1271,9 +1271,9 @@ static int sm_exit()
 }
 
 /* return code for service manager thread,
- * this is a static, since we return its address
+ * this is global since we return its address
  * from the pthread entry point function */
-static int sm_rc = 0;
+int sm_rc;
 
 /* entry point for the service thread, service the read requests
  * received from the requesting delegators, executes a loop constantly
@@ -1289,8 +1289,9 @@ void* sm_service_reads(void* ctx)
     read_buf = malloc(READ_BUF_SZ);
     if (read_buf == NULL) {
         // TODO: we need a better way to handle this case
-        fprintf(stderr, "Error allocating buffer!!!\n");
-        exit(-1);
+        LOGERR("failed to allocate read buffer!");
+        sm_rc = (int)UNIFYCR_ERROR_NOMEM;
+        return (void*)&sm_rc;
     }
 
     /* initialize value on how long to wait before processing
@@ -1366,8 +1367,8 @@ void* sm_service_reads(void* ctx)
 
     /* listen and server incoming requests until signaled to exit */
     MPI_Status status;
-    int flag = 0;
-    while (! flag) {
+    int done = 0;
+    while (!done) {
         /* post a receive for incoming request */
         MPI_Request request;
         MPI_Irecv(req_msg_buf, REQ_BUF_LEN, MPI_BYTE,
@@ -1473,21 +1474,20 @@ void* sm_service_reads(void* ctx)
             /* got a request for data, append read requests in message
              * to our service_msgs list */
             sm_decode_msg(req_msg_buf);
-        }
-
-        /* check whether we were told to exit */
-        if (cmd == XFER_COMM_EXIT) {
+        } else if (cmd == XFER_COMM_EXIT) {
             /* time to exit, free off data structures */
             sm_exit();
 
             /* set flag to exit */
-            flag = 1;
+            done = 1;
         }
     }
 
     /* free receive buffer */
     free(req_msg_buf);
     req_msg_buf = NULL;
+
+    LOGDBG("thread exiting");
 
     return (void*)&sm_rc;
 }

@@ -180,19 +180,16 @@ static int open_log_file(app_config_t* app_config,
 static thrd_ctrl_t* unifycr_rm_thrd_create(int app_id, int client_id)
 {
     /* allocate a new thread control structure */
-    size_t bytes = sizeof(thrd_ctrl_t);
-    thrd_ctrl_t* thrd_ctrl = (thrd_ctrl_t*)malloc(bytes);
+    thrd_ctrl_t* thrd_ctrl = (thrd_ctrl_t*)calloc(1, sizeof(thrd_ctrl_t));
     if (thrd_ctrl == NULL) {
         LOGERR("Failed to allocate structure for request "
                "manager thread for app_id=%d client_id=%d",
                app_id, client_id);
         return NULL;
     }
-    memset(thrd_ctrl, 0, bytes);
 
     /* allocate an array for listing read requests from client */
-    bytes = sizeof(msg_meta_t);
-    thrd_ctrl->del_req_set = (msg_meta_t*)malloc(bytes);
+    thrd_ctrl->del_req_set = (msg_meta_t*)calloc(1, sizeof(msg_meta_t));
     if (thrd_ctrl->del_req_set == NULL) {
         LOGERR("Failed to allocate read request structure for request "
                "manager thread for app_id=%d client_id=%d",
@@ -200,12 +197,11 @@ static thrd_ctrl_t* unifycr_rm_thrd_create(int app_id, int client_id)
         free(thrd_ctrl);
         return NULL;
     }
-    memset(thrd_ctrl->del_req_set, 0, bytes);
 
     /* allocate structure for tracking outstanding read requests
      * this delegator has with service managers on other nodes */
-    bytes = sizeof(del_req_stat_t);
-    thrd_ctrl->del_req_stat = (del_req_stat_t*)malloc(bytes);
+    thrd_ctrl->del_req_stat = (del_req_stat_t*)
+        calloc(1, sizeof(del_req_stat_t));
     if (thrd_ctrl->del_req_stat == NULL) {
         LOGERR("Failed to allocate delegator structure for request "
                "manager thread for app_id=%d client_id=%d",
@@ -214,12 +210,11 @@ static thrd_ctrl_t* unifycr_rm_thrd_create(int app_id, int client_id)
         free(thrd_ctrl);
         return NULL;
     }
-    memset(thrd_ctrl->del_req_set, 0, bytes);
 
     /* allocate a structure to track requests we have on each
      * remote service manager */
-    bytes = sizeof(per_del_stat_t) * glb_size;
-    thrd_ctrl->del_req_stat->req_stat = (per_del_stat_t*)malloc(bytes);
+    thrd_ctrl->del_req_stat->req_stat = (per_del_stat_t*)
+        calloc(glb_size, sizeof(per_del_stat_t));
     if (thrd_ctrl->del_req_stat->req_stat == NULL) {
         LOGERR("Failed to allocate per-delegator structure for request "
                "manager thread for app_id=%d client_id=%d",
@@ -229,7 +224,6 @@ static thrd_ctrl_t* unifycr_rm_thrd_create(int app_id, int client_id)
         free(thrd_ctrl);
         return NULL;
     }
-    memset(thrd_ctrl->del_req_stat->req_stat, 0, bytes);
 
     /* initialize lock for shared data structures between
      * main thread and request delegator thread */
@@ -266,10 +260,10 @@ static thrd_ctrl_t* unifycr_rm_thrd_create(int app_id, int client_id)
 
     /* initialize flow control flags */
     thrd_ctrl->exit_flag              = 0;
+    thrd_ctrl->exited                 = 0;
     thrd_ctrl->has_waiting_delegator  = 0;
     thrd_ctrl->has_waiting_dispatcher = 0;
 
-    /* TODO: can't we just tack this address onto tmp_config structure? */
     /* insert our thread control structure into our list of
      * active request manager threads, important to do this before
      * launching thread since it uses list to lookup its structure */
@@ -288,8 +282,8 @@ static thrd_ctrl_t* unifycr_rm_thrd_create(int app_id, int client_id)
     rc = pthread_create(&(thrd_ctrl->thrd), NULL,
                         rm_delegate_request_thread, (void*)thrd_ctrl);
     if (rc != 0) {
-        LOGERR("pthread_create failed for request "
-               "manager thread app_id=%d client_id=%d rc=%d (%s)",
+        LOGERR("failed to create request manager thread for "
+               "app_id=%d client_id=%d - rc=%d (%s)",
                app_id, client_id, rc, strerror(rc));
         pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
         pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
@@ -443,11 +437,21 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
     int app_id    = in.app_id;
     int client_id = in.local_rank_idx;
 
+    /* build output structure to return to caller */
+    unifycr_unmount_out_t out;
+    out.ret = UNIFYCR_SUCCESS;
+
+    /* send output back to caller */
+    hg_return_t hret = margo_respond(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* free margo resources */
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+
     /* lookup app_config for given app_id */
     app_config_t* app_config =
         (app_config_t *) arraylist_get(app_config_list, app_id);
-
-    /* TODO: do cleanup here */
 
     /* get thread id for this client */
     int thrd_id = app_config->thrd_idxs[client_id];
@@ -472,24 +476,12 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
                          (void**)&(app_config->shm_recv_bufs[client_id]));
     }
 
-    /* destroy the sockets except for the ones for acks */
-    sock_sanitize_cli(client_id);
+    /* close the client socket connection */
+    sock_sanitize_client(client_id);
 
     /* free margo hg_addr_t client addresses in app_config struct */
     margo_addr_free(unifycr_server_rpc_context->mid,
                     app_config->client_addr[client_id]);
-
-    /* build output structure to return to caller */
-    unifycr_unmount_out_t out;
-    out.ret = UNIFYCR_SUCCESS;
-
-    /* send output back to caller */
-    hg_return_t hret = margo_respond(handle, &out);
-    assert(hret == HG_SUCCESS);
-
-    /* free margo resources */
-    margo_free_input(handle, &in);
-    margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(unifycr_unmount_rpc)
 

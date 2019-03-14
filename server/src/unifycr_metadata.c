@@ -117,7 +117,7 @@ int meta_init_store(unifycr_cfg_t* cfg)
         return -1;
     }
 
-    /* UNIFYCR_META_DB_PATH: file that stores the key value pair*/
+    /* UNIFYCR_META_DB_PATH: file that stores the metadata */
     db_opts->db_path = strdup(cfg->meta_db_path);
     if (db_opts->db_path == NULL) {
         return -1;
@@ -127,8 +127,8 @@ int meta_init_store(unifycr_cfg_t* cfg)
     db_opts->db_type = LEVELDB;
     db_opts->db_create_new = 1;
 
-    /* META_SERVER_RATIO: number of metadata servers =
-        number of processes/META_SERVER_RATIO */
+    /* number of metadata servers =
+     *   number of unifycr servers / UNIFYCR_META_SERVER_RATIO */
     svr_ratio = 0;
     rc = configurator_int_val(cfg->meta_server_ratio, &svr_ratio);
     if (rc != 0) {
@@ -141,7 +141,7 @@ int meta_init_store(unifycr_cfg_t* cfg)
     db_opts->num_paths = 0;
     db_opts->num_wthreads = 1;
 
-    path_len = strlen(db_opts->db_path) + strlen(MANIFEST_FILE_NAME) + 1;
+    path_len = strlen(db_opts->db_path) + strlen(MANIFEST_FILE_NAME) + 2;
     manifest_path = malloc(path_len);
     if (manifest_path == NULL) {
         return -1;
@@ -158,7 +158,7 @@ int meta_init_store(unifycr_cfg_t* cfg)
     db_opts->debug_level = MLOG_CRIT;
 
     /* indices/attributes are striped to servers according
-     * to UnifyCR_META_RANGE_SIZE.
+     * to config setting for UNIFYCR_META_RANGE_SIZE.
      */
     range_sz = 0;
     rc = configurator_int_val(cfg->meta_range_size, &range_sz);
@@ -185,7 +185,6 @@ int meta_init_store(unifycr_cfg_t* cfg)
     }
 
     return 0;
-
 }
 
 /**
@@ -193,55 +192,58 @@ int meta_init_store(unifycr_cfg_t* cfg)
 * put/get key-value pairs
 * ToDo: split once the number of metadata exceeds MAX_META_PER_SEND
 */
-int meta_init_indices()
+int meta_init_indices(void)
 {
-
     int i;
 
-    /*init index metadata*/
-    unifycr_keys = (unifycr_key_t**)malloc(MAX_META_PER_SEND
-                                           * sizeof(unifycr_key_t*));
+    /* init index metadata */
+    unifycr_keys = (unifycr_key_t**)
+        malloc(MAX_META_PER_SEND * sizeof(unifycr_key_t*));
+    if (unifycr_keys == NULL) {
+        return (int)UNIFYCR_ERROR_NOMEM;
+    }
 
-    unifycr_vals = (unifycr_val_t**)malloc(MAX_META_PER_SEND
-                                           * sizeof(unifycr_val_t*));
+    unifycr_vals = (unifycr_val_t**)
+        malloc(MAX_META_PER_SEND * sizeof(unifycr_val_t*));
+    if (unifycr_vals == NULL) {
+        return (int)UNIFYCR_ERROR_NOMEM;
+    }
 
     for (i = 0; i < MAX_META_PER_SEND; i++) {
-        unifycr_keys[i] = (unifycr_key_t*)malloc(sizeof(unifycr_key_t));
+        unifycr_keys[i] = (unifycr_key_t*) calloc(1, sizeof(unifycr_key_t));
         if (unifycr_keys[i] == NULL) {
             return (int)UNIFYCR_ERROR_NOMEM;
         }
-        memset(unifycr_keys[i], 0, sizeof(unifycr_key_t));
-    }
 
-    for (i = 0; i < MAX_META_PER_SEND; i++) {
-        unifycr_vals[i] = (unifycr_val_t*)malloc(sizeof(unifycr_val_t));
+        unifycr_vals[i] = (unifycr_val_t*) calloc(1, sizeof(unifycr_val_t));
         if (unifycr_vals[i] == NULL) {
             return (int)UNIFYCR_ERROR_NOMEM;
         }
-        memset(unifycr_vals[i], 0, sizeof(unifycr_val_t));
     }
 
-    /*init attribute metadata*/
-    fattr_keys = (fattr_key_t**)malloc(MAX_FILE_CNT_PER_NODE
-                                       * sizeof(fattr_key_t*));
+    /* init attribute metadata */
+    fattr_keys = (fattr_key_t**)
+        malloc(MAX_FILE_CNT_PER_NODE * sizeof(fattr_key_t*));
+    if (fattr_keys == NULL) {
+        return (int)UNIFYCR_ERROR_NOMEM;
+    }
 
-    fattr_vals = (fattr_val_t**)malloc(MAX_FILE_CNT_PER_NODE
-                                       * sizeof(fattr_val_t*));
+    fattr_vals = (fattr_val_t**)
+        malloc(MAX_FILE_CNT_PER_NODE * sizeof(fattr_val_t*));
+    if (fattr_vals == NULL) {
+        return (int)UNIFYCR_ERROR_NOMEM;
+    }
 
     for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
-        fattr_keys[i] = (fattr_key_t*)malloc(sizeof(fattr_key_t));
+        fattr_keys[i] = (fattr_key_t*) calloc(1, sizeof(fattr_key_t));
         if (fattr_keys[i] == NULL) {
             return (int)UNIFYCR_ERROR_NOMEM;
         }
-        memset(fattr_keys[i], 0, sizeof(fattr_key_t));
-    }
 
-    for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
-        fattr_vals[i] = (fattr_val_t*)malloc(sizeof(fattr_val_t));
+        fattr_vals[i] = (fattr_val_t*) calloc(1, sizeof(fattr_val_t));
         if (fattr_vals[i] == NULL) {
             return (int)UNIFYCR_ERROR_NOMEM;
         }
-        memset(fattr_vals[i], 0, sizeof(fattr_val_t));
     }
 
     return 0;
@@ -278,37 +280,35 @@ void print_fsync_indices(unifycr_key_t** unifycr_keys,
     }
 }
 
-int meta_free_indices()
+void meta_free_indices(void)
 {
     int i;
     for (i = 0; i < MAX_META_PER_SEND; i++) {
-        free(unifycr_keys[i]);
+        if (NULL != unifycr_keys[i]) {
+            free(unifycr_keys[i]);
+        }
+        if (NULL != unifycr_vals[i]) {
+            free(unifycr_vals[i]);
+        }
     }
     free(unifycr_keys);
-
-    for (i = 0; i < MAX_META_PER_SEND; i++) {
-        free(unifycr_vals[i]);
-    }
     free(unifycr_vals);
 
     for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
-        free(fattr_keys[i]);
+        if (NULL != fattr_keys[i]) {
+            free(fattr_keys[i]);
+        }
+        if (NULL != fattr_vals[i]) {
+            free(fattr_vals[i]);
+        }
     }
     free(fattr_keys);
-
-    for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
-        free(fattr_vals[i]);
-    }
     free(fattr_vals);
-
-    return 0;
 }
 
-int meta_sanitize()
+int meta_sanitize(void)
 {
-    int rc = ULFS_SUCCESS;
-
-    meta_free_indices();
+    int rc = UNIFYCR_SUCCESS;
 
     char dbfilename[UNIFYCR_MAX_FILENAME] = {0};
     char statfilename[UNIFYCR_MAX_FILENAME] = {0};
@@ -338,11 +338,11 @@ int meta_sanitize()
     rc = mdhimSanitize(dbfilename1, statfilename1, manifestname1);
 
     mdhim_options_destroy(db_opts);
+
+    meta_free_indices();
+
     return rc;
 }
-
-
-
 
 // New API
 /*
@@ -371,8 +371,8 @@ int unifycr_set_file_attribute(unifycr_file_attr_t* fattr_ptr)
 /*
  *
  */
-int unifycr_set_file_attributes(int num_entries, fattr_key_t** keys,
-                                int* key_lens,
+int unifycr_set_file_attributes(int num_entries,
+                                fattr_key_t** keys, int* key_lens,
                                 unifycr_file_attr_t** fattr_ptr, int* val_lens)
 {
     int rc = UNIFYCR_SUCCESS;
@@ -396,7 +396,6 @@ int unifycr_set_file_attributes(int num_entries, fattr_key_t** keys,
         brm = brmp;
         brmp = brmp->next;
         mdhim_full_release_msg(brm);
-
     }
 
     return rc;

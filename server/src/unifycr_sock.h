@@ -38,19 +38,21 @@ extern int client_sockfd;
 extern struct pollfd poll_set[MAX_NUM_CLIENTS];
 
 int sock_init_server(int srvr_id);
+void sock_sanitize_client(int client_idx);
+int sock_sanitize(void);
 int sock_add(int fd);
-void sock_reset();
-int sock_wait_cli_cmd();
-char* sock_get_cmd_buf(int sock_id);
+int sock_remove(int client_idx);
+void sock_reset(void);
+int sock_wait_cmd(int poll_timeout);
+
+#if 0 // DEPRECATED DUE TO MARGO
 int sock_handle_error(int sock_error_no);
-int sock_get_id();
-int sock_get_error_id();
-int sock_ack_cli(int sock_id, int ret_sz);
-int sock_sanitize();
-void sock_sanitize_cli(int client_id);
-char* sock_get_ack_buf(int sock_id);
-int sock_remove(int idx);
-int sock_notify_cli(int sock_id, int cmd);
-char* sock_get_cmd_buf(int sock_id);
+int sock_get_id(void);
+int sock_get_error_id(void);
+char* sock_get_cmd_buf(int client_idx);
+char* sock_get_ack_buf(int client_idx);
+int sock_ack_client(int client_idx, int ret_sz);
+int sock_notify_client(int client_idx, int cmd);
+#endif // DEPRECATED DUE TO MARGO
 
 #endif

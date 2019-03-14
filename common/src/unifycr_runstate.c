@@ -102,6 +102,7 @@ int unifycr_write_runstate(unifycr_cfg_t* cfg)
 int unifycr_clean_runstate(unifycr_cfg_t* cfg)
 {
     int rc = (int)UNIFYCR_SUCCESS;
+    int uid = (int)getuid();
     char runstate_fname[UNIFYCR_MAX_FILENAME] = {0};
 
     if (cfg == NULL) {
@@ -110,7 +111,7 @@ int unifycr_clean_runstate(unifycr_cfg_t* cfg)
     }
 
     snprintf(runstate_fname, sizeof(runstate_fname),
-             "%s/%s", cfg->runstate_dir, runstate_file);
+             "%s/%s.%d", cfg->runstate_dir, runstate_file, uid);
 
     rc = unlink(runstate_fname);
     if (rc != 0) {
