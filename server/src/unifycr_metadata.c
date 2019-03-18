@@ -70,12 +70,12 @@ void debug_log_key_val(const char* ctx,
                        unifycr_val_t* val)
 {
     if ((key != NULL) && (val != NULL)) {
-        LOGDBG("@%s - key(fid=%lu, offset=%lu), "
+        LOGDBG("@%s - key(fid=%d, offset=%lu), "
                "val(del=%d, len=%lu, addr=%lu, app=%d, rank=%d)",
                ctx, key->fid, key->offset,
                val->delegator_id, val->len, val->addr, val->app_id, val->rank);
     } else if (key != NULL) {
-        LOGDBG("@%s - key(fid=%lu, offset=%lu)",
+        LOGDBG("@%s - key(fid=%d, offset=%lu)",
                ctx, key->fid, key->offset);
     }
 }
@@ -271,7 +271,7 @@ void print_fsync_indices(unifycr_key_t** unifycr_keys,
 {
     size_t i;
     for (i = 0; i < num_entries; i++) {
-        LOGDBG("fid:%lu, offset:%lu, addr:%lu, len:%lu, del_id:%d",
+        LOGDBG("fid:%d, offset:%lu, addr:%lu, len:%lu, del_id:%d",
                unifycr_keys[i]->fid, unifycr_keys[i]->offset,
                unifycr_vals[i]->addr, unifycr_vals[i]->len,
                unifycr_vals[i]->delegator_id);
@@ -473,7 +473,7 @@ int unifycr_get_file_extents(int num_keys, unifycr_key_t** keys,
                 (*keyval)[tot_num].val.addr = tmp_val->addr;
                 (*keyval)[tot_num].val.app_id = tmp_val->app_id;
                 (*keyval)[tot_num].val.delegator_id = tmp_val->delegator_id;
-                (*keyval)[tot_num].val.addr = tmp_val->len;
+                (*keyval)[tot_num].val.len = tmp_val->len;
                 tot_num++;
                 if (MAX_META_PER_SEND == tot_num) {
                     LOGERR("Error: maximum number of values!");
