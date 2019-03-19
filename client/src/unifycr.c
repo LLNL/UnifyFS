@@ -166,7 +166,8 @@ void* free_chunk_stack;
 void* free_spillchunk_stack;
 unifycr_filename_t* unifycr_filelist;
 static unifycr_filemeta_t* unifycr_filemetas;
-static unifycr_chunkmeta_t* unifycr_chunkmetas;
+
+unifycr_chunkmeta_t* unifycr_chunkmetas;
 
 char* unifycr_chunks;
 int unifycr_spilloverblock = 0;
@@ -1696,8 +1697,7 @@ static int unifycr_init_structures()
         unifycr_filemeta_t* filemeta = &unifycr_filemetas[i];
 
         /* compute offset to start of chunk meta list for this file */
-        unifycr_chunkmeta_t* chunkmetas = &(unifycr_chunkmetas[numchunks * i]);
-        filemeta->chunk_meta = chunkmetas;
+        filemeta->chunkmeta_idx = numchunks * i;
     }
 
     /* initialize stack of free file ids */

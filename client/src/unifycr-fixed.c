@@ -43,22 +43,27 @@
 #include "unifycr-fixed.h"
 #include "unifycr_log.h"
 
+static inline
+unifycr_chunkmeta_t* filemeta_get_chunkmeta(const unifycr_filemeta_t* meta,
+                                            int cid)
+{
+    unifycr_chunkmeta_t* chunkmeta = NULL;
+
+    if (meta && (cid >= 0 && cid < unifycr_max_chunks)) {
+        chunkmeta = &unifycr_chunkmetas[meta->chunkmeta_idx + cid];
+    }
+
+    return chunkmeta;
+}
+
 /* given a file id and logical chunk id, return pointer to meta data
  * for specified chunk, return NULL if not found */
-unifycr_chunkmeta_t* unifycr_get_chunkmeta(int fid, int cid)
+static inline unifycr_chunkmeta_t* unifycr_get_chunkmeta(int fid, int cid)
 {
     /* lookup file meta data for specified file id */
     unifycr_filemeta_t* meta = unifycr_get_meta_from_fid(fid);
-    if (meta != NULL) {
-        /* now lookup chunk meta data for specified chunk id */
-        if (cid >= 0 && cid < unifycr_max_chunks) {
-            unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[cid]);
-            return chunk_meta;
-        }
-    }
 
-    /* failed to find file or chunk id is out of range */
-    return (unifycr_chunkmeta_t*)NULL;
+    return filemeta_get_chunkmeta(meta, cid);
 }
 
 /* ---------------------------------------
@@ -67,13 +72,11 @@ unifycr_chunkmeta_t* unifycr_get_chunkmeta(int fid, int cid)
 
 /* given a logical chunk id and an offset within that chunk, return the pointer
  * to the memory location corresponding to that location */
-static inline void* unifycr_compute_chunk_buf(
-    const unifycr_filemeta_t* meta,
-    int logical_id,
-    off_t logical_offset)
+static inline void* unifycr_compute_chunk_buf(const unifycr_filemeta_t* meta,
+                                              int cid, off_t offset)
 {
     /* get pointer to chunk meta */
-    const unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[logical_id]);
+    const unifycr_chunkmeta_t* chunk_meta = filemeta_get_chunkmeta(meta, cid);
 
     /* identify physical chunk id */
     int physical_id = chunk_meta->id;
@@ -89,19 +92,17 @@ static inline void* unifycr_compute_chunk_buf(
     }
 
     /* now add offset */
-    char* buf = start + logical_offset;
+    char* buf = start + offset;
     return (void*)buf;
 }
 
 /* given a chunk id and an offset within that chunk, return the offset
  * in the spillover file corresponding to that location */
-static inline off_t unifycr_compute_spill_offset(
-    const unifycr_filemeta_t* meta,
-    int logical_id,
-    off_t logical_offset)
+static inline off_t unifycr_compute_spill_offset(const unifycr_filemeta_t* meta,
+                                                 int cid, off_t offset)
 {
     /* get pointer to chunk meta */
-    const unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[logical_id]);
+    const unifycr_chunkmeta_t* chunk_meta = filemeta_get_chunkmeta(meta, cid);
 
     /* identify physical chunk id */
     int physical_id = chunk_meta->id;
@@ -118,7 +119,7 @@ static inline off_t unifycr_compute_spill_offset(
         start = ((long)(physical_id - unifycr_max_chunks) << unifycr_chunk_bits);
     }
 
-    off_t buf = start + logical_offset;
+    off_t buf = start + offset;
     return buf;
 }
 
@@ -126,7 +127,7 @@ static inline off_t unifycr_compute_spill_offset(
 static int unifycr_chunk_alloc(int fid, unifycr_filemeta_t* meta, int chunk_id)
 {
     /* get pointer to chunk meta data */
-    unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[chunk_id]);
+    unifycr_chunkmeta_t* chunk_meta = filemeta_get_chunkmeta(meta, chunk_id);
 
     /* allocate a chunk and record its location */
     if (unifycr_use_memfs) {
@@ -193,7 +194,7 @@ static int unifycr_chunk_alloc(int fid, unifycr_filemeta_t* meta, int chunk_id)
 static int unifycr_chunk_free(int fid, unifycr_filemeta_t* meta, int chunk_id)
 {
     /* get pointer to chunk meta data */
-    unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[chunk_id]);
+    unifycr_chunkmeta_t* chunk_meta = filemeta_get_chunkmeta(meta, chunk_id);
 
     /* get physical id of chunk */
     int id = chunk_meta->id;
@@ -228,7 +229,7 @@ static int unifycr_chunk_read(
     size_t count)            /* number of bytes to read */
 {
     /* get chunk meta data */
-    unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[chunk_id]);
+    unifycr_chunkmeta_t* chunk_meta = filemeta_get_chunkmeta(meta, chunk_id);
 
     /* determine location of chunk */
     if (chunk_meta->location == CHUNK_LOCATION_MEMFS) {
@@ -339,7 +340,7 @@ static int unifycr_logio_chunk_write(
     size_t count)             /* number of bytes to write */
 {
     /* get chunk meta data */
-    unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[chunk_id]);
+    unifycr_chunkmeta_t* chunk_meta = filemeta_get_chunkmeta(meta, chunk_id);
 
     if (chunk_meta->location != CHUNK_LOCATION_MEMFS &&
             chunk_meta->location != CHUNK_LOCATION_SPILLOVER) {
@@ -478,7 +479,7 @@ static int unifycr_chunk_write(
     size_t count)            /* number of bytes to write */
 {
     /* get chunk meta data */
-    unifycr_chunkmeta_t* chunk_meta = &(meta->chunk_meta[chunk_id]);
+    unifycr_chunkmeta_t* chunk_meta = filemeta_get_chunkmeta(meta, chunk_id);
 
     /* determine location of chunk */
     if (chunk_meta->location == CHUNK_LOCATION_MEMFS) {
