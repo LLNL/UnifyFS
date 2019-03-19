@@ -271,7 +271,7 @@ typedef struct {
     int needs_sync;                 /* have unsynced writes */
 
     off_t chunks;                   /* number of chunks allocated to file */
-    unifycr_chunkmeta_t* chunk_meta; /* meta data for chunks */
+    off_t chunkmeta_idx;            /* starting index in unifycr_chunkmeta */
 } unifycr_filemeta_t;
 
 /* struct used to map a full path to its local file id,
@@ -395,6 +395,7 @@ unifycr_max_chunks; /* maximum number of chunks that fit in memory */
 extern void* free_chunk_stack;
 extern void* free_spillchunk_stack;
 extern char* unifycr_chunks;
+extern unifycr_chunkmeta_t* unifycr_chunkmetas;
 int unifycr_spilloverblock;
 
 /* -------------------------------
