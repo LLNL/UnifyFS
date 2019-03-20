@@ -1541,34 +1541,31 @@ static size_t unifycr_superblock_size(void)
     /* file metadata struct array */
     sb_size += unifycr_max_files * sizeof(unifycr_filemeta_t);
 
-    /* memory chunk metadata struct array for each file,
-     * enables a file to use all space in memory */
     if (unifycr_use_memfs) {
+        /* memory chunk metadata struct array for each file,
+         * enables a file to use all space in memory */
         sb_size += unifycr_max_files * unifycr_max_chunks *
                    sizeof(unifycr_chunkmeta_t);
     }
-
-    /* spillover chunk metadata struct array for each file,
-     * enables a file to use all space in spillover file */
     if (unifycr_use_spillover) {
+        /* spillover chunk metadata struct array for each file,
+         * enables a file to use all space in spillover file */
         sb_size += unifycr_max_files * unifycr_spillover_max_chunks *
                    sizeof(unifycr_chunkmeta_t);
     }
 
-    /* free memory chunk stack */
+    /* free chunk stack */
     if (unifycr_use_memfs) {
         sb_size += unifycr_stack_bytes(unifycr_max_chunks);
     }
-
-    /* free spillover chunk stack */
     if (unifycr_use_spillover) {
         sb_size += unifycr_stack_bytes(unifycr_spillover_max_chunks);
     }
 
     /* space for memory chunks */
     if (unifycr_use_memfs) {
-        sb_size += unifycr_page_size +
-                   (unifycr_max_chunks * unifycr_chunk_size);
+        sb_size += unifycr_page_size;
+        sb_size += unifycr_max_chunks * unifycr_chunk_size;
     }
 
     /* index region size */
@@ -1581,6 +1578,19 @@ static size_t unifycr_superblock_size(void)
 
     /* return number of bytes */
     return sb_size;
+}
+
+static inline
+char* next_page_align(char* ptr)
+{
+    intptr_t orig = (intptr_t) ptr;
+    intptr_t aligned = orig;
+    intptr_t offset = orig % unifycr_page_size;
+    if (offset) {
+        aligned += (unifycr_page_size - offset);
+    }
+    LOGDBG("orig=0x%p, next-page-aligned=0x%p", ptr, (char*)aligned);
+    return (char*) aligned;
 }
 
 /* initialize our global pointers into the given superblock */
@@ -1610,9 +1620,6 @@ static void* unifycr_init_pointers(void* superblock)
         ptr += unifycr_max_files * unifycr_max_chunks *
                sizeof(unifycr_chunkmeta_t);
     }
-
-    /* if we're using spillover, reserve chunk meta data
-     * for spill over chunks */
     if (unifycr_use_spillover) {
         ptr += unifycr_max_files * unifycr_spillover_max_chunks *
                sizeof(unifycr_chunkmeta_t);
@@ -1623,8 +1630,6 @@ static void* unifycr_init_pointers(void* superblock)
         free_chunk_stack = ptr;
         ptr += unifycr_stack_bytes(unifycr_max_chunks);
     }
-
-    /* stack to manage free spill-over data chunks */
     if (unifycr_use_spillover) {
         free_spillchunk_stack = ptr;
         ptr += unifycr_stack_bytes(unifycr_spillover_max_chunks);
@@ -1632,15 +1637,8 @@ static void* unifycr_init_pointers(void* superblock)
 
     /* Only set this up if we're using memfs */
     if (unifycr_use_memfs) {
-        /* round ptr up to start of next page */
-        unsigned long long ull_ptr  = (unsigned long long)ptr;
-        unsigned long long ull_page = (unsigned long long)unifycr_page_size;
-        unsigned long long num_pages = ull_ptr / ull_page;
-        if (ull_ptr > num_pages * ull_page) {
-            ptr = (char*)((num_pages + 1) * ull_page);
-        }
-
         /* pointer to start of memory data chunks */
+        ptr = next_page_align(ptr);
         unifycr_chunks = ptr;
         ptr += unifycr_max_chunks * unifycr_chunk_size;
     } else {
@@ -1648,22 +1646,18 @@ static void* unifycr_init_pointers(void* superblock)
     }
 
     /* record pointer to number of index entries */
-    unifycr_indices.ptr_num_entries = (off_t*)ptr;
-
-    /* skip a full page? */
-    ptr += unifycr_page_size;
+    unifycr_indices.ptr_num_entries = (size_t*)ptr;
 
     /* pointer to array of index entries */
+    ptr += unifycr_page_size;
     unifycr_indices.index_entry = (unifycr_index_t*)ptr;
     ptr += unifycr_max_index_entries * sizeof(unifycr_index_t);
 
     /* pointer to number of file metadata entries */
-    unifycr_fattrs.ptr_num_entries = (off_t*)ptr;
-
-    /* skip a full page? */
-    ptr += unifycr_page_size;
+    unifycr_fattrs.ptr_num_entries = (size_t*)ptr;
 
     /* pointer to array of file metadata entries */
+    ptr += unifycr_page_size;
     unifycr_fattrs.meta_entry = (unifycr_file_attr_t*)ptr;
     ptr += unifycr_max_fattr_entries * sizeof(unifycr_file_attr_t);
 
@@ -2087,17 +2081,17 @@ int unifycr_sync_to_del(unifycr_mount_in_t* in)
     size_t recv_buf_sz   = shm_recv_size;
     size_t superblock_sz = shm_super_size;
 
-    void* meta_start   = (void*)unifycr_indices.ptr_num_entries;
+    void*  meta_start  = (void*)unifycr_indices.ptr_num_entries;
     size_t meta_offset = meta_start - shm_super_buf;
     size_t meta_size   = unifycr_max_index_entries
                          * sizeof(unifycr_index_t);
 
-    void* fmeta_start   = (void*)unifycr_fattrs.ptr_num_entries;
+    void*  fmeta_start  = (void*)unifycr_fattrs.ptr_num_entries;
     size_t fmeta_offset = fmeta_start - shm_super_buf;
     size_t fmeta_size   = unifycr_max_fattr_entries
                           * sizeof(unifycr_file_attr_t);
 
-    void* data_start   = (void*)unifycr_chunks;
+    void*  data_start  = (void*)unifycr_chunks;
     size_t data_offset = data_start - shm_super_buf;
     size_t data_size   = (size_t)unifycr_max_chunks * unifycr_chunk_size;
 

@@ -40,10 +40,10 @@
  * Key for a file extent
  */
 typedef struct {
-    /** file id */
+    /** global file id */
     int fid;
-    /** offset */
-    unsigned long offset;
+    /** logical file offset */
+    size_t offset;
 } unifycr_key_t;
 
 #define UNIFYCR_KEY_SZ (sizeof(unifycr_key_t))
@@ -51,11 +51,11 @@ typedef struct {
 #define UNIFYCR_KEY_OFF(keyp) (((unifycr_key_t*)keyp)->offset)
 
 typedef struct {
-    unsigned long addr;
-    unsigned long len;
-    int delegator_id;
-    int app_id;
-    int rank;
+    size_t addr;      /* data offset in server */
+    size_t len;       /* length of data at addr */
+    int delegator_id; /* rank of server where data lives */
+    int app_id;       /* application id in server */
+    int rank;         /* client id in server */
 } unifycr_val_t;
 
 #define UNIFYCR_VAL_SZ (sizeof(unifycr_val_t))

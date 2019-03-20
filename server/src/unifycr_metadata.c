@@ -383,8 +383,7 @@ int unifycr_set_file_attributes(int num_entries,
     brmp = brm;
     if (!brmp || brmp->error) {
         rc = (int)UNIFYCR_ERROR_MDHIM;
-        LOG(LOG_DBG, "Rank - %d: Error inserting keys/values into MDHIM\n",
-            md->mdhim_rank);
+        LOGERR("Error inserting keys/values into MDHIM");
     }
 
     while (brmp) {
@@ -413,19 +412,14 @@ int unifycr_get_file_attribute(int gfid,
     md->primary_index = unifycr_indexes[1];
     bgrm = mdhimGet(md, md->primary_index, &gfid,
                     sizeof(int), MDHIM_GET_EQ);
-
     if (!bgrm || bgrm->error) {
         rc = (int)UNIFYCR_ERROR_MDHIM;
     } else {
         tmp_ptr_attr = (unifycr_file_attr_t*)bgrm->values[0];
-
-        attr_val_ptr->file_attr = tmp_ptr_attr->file_attr;
-        attr_val_ptr->fid = tmp_ptr_attr->fid;
-        attr_val_ptr->gfid = tmp_ptr_attr->gfid;
-        strcpy(attr_val_ptr->filename, tmp_ptr_attr->filename);
+        memcpy(attr_val_ptr, tmp_ptr_attr, sizeof(unifycr_file_attr_t));
+        mdhim_full_release_msg(bgrm);
     }
 
-    mdhim_full_release_msg(bgrm);
     return rc;
 }
 
@@ -434,7 +428,7 @@ int unifycr_get_file_attribute(int gfid,
  */
 int unifycr_get_file_extents(int num_keys, unifycr_key_t** keys,
                              int* unifycr_key_lens, int* num_values,
-                             unifycr_keyval_t** keyval)
+                             unifycr_keyval_t** keyvals)
 {
     /*
      * This is using a modified version of mdhim. The function will return all
@@ -442,17 +436,17 @@ int unifycr_get_file_extents(int num_keys, unifycr_key_t** keys,
      * We need to re-evaluate this function to use different key-value stores.
      */
 
-    int rc = UNIFYCR_SUCCESS;
     int i;
-
-    md->primary_index = unifycr_indexes[0];
-    bgrm = mdhimBGet(md, md->primary_index, (void**)keys,
-                     unifycr_key_lens, num_keys, MDHIM_RANGE_BGET);
-
+    int rc = UNIFYCR_SUCCESS;
     int tot_num = 0;
 
     unifycr_key_t* tmp_key;
     unifycr_val_t* tmp_val;
+    unifycr_keyval_t* kviter = *keyvals;
+
+    md->primary_index = unifycr_indexes[0];
+    bgrm = mdhimBGet(md, md->primary_index, (void**)keys,
+                     unifycr_key_lens, num_keys, MDHIM_RANGE_BGET);
 
     while (bgrm) {
         bgrmp = bgrm;
@@ -464,15 +458,11 @@ int unifycr_get_file_extents(int num_keys, unifycr_key_t** keys,
 
         if (tot_num < MAX_META_PER_SEND) {
             for (i = 0; i < bgrmp->num_keys; i++) {
-                tmp_key = (unifycr_key_t*)bgrm->keys[i];
-                tmp_val = (unifycr_val_t*)bgrm->values[i];
-                (*keyval)[tot_num].key.fid = tmp_key->fid;
-                (*keyval)[tot_num].key.offset = tmp_key->offset;
-
-                (*keyval)[tot_num].val.addr = tmp_val->addr;
-                (*keyval)[tot_num].val.app_id = tmp_val->app_id;
-                (*keyval)[tot_num].val.delegator_id = tmp_val->delegator_id;
-                (*keyval)[tot_num].val.len = tmp_val->len;
+                tmp_key = (unifycr_key_t*)bgrmp->keys[i];
+                tmp_val = (unifycr_val_t*)bgrmp->values[i];
+                memcpy(&(kviter->key), tmp_key, sizeof(unifycr_key_t));
+                memcpy(&(kviter->val), tmp_val, sizeof(unifycr_val_t));
+                kviter++;
                 tot_num++;
                 if (MAX_META_PER_SEND == tot_num) {
                     LOGERR("Error: maximum number of values!");
@@ -493,9 +483,9 @@ int unifycr_get_file_extents(int num_keys, unifycr_key_t** keys,
 /*
  *
  */
-int unifycr_set_file_extents(int num_entries, unifycr_key_t** keys,
-                             int* unifycr_key_lens, unifycr_val_t** vals,
-                             int* unifycr_val_lens)
+int unifycr_set_file_extents(int num_entries,
+                             unifycr_key_t** keys, int* unifycr_key_lens,
+                             unifycr_val_t** vals, int* unifycr_val_lens)
 {
     int rc = UNIFYCR_SUCCESS;
 
@@ -507,8 +497,7 @@ int unifycr_set_file_extents(int num_entries, unifycr_key_t** keys,
     brmp = brm;
     if (!brmp || brmp->error) {
         rc = (int)UNIFYCR_ERROR_MDHIM;
-        LOG(LOG_DBG, "Rank - %d: Error inserting keys/values into MDHIM\n",
-            md->mdhim_rank);
+        LOGERR("Error inserting keys/values into MDHIM");
     }
 
     while (brmp) {
