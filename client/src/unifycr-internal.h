@@ -255,20 +255,20 @@ enum flock_enum {
 #define CHUNK_LOCATION_SPILLOVER 2
 
 typedef struct {
-    int location; /* CHUNK_LOCATION specifies how chunk is stored */
+    int location; /* CHUNK_LOCATION type */
     off_t id;     /* physical id of chunk in its respective storage */
 } unifycr_chunkmeta_t;
 
 typedef struct {
-    off_t size;                     /* current file size */
-    off_t log_size;                 /* real size of the file for logio*/
-    int is_dir;                     /* is this file a directory */
-    pthread_spinlock_t fspinlock;   /* file lock variable */
-    enum flock_enum flock_status;   /* file lock status */
+    off_t size;                      /* current file size */
+    off_t log_size;                  /* real size of the file for logio*/
+    int is_dir;                      /* is this file a directory */
+    pthread_spinlock_t fspinlock;    /* file lock variable */
+    enum flock_enum flock_status;    /* file lock status */
 
-    int storage;                    /* FILE_STORAGE specifies file data management */
+    int storage;                     /* FILE_STORAGE type */
 
-    int needs_sync;                 /* have unsynced writes */
+    int needs_sync;                  /* have unsynced writes */
 
     off_t chunks;                   /* number of chunks allocated to file */
     off_t chunkmeta_idx;            /* starting index in unifycr_chunkmeta */

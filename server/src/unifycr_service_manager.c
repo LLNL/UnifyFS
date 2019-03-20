@@ -111,9 +111,9 @@ typedef struct {
  * and the app_id and client_id are used to determine
  * the memory/files holding the source data */
 typedef struct {
+    size_t size;      /* size of read operation */
     int start_idx;    /* index of starting read request */
     int end_idx;      /* index of ending read request */
-    int size;         /* size of read operation */
     int app_id;       /* app id holding requested data */
     int cli_id;       /* client id holding requested data */
     int arrival_time; /* time stamp when read request arrived */
@@ -262,9 +262,8 @@ static void reset_read_tasks(task_set_t* read_task_set,
 * the clustered read requests
 * return success/error
 */
-static int sm_cluster_reads(
-    task_set_t* read_task_set,
-    service_msgs_t* service_msgs)
+static int sm_cluster_reads(task_set_t* read_task_set,
+                            service_msgs_t* service_msgs)
 {
     /* sort service messages by log file (app_id, client_id)
      * and then by offset within each log file */
@@ -292,8 +291,8 @@ static int sm_cluster_reads(
 
         /* check whether current message reads from the same log file,
          * as our last read task */
-        if (last_read->app_id != msg->dest_app_id ||
-                last_read->cli_id != msg->dest_client_id) {
+        if ((last_read->app_id != msg->dest_app_id) ||
+            (last_read->cli_id != msg->dest_client_id)) {
             /* reading on a different local log file,
              * so create a new read task for this message */
             reset_read_tasks(read_task_set, service_msgs, i);
@@ -307,7 +306,7 @@ static int sm_cluster_reads(
 
             /* see if we can tack current message on to
              * previous read request */
-            long last_offset = last_msg->dest_offset + last_msg->length;
+            size_t last_offset = last_msg->dest_offset + last_msg->length;
             if (last_offset == msg->dest_offset) {
                 /* current message starts where last read request
                  * ends, so append it to last read request if no larger
@@ -316,7 +315,7 @@ static int sm_cluster_reads(
                 /* the size of individual read should be smaller
                  * than read_block_size, if read size is larger it
                  * needs to be split into the unit of READ_BLOCK_SIZE */
-                if (last_read->size + msg->length <= READ_BLOCK_SIZE) {
+                if ((last_read->size + msg->length) <= READ_BLOCK_SIZE) {
                     /* tack current message on previous read request */
                     last_read->end_idx = i;
                     last_read->size += msg->length;
@@ -1050,7 +1049,7 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
         size_t size = read_task->size;
 
         /* check whether we have room in the read buffer to hold data */
-        if (buf_cursor + size > READ_BUF_SZ) {
+        if ((buf_cursor + size) > READ_BUF_SZ) {
             /* no room, wait until reads complete and send
              * out replies */
             sm_wait_until_digested(read_task_set,
@@ -1075,10 +1074,10 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
 
         /* get offset in log file */
         send_msg_t* msg = &service_msgs->msg[start_idx];
-        long offset = msg->dest_offset;
+        size_t offset = msg->dest_offset;
 
         /* prepare read opertions based on data location */
-        if (offset + read_task->size <= app_config->data_size) {
+        if ((offset + read_task->size) <= app_config->data_size) {
             /* requested data in read_task is totally in shared memory,
              * get pointer to position in shared memory */
             char* log_ptr = app_config->shm_superblocks[cli_id] +
@@ -1195,6 +1194,8 @@ static int sm_decode_msg(char* recv_msg_buf)
     /* extract number of read requests in message */
     int num = *((int*)ptr);
     ptr += sizeof(int);
+
+    LOGDBG("decoding %d requests", num);
 
     /* get pointer to read request */
     send_msg_t* msg = (send_msg_t*)ptr;
@@ -1392,7 +1393,7 @@ void* sm_service_reads(void* ctx)
          * until the end of a anticipated
          * bursty behavior
          * */
-        while (! irecv_flag) {
+        while (!irecv_flag) {
             /* if we have not received anything, sleep */
             if (bursty_interval > MIN_SLEEP_INTERVAL) {
                 usleep(SLEEP_INTERVAL); /* wait an interval */
@@ -1402,8 +1403,8 @@ void* sm_service_reads(void* ctx)
             /* a bursty behavior is considered end when
              * wait time is larger than BURSTY_INTERVAL
              * */
-            if (wait_time >= bursty_interval ||
-                    bursty_interval <= MIN_SLEEP_INTERVAL) {
+            if ((wait_time >= bursty_interval) ||
+                (bursty_interval <= MIN_SLEEP_INTERVAL)) {
                 /* if time to wait has expired, and if we have some
                  * queued read requests, do some work */
                 if (service_msgs.num > 0) {
