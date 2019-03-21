@@ -48,8 +48,17 @@ unifycr_chunkmeta_t* filemeta_get_chunkmeta(const unifycr_filemeta_t* meta,
                                             int cid)
 {
     unifycr_chunkmeta_t* chunkmeta = NULL;
+    uint64_t limit = 0;
 
-    if (meta && (cid >= 0 && cid < unifycr_max_chunks)) {
+    if (unifycr_use_memfs) {
+        limit += unifycr_max_chunks;
+    }
+
+    if (unifycr_use_spillover) {
+        limit += unifycr_spillover_max_chunks;
+    }
+
+    if (meta && (cid >= 0 && cid < limit)) {
         chunkmeta = &unifycr_chunkmetas[meta->chunkmeta_idx + cid];
     }
 
