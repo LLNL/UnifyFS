@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2019, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -10,21 +10,6 @@
  * This is the license for UnifyCR.
  * For details, see https://github.com/LLNL/UnifyCR.
  * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
- */
-
-/*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
- * Produced at the Lawrence Livermore National Laboratory.
- * Copyright (c) 2017, Florida State University. Contributions from
- * the Computer Architecture and Systems Research Laboratory (CASTL)
- * at the Department of Computer Science.
- *
- * Written by: Teng Wang, Adam Moody, Weikuan Yu, Kento Sato, Kathryn Mohror
- * LLNL-CODE-728877. All rights reserved.
- *
- * This file is part of burstfs.
- * For details, see https://github.com/llnl/burstfs
- * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
 /*  Copyright (c) 2018 - Michael J. Brim
@@ -106,7 +91,7 @@ extern "C" {
 #endif
 
 /**
- * @brief supported consistency models
+ * @brief enum for error codes
  */
 typedef enum {
     UNIFYCR_INVALID_ERROR = -2,
@@ -120,22 +105,22 @@ typedef enum {
 } unifycr_error_e;
 
 /**
- * @brief get C-string for given consistency model enum value
+ * @brief get C-string for given error enum value
  */
 const char *unifycr_error_enum_str(unifycr_error_e e);
 
 /**
- * @brief get description for given consistency model enum value
+ * @brief get description for given error enum value
  */
 const char *unifycr_error_enum_description(unifycr_error_e e);
 
 /**
- * @brief check validity of given consistency model enum value
+ * @brief check validity of given error enum value
  */
 int check_valid_unifycr_error_enum(unifycr_error_e e);
 
 /**
- * @brief get enum value for given consistency model C-string
+ * @brief get enum value for given error C-string
  */
 unifycr_error_e unifycr_error_enum_from_str(const char *s);
 

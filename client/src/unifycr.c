@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2019, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -68,6 +68,9 @@
 #include "unifycr_rpc_util.h"
 
 #include "unifycr_log.h"
+
+/* avoid duplicate mounts (for now) */
+static int unifycr_mounted = -1;
 
 /* global rpc context (probably should find a better spot for this) */
 unifycr_client_rpc_context_t* unifycr_rpc_context = NULL;
@@ -2639,14 +2642,23 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
     bool b;
     char* cfgval;
 
-    glb_rank = rank;
-
-    /* print log messages to stderr */
-    unifycr_log_open(NULL);
+    if (-1 != unifycr_mounted) {
+        if (l_app_id != unifycr_mounted) {
+            LOGERR("multiple mount support not yet implemented");
+            return UNIFYCR_FAILURE;
+        } else {
+            LOGDBG("already mounted");
+            return UNIFYCR_SUCCESS;
+        }
+    }
 
     /* record our rank for debugging messages,
      * record the value we should use for an app_id */
     app_id = l_app_id;
+    glb_rank = rank;
+
+    /* print log messages to stderr */
+    unifycr_log_open(NULL);
 
     /************************
      * read configuration values
@@ -2713,10 +2725,6 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
         return ret;
     }
 
-    /************************
-     * establish connection to server
-     ************************/
-
     /* open rpc connection to server */
     char* addr_string = rpc_lookup_server_addr();
     if (addr_string == NULL) {
@@ -2754,10 +2762,6 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
         return UNIFYCR_FAILURE;
     }
 
-    /************************
-     * create a local entry for our mount point directory
-     ************************/
-
     /* add mount point as a new directory in the file list */
     if (unifycr_get_fid_from_path(prefix) < 0) {
         /* no entry exists for mount point, so create one */
@@ -2765,12 +2769,15 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
         if (fid < 0) {
             /* if there was an error, return it */
             LOGERR("failed to create directory entry for mount point: `%s'",
-                prefix);
+                   prefix);
             return UNIFYCR_FAILURE;
         }
     }
 
-    return rc;
+    /* record client state as mounted for specific app_id */
+    unifycr_mounted = app_id;
+
+    return UNIFYCR_SUCCESS;
 }
 
 /* free resources allocated in corresponding call
@@ -2859,6 +2866,10 @@ int unifycr_unmount(void)
     int rc;
     int ret = UNIFYCR_SUCCESS;
 
+    if (-1 == unifycr_mounted) {
+        return UNIFYCR_SUCCESS;
+    }
+
     /************************
      * tear down connection to server
      ************************/
@@ -2916,6 +2927,8 @@ int unifycr_unmount(void)
 
     /* shut down our logging */
     unifycr_log_close();
+
+    unifycr_mounted = -1;
 
     return ret;
 }
