@@ -73,10 +73,6 @@ typedef struct {
     int rank;
 } name_rank_pair_t;
 
-#if 0
-int unifycr_mount(const char prefix[], int rank, size_t size,
-                  int l_app_id, int subtype);
-#endif
 int unifycr_mount(const char prefix[], int rank, size_t size,
                   int l_app_id);
 int unifycr_unmount(void);

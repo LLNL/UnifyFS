@@ -60,6 +60,16 @@ AC_CHECK_FUNCS([ftruncate getpagesize gettimeofday memset socket floor])
 AC_CHECK_FUNCS([gethostbyname strcasecmp strdup strerror strncasecmp strrchr])
 AC_CHECK_FUNCS([gethostname strstr strtoumax strtol uname posix_fallocate])
 
+# PMPI Init/Fini mount/unmount option
+AC_ARG_ENABLE([mpi-mount],
+              AC_HELP_STRING([--enable-mpi-mount],
+                             [Enable transparent mount/unmount at MPI_Init/Finalize.]))
+if test "x$enable_mpi_mount" = "xyes"; then
+AM_CONDITIONAL([USE_PMPI_WRAPPERS], [true])
+else
+AM_CONDITIONAL([USE_PMPI_WRAPPERS], [false])
+fi
+
 # PMIx support build option
 AC_ARG_ENABLE([pmix],
               AC_HELP_STRING([--enable-pmix],
