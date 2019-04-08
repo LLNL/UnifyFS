@@ -41,6 +41,7 @@
 	forall(i=1:ni,j=1:nj,k=1:nk) &
 	 W1(i,j,k) = nodeoff*mynod+i+ni*(j-1+nj*(k-1))
 
+	writeunit = mynod
 	open(unit=writeunit,file=fname,form='unformatted',action='write')
 	     
 	write(writeunit,iostat=ios) W1
