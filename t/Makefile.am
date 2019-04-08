@@ -11,7 +11,8 @@ TESTS = \
 	0600-stdio-static.t \
 	9005-unifycr-unmount.t \
 	9010-stop-unifycrd.t \
-	9020-mountpoint-empty.t
+	9020-mountpoint-empty.t \
+	9100-metadata-api.t
 
 check_SCRIPTS = \
 	0001-setup.t \
@@ -21,7 +22,8 @@ check_SCRIPTS = \
 	0600-stdio-static.t \
 	9005-unifycr-unmount.t \
 	9010-stop-unifycrd.t \
-	9020-mountpoint-empty.t
+	9020-mountpoint-empty.t \
+	9100-metadata-api.t
 
 EXTRA_DIST = \
 	$(check_SCRIPTS) \
@@ -39,6 +41,7 @@ libexec_PROGRAMS = \
 	std/stdio-gotcha.t \
 	sys/sysio-static.t \
 	std/stdio-static.t \
+	server/metadata.t \
 	unifycr_unmount.t
 
 test_ldadd = \
@@ -56,6 +59,28 @@ test_static_ldflags = \
 	-static \
 	$(CP_WRAPPERS) $(AM_LDFLAGS) $(MPI_CLDFLAGS) $(FLATCC_LDFLAGS) \
         $(FLATCC_LIBS)
+
+test_metadata_ldadd = \
+	$(top_builddir)/t/lib/libtap.la \
+	$(top_builddir)/t/lib/libtestutil.la \
+	$(top_builddir)/common/src/libunifycr_common.la \
+	$(top_builddir)/server/src/libunifycrd.a \
+	$(top_builddir)/meta/src/libmdhim.a \
+	$(LEVELDB_LDFLAGS) $(LEVELDB_LIBS) \
+	$(MPI_CLDFLAGS) \
+	$(MERCURY_LDFLAGS) $(MERCURY_LIBS) \
+	$(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) \
+	$(MARGO_LDFLAGS) $(MARGO_LIBS) \
+	$(FLATCC_LDFLAGS) $(FLATCC_LIBS) \
+	-lpthread -lm -lstdc++ -lrt
+
+test_meta_cppflags = \
+	-I$(top_srcdir) \
+	-I$(top_srcdir)/server/src \
+	-I$(top_srcdir)/common/src \
+	-D_GNU_SOURCE \
+	$(AM_CPPFLAGS) \
+        $(MPI_CFLAGS)
 
 test_cppflags = \
 	-I$(top_srcdir) \
@@ -100,6 +125,15 @@ std_stdio_static_t_SOURCES = std/stdio_suite.h \
 std_stdio_static_t_CPPFLAGS = $(test_cppflags)
 std_stdio_static_t_LDADD = $(test_static_ldadd)
 std_stdio_static_t_LDFLAGS = $(test_static_ldflags)
+
+server_metadata_t_SOURCES = \
+	server/metadata_suite.h \
+	server/metadata_suite.c \
+	server/unifycr_meta_get_test.c
+
+server_metadata_t_CPPFLAGS = $(test_meta_cppflags)
+server_metadata_t_LDADD = $(test_metadata_ldadd)
+server_metadata_t_LDFLAGS = $(AM_LDFLAGS)
 
 unifycr_unmount_t_SOURCES = unifycr_unmount.c
 unifycr_unmount_t_CPPFLAGS = $(test_cppflags)
