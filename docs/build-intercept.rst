@@ -208,8 +208,19 @@ Steps for dynamic linking using gotcha:
 To intercept I/O calls using gotcha, use the following syntax to link an
 application.
 
+C
+^^^^^^^^^^^^^^
+
 .. code-block:: Bash
 
     $ mpicc -o test_write test_write.c \
         -I<unifycr>/include -L<unifycy>/lib -lunifycr_gotcha \
         -L<gotcha>/lib64 -lgotcha
+
+Fortran
+^^^^^^^^^^^^^^
+
+.. code-block:: Bash
+
+    $ mpif90 -o test_write test_write.F \
+        -I<unifycr>/include -L<unifycy>/lib -lunifycrf -lunifycr_gotcha
