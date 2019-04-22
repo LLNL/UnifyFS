@@ -146,6 +146,7 @@ typedef struct {
     int    fd_access;  /* access flags for cfg.fd */
 
     /* MPI info */
+    int app_id;
     int rank;
     int n_ranks;
 } test_cfg;
@@ -211,6 +212,7 @@ void test_config_print(test_cfg* cfg)
     fprintf(stderr, "\t mountpt     = %s\n", cfg->mountpt);
 
     fprintf(stderr, "\n-- MPI Info --\n");
+    fprintf(stderr, "\t app_id      = %d\n", cfg->app_id);
     fprintf(stderr, "\t rank        = %d\n", cfg->rank);
     fprintf(stderr, "\t n_ranks     = %d\n", cfg->n_ranks);
 }
@@ -404,9 +406,10 @@ int test_is_static(const char* program)
 
 // common options for all tests
 
-static const char* test_short_opts = "Ab:c:df:hkLm:Mn:p:PSUvVx";
+static const char* test_short_opts = "a:Ab:c:df:hkLm:Mn:p:PSUvVx";
 
 static const struct option test_long_opts[] = {
+    { "appid", 1, 0, 'a' },
     { "aio", 0, 0, 'A' },
     { "blocksize", 1, 0, 'b' },
     { "chunksize", 1, 0, 'c' },
@@ -433,6 +436,8 @@ static const char* test_usage_str =
     "Usage: %s [options...]\n"
     "\n"
     "Available options:\n"
+    " -a, --appid=<id>                 use given application id\n"
+    "                                  (default: 0)\n"
     " -A, --aio                        use asynchronous I/O instead of read|write\n"
     "                                  (default: off)\n"
     " -b, --blocksize=<bytes>          I/O block size\n"
@@ -490,6 +495,10 @@ int test_process_argv(test_cfg* cfg,
     while ((ch = getopt_long(argc, argv, test_short_opts,
                              test_long_opts, NULL)) != -1) {
         switch (ch) {
+        case 'a':
+            cfg->app_id = atoi(optarg);
+            break;
+
         case 'A':
             cfg->use_aio = 1;
             break;
@@ -999,7 +1008,7 @@ int test_init(int argc, char** argv,
         if (cfg->debug) {
             test_pause(cfg, "Before unifycr_mount()");
         }
-        rc = unifycr_mount(cfg->mountpt, cfg->rank, cfg->n_ranks, 0);
+        rc = unifycr_mount(cfg->mountpt, cfg->rank, cfg->n_ranks, cfg->app_id);
         if (rc) {
             test_print(cfg, "ERROR: unifycr_mount() failed (rc=%d)", rc);
             test_abort(cfg, rc);
