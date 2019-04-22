@@ -119,7 +119,7 @@ static int attach_to_shm(
     /* copy name of request buffer region */
     strcpy(app_config->recv_buf_name[client_side_id], shm_name);
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /**
@@ -171,7 +171,7 @@ static int open_log_file(app_config_t* app_config,
         return (int)UNIFYCR_ERROR_FILE;
     }
 
-    return ULFS_SUCCESS;
+    return UNIFYCR_SUCCESS;
 }
 
 /* create a request manager thread for the given app_id
@@ -372,6 +372,8 @@ static void unifycr_mount_rpc(hg_handle_t handle)
         if (rc != 0) {
             ret = rc;
         }
+    } else {
+        LOGDBG("using existing app_config for app_id=%d", app_id);
     }
 
     /* convert client_addr_str sent in input struct to margo hg_addr_t,
@@ -389,13 +391,17 @@ static void unifycr_mount_rpc(hg_handle_t handle)
 
     /* attach to shared memory regions of this client */
     rc = attach_to_shm(tmp_config, app_id, client_id);
-    if (rc != ULFS_SUCCESS) {
+    if (rc != UNIFYCR_SUCCESS) {
+        LOGERR("attach_to_shm() failed for app_id=%d client_id=%d rc=%d",
+               app_id, client_id, rc);
         ret = rc;
     }
 
     /* open spill over files for this client */
     rc = open_log_file(tmp_config, app_id, client_id);
     if (rc < 0)  {
+        LOGERR("open_log_file() failed for app_id=%d client_id=%d rc=%d",
+               app_id, client_id, rc);
         ret = rc;
     }
 
@@ -408,6 +414,8 @@ static void unifycr_mount_rpc(hg_handle_t handle)
         tmp_config->thrd_idxs[client_id] = arraylist_size(thrd_list) - 1;
     } else {
         /* failed to create request manager thread */
+        LOGERR("unifycr_rm_thrd_create() failed for app_id=%d client_id=%d",
+               app_id, client_id);
         ret = UNIFYCR_FAILURE;
     }
 
@@ -477,7 +485,8 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
     }
 
     /* close the client socket connection */
-    sock_sanitize_client(client_id);
+    // MJB TODO: following is broken, uses client_id as index, fix it
+    // sock_sanitize_client(client_id);
 
     /* free margo hg_addr_t client addresses in app_config struct */
     margo_addr_free(unifycr_server_rpc_context->mid,
