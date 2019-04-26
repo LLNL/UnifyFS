@@ -1,11 +1,11 @@
-#ifndef __UNIFYCR_SERVER_H
-#define __UNIFYCR_SERVER_H
+#ifndef _MARGO_SERVER_H
+#define _MARGO_SERVER_H
 
 /********************************************
  *
- * unifycr_server.h
+ * margo_server.h
  *
- * Declarations for the UCR global server.
+ * Declarations for the server's use of Margo
  *
  *********************************************/
 
@@ -13,9 +13,9 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include <margo.h>
 #include <mercury.h>
 #include <abt.h>
-#include <margo.h>
 
 typedef struct ServerRpcContext {
     margo_instance_id mid;
@@ -23,6 +23,7 @@ typedef struct ServerRpcContext {
     hg_class_t* hg_class;
     /* TODO: rpc id's executed on client go here */
 } ServerRpcContext_t;
+extern ServerRpcContext_t* unifycrd_rpc_context;
 
 static const char* SMSVR_ADDR_STR   = "na+sm://";
 static const char* VERBSVR_ADDR_STR = "cci+verbs";
@@ -30,11 +31,6 @@ static const char* TCPSVR_ADDR_STR  = "cci+tcp";
 
 extern bool usetcp;
 
-extern uint16_t total_rank;
-extern uint16_t my_rank;
+int unifycr_server_rpc_init(void);
 
-extern ServerRpcContext_t* unifycr_server_rpc_context;
-
-margo_instance_id unifycr_server_rpc_init(void);
-
-#endif
+#endif // MARGO_SERVER_H

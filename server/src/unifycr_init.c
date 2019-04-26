@@ -27,35 +27,27 @@
  * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
-#include <assert.h>
-#include <errno.h>
+// system headers
 #include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/mman.h>
-#include <unistd.h>
-#include <pthread.h>
 #include <mpi.h>
 
-#include "unifycr_metadata.h"
-#include "unifycr_log.h"
-#include "unifycr_sock.h"
-#include "unifycr_init.h"
-#include "unifycr_const.h"
-#include "unifycr_shm.h"
-#include "arraylist.h"
-#include "unifycr_global.h"
-#include "unifycr_cmd_handler.h"
-#include "unifycr_service_manager.h"
-#include "unifycr_request_manager.h"
+// common headers
+#include "unifycr_configurator.h"
 #include "unifycr_runstate.h"
 
+// server components
+#include "unifycr_global.h"
+#include "unifycr_init.h"
+#include "unifycr_metadata.h"
+#include "unifycr_request_manager.h"
+#include "unifycr_service_manager.h"
+
+// margo rpcs
 #include "unifycr_clientcalls_rpc.h"
-#include "unifycr_server.h"
 #include "unifycr_servercalls_rpc.h"
-#include "unifycr_server.h"
 #include "unifycr_rpc_util.h"
+#include "margo_server.h"
 
 int* local_rank_lst;
 int local_rank_cnt;
@@ -67,9 +59,7 @@ arraylist_t* thrd_list;
 int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
 
 unifycr_cfg_t server_cfg;
-ServerRpcContext_t* unifycr_server_rpc_context;
-
-static const int IO_POOL_SIZE = 2;
+ServerRpcContext_t* unifycrd_rpc_context;
 
 /* setup_sm_target - Initializes the shared-memory target.
  *
@@ -85,69 +75,71 @@ static margo_instance_id setup_sm_target()
     hg_size_t addr_self_string_sz = 128;
 
     /* create rpc server context to store information needed to call rpcs */
-    unifycr_server_rpc_context = malloc(sizeof(ServerRpcContext_t));
-    assert(unifycr_server_rpc_context);
+    unifycrd_rpc_context = calloc(1, sizeof(ServerRpcContext_t));
+    assert(unifycrd_rpc_context);
 
-    unifycr_server_rpc_context->mid = margo_init(SMSVR_ADDR_STR,
-                                                 MARGO_SERVER_MODE, 1, 1);
-    assert(unifycr_server_rpc_context->mid);
+    unifycrd_rpc_context->mid = margo_init(SMSVR_ADDR_STR,
+                                           MARGO_SERVER_MODE, 1, 1);
+    if (unifycrd_rpc_context->mid == MARGO_INSTANCE_NULL) {
+        return MARGO_INSTANCE_NULL;
+    }
 
     /* figure out what address this server is listening on */
-    hret = margo_addr_self(unifycr_server_rpc_context->mid, &addr_self);
+    hret = margo_addr_self(unifycrd_rpc_context->mid, &addr_self);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_addr_self()");
-        margo_finalize(unifycr_server_rpc_context->mid);
-        return NULL;
+        margo_finalize(unifycrd_rpc_context->mid);
+        return MARGO_INSTANCE_NULL;
     }
-    hret = margo_addr_to_string(unifycr_server_rpc_context->mid,
+    hret = margo_addr_to_string(unifycrd_rpc_context->mid,
                                 addr_self_string, &addr_self_string_sz,
                                 addr_self);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_addr_to_string()");
-        margo_addr_free(unifycr_server_rpc_context->mid, addr_self);
-        margo_finalize(unifycr_server_rpc_context->mid);
-        return NULL;
+        margo_addr_free(unifycrd_rpc_context->mid, addr_self);
+        margo_finalize(unifycrd_rpc_context->mid);
+        return MARGO_INSTANCE_NULL;
     }
-    margo_addr_free(unifycr_server_rpc_context->mid, addr_self);
+    margo_addr_free(unifycrd_rpc_context->mid, addr_self);
 
     printf("# accepting RPCs on server address \"%s\"\n", addr_self_string);
 
     /* publish rpc address of server for local clients */
     rpc_publish_server_addr(addr_self_string);
 
-    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_mount_rpc",
+    MARGO_REGISTER(unifycrd_rpc_context->mid, "unifycr_mount_rpc",
                    unifycr_mount_in_t, unifycr_mount_out_t,
                    unifycr_mount_rpc);
 
-    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_unmount_rpc",
-                     unifycr_unmount_in_t, unifycr_unmount_out_t,
-                     unifycr_unmount_rpc);
+    MARGO_REGISTER(unifycrd_rpc_context->mid, "unifycr_unmount_rpc",
+                   unifycr_unmount_in_t, unifycr_unmount_out_t,
+                   unifycr_unmount_rpc);
 
-    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_metaget_rpc",
+    MARGO_REGISTER(unifycrd_rpc_context->mid, "unifycr_metaget_rpc",
                    unifycr_metaget_in_t, unifycr_metaget_out_t,
                    unifycr_metaget_rpc);
 
-    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_metaset_rpc",
+    MARGO_REGISTER(unifycrd_rpc_context->mid, "unifycr_metaset_rpc",
                    unifycr_metaset_in_t, unifycr_metaset_out_t,
                    unifycr_metaset_rpc);
 
-    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_fsync_rpc",
+    MARGO_REGISTER(unifycrd_rpc_context->mid, "unifycr_fsync_rpc",
                    unifycr_fsync_in_t, unifycr_fsync_out_t,
                    unifycr_fsync_rpc);
 
-    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_filesize_rpc",
+    MARGO_REGISTER(unifycrd_rpc_context->mid, "unifycr_filesize_rpc",
                    unifycr_filesize_in_t, unifycr_filesize_out_t,
                    unifycr_filesize_rpc);
 
-    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_read_rpc",
+    MARGO_REGISTER(unifycrd_rpc_context->mid, "unifycr_read_rpc",
                    unifycr_read_in_t, unifycr_read_out_t,
                    unifycr_read_rpc)
 
-    MARGO_REGISTER(unifycr_server_rpc_context->mid, "unifycr_mread_rpc",
+    MARGO_REGISTER(unifycrd_rpc_context->mid, "unifycr_mread_rpc",
                    unifycr_mread_in_t, unifycr_mread_out_t,
                    unifycr_mread_rpc);
 
-    return unifycr_server_rpc_context->mid;
+    return unifycrd_rpc_context->mid;
 }
 
 
@@ -299,58 +291,14 @@ static margo_instance_id setup_verbs_target(ABT_pool& progress_pool)
  *                       for inter-server communication.
  *
  */
-margo_instance_id unifycr_server_rpc_init()
+int unifycr_server_rpc_init()
 {
-    //assert(unifycr_rpc_context);
-    /* set up argobots */
-    /*int ret = ABT_init(0, NULL);
-    if ( ret != 0 ) {
-        LOGERR("ABT_init()");
-        assert(false);
-    }*/
-
-    /* set primary ES to idle without polling */
-    /*
-    ret = ABT_snoozer_xstream_self_set();
-    if ( ret != 0 ) {
-        LOGERR("ABT_snoozer_xstream_self_set()");
-        assert(false);
+    int rc = UNIFYCR_SUCCESS;
+    margo_instance_id mid = setup_sm_target();
+    if (mid == MARGO_INSTANCE_NULL) {
+        rc = UNIFYCR_FAILURE;
     }
-
-
-    ABT_xstream* io_xstreams = (ABT_xstream*)malloc(sizeof(ABT_xstream) * IO_POOL_SIZE);
-    assert(io_xstreams);
-
-    ABT_pool io_pool;
-    ret = ABT_snoozer_xstream_create(IO_POOL_SIZE, &io_pool, io_xstreams);
-    assert(ret == 0);
-
-    aid = abt_io_init_pool(io_pool);
-    assert(aid);
-
-
-    ABT_xstream progress_xstream;
-    ret = ABT_xstream_self(&progress_xstream);
-    if ( ret != 0 ) {
-        LOGERR("ABT_xstream_self()");
-        assert(false);
-    }
-    ABT_pool progress_pool;
-
-    ret = ABT_xstream_get_main_pools(progress_xstream, 1, &progress_pool);
-    if ( ret != 0 ) {
-        LOGERR("ABT_xstream_get_main_pools()");
-        assert(false);
-    }
-
-    ABT_xstream progress_xstream;
-    ABT_pool progress_pool;
-    ret = ABT_snoozer_xstream_create(1, &progress_pool, &progress_xstream);
-    if ( ret != 0 ) {
-        LOGERR("ABT_snoozer_xstream_create()");
-        assert(false);
-    }*/
-    return setup_sm_target();
+    return rc;
 #ifdef VERBS_TARGET
     ABT_xstream progress_xstream2;
     ABT_pool progress_pool2;
@@ -539,7 +487,11 @@ int main(int argc, char* argv[])
     }
 
     LOGDBG("initializing rpc service");
-    margo_instance_id mid = unifycr_server_rpc_init();
+    rc = unifycr_server_rpc_init();
+    if (rc != UNIFYCR_SUCCESS) {
+        LOGERR("%s", unifycr_error_enum_description(UNIFYCR_ERROR_MARGO));
+        exit(1);
+    }
 
     LOGDBG("creating server domain socket");
 #if defined(UNIFYCR_MULTIPLE_DELEGATORS)
@@ -819,7 +771,7 @@ static int unifycr_exit()
 
     /* shutdown rpc service */
     LOGDBG("stopping rpc service");
-    unifycr_server_rpc_finalize(&unifycr_server_rpc_context);
+    unifycr_server_rpc_finalize(&unifycrd_rpc_context);
     rpc_clean_server_addr();
 
     /* close remaining sockets */

@@ -27,30 +27,11 @@
  * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
-#include <stdlib.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <sys/time.h>
-#include <limits.h>
 #include <aio.h>
-#include <errno.h>
-#include <poll.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <assert.h>
+#include <time.h>
+#include <mpi.h>
 
-#include "mpi.h"
-
-#include "unifycr_log.h"
-#include "unifycr_sock.h"
-#include "unifycr_service_manager.h"
-#include "unifycr_const.h"
 #include "unifycr_global.h"
-#include "arraylist.h"
 
 /* The service manager thread runs in a loop waiting for incoming
  * requests.  When it receives a message, it unpacks all read

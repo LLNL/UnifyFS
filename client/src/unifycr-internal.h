@@ -56,6 +56,8 @@
  * Common includes
  * -------------------------------
  */
+
+// system headers
 #include <aio.h>
 #include <assert.h>
 #include <errno.h>
@@ -87,14 +89,19 @@
 #include <pthread.h>
 #include <sched.h>
 
+// common headers
+#include "unifycr_configurator.h"
+#include "unifycr_const.h"
+#include "unifycr_log.h"
+#include "unifycr_meta.h"
+#include "unifycr_pmix.h"
+#include "unifycr_shm.h"
+
+// client headers
+#include "unifycr.h"
+#include "unifycr-stack.h"
 #include "utlist.h"
 #include "uthash.h"
-
-#include "unifycr.h"
-#include "unifycr_configurator.h"
-#include "unifycr_meta.h"
-#include "unifycr-stack.h"
-
 
 /* -------------------------------
  * Defines and types

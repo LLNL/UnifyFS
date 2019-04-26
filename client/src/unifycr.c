@@ -42,9 +42,6 @@
 
 #include "unifycr-internal.h"
 #include "unifycr-fixed.h"
-#include "unifycr_meta.h"
-#include "unifycr_pmix.h"
-#include "unifycr_shm.h"
 #include "unifycr_runstate.h"
 
 #include <time.h>
@@ -61,13 +58,10 @@
 #include "gotcha_map_unifycr_list.h"
 #endif
 
-#include "unifycr_client.h"
 #include "unifycr_clientcalls_rpc.h"
-#include "unifycr_server.h"
 #include "unifycr_servercalls_rpc.h"
 #include "unifycr_rpc_util.h"
-
-#include "unifycr_log.h"
+#include "margo_client.h"
 
 /* avoid duplicate mounts (for now) */
 static int unifycr_mounted = -1;

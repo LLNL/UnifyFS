@@ -13,23 +13,25 @@ BASE_SRCS = \
   cm_enumerator.c \
   rm_enumerator.h \
   rm_enumerator.c \
+  flatbuffers_common_builder.h \
+  flatbuffers_common_reader.h \
+  ucr_read_builder.h \
+  ucr_read_reader.h \
   tinyexpr.h \
   tinyexpr.c \
-  unifycr_server.h \
-  unifycr_servercalls_rpc.h \
-  unifycr_client.h \
-  unifycr_clientcalls_rpc.h \
   unifycr_const.h \
   unifycr_configurator.h \
   unifycr_configurator.c \
-  unifycr_runstate.h \
-  unifycr_runstate.c \
+  unifycr_log.h \
+  unifycr_log.c \
   unifycr_meta.h \
   unifycr_pmix.h \
   unifycr_rpc_util.h \
   unifycr_rpc_util.c \
-  unifycr_log.h \
-  unifycr_log.c \
+  unifycr_clientcalls_rpc.h \
+  unifycr_servercalls_rpc.h \
+  unifycr_runstate.h \
+  unifycr_runstate.c \
   unifycr_shm.h \
   unifycr_shm.c
 
@@ -43,8 +45,24 @@ endif
 
 libunifycr_common_la_SOURCES = $(BASE_SRCS) $(OPT_SRCS)
 
-libunifycr_common_la_CPPFLAGS = -I$(top_builddir)/client
-libunifycr_common_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION)
-libunifycr_common_la_LIBADD = -lm $(OPT_LIBS) -lrt
+libunifycr_common_la_CPPFLAGS = \
+  $(MERCURY_CFLAGS) \
+  $(ARGOBOTS_CFLAGS) \
+  $(MARGO_CFLAGS) \
+  $(FLATCC_CFLAGS)
+
+libunifycr_common_la_LDFLAGS = \
+  -version-info $(LIBUNIFYCR_LT_VERSION) \
+  $(MERCURY_LDFLAGS) \
+  $(ARGOBOTS_LDFLAGS) \
+  $(MARGO_LDFLAGS) \
+  $(FLATCC_LDFLAGS)
+
+libunifycr_common_la_LIBADD = \
+  $(MERCURY_LIBS) \
+  $(ARGOBOTS_LIBS) \
+  $(MARGO_LIBS) \
+  $(FLATCC_LIBS) \
+  $(OPT_LIBS) -lm -lrt
 
 AM_CFLAGS = -Wall -Wno-strict-aliasing

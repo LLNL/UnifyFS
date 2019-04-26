@@ -13,26 +13,22 @@ CLIENT_COMMON_CPPFLAGS = \
 
 CLIENT_COMMON_CFLAGS = \
   $(MPI_CFLAGS) \
-  $(MERCURY_CFLAGS) $(ARGOBOTS_CFLAGS) $(MARGO_CFLAGS) \
+  $(MERCURY_CFLAGS) \
+  $(ARGOBOTS_CFLAGS) \
+  $(MARGO_CFLAGS) \
   $(FLATCC_CFLAGS)
 
 CLIENT_COMMON_LDFLAGS = \
   -version-info $(LIBUNIFYCR_LT_VERSION) \
-  $(MPI_CLDFLAGS) \
-  $(MERCURY_LDFLAGS) $(MERCURY_LIBS) \
-  $(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) \
-  $(MARGO_LDFLAGS) $(MARGO_LIBS) \
-  $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
+  $(MPI_CLDFLAGS)
 
 CLIENT_COMMON_LIBADD = \
   $(top_builddir)/common/src/libunifycr_common.la \
   -lcrypto -lrt -lpthread
 
 CLIENT_COMMON_SOURCES = \
-  flatbuffers_common_builder.h \
-  flatbuffers_common_reader.h \
-  ucr_read_builder.h \
-  ucr_read_reader.h \
+  margo_client.c \
+  margo_client.h \
   unifycr.c \
   unifycr.h \
   unifycr-dirops.h \
@@ -46,7 +42,6 @@ CLIENT_COMMON_SOURCES = \
   unifycr-stdio.h \
   unifycr-sysio.c \
   unifycr-sysio.h \
-  unifycr_client.c \
   uthash.h \
   utlist.h
 

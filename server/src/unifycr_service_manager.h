@@ -30,6 +30,7 @@
 #ifndef UNIFYCR_SERVICE_MANAGER_H
 #define UNIFYCR_SERVICE_MANAGER_H
 
+/* Service Manager pthread main */
 void* sm_service_reads(void* ctx);
 
 #endif

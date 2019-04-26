@@ -29,6 +29,7 @@
 
 #ifndef UNIFYCR_INIT_H
 #define UNIFYCR_INIT_H
+
 #include <pthread.h>
 #include "unifycr_const.h"
 
@@ -56,4 +57,5 @@ static int find_rank_idx(int my_rank,
 #endif
 
 static int unifycr_exit();
-#endif
+
+#endif // UNIFYCR_INIT_H

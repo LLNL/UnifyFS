@@ -40,11 +40,10 @@
  * Please also read this file LICENSE.CRUISE
  */
 
-#include "unifycr-sysio.h"
 #include "unifycr-internal.h"
-#include "unifycr_client.h"
+#include "unifycr-sysio.h"
+#include "margo_client.h"
 #include "ucr_read_builder.h"
-#include "unifycr_log.h"
 
 /* -------------------
  * define external variables
@@ -1891,7 +1890,7 @@ int unifycr_fd_logreadlist(read_req_t* read_reqs, int count)
         size_t size = 0;
         void* buffer = flatcc_builder_finalize_buffer(&builder, &size);
         assert(buffer);
-        LOGDBG("mread: n_reqs:%zu, flatcc buffer (%p) sz:%zu",
+        LOGDBG("mread: n_reqs:%d, flatcc buffer (%p) sz:%zu",
                read_req_set.count, buffer, size);
 
         /* invoke read rpc here */

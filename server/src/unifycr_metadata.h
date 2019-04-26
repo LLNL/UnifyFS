@@ -30,9 +30,8 @@
 #ifndef UNIFYCR_METADATA_H
 #define UNIFYCR_METADATA_H
 
-#include "unifycr_const.h"
+#include "unifycr_configurator.h"
 #include "unifycr_global.h"
-#include "unifycr_meta.h"
 
 #define MANIFEST_FILE_NAME "mdhim_manifest_"
 

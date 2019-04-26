@@ -30,11 +30,33 @@
 #ifndef UNIFYCR_GLOBAL_H
 #define UNIFYCR_GLOBAL_H
 
-#include <pthread.h>
+// system headers
+#include <assert.h>
+#include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
-#include <margo.h>
-#include "unifycr_configurator.h"
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+// common headers
 #include "arraylist.h"
+#include "unifycr_const.h"
+#include "unifycr_log.h"
+#include "unifycr_meta.h"
+#include "unifycr_shm.h"
+#include "unifycr_sock.h"
+
+#include <margo.h>
+#include <pthread.h>
+
+extern arraylist_t *app_config_list;
+extern arraylist_t *thrd_list;
+
+extern int glb_rank, glb_size;
+extern int *local_rank_lst;
+extern int local_rank_cnt;
+extern size_t max_recs_per_slice;
 
 /* defines commands for messages sent to service manager threads */
 typedef enum {
@@ -225,14 +247,7 @@ typedef struct {
     struct stat file_attr;
 } fattr_val_t;
 
-extern arraylist_t *app_config_list;
-extern arraylist_t *thrd_list;
-
 int invert_sock_ids[MAX_NUM_CLIENTS];
 
-extern int glb_rank, glb_size;
-extern int *local_rank_lst;
-extern int local_rank_cnt;
-extern size_t max_recs_per_slice;
+#endif // UNIFYCR_GLOBLA_H
 
-#endif
