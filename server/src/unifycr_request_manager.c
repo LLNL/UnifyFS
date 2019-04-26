@@ -27,19 +27,23 @@
  * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
-#include <mpi.h>
+// system headers
 #include <assert.h>
 #include <poll.h>
-#include <time.h>
-#include <string.h>
 #include <stdint.h>
+#include <string.h>
+#include <time.h>
+#include <mpi.h>
+
+// general support
 #include "unifycr_log.h"
-#include "unifycr_request_manager.h"
-#include "unifycr_const.h"
-#include "unifycr_global.h"
-#include "unifycr_metadata.h"
 #include "unifycr_sock.h"
 
+// server components
+#include "unifycr_request_manager.h"
+#include "unifycr_metadata.h"
+
+// margo rpcs
 #include "unifycr_clientcalls_rpc.h"
 #include "ucr_read_builder.h"
 

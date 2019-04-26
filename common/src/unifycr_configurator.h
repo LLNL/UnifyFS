@@ -76,6 +76,7 @@
     UNIFYCR_CFG_CLI(log, dir, STRING, LOGDIR, "log file directory", configurator_directory_check, 'L', "specify full path to directory to contain log file") \
     UNIFYCR_CFG(logfs, index_buf_size, INT, UNIFYCR_INDEX_BUF_SIZE, "log file system index buffer size", NULL) \
     UNIFYCR_CFG(logfs, attr_buf_size, INT, UNIFYCR_FATTR_BUF_SIZE, "log file system file attributes buffer size", NULL) \
+    UNIFYCR_CFG(margo, tcp, BOOL, on, "use TCP for server-server margo RPCs", NULL) \
     UNIFYCR_CFG(meta, db_name, STRING, META_DEFAULT_DB_NAME, "metadata database name", NULL) \
     UNIFYCR_CFG(meta, db_path, STRING, /tmp, "metadata database path", NULL) \
     UNIFYCR_CFG(meta, server_ratio, INT, META_DEFAULT_SERVER_RATIO, "metadata server ratio", NULL) \

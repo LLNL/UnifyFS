@@ -1,12 +1,9 @@
-#ifndef __UNIFYCR_CLIENT_H
-#define __UNIFYCR_CLIENT_H
+#ifndef _MARGO_CLIENT_H
+#define _MARGO_CLIENT_H
 
-/************************************************
- * unifycr_client.h
- *
- * Declarations for the unifycr client interface.
- *
- * ************************************************/
+/********************************************
+ * margo_client.h - client-server margo RPCs
+ ********************************************/
 
 #include "unifycr-internal.h"
 
@@ -76,4 +73,4 @@ int32_t unifycr_client_mread_rpc_invoke(unifycr_client_rpc_context_t**
                                         hg_size_t size,
                                         void* buffer);
 
-#endif
+#endif // MARGO_CLIENT_H

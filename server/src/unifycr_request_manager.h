@@ -30,10 +30,9 @@
 #ifndef UNIFYCR_REQUEST_MANAGER_H
 #define UNIFYCR_REQUEST_MANAGER_H
 
-#include "unifycr_const.h"
 #include "unifycr_global.h"
 
-/* entry point for starting a request manager thread */
+/* Request Manager pthread main */
 void* rm_delegate_request_thread(void* arg);
 
 /* functions called by rpc handlers to assign work

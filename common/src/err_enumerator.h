@@ -49,6 +49,7 @@
     ENUMITEM(INVAL, "Invalid argument.")                                \
     ENUMITEM(IO, "Generic I/O error.")                                  \
     ENUMITEM(ISDIR, "Invalid operation for directory.")                 \
+    ENUMITEM(MARGO, "Mercury/Argobots operation error.")                \
     ENUMITEM(MDHIM, "MDHIM operation error.")                           \
     ENUMITEM(MDINIT, "MDHIM initialization error.")                     \
     ENUMITEM(NAMETOOLONG, "Filename is too long.")                      \

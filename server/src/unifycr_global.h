@@ -30,11 +30,33 @@
 #ifndef UNIFYCR_GLOBAL_H
 #define UNIFYCR_GLOBAL_H
 
-#include <pthread.h>
+// system headers
+#include <assert.h>
+#include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
-#include <margo.h>
-#include "unifycr_configurator.h"
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+// common headers
 #include "arraylist.h"
+#include "unifycr_const.h"
+#include "unifycr_log.h"
+#include "unifycr_meta.h"
+#include "unifycr_shm.h"
+#include "unifycr_sock.h"
+
+#include <margo.h>
+#include <pthread.h>
+
+extern arraylist_t* app_config_list;
+extern arraylist_t* thrd_list;
+
+extern int glb_rank, glb_size;
+extern int* local_rank_lst;
+extern int local_rank_cnt;
+extern size_t max_recs_per_slice;
 
 /* defines commands for messages sent to service manager threads */
 typedef enum {
@@ -107,7 +129,7 @@ typedef struct {
 /* records list of delegator information (rank, req count) for
  * set of delegators we have active read requests for */
 typedef struct {
-    per_del_stat_t *req_stat; /* delegator rank and request count */
+    per_del_stat_t* req_stat; /* delegator rank and request count */
     int del_cnt; /* number of delegators we have read requests for */
 } del_req_stat_t;
 
@@ -137,10 +159,10 @@ typedef struct {
     /* a list of read requests to be sent to each delegator,
      * main thread adds items to this list, request manager
      * processes them */
-    msg_meta_t *del_req_set;
+    msg_meta_t* del_req_set;
 
     /* statistics of read requests to be sent to each delegator */
-    del_req_stat_t *del_req_stat;
+    del_req_stat_t* del_req_stat;
 
     /* buffer to build read request messages */
     char del_req_msg_buf[REQ_BUF_LEN];
@@ -200,9 +222,9 @@ typedef struct {
     int spill_index_log_fds[MAX_NUM_CLIENTS]; /* spillover index */
 
     /* shared memory pointers */
-    char *shm_superblocks[MAX_NUM_CLIENTS]; /* superblock data */
-    char *shm_req_bufs[MAX_NUM_CLIENTS];    /* read request shm */
-    char *shm_recv_bufs[MAX_NUM_CLIENTS];   /* read reply shm */
+    char* shm_superblocks[MAX_NUM_CLIENTS]; /* superblock data */
+    char* shm_req_bufs[MAX_NUM_CLIENTS];    /* read request shm */
+    char* shm_recv_bufs[MAX_NUM_CLIENTS];   /* read reply shm */
 
     /* client address for rpc invocation */
     hg_addr_t client_addr[MAX_NUM_CLIENTS];
@@ -225,14 +247,6 @@ typedef struct {
     struct stat file_attr;
 } fattr_val_t;
 
-extern arraylist_t *app_config_list;
-extern arraylist_t *thrd_list;
-
 int invert_sock_ids[MAX_NUM_CLIENTS];
 
-extern int glb_rank, glb_size;
-extern int *local_rank_lst;
-extern int local_rank_cnt;
-extern size_t max_recs_per_slice;
-
-#endif
+#endif // UNIFYCR_GLOBAL_H

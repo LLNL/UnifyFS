@@ -87,20 +87,6 @@ else
 AM_CONDITIONAL([USE_PMIX], [false])
 fi
 
-# Debug build
-AC_ARG_ENABLE([debug],
-              AC_HELP_STRING([--enable-debug],
-                             [Enable debug build options.]))
-
-BUILD_DEBUG=no
-if test "x$enable_debug" = "xyes"; then
-        BUILD_DEBUG=yes
-        CFLAGS=`echo $CFLAGS | sed -e s/O2/O1/`
-else
-        BUILD_DEBUG=no
-fi
-AC_SUBST(CFLAGS)
-
 CHECK_NUMA
 
 AC_ARG_WITH(pkgconfigdir,
