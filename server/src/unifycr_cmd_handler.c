@@ -27,30 +27,20 @@
  * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
-#include <unistd.h>
-#include <mpi.h>
-#include <stdio.h>
-#include <stdlib.h>
+// system headers
+#include <fcntl.h>
 #include <sys/mman.h>
-#include <string.h>
-#include <mercury.h>
-#include <margo.h>
-#include <assert.h>
-#include <errno.h>
-#include <string.h>
-#include "unifycr_rpc_util.h"
-#include "unifycr_log.h"
+#include <mpi.h>
+
+// server components
 #include "unifycr_global.h"
-#include "unifycr_meta.h"
-#include "unifycr_cmd_handler.h"
-#include "unifycr_request_manager.h"
-#include "unifycr_setup.h"
-#include "unifycr_const.h"
-#include "unifycr_sock.h"
 #include "unifycr_metadata.h"
-#include "unifycr_shm.h"
-#include "unifycr_server.h"
+#include "unifycr_request_manager.h"
+
+// margo rpcs
+#include "margo_server.h"
 #include "unifycr_clientcalls_rpc.h"
+#include "unifycr_rpc_util.h"
 
 /**
  * attach to the client-side shared memory
@@ -379,7 +369,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     /* convert client_addr_str sent in input struct to margo hg_addr_t,
      * which is the address type needed to call rpc functions, etc */
     hg_return_t hret =
-        margo_addr_lookup(unifycr_server_rpc_context->mid,
+        margo_addr_lookup(unifycrd_rpc_context->sm_mid,
                           in.client_addr_str,
                           &(tmp_config->client_addr[client_id]));
 
@@ -489,7 +479,7 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
     // sock_sanitize_client(client_id);
 
     /* free margo hg_addr_t client addresses in app_config struct */
-    margo_addr_free(unifycr_server_rpc_context->mid,
+    margo_addr_free(unifycrd_rpc_context->sm_mid,
                     app_config->client_addr[client_id]);
 }
 DEFINE_MARGO_RPC_HANDLER(unifycr_unmount_rpc)

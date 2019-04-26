@@ -1,17 +1,13 @@
-
-/*******************************************************************************************
- * unifycr_client.c - Implements the RPC handlers for the
- * application-client, shared-memory interface.
- ********************************************************************************************/
+/**************************************************************************
+ * margo_client.c - Implements the client-server RPC calls (shared-memory)
+ **************************************************************************/
 
 #include "unifycr-internal.h"
-#include "unifycr_client.h"
-#include "unifycr_clientcalls_rpc.h"
-#include "unifycr_log.h"
 
 /* add margo and argobots */
-#include <abt.h>
 #include <margo.h>
+#include "margo_client.h"
+#include "unifycr_clientcalls_rpc.h"
 
 /* declaration should be moved to header file */
 int unifycr_sync_to_del(unifycr_mount_in_t* in);

@@ -20,7 +20,7 @@ before_install:
   - git config --global http.sslVerify false
   - git clone https://xgitlab.cels.anl.gov/sds/sds-repo.git $HOME/sds-repo.git
   - $HOME/spack/bin/spack repo add $HOME/sds-repo.git
-  - $HOME/spack/bin/spack install margo
+  - $HOME/spack/bin/spack install margo@develop
   - git config --global http.sslVerify true
   # prepare build environment
   - . $HOME/spack/share/spack/setup-env.sh

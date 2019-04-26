@@ -931,6 +931,7 @@ int test_map_file(test_cfg* cfg, off_t off, size_t len)
     cfg->mapped = addr;
     cfg->mapped_sz = len;
     cfg->mapped_off = off;
+    return 0;
 }
 
 /*

@@ -30,7 +30,6 @@
 #ifndef UNIFYCR_CONST_H
 #define UNIFYCR_CONST_H
 
-#include <fcntl.h>
 #include <limits.h> // provides HOST_NAME_MAX
 
 /* ********************** ERROR CODES ************************ */
@@ -101,6 +100,5 @@
 #define META_DEFAULT_SERVER_RATIO 1
 #define META_DEFAULT_RANGE_SZ MIB
 
-#endif
-
+#endif // UNIFYCR_CONST_H
 
