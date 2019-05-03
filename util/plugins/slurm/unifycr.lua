@@ -29,12 +29,12 @@ function slurm_spank_init (spank)
 end
 
 local function start_unifycr ()
-    local status = os.execute("unifycrd &")
+    local status = os.execute("/g/g0/sikich1/UnifyCR/install/bin/unifycrd &")
         return status == 0 and SPANK.SUCCESS or SPANK.FAILURE
 end
 
 local function stop_unifycr ()
-    local status = os.execute("pkill unifycrd")
+    local status = os.execute("pkill /g/g0/sikich1/UnifyCR/install/bin/unifycrd")
         return status == 0 and SPANK.SUCCESS or SPANK.FAILURE
 end
 
@@ -55,7 +55,7 @@ function slurm_spank_task_exit (spank)
 
         if spank.context == "remote" then
                 if unifycr_enabled then
-                        return stopt_unifycr ()
+                        return stop_unifycr ()
                 else
                         return SPANK.SUCCESS
                 end
