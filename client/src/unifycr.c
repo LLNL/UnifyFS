@@ -2926,3 +2926,127 @@ int unifycr_unmount(void)
 
     return ret;
 }
+
+#define UNIFYCR_TX_BUFSIZE (64*(1<<10))
+
+enum {
+    UNIFYCR_TX_STAGE_OUT = 0,
+    UNIFYCR_TX_STAGE_IN,
+};
+
+static
+int unifycr_do_transfer_file(const char* src, const char* dst, int direction)
+{
+    int ret = 0;
+    int fd_src = 0;
+    int fd_dst = 0;
+    ssize_t n_read = 0;
+    ssize_t n_written = 0;
+    ssize_t n_left = 0;
+    char buf[UNIFYCR_TX_BUFSIZE] = { 0, };
+
+    /*
+     * for now, we do not use the @direction hint.
+     */
+
+    if (!buf) {
+        return ENOMEM;
+    }
+
+    fd_src = open(src, O_RDONLY);
+    if (fd_src < 0) {
+        return errno;
+    }
+
+    fd_dst = open(dst, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd_dst < 0) {
+        ret = errno;
+        goto out_close_src;
+    }
+
+    while (1) {
+        n_read = read(fd_src, buf, UNIFYCR_TX_BUFSIZE);
+
+        if (n_read == 0) {  /* EOF */
+            break;
+        } else if (n_read < 0) {   /* error */
+            ret = errno;
+            goto out_close_dst;
+        }
+
+        n_left = n_read;
+
+        do {
+            n_written = write(fd_dst, buf, n_left);
+
+            if (n_written < 0) {
+                ret = errno;
+                goto out_close_dst;
+            } else if (n_written == 0 && errno && errno != EAGAIN) {
+                ret = errno;
+                goto out_close_dst;
+            }
+
+            n_left -= n_written;
+        } while (n_left);
+    }
+
+    fsync(fd_dst);
+
+out_close_dst:
+    close(fd_dst);
+out_close_src:
+    close(fd_src);
+
+    return ret;
+}
+
+int unifycr_transfer_file(const char* src, const char* dst)
+{
+    int ret = 0;
+    int direction = 0;
+    struct stat sb_src = { 0, };
+    struct stat sb_dst = { 0, };
+    int unify_src = 0;
+    int unify_dst = 0;
+    char dst_path[PATH_MAX] = { 0, };
+    char* pos = dst_path;
+    char* src_path = strdup(src);
+
+    if (!src_path) {
+        return -ENOMEM;
+    }
+
+    if (unifycr_intercept_path(src)) {
+        direction = UNIFYCR_TX_STAGE_OUT;
+        unify_src = 1;
+    }
+
+    ret = UNIFYCR_WRAP(stat)(src, &sb_src);
+    if (ret < 0) {
+        return -errno;
+    }
+
+    pos += sprintf(pos, "%s", dst);
+
+    if (unifycr_intercept_path(dst)) {
+        direction = UNIFYCR_TX_STAGE_IN;
+        unify_dst = 1;
+    }
+
+    ret = UNIFYCR_WRAP(stat)(dst, &sb_dst);
+    if (ret == 0 && !S_ISREG(sb_dst.st_mode)) {
+        if (S_ISDIR(sb_dst.st_mode)) {
+            sprintf(pos, "/%s", basename((char*) src_path));
+        } else {
+            return -EEXIST;
+        }
+    }
+
+    if (unify_src + unify_dst != 1) {
+        return -EINVAL;
+    }
+
+    return unifycr_do_transfer_file(src_path, dst_path, direction);
+}
+

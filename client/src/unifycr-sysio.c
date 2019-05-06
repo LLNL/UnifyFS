@@ -1023,14 +1023,18 @@ ssize_t UNIFYCR_WRAP(read)(int fd, void* buf, size_t count)
          */
         int ret = unifycr_fd_logreadlist(&tmp_req, 1);
 
+        /*
+         * FIXME: when we can get the global file size correctly, the following
+         * should be rewritten. currently, we cannot detect EOF reliably.
+         */
         if (ret != UNIFYCR_SUCCESS) {
-            /* error reading data */
-            errno = EIO;
-            retcount = -1;
-        } else if (tmp_req.errcode != UNIFYCR_SUCCESS) {
-            /* error reading data */
-            errno = EIO;
-            retcount = -1;
+            if (tmp_req.errcode != UNIFYCR_SUCCESS) {
+                /* error reading data */
+                errno = EIO;
+                retcount = -1;
+            } else {
+                retcount = 0; /* possible EOF */
+            }
         } else {
             /* success, update position */
             filedesc->pos += (off_t) retcount;
