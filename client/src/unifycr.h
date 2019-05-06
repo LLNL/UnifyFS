@@ -78,4 +78,15 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
 int unifycr_unmount(void);
 int compare_fattr(const void* a, const void* b);
 
+/**
+ * @brief transfer a single file between unifycr and other file system. either
+ * @src or @dst should (not both) specify a unifycr pathname, i.e., /unifycr/..
+ *
+ * @param src source file path
+ * @param dst destination file path
+ *
+ * @return 0 on success, negative errno otherwise.
+ */
+int unifycr_transfer_file(const char* src, const char* dst);
+
 #endif /* UNIFYCR_H */

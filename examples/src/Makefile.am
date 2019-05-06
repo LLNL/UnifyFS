@@ -12,7 +12,8 @@ libexec_PROGRAMS = \
   sysio-cp-gotcha sysio-cp-static \
   app-mpiio-gotcha app-mpiio-static \
   app-btio-gotcha app-btio-static \
-  app-tileio-gotcha app-tileio-static
+  app-tileio-gotcha app-tileio-static \
+  transfer-gotcha transfer-static
 
 if HAVE_FORTRAN
 libexec_PROGRAMS += \
@@ -246,4 +247,15 @@ app_hdf5_writeread_gotcha_LDADD    = $(test_gotcha_ldadd) $(HDF5_LIBS)
 app_hdf5_writeread_gotcha_LDFLAGS  = $(test_gotcha_ldflags) $(HDF5_LDFLAGS)
 
 endif
+
+transfer_gotcha_SOURCES  = transfer.c
+transfer_gotcha_CPPFLAGS = $(test_cppflags)
+transfer_gotcha_LDADD    = $(test_gotcha_ldadd)
+transfer_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+transfer_static_SOURCES  = transfer.c
+transfer_static_CPPFLAGS = $(test_cppflags)
+transfer_static_LDADD    = $(test_static_ldadd)
+transfer_static_LDFLAGS  = $(test_static_ldflags)
+
 
