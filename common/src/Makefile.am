@@ -28,8 +28,8 @@ BASE_SRCS = \
   unifycr_pmix.h \
   unifycr_rpc_util.h \
   unifycr_rpc_util.c \
-  unifycr_clientcalls_rpc.h \
-  unifycr_servercalls_rpc.h \
+  unifycr_client_rpcs.h \
+  unifycr_server_rpcs.h \
   unifycr_runstate.h \
   unifycr_runstate.c \
   unifycr_shm.h \

@@ -11,48 +11,24 @@ the Margo library API.
     function to follow throughout.
 
 ---------------------------
-Server
+Common
 ---------------------------
 
-1. Write rpc handler function for the server. This is the function that
-will be invoked on the client, but executed on the server. Most RPC functions
-executed on the server are implemented in `server/src/unifycr_cmd_handler.c`,
-such as `unifycr_mount_rpc(hg_handle_t handle)`. After writing the handler
-function, use a Margo macro to define the RPC handler function below your
-implementation:
-    `DEFINE_MARGO_RPC_HANDLER(unifycr_mount_rpc`
-That goes at the bottom of your RPC handler. You can look at currently
-implemented RPC functions in `server/src/unifycr_cmd_handler.c` for
-reference on what this should look like. Generally, the implementations of
-these fucntions pass in a handle, then use a `margo_get_input` call to
-retrieve the input struct parameters passed in by the client. Then the RPC
-handler function operates on those input struct parameters in some way. After
-finishing, it replies with a `margo_respond`, where the RPC handle and output
-struct are passed back to the client.
+1. Define structs for the input and output parameters of your RPC handler.
 
-2. Register your implementation of the RPC handler on the server with margo in
-`server/src/unifycr_init.c`.
+   The struct definition macro `MERCURY_GEN_PROC()` is used to define
+   both input and output parameters. For client-server RPCs, the
+   definitions should be placed in `common/src/unifycr_clientcalls_rpc.h`,
+   while server-server RPC structs are defined in
+   `common/src/unifycr_servercalls_rpc.h`.
+
+   The input parameters struct should contain all values the client needs
+   to pass to the server handler function.
+   The output parameters struct should contain all values the server needs
+   to pass back to the client upon completion of the handler function.
+   The following shows the input and output structs for `unifycr_mount_rpc`.
+
 .. code-block:: C
-
-    MARGO_REGISTER(unifycr_server_rpc_context->mid,   "unifycr_mount_rpc",
-    unifycr_mount_in_t, unifycr_mount_out_t, unifycr_mount_rpc);
-
-The last two parameters to `MARGO_REGISTER` are input and output structs that
-are defined on the client, but also need to be registered with the server. The
-input struct is passed in by the client to the RPC handler function, and then
-forwarded to the server. When the RPC handler function finishes, the output
-struct will be passed back to the client, which is generally a return code.
-
----------------------------
-Client
----------------------------
-
-1. Define the input and output structs for your RPC handler in
-`common/src/unifycr_clientcalls_rpc.h`. This uses the MERCURY_GEN_PROC macro:
-.. code-block:: C
-  MERCURY_GEN_PROC(unifycr_mount_out_t,
-                   ((hg_size_t)(max_recs_per_slice))
-                   ((int32_t)(ret)))
   MERCURY_GEN_PROC(unifycr_mount_in_t,
                    ((int32_t)(app_id))
                    ((int32_t)(local_rank_idx))
@@ -69,69 +45,107 @@ Client
                    ((hg_size_t)(data_offset))
                    ((hg_size_t)(data_size))
                    ((hg_const_string_t)(external_spill_dir)))
-
-The input struct will be all of the parameters the client sends to the RPC
-handler function on the server, so they need to be defined in the client
-invocation function.
+  MERCURY_GEN_PROC(unifycr_mount_out_t,
+                   ((hg_size_t)(max_recs_per_slice))
+                   ((int32_t)(ret)))
 
 .. note::
+Passing some types can be an issue. Refer to the Mercury documentation for
+supported types: `<https://mercury-hpc.github.io/documentation/`_ (look
+under Predefined Types). If your type is not predefined, you will need to
+either convert it to a supported type or write code to serialize/deserialize
+the input/output parameters. Phil Carns said he has starter code for this,
+since much of the code is similar.
 
-    Passing some types can be an issue. You can look through the mercury documentation on what types
-    are supported here: `<https://mercury-hpc.github.io/documentation/`_ (look under Predefined Types).
-    If your type is not a predefined type you will most likely have to write the code to
-    serialize/deserialize the input/output structs.  Phil said he has starter code for this,
-    since much of the code is similar.
+---------------------------
+Server
+---------------------------
 
-2. Register the RPC handler with the client in cilent/src/unifycr.c. The pointer
-to the margo id for the RPC handler will be stored in an rpc_context that will
-be used when the client invokes the RPC handler.
+1. Implement the RPC handler function for the server.
+
+   This is the function that will be invoked on the client and executed on
+   the server. Client-server RPC handler functions are implemented in
+   `server/src/unifycr_cmd_handler.c`, while server-server RPC handlers go
+   in `server/src/unifycr_service_manager.c`. The RPC handler input and output
+   parameters structs are defined in `common/src/unifycr_clientcalls_rpc.h`.
+
+   All the RPC handler functions follow the same protoype, which is passed
+   a Mercury handle as the only argument. The handler function should use
+   `margo_get_input()` to retrieve the input parameters struct provided by
+   the client. After the RPC handler finishes its intended action, it replies
+   using `margo_respond()`, which takes the handle and output parameters
+   struct as arguments. Finally, the handler function should release the
+   input struct using `margo_free_input()`, and the handle using
+   `margo_destroy()`. See the existing RPC handler functions for more info.
+
+   After implementing the handler function, place the Margo RPC handler
+   definition macro immediately following the function, for example:
+    `DEFINE_MARGO_RPC_HANDLER(unifycr_mount_rpc`
+
+2. Register the server RPC handler with margo.
+
+   In `server/src/margo_server.c`, update the client-server RPC registration
+   function `register_client_server_rpcs()` to include a registration macro
+   for the new RPC handler, for example:
 .. code-block:: C
+    MARGO_REGISTER(unifycrd_rpc_context->mid, "unifycr_mount_rpc",
+    unifycr_mount_in_t, unifycr_mount_out_t, unifycr_mount_rpc);
 
-    (*unifycr_rpc_context)->unifycr_mount_rpc_id = MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_mount_rpc",
-                                                                  unifycr_mount_in_t, unifycr_mount_out_t, NULL);
+   The last argument to `MARGO_REGISTER()` is the handler function name. The
+   prior two arguments are the input and output parameters structs. The input
+   struct is passed in by the client to the RPC handler function, and then
+   forwarded to the server. When the RPC handler function finishes, the output
+   struct will be passed back to the client, which is generally a return code.
 
-When the client calls `MARGO_REGISTER` the last parameter is `NULL`, this is
-the RPC handler function that is not defined on the client. When the server
-calls this function the last parameter would be the name of the RPC handler
-function instead of `NULL`.
+---------------------------
+Client
+---------------------------
 
-3. Add mercury id for the name of the RPC handler to the ClientRpcContext in
-`common/src/unifycr_client.h`.
+1. Add a Mercury id for the RPC handler to the client RPC context.
+
+   In `client/src/margo_client.h`, update the `ClientRpcIds` structure
+   to add a new `hg_id_t` variable to hold the RPC handler id.
 .. code-block:: C
+    typedef struct ClientRpcIds {
+        ...
+        hg_id_t mount_id;
+    }
 
-    typedef struct ClientRpcContext {
-        margo_instance_id mid;
-        hg_context_t* hg_context;
-        hg_class_t* hg_class;
-        hg_addr_t svr_addr;
-        hg_id_t unifycr_mount_rpc_id;
+2. Register the RPC handler with Margo.
 
-4.  Define an invocation prototype for the client invocation function:
-.. code-block:: C
-    int32_t unifycr_client_mount_rpc_invoke(unifycr_client_rpc_context_t** unifycr_rpc_context);
+   In `client/src/margo_client.c`, update `register_client_rpcs()` to register
+   the RPC handler and store its Mercury id in the newly defined `ClientRpcIds`
+   variable.
+   .. code-block:: C
+   client_rpc_context->rpcs.mount_id = MARGO_REGISTER(client_rpc_context->mid, "unifycr_mount_rpc",
+                                                      unifycr_mount_in_t, unifycr_mount_out_t, NULL);
 
-5. Invoke the RPC function on the Client:
-.. code-block:: C
+   When the client calls `MARGO_REGISTER()` the last parameter is `NULL`. This
+   is the RPC handler function that is only defined on the server.
 
-    unifycr_client_mount_rpc_invoke(&unifycr_rpc_context);
+3. Define and implement an invocation function that will execute the RPC.
 
-The implementation for these invocation functions have generally been
-implemented in `client/src/unifycr_client.c` or the common directory.
-The connection to the server is established with a margo_create call
-(where the address of the server is passed), then the RPC is actually
-forwarded to the server with a `margo_forward` call, where the RPC handle
-and input struct are passed. You can get the RPC output with a margo_get_output
-call that passes back a return code. There are many more example invocation
-functions in `client/src/unifycr_client.c`.
+   The declaration should be placed in `client/src/margo_client.h`, and the
+   definition should go in `client/src/margo_client.c`.
+   .. code-block:: C
+   int invoke_client_mount_rpc();
+
+   A handle for the RPC is obtained using `margo_create()`, which takes the
+   server address and the id of the RPC as parameters. The RPC is actually
+   initiated using `margo_forward()`, where the RPC handle and input struct
+   are supplied. Use `margo_get_output()` to obtain the returned output
+   parameters struct, and release it with `margo_free_output()`. Finally,
+   `margo_destroy()` is used to release the RPC handle. See the existing
+   invocation functions for more info.
 
 .. note::
 The general workflow for creating new RPC functions is the same if you want to
 invoke an RPC on the server, and execute it on the client. One difference is
-that you will have to pass `NULL` to the last parameter of `MARGO_REGISTER` on
-the server, and on the client the last parameter to `MARGO_REGISTER` will be
+that you will have to pass `NULL` to the last parameter of `MARGO_REGISTER()` on
+the server, and on the client the last parameter to `MARGO_REGISTER()` will be
 the name of the RPC handler function. To execute RPCs on the client it needs to
 be started in Margo as a `SERVER`, and the server needs to know the address of
 the client where the RPC will be executed. The client has already been
 configured to do those two things, so the only change going forward is how
-`MARGO_REGISTER` is called depending on where the RPC is being executed
+`MARGO_REGISTER()` is called depending on where the RPC is being executed
 (client or server).

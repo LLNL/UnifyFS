@@ -17,68 +17,120 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <config.h>
 #include "unifycr_log.h"
+#include "unifycr_pmix.h"
 #include "unifycr_rpc_util.h"
 
-#define SRVR_RPC_ADDR_FILE "/dev/shm/unifycrd_id"
+#define LOCAL_RPC_ADDR_FILE "/tmp/unifycrd.margo-shm"
 
-/* publishes server RPC address */
-void rpc_publish_server_addr(const char* addr)
+/* publishes client-server RPC address */
+void rpc_publish_local_server_addr(const char* addr)
 {
-    /* TODO: support other publish modes like PMIX */
+    LOGDBG("publishing client-server rpc address '%s'", addr);
 
-    /* write server address to /dev/shm/ for client on node to
-     * read from */
-    FILE* fp = fopen(SRVR_RPC_ADDR_FILE, "w+");
+#ifdef HAVE_PMIX_H
+    // publish client-server margo address
+    unifycr_pmix_publish(pmix_key_unifycrd_margo_shm, addr);
+#endif
+
+    /* write server address to local file for client to read */
+    FILE* fp = fopen(LOCAL_RPC_ADDR_FILE, "w+");
     if (fp != NULL) {
         fprintf(fp, "%s", addr);
         fclose(fp);
     } else {
-        LOGERR("Error writing server rpc addr file " SRVR_RPC_ADDR_FILE);
+        LOGERR("Error writing server rpc addr file " LOCAL_RPC_ADDR_FILE);
     }
+}
+
+/* publishes server-server RPC address */
+void rpc_publish_remote_server_addr(const char* addr)
+{
+    LOGDBG("publishing server-server rpc address '%s'", addr);
+
+#ifdef HAVE_PMIX_H
+    // publish client-server margo address
+    unifycr_pmix_publish(pmix_key_unifycrd_margo_svr, addr);
+#endif
 }
 
 /* lookup address of server, returns NULL if server address is not found,
- *  * otherwise returns server address in newly allocated string that caller
- *  must free */
-char* rpc_lookup_server_addr(void)
+ * otherwise returns server address in newly allocated string that caller
+ * must free */
+char* rpc_lookup_local_server_addr(void)
 {
     /* returns NULL if we can't find server address */
-    char* str = NULL;
+    char* addr = NULL;
 
-    /* TODO: support other lookup methods here like PMIX */
+#ifdef HAVE_PMIX_H
+    char* valstr = NULL;
 
-    /* read server address string from well-known file name in ramdisk */
-    FILE* fp = fopen(SRVR_RPC_ADDR_FILE, "r");
-    if (fp != NULL) {
-        /* opened the file, now read the address string */
-        char addr_string[256];
-        int rc = fscanf(fp, "%255s", addr_string);
-        if (rc == 1) {
-            /* read the server address, dup a copy of it */
-            str = strdup(addr_string);
+    // lookup client-server margo address
+    if (0 == unifycr_pmix_lookup(pmix_key_unifycrd_margo_shm, 0, &valstr)) {
+        addr = strdup(valstr);
+        free(valstr);
+    }
+#endif
+
+    if (NULL == addr) {
+        /* read server address from local file */
+        FILE* fp = fopen(LOCAL_RPC_ADDR_FILE, "r");
+        if (fp != NULL) {
+            char addr_string[256];
+            memset(addr_string, 0, sizeof(addr_string));
+            if (1 == fscanf(fp, "%255s", addr_string)) {
+                addr = strdup(addr_string);
+            }
+            fclose(fp);
         }
-        fclose(fp);
     }
 
     /* print server address (debugging) */
-    if (str != NULL) {
-        LOGDBG("found server rpc address: %s", str);
+    if (NULL != addr) {
+        LOGDBG("found local server rpc address '%s'", addr);
     }
-
-    return str;
+    return addr;
 }
 
-/* remove server RPC address file */
-void rpc_clean_server_addr(void)
+/* lookup address of server, returns NULL if server address is not found,
+ * otherwise returns server address in newly allocated string that caller
+ * must free */
+char* rpc_lookup_remote_server_addr(const char* hostname)
 {
-    /* TODO: support other publish modes like PMIX */
+    /* returns NULL if we can't find server address */
+    char* addr = NULL;
 
-    /* write server address to /dev/shm/ for client on node to
-     * read from */
-    int rc = unlink(SRVR_RPC_ADDR_FILE);
+#ifdef HAVE_PMIX_H
+    char* valstr = NULL;
+
+    // lookup server-server margo address
+    if (0 == unifycr_pmix_lookup_remote(hostname,
+                                        pmix_key_unifycrd_margo_svr,
+                                        0, &valstr)) {
+        addr = strdup(valstr);
+        free(valstr);
+    }
+#endif
+
+    /* print sserver address (debugging) */
+    if (NULL != addr) {
+        LOGDBG("found server rpc address '%s' for %s", addr, hostname);
+    }
+    return addr;
+}
+
+/* remove local server RPC address file */
+void rpc_clean_local_server_addr(void)
+{
+    int rc = unlink(LOCAL_RPC_ADDR_FILE);
     if (rc != 0) {
-        LOGERR("Error removing server rpc addr file " SRVR_RPC_ADDR_FILE);
+        int err = errno;
+        if (err != ENOENT) {
+            LOGERR("Error (%s) removing local server rpc addr file "
+                   LOCAL_RPC_ADDR_FILE, strerror(err));
+        }
     }
 }
 

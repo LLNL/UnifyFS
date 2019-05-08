@@ -1685,7 +1685,7 @@ static int delegator_signal()
  * is filled with read data */
 static int delegator_wait()
 {
-#if 0
+#ifdef USE_DOMAIN_SOCKET
     /* wait for signal on socket */
     cmd_fd.events = POLLIN | POLLPRI;
     cmd_fd.revents = 0;
@@ -1898,9 +1898,8 @@ int unifycr_fd_logreadlist(read_req_t* read_reqs, int count)
                read_req_set.count, buffer, size);
 
         /* invoke read rpc here */
-        unifycr_client_mread_rpc_invoke(&unifycr_rpc_context, app_id,
-                                        local_rank_idx, ptr_meta_entry->gfid,
-                                        read_req_set.count, size, buffer);
+        invoke_client_mread_rpc(app_id, local_rank_idx, ptr_meta_entry->gfid,
+                                read_req_set.count, size, buffer);
 
         flatcc_builder_clear(&builder);
         free(buffer);
@@ -1910,8 +1909,7 @@ int unifycr_fd_logreadlist(read_req_t* read_reqs, int count)
         size_t offset = read_req_set.read_reqs[0].offset;
         size_t length = read_req_set.read_reqs[0].length;
         LOGDBG("read: offset:%zu, len:%zu", offset, length);
-        unifycr_client_read_rpc_invoke(&unifycr_rpc_context, app_id,
-                                       local_rank_idx, gfid, offset, length);
+        invoke_client_read_rpc(app_id, local_rank_idx, gfid, offset, length);
     }
 
     /*
@@ -2139,11 +2137,8 @@ int UNIFYCR_WRAP(fsync)(int fd)
         /* if using LOGIO, call fsync rpc */
         if (meta->storage == FILE_STORAGE_LOGIO) {
             /* invoke fsync rpc to register index metadata with server */
-            uint32_t gfid = get_gfid(fid);
-            unifycr_client_fsync_rpc_invoke(&unifycr_rpc_context,
-                                            app_id,
-                                            local_rank_idx,
-                                            gfid);
+            int gfid = get_gfid(fid);
+            invoke_client_fsync_rpc(app_id, local_rank_idx, gfid);
         }
 
         meta->needs_sync = 0;

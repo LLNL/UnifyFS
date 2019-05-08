@@ -21,10 +21,10 @@ bool margo_use_tcp = true;
 
 static const char* PROTOCOL_MARGO_SHM   = "na+sm://";
 static const char* PROTOCOL_MARGO_VERBS = "ofi+verbs://";
-static const char* PROTOCOL_MARGO_TCP   = "ofi+tcp://";
+static const char* PROTOCOL_MARGO_TCP   = "bmi+tcp://";
 
-/* setup_ofi_target - Initializes the libfabrics margo target */
-static margo_instance_id setup_ofi_target(void)
+/* setup_remote_target - Initializes the server-server margo target */
+static margo_instance_id setup_remote_target(void)
 {
     /* initialize margo */
     hg_return_t hret;
@@ -62,11 +62,11 @@ static margo_instance_id setup_ofi_target(void)
         margo_finalize(mid);
         return MARGO_INSTANCE_NULL;
     }
-    LOGDBG("ofi margo RPC server: %s", self_string);
+    LOGDBG("margo RPC server: %s", self_string);
     margo_addr_free(mid, addr_self);
 
-    /* publish rpc address of server for remote servers */
-    // TODO
+    /* publish rpc address of server for local clients */
+    rpc_publish_remote_server_addr(self_string);
 
     return mid;
 }
@@ -76,8 +76,8 @@ static void register_server_server_rpcs(margo_instance_id mid)
 
 }
 
-/* setup_sm_target - Initializes the shared-memory margo target */
-static margo_instance_id setup_sm_target(void)
+/* setup_local_target - Initializes the client-server margo target */
+static margo_instance_id setup_local_target(void)
 {
     /* initialize margo */
     hg_return_t hret;
@@ -112,7 +112,7 @@ static margo_instance_id setup_sm_target(void)
     margo_addr_free(mid, addr_self);
 
     /* publish rpc address of server for local clients */
-    rpc_publish_server_addr(self_string);
+    rpc_publish_local_server_addr(self_string);
 
     return mid;
 }
@@ -170,23 +170,21 @@ int margo_server_rpc_init(void)
     }
 
     margo_instance_id mid;
-    mid = setup_sm_target();
+    mid = setup_local_target();
     if (mid == MARGO_INSTANCE_NULL) {
         rc = UNIFYCR_FAILURE;
     } else {
-        unifycrd_rpc_context->sm_mid = mid;
+        unifycrd_rpc_context->shm_mid = mid;
         register_client_server_rpcs(mid);
     }
 
-#ifdef NOT_YET
-    mid = setup_ofi_target();
+    mid = setup_remote_target();
     if (mid == MARGO_INSTANCE_NULL) {
         rc = UNIFYCR_FAILURE;
     } else {
-        unifycrd_rpc_context->ofi_mid = mid;
+        unifycrd_rpc_context->svr_mid = mid;
         register_server_server_rpcs(mid);
     }
-#endif
 
     return rc;
 }
@@ -206,13 +204,12 @@ int margo_server_rpc_finalize(void)
         ServerRpcContext_t* ctx = unifycrd_rpc_context;
         unifycrd_rpc_context = NULL;
 
-        rpc_clean_server_addr();
+        rpc_clean_local_server_addr();
 
         /* shut down margo */
-        margo_finalize(ctx->sm_mid);
-#ifdef NOT_YET
-        margo_finalize(ctx->ofi_mid);
-#endif
+        margo_finalize(ctx->shm_mid);
+        /* NOTE: 2nd call to margo_finalize() hangs - Margo bug?
+         * margo_finalize(ctx->svr_mid); */
 
         /* free memory allocated for context structure */
         free(ctx);

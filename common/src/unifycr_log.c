@@ -35,7 +35,7 @@
 unifycr_log_level_t unifycr_log_level = 5;
 
 /* pointer to log file stream */
-FILE* unifycr_log_stream;
+FILE* unifycr_log_stream; // = NULL
 
 int glb_rank;
 
@@ -48,12 +48,13 @@ char unifycr_log_timestamp[256];
  * returns UNIFYCR_SUCCESS on success */
 int unifycr_log_open(const char* file)
 {
-    unifycr_log_stream = fopen(file, "a");
-    if (unifycr_log_stream == NULL) {
+    FILE* logf = fopen(file, "a");
+    if (logf == NULL) {
         /* failed to open file name, fall back to stderr */
         unifycr_log_stream = stderr;
         return (int)UNIFYCR_ERROR_DBG;
     } else {
+        unifycr_log_stream = logf;
         return UNIFYCR_SUCCESS;
     }
 }
