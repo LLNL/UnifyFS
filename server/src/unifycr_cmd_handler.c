@@ -501,9 +501,16 @@ static void unifycr_metaget_rpc(hg_handle_t handle)
 
     /* build our output values */
     unifycr_metaget_out_t out;
-    out.st_size  = attr_val.file_attr.st_size;
+    out.gfid = attr_val.gfid;
+    out.mode = attr_val.mode;
+    out.uid = attr_val.uid;
+    out.gid = attr_val.gid;
+    out.size = attr_val.size;
+    out.atime = attr_val.atime;
+    out.mtime = attr_val.mtime;
+    out.ctime = attr_val.ctime;
     out.filename = attr_val.filename;
-    out.ret      = ret;
+    out.ret = ret;
 
     /* send output back to caller */
     hg_return_t hret = margo_respond(handle, &out);
@@ -529,7 +536,14 @@ static void unifycr_metaset_rpc(hg_handle_t handle)
     memset(&fattr, 0, sizeof(fattr));
     fattr.gfid = in.gfid;
     strncpy(fattr.filename, in.filename, sizeof(fattr.filename));
-    /* TODO: unifycr_metaset_in_t is missing struct stat info */
+    fattr.mode = in.mode;
+    fattr.uid = in.uid;
+    fattr.gid = in.gid;
+    fattr.size = in.size;
+    fattr.atime = in.atime;
+    fattr.mtime = in.mtime;
+    fattr.ctime = in.ctime;
+
     ret = unifycr_set_file_attribute(&fattr);
 
     /* build our output values */

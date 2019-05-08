@@ -5,6 +5,7 @@
  * Declarations for client-server margo RPCs (shared-memory)
  */
 
+#include <time.h>
 #include <margo.h>
 #include <mercury.h>
 #include <mercury_proc_string.h>
@@ -44,14 +45,27 @@ MERCURY_GEN_PROC(unifycr_unmount_in_t,
 MERCURY_GEN_PROC(unifycr_unmount_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifycr_unmount_rpc)
 
+typedef struct timespec sys_timespec_t;
+
+MERCURY_GEN_STRUCT_PROC(sys_timespec_t,
+                        ((uint64_t)(tv_sec))
+                        ((uint64_t)(tv_nsec)))
+
 /* unifycr_metaset_rpc (client => server)
  *
  * given a global file id and a file name,
  * record key/value entry for this file */
 MERCURY_GEN_PROC(unifycr_metaset_in_t,
+                 ((hg_const_string_t)(filename))
                  ((int32_t)(fid))
                  ((int32_t)(gfid))
-                 ((hg_const_string_t)(filename)))
+                 ((uint32_t)(mode))
+                 ((uint32_t)(uid))
+                 ((uint32_t)(gid))
+                 ((uint64_t)(size))
+                 ((sys_timespec_t)(atime))
+                 ((sys_timespec_t)(mtime))
+                 ((sys_timespec_t)(ctime)))
 MERCURY_GEN_PROC(unifycr_metaset_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)
 
@@ -62,9 +76,17 @@ DECLARE_MARGO_RPC_HANDLER(unifycr_metaset_rpc)
 MERCURY_GEN_PROC(unifycr_metaget_in_t,
                  ((int32_t)(gfid)))
 MERCURY_GEN_PROC(unifycr_metaget_out_t,
-                 ((hg_size_t)(st_size))
                  ((int32_t)(ret))
-                 ((hg_const_string_t)(filename)))
+                 ((hg_const_string_t)(filename))
+                 ((int32_t)(fid))
+                 ((int32_t)(gfid))
+                 ((uint32_t)(mode))
+                 ((uint32_t)(uid))
+                 ((uint32_t)(gid))
+                 ((uint64_t)(size))
+                 ((sys_timespec_t)(atime))
+                 ((sys_timespec_t)(mtime))
+                 ((sys_timespec_t)(ctime)))
 DECLARE_MARGO_RPC_HANDLER(unifycr_metaget_rpc)
 
 /* unifycr_fsync_rpc (client => server)

@@ -15,7 +15,10 @@
 #ifndef UNIFYCR_META_H
 #define UNIFYCR_META_H
 
+#include <stdint.h>
+#include <sys/types.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "unifycr_const.h"
 
@@ -37,8 +40,45 @@ typedef struct {
     int fid;
     int gfid;
     char filename[UNIFYCR_MAX_FILENAME];
-    struct stat file_attr;
+
+    /* essential stat fields */
+    uint32_t mode;
+    uint32_t uid;
+    uint32_t gid;
+    uint64_t size;
+    struct timespec atime;
+    struct timespec mtime;
+    struct timespec ctime;
 } unifycr_file_attr_t;
+
+enum {
+    UNIFYCR_STAT_DEFAULT_DEV = 0,
+    UNIFYCR_STAT_DEFAULT_BLKSIZE = 4096,
+    UNIFYCR_STAT_DEFAULT_FILE_MODE = S_IFREG | 0644,
+    UNIFYCR_STAT_DEFAULT_DIR_MODE = S_IFDIR | 0755,
+};
+
+static inline
+void unifycr_file_attr_to_stat(unifycr_file_attr_t* fattr, struct stat* sb)
+{
+    if (fattr && sb) {
+        sb->st_dev = UNIFYCR_STAT_DEFAULT_DEV;
+        sb->st_ino = fattr->gfid;
+        sb->st_mode = fattr->mode;
+        sb->st_uid = fattr->uid;
+        sb->st_gid = fattr->gid;
+        sb->st_rdev = UNIFYCR_STAT_DEFAULT_DEV;
+        sb->st_size = fattr->size;
+        sb->st_blksize = UNIFYCR_STAT_DEFAULT_BLKSIZE;
+        sb->st_blocks = fattr->size / UNIFYCR_STAT_DEFAULT_BLKSIZE;
+        if (fattr->size % UNIFYCR_STAT_DEFAULT_BLKSIZE > 0) {
+            sb->st_blocks += 1;
+        }
+        sb->st_atime = fattr->atime.tv_sec;
+        sb->st_mtime = fattr->mtime.tv_sec;
+        sb->st_ctime = fattr->ctime.tv_sec;
+    }
+}
 
 typedef struct {
     off_t file_pos;

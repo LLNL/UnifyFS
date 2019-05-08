@@ -389,7 +389,7 @@ static int unifycr_logio_chunk_write(
                                         sizeof(unifycr_file_attr_t),
                                         compare_fattr);
     if (ptr_meta_entry !=  NULL) {
-        ptr_meta_entry->file_attr.st_size = pos + count;
+        ptr_meta_entry->size = pos + count;
     }
 
     /* define an new index entry for this write operation */

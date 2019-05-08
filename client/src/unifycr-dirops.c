@@ -109,8 +109,11 @@ DIR* UNIFYCR_WRAP(opendir)(const char* name)
         return NULL;
     }
 
-    struct stat* sb = &gfattr.file_attr;
-    if (!S_ISDIR(sb->st_mode)) {
+    struct stat sb = { 0, };
+
+    unifycr_file_attr_to_stat(&gfattr, &sb);
+
+    if (!S_ISDIR(sb.st_mode)) {
         errno = ENOTDIR;
         return NULL;
     }
@@ -132,8 +135,8 @@ DIR* UNIFYCR_WRAP(opendir)(const char* name)
         /*
          * FIXME: also, is it safe to oeverride this local data?
          */
-        meta->size = sb->st_size;
-        meta->chunks = sb->st_blocks;
+        meta->size = sb.st_size;
+        meta->chunks = sb.st_blocks;
         meta->log_size = 0; /* no need of local storage for dir operations */
     } else {
         fid = unifycr_fid_create_file(name);
@@ -144,8 +147,8 @@ DIR* UNIFYCR_WRAP(opendir)(const char* name)
 
         meta = unifycr_get_meta_from_fid(fid);
         meta->is_dir   = 1;
-        meta->size     = sb->st_size;
-        meta->chunks   = sb->st_blocks;
+        meta->size     = sb.st_size;
+        meta->chunks   = sb.st_blocks;
         meta->log_size = 0;
     }
 

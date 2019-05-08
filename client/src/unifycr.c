@@ -742,6 +742,22 @@ off_t unifycr_fid_size(int fid)
     return meta->size;
 }
 
+static inline
+void unifycr_init_file_attr(unifycr_file_attr_t* fattr, int isdir)
+{
+    if (fattr) {
+        struct timespec tp = { 0, };
+
+        clock_gettime(CLOCK_REALTIME, &tp);
+        fattr->atime = tp;
+        fattr->mtime = tp;
+        fattr->ctime = tp;
+
+        fattr->mode = isdir ? UNIFYCR_STAT_DEFAULT_DIR_MODE
+                            : UNIFYCR_STAT_DEFAULT_FILE_MODE;
+    }
+}
+
 /*
  * insert file attribute to attributed shared memory buffer,
  * keep entries ordered by file id
@@ -785,7 +801,7 @@ static int ins_file_meta(unifycr_fattr_buf_t* ptr_f_meta_log,
 }
 
 int unifycr_set_global_file_meta(const char* path, int fid, int gfid,
-                                 struct stat* sb)
+                                 int isdir)
 {
     int ret = 0;
     unifycr_file_attr_t new_fmeta = { 0, };
@@ -796,7 +812,8 @@ int unifycr_set_global_file_meta(const char* path, int fid, int gfid,
 
     new_fmeta.fid = fid;
     new_fmeta.gfid = gfid;
-    new_fmeta.file_attr = *sb;
+
+    unifycr_init_file_attr(&new_fmeta, isdir);
 
     ret = unifycr_client_metaset_rpc_invoke(&unifycr_rpc_context,
                                             &new_fmeta);
@@ -855,7 +872,7 @@ int unifycr_gfid_stat(int gfid, struct stat* buf)
     }
 
     /* copy stat structure */
-    *buf = fattr.file_attr;
+    unifycr_file_attr_to_stat(&fattr, buf);
 
     /* set the file size */
     buf->st_size = filesize;
@@ -948,40 +965,6 @@ int unifycr_fid_create_file(const char* path)
     return fid;
 }
 
-/*
- * TODO: we need to generate proper mode for each entry.
- */
-static const mode_t unifycr_default_file_mode = S_IFREG | 0644;
-static const mode_t unifycr_default_dir_mode  = S_IFDIR | 0755;
-
-static inline void unifycr_init_file_attr(struct stat* sb, int gfid)
-{
-    if (sb) {
-        memset((void*) sb, 0, sizeof(*sb));
-
-        sb->st_ino = gfid;
-        sb->st_size = 0;
-        sb->st_blocks = 1;
-        sb->st_blksize = 4096;
-        sb->st_atime = sb->st_mtime = sb->st_ctime = time(NULL);
-        sb->st_mode = unifycr_default_file_mode;
-    }
-}
-
-static inline void unifycr_init_dir_attr(struct stat* sb, int gfid)
-{
-    if (sb) {
-        memset((void*) sb, 0, sizeof(*sb));
-
-        sb->st_ino = gfid;
-        sb->st_size = 0;
-        sb->st_blocks = 1;
-        sb->st_blksize = 4096;
-        sb->st_atime = sb->st_mtime = sb->st_ctime = time(NULL);
-        sb->st_mode = unifycr_default_dir_mode;
-    }
-}
-
 int unifycr_fid_create_directory(const char* path)
 {
     int ret = 0;
@@ -1042,9 +1025,7 @@ int unifycr_fid_create_directory(const char* path)
     meta = unifycr_get_meta_from_fid(fid);
     meta->is_dir = 1;
 
-    unifycr_init_dir_attr(&sb, gfid);
-
-    ret = unifycr_set_global_file_meta(path, fid, gfid, &sb);
+    ret = unifycr_set_global_file_meta(path, fid, gfid, 1);
     if (ret) {
         LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
                path, fid);
@@ -1345,7 +1326,7 @@ int unifycr_fid_open(const char* path, int flags, mode_t mode, int* outfid,
 
         meta = unifycr_get_meta_from_fid(fid);
 
-        meta->size = gfattr.file_attr.st_size;
+        meta->size = gfattr.size;
         gfattr.fid = fid;
         gfattr.gfid = gfid;
 
@@ -1403,10 +1384,8 @@ int unifycr_fid_open(const char* path, int flags, mode_t mode, int* outfid,
             return (int) UNIFYCR_ERROR_IO;
         }
 
-        unifycr_init_file_attr(&sb, gfid);
-
         /*create a file and send its attribute to key-value store*/
-        ret = unifycr_set_global_file_meta(path, fid, gfid, &sb);
+        ret = unifycr_set_global_file_meta(path, fid, gfid, 0);
         if (ret) {
             LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
                    path, fid);
