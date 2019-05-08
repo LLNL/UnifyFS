@@ -552,7 +552,7 @@ int unifycr_fid_unlink(int fid);
 int unifycr_generate_gfid(const char* path);
 
 int unifycr_set_global_file_meta(const char* path, int fid, int gfid,
-                                 struct stat* sb);
+                                 int isdir);
 
 int unifycr_get_global_file_meta(int fid, int gfid,
                                  unifycr_file_attr_t* gfattr);

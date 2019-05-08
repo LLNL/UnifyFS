@@ -15,9 +15,16 @@ int unifycr_sync_to_del(unifycr_mount_in_t* in);
 static int set_global_file_meta(unifycr_metaset_in_t* in,
                                 unifycr_file_attr_t* f_meta)
 {
-    in->fid      = f_meta->fid;
-    in->gfid     = f_meta->gfid;
-    in->filename = f_meta->filename;
+    in->fid       = f_meta->fid;
+    in->gfid      = f_meta->gfid;
+    in->filename  = f_meta->filename;
+    in->mode      = f_meta->mode;
+    in->uid       = f_meta->uid;
+    in->gid       = f_meta->gid;
+    in->size      = f_meta->size;
+    in->atime     = f_meta->atime;
+    in->mtime     = f_meta->mtime;
+    in->ctime     = f_meta->ctime;
 
     /* TODO: unifycr_metaset_in_t is missing struct stat info
      * in->file_attr = f_meta->file_attr; */
@@ -26,13 +33,20 @@ static int set_global_file_meta(unifycr_metaset_in_t* in,
 }
 
 static int get_global_file_meta(int gfid, unifycr_metaget_out_t* out,
-                                unifycr_file_attr_t* file_meta)
+                                unifycr_file_attr_t* f_meta)
 {
-    memset(file_meta, 0, sizeof(unifycr_file_attr_t));
+    memset(f_meta, 0, sizeof(unifycr_file_attr_t));
 
-    file_meta->gfid = gfid;
-    strcpy(file_meta->filename, out->filename);
-    file_meta->file_attr.st_size = out->st_size;
+    strcpy(f_meta->filename, out->filename);
+
+    f_meta->gfid  = gfid;
+    f_meta->mode  = out->mode;
+    f_meta->uid   = out->uid;
+    f_meta->gid   = out->gid;
+    f_meta->size  = out->size;
+    f_meta->atime = out->atime;
+    f_meta->mtime = out->mtime;
+    f_meta->ctime = out->ctime;
 
     return UNIFYCR_SUCCESS;
 }
