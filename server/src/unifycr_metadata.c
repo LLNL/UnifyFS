@@ -38,7 +38,7 @@
 #include "mdhim.h"
 #include "unifycr_log.h"
 #include "unifycr_metadata.h"
-#include "unifycr_clientcalls_rpc.h"
+#include "unifycr_client_rpcs.h"
 #include "ucr_read_builder.h"
 
 unifycr_key_t** unifycr_keys;

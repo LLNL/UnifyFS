@@ -17,13 +17,13 @@
 #include <mercury.h>
 #include <abt.h>
 
-#include "unifycr_clientcalls_rpc.h"
-#include "unifycr_servercalls_rpc.h"
+#include "unifycr_client_rpcs.h"
+#include "unifycr_server_rpcs.h"
 #include "unifycr_rpc_util.h"
 
 typedef struct ServerRpcContext {
-    margo_instance_id sm_mid;
-    margo_instance_id ofi_mid;
+    margo_instance_id shm_mid;
+    margo_instance_id svr_mid;
     /* TODO: rpc id's executed on client go here */
 } ServerRpcContext_t;
 

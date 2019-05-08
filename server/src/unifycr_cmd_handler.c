@@ -39,7 +39,7 @@
 
 // margo rpcs
 #include "margo_server.h"
-#include "unifycr_clientcalls_rpc.h"
+#include "unifycr_client_rpcs.h"
 #include "unifycr_rpc_util.h"
 
 /**
@@ -369,7 +369,7 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     /* convert client_addr_str sent in input struct to margo hg_addr_t,
      * which is the address type needed to call rpc functions, etc */
     hg_return_t hret =
-        margo_addr_lookup(unifycrd_rpc_context->sm_mid,
+        margo_addr_lookup(unifycrd_rpc_context->shm_mid,
                           in.client_addr_str,
                           &(tmp_config->client_addr[client_id]));
 
@@ -479,7 +479,7 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
     // sock_sanitize_client(client_id);
 
     /* free margo hg_addr_t client addresses in app_config struct */
-    margo_addr_free(unifycrd_rpc_context->sm_mid,
+    margo_addr_free(unifycrd_rpc_context->shm_mid,
                     app_config->client_addr[client_id]);
 }
 DEFINE_MARGO_RPC_HANDLER(unifycr_unmount_rpc)

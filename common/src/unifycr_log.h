@@ -67,6 +67,9 @@ extern char unifycr_log_timestamp[256];
         unifycr_log_ltime = localtime(&unifycr_log_time); \
         strftime(unifycr_log_timestamp, sizeof(unifycr_log_timestamp), \
             "%Y-%m-%dT%H:%M:%S", unifycr_log_ltime); \
+        if (unifycr_log_stream == NULL) { \
+            unifycr_log_stream = stderr; \
+        } \
         fprintf(unifycr_log_stream, "%s rank=%d tid=%ld @ %s:%d in %s: ", \
             unifycr_log_timestamp, glb_rank, (long)gettid(), \
             __FILE__, __LINE__, __func__); \
@@ -80,11 +83,11 @@ extern char unifycr_log_timestamp[256];
 #define LOGDBG(...)  LOG(LOG_DBG,  __VA_ARGS__)
 
 /* open specified file as debug file stream,
- *  * returns UNIFYCR_SUCCESS on success */
+ * returns UNIFYCR_SUCCESS on success */
 int unifycr_log_open(const char* file);
 
 /* close our debug file stream,
- *  * returns UNIFYCR_SUCCESS on success */
+ * returns UNIFYCR_SUCCESS on success */
 int unifycr_log_close(void);
 
 #endif /* LOG_H */

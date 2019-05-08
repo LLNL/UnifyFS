@@ -54,7 +54,7 @@ install:
   - spack install leveldb
   - spack install gotcha@0.0.2
   - spack install flatcc
-  - spack install margo^mercury~boostsys
+  - spack install margo^mercury+bmi~boostsys
   # prepare build environment
   - spack load environment-modules
   - source <(spack module tcl loads leveldb gotcha@0.0.2 flatcc mercury argobots margo)

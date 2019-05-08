@@ -44,7 +44,7 @@
 #include "unifycr_metadata.h"
 
 // margo rpcs
-#include "unifycr_clientcalls_rpc.h"
+#include "unifycr_client_rpcs.h"
 #include "ucr_read_builder.h"
 
 /* One request manager thread is created for each client that a

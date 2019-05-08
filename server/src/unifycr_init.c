@@ -159,11 +159,6 @@ int main(int argc, char* argv[])
         daemonize();
     }
 
-    rc = unifycr_write_runstate(&server_cfg);
-    if (rc != (int)UNIFYCR_SUCCESS) {
-        exit(1);
-    }
-
     // setup clean termination by signal
     memset(&sa, 0, sizeof(struct sigaction));
     sa.sa_handler = exit_request;
@@ -193,6 +188,11 @@ int main(int argc, char* argv[])
     rc = unifycr_log_open(dbg_fname);
     if (rc != UNIFYCR_SUCCESS) {
         LOGERR("%s", unifycr_error_enum_description((unifycr_error_e)rc));
+    }
+
+    rc = unifycr_write_runstate(&server_cfg);
+    if (rc != (int)UNIFYCR_SUCCESS) {
+        exit(1);
     }
 
     rc = CountTasksPerNode(glb_rank, glb_size);

@@ -23,8 +23,10 @@
 #include <pmix.h>
 
 // PMIx keys we use
-const char* pmix_key_runstate;        // path to runstate file
-const char* pmix_key_unifycrd_socket; // server domain socket path
+const char* pmix_key_runstate;           // path to runstate file
+const char* pmix_key_unifycrd_socket;    // server domain socket path
+const char* pmix_key_unifycrd_margo_shm; // client-server margo address
+const char* pmix_key_unifycrd_margo_svr; // server-server margo address
 
 // initialize PMIx
 int unifycr_pmix_init(int* orank,

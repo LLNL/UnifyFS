@@ -58,16 +58,13 @@
 #include "gotcha_map_unifycr_list.h"
 #endif
 
-#include "unifycr_clientcalls_rpc.h"
-#include "unifycr_servercalls_rpc.h"
+#include "unifycr_client_rpcs.h"
+#include "unifycr_server_rpcs.h"
 #include "unifycr_rpc_util.h"
 #include "margo_client.h"
 
 /* avoid duplicate mounts (for now) */
 static int unifycr_mounted = -1;
-
-/* global rpc context (probably should find a better spot for this) */
-unifycr_client_rpc_context_t* unifycr_rpc_context = NULL;
 
 static int unifycr_fpos_enabled   = 1;  /* whether we can use fgetpos/fsetpos */
 
@@ -79,11 +76,9 @@ unifycr_cfg_t client_cfg;
 
 unifycr_index_buf_t unifycr_indices;
 unifycr_fattr_buf_t unifycr_fattrs;
-static size_t
-unifycr_index_buf_size;   /* size of metadata log for log-structured io*/
+static size_t unifycr_index_buf_size;    /* size of metadata log */
 static size_t unifycr_fattr_buf_size;
-unsigned long
-unifycr_max_index_entries; /*max number of metadata entries for log-structured write*/
+unsigned long unifycr_max_index_entries; /* max metadata log entries */
 unsigned int unifycr_max_fattr_entries;
 int unifycr_spillmetablock;
 
@@ -99,13 +94,13 @@ struct pollfd cmd_fd;
  * from client to server */
 static char   shm_req_name[GEN_STR_LEN]  = {0};
 static size_t shm_req_size = UNIFYCR_SHMEM_REQ_SIZE;
-void*  shm_req_buf;
+void* shm_req_buf;
 
 /* shared memory buffer to transfer read replies
  * from server to client */
 static char   shm_recv_name[GEN_STR_LEN] = {0};
 static size_t shm_recv_size = UNIFYCR_SHMEM_RECV_SIZE;
-void*  shm_recv_buf;
+void* shm_recv_buf;
 
 char cmd_buf[CMD_BUF_SIZE] = {0};
 
@@ -815,9 +810,7 @@ int unifycr_set_global_file_meta(const char* path, int fid, int gfid,
 
     unifycr_init_file_attr(&new_fmeta, isdir);
 
-    ret = unifycr_client_metaset_rpc_invoke(&unifycr_rpc_context,
-                                            &new_fmeta);
-    //ret = set_global_file_meta(&new_fmeta);
+    ret = invoke_client_metaset_rpc(&new_fmeta);
     if (ret < 0) {
         return ret;
     }
@@ -834,8 +827,7 @@ int unifycr_get_global_file_meta(int fid, int gfid, unifycr_file_attr_t* gfattr)
     }
 
     unifycr_file_attr_t fmeta;
-    int ret = unifycr_client_metaget_rpc_invoke(
-                  &unifycr_rpc_context, gfid, &fmeta);
+    int ret = invoke_client_metaget_rpc(gfid, &fmeta);
     if (ret == UNIFYCR_SUCCESS) {
         *gfattr = fmeta;
          gfattr->fid = fid;
@@ -857,18 +849,16 @@ int unifycr_gfid_stat(int gfid, struct stat* buf)
 
     /* lookup stat data for global file id */
     unifycr_file_attr_t fattr;
-    int ret = unifycr_client_metaget_rpc_invoke(
-                  &unifycr_rpc_context, gfid, &fattr);
+    int ret = invoke_client_metaget_rpc(gfid, &fattr);
     if (ret != UNIFYCR_SUCCESS) {
-        return UNIFYCR_ERROR_IO;
+        return ret;
     }
 
     /* execute rpc to get file size */
     size_t filesize;
-    ret = unifycr_client_filesize_rpc_invoke(&unifycr_rpc_context,
-        app_id, local_rank_idx, gfid, &filesize);
+    ret = invoke_client_filesize_rpc(app_id, local_rank_idx, gfid, &filesize);
     if (ret != UNIFYCR_SUCCESS) {
-        return UNIFYCR_ERROR_IO;
+        return ret;
     }
 
     /* copy stat structure */
@@ -2045,84 +2035,36 @@ static int unifycr_init(int rank)
  * APIs exposed to external libraries
  * --------------------------------------- */
 
-/**
- * Transfer the client-side context information to the corresponding
- * delegator on the server side.
- */
-int unifycr_sync_to_del(unifycr_mount_in_t* in)
+/* Fill mount rpc input struct with client-side context info */
+void fill_client_mount_info(unifycr_mount_in_t* in)
 {
-    int num_procs_per_node = local_rank_cnt;
-
-    size_t req_buf_sz    = shm_req_size;
-    size_t recv_buf_sz   = shm_recv_size;
-    size_t superblock_sz = shm_super_size;
-
-    void*  meta_start  = (void*)unifycr_indices.ptr_num_entries;
-    size_t meta_offset = meta_start - shm_super_buf;
+    size_t meta_offset = (char*)unifycr_indices.ptr_num_entries -
+                         (char*)shm_super_buf;
     size_t meta_size   = unifycr_max_index_entries
                          * sizeof(unifycr_index_t);
 
-    void*  fmeta_start  = (void*)unifycr_fattrs.ptr_num_entries;
-    size_t fmeta_offset = fmeta_start - shm_super_buf;
+    size_t fmeta_offset = (char*)unifycr_fattrs.ptr_num_entries -
+                          (char*)shm_super_buf;
     size_t fmeta_size   = unifycr_max_fattr_entries
                           * sizeof(unifycr_file_attr_t);
 
-    void*  data_start  = (void*)unifycr_chunks;
-    size_t data_offset = data_start - shm_super_buf;
+    size_t data_offset = (char*)unifycr_chunks - (char*)shm_super_buf;
     size_t data_size   = (size_t)unifycr_max_chunks * unifycr_chunk_size;
-
-    char* external_spill_dir = malloc(UNIFYCR_MAX_FILENAME);
-    strcpy(external_spill_dir, external_data_dir);
-
-    /* vars used to get margo address of this client */
-    hg_return_t hret;
-    hg_addr_t addr_self;
-    char addr_self_string[128];
-    hg_size_t addr_self_string_sz = 128;
-
-    /* figure out what address this client is listening on */
-    hret = margo_addr_self((unifycr_rpc_context)->mid, &addr_self);
-
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_self()");
-        margo_finalize((unifycr_rpc_context)->mid);
-        return UNIFYCR_FAILURE;
-    }
-
-    hret = margo_addr_to_string((unifycr_rpc_context)->mid, addr_self_string,
-                                &addr_self_string_sz, addr_self);
-
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_to_string()");
-        margo_addr_free((unifycr_rpc_context)->mid, addr_self);
-        margo_finalize((unifycr_rpc_context)->mid);
-        return UNIFYCR_FAILURE;
-    }
-
-    margo_addr_free((unifycr_rpc_context)->mid, addr_self);
-
-    /* resolve server address */
-    char* client_addr_str =
-        (char*)malloc((strlen(addr_self_string) + 1) * sizeof(char));
-    strcpy(client_addr_str, addr_self_string);
 
     in->app_id             = app_id;
     in->local_rank_idx     = local_rank_idx;
     in->dbg_rank           = glb_rank;
-    in->num_procs_per_node = num_procs_per_node;
-    in->req_buf_sz         = req_buf_sz;
-    in->recv_buf_sz        = recv_buf_sz;
-    in->superblock_sz      = superblock_sz;
+    in->num_procs_per_node = local_rank_cnt;
+    in->req_buf_sz         = shm_req_size;
+    in->recv_buf_sz        = shm_recv_size;
+    in->superblock_sz      = shm_super_size;
     in->meta_offset        = meta_offset;
     in->meta_size          = meta_size;
     in->fmeta_offset       = fmeta_offset;
     in->fmeta_size         = fmeta_size;
     in->data_offset        = data_offset;
     in->data_size          = data_size;
-    in->external_spill_dir = external_spill_dir;
-    in->client_addr_str    = client_addr_str;
-
-    return UNIFYCR_SUCCESS;
+    in->external_spill_dir = strdup(external_data_dir);
 }
 
 /**
@@ -2193,90 +2135,8 @@ static int unifycr_init_req_shm(int local_rank_idx, int app_id)
     return UNIFYCR_SUCCESS;
 }
 
-/* unifycr_init_rpc is replacing unifycr_init_socket */
-static int unifycr_client_rpc_init(
-    int local_rank_idx,
-    int app_id,
-    char* svr_addr_str,
-    unifycr_client_rpc_context_t** unifycr_rpc_context)
-{
-    /* initialize margo */
-    hg_return_t hret;
-    hg_addr_t addr_self;
-    hg_size_t addr_self_string_sz = 128;
 
-    *unifycr_rpc_context = malloc(sizeof(unifycr_client_rpc_context_t));
-    assert(*unifycr_rpc_context);
-
-    /* parse address string to determine the protocol */
-    char proto[12] = {0};
-    int i;
-    for (i = 0;
-         i < 11 && svr_addr_str[i] != '\0' && svr_addr_str[i] != ':';
-         i++) {
-        proto[i] = svr_addr_str[i];
-    }
-
-    /* initialize margo */
-    LOGDBG("svr_addr_str:%s", svr_addr_str);
-    (*unifycr_rpc_context)->mid = margo_init(proto, MARGO_SERVER_MODE,
-                                  1, 1);
-    assert((*unifycr_rpc_context)->mid);
-
-    margo_diag_start((*unifycr_rpc_context)->mid);
-
-    /* register read rpc with mercury */
-    (*unifycr_rpc_context)->unifycr_read_rpc_id =
-        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_read_rpc",
-                       unifycr_read_in_t,
-                       unifycr_read_out_t,
-                       NULL);
-
-    (*unifycr_rpc_context)->unifycr_mread_rpc_id =
-        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_mread_rpc",
-                       unifycr_mread_in_t,
-                       unifycr_mread_out_t,
-                       NULL);
-
-    (*unifycr_rpc_context)->unifycr_mount_rpc_id   =
-        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_mount_rpc",
-                       unifycr_mount_in_t,
-                       unifycr_mount_out_t, NULL);
-
-    (*unifycr_rpc_context)->unifycr_unmount_rpc_id   =
-        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_unmount_rpc",
-                       unifycr_unmount_in_t,
-                       unifycr_unmount_out_t, NULL);
-
-    (*unifycr_rpc_context)->unifycr_metaget_rpc_id =
-        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_metaget_rpc",
-                       unifycr_metaget_in_t, unifycr_metaget_out_t,
-                       NULL);
-
-    (*unifycr_rpc_context)->unifycr_metaset_rpc_id =
-        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_metaset_rpc",
-                       unifycr_metaset_in_t, unifycr_metaset_out_t,
-                       NULL);
-
-    (*unifycr_rpc_context)->unifycr_fsync_rpc_id =
-        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_fsync_rpc",
-                       unifycr_fsync_in_t, unifycr_fsync_out_t,
-                       NULL);
-
-    (*unifycr_rpc_context)->unifycr_filesize_rpc_id =
-        MARGO_REGISTER((*unifycr_rpc_context)->mid, "unifycr_filesize_rpc",
-                       unifycr_filesize_in_t,
-                       unifycr_filesize_out_t,
-                       NULL);
-
-    /* resolve server address */
-    (*unifycr_rpc_context)->svr_addr = HG_ADDR_NULL;
-    int ret = margo_addr_lookup((*unifycr_rpc_context)->mid, svr_addr_str,
-                                &((*unifycr_rpc_context)->svr_addr));
-
-    return UNIFYCR_SUCCESS;
-}
-
+#ifdef USE_DOMAIN_SOCKET
 /**
  * initialize the client-side socket
  * used to communicate with the server-side
@@ -2289,7 +2149,6 @@ static int unifycr_client_rpc_init(
  * delegators on the same node
  * @return success/error code
  */
-
 static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
                                int l_num_del_per_node)
 {
@@ -2349,6 +2208,7 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
 
     return 0;
 }
+#endif // USE_DOMAIN_SOCKET
 
 int compare_fattr(const void* a, const void* b)
 {
@@ -2699,20 +2559,18 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
     }
 
     /* open rpc connection to server */
-    char* addr_string = rpc_lookup_server_addr();
-    if (addr_string == NULL) {
-        LOGERR("Failed to find server address");
-        return UNIFYCR_FAILURE;
+    ret = unifycr_client_rpc_init(local_rank_idx, app_id);
+    if (ret != UNIFYCR_SUCCESS) {
+        LOGERR("Failed to initialize client RPC");
+        return ret;
     }
-    unifycr_client_rpc_init(local_rank_idx, app_id, addr_string,
-                            &unifycr_rpc_context);
-    free(addr_string);
 
-    /* call client rpc function here (which calls unifycr_sync_to_del)
+    /* call client mount rpc function here
      * to register our shared memory and files with server */
     LOGDBG("calling mount");
-    unifycr_client_mount_rpc_invoke(&unifycr_rpc_context);
+    invoke_client_mount_rpc();
 
+#ifdef USE_DOMAIN_SOCKET
     /* open a socket to the server */
     rc = unifycr_init_socket(local_rank_idx, local_rank_cnt,
                              local_del_cnt);
@@ -2720,6 +2578,7 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
         LOGERR("failed to initialize socket, rc == %d", rc);
         return UNIFYCR_FAILURE;
     }
+#endif
 
     /* create shared memory region for read requests */
     rc = unifycr_init_req_shm(local_rank_idx, app_id);
@@ -2749,31 +2608,6 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
 
     /* record client state as mounted for specific app_id */
     unifycr_mounted = app_id;
-
-    return UNIFYCR_SUCCESS;
-}
-
-/* free resources allocated in corresponding call
- * to unifycr_client_rpc_init, frees structure
- * allocated and sets pcontect to NULL */
-static int unifycr_client_rpc_finalize(
-    unifycr_client_rpc_context_t** pcontext)
-{
-    if (pcontext != NULL && *pcontext != NULL) {
-        /* define a temporary to refer to context */
-        unifycr_client_rpc_context_t* ctx = *pcontext;
-
-        /* free margo address to server */
-        margo_addr_free(ctx->mid, ctx->svr_addr);
-
-        /* shut down margo */
-        margo_finalize(ctx->mid);
-
-        /* free memory allocated for context structure,
-         * and set caller's pointer to NULL */
-        free(ctx);
-        *pcontext = NULL;
-    }
 
     return UNIFYCR_SUCCESS;
 }
@@ -2863,14 +2697,14 @@ int unifycr_unmount(void)
 
     /* invoke unmount rpc to tell server we're disconnecting */
     LOGDBG("calling unmount");
-    rc = unifycr_client_unmount_rpc_invoke(&unifycr_rpc_context);
+    rc = invoke_client_unmount_rpc();
     if (rc) {
-        LOGERR("unifycr_client_unmount_rpc_invoke() failed");
+        LOGERR("client unmount rpc failed");
         ret = UNIFYCR_FAILURE;
     }
 
     /* free resources allocated in client_rpc_init */
-    unifycr_client_rpc_finalize(&unifycr_rpc_context);
+    unifycr_client_rpc_finalize();
 
     /************************
      * free our mount point, and detach from structures
