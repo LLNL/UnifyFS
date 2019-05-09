@@ -26,9 +26,20 @@ AC_PROG_RANLIB
 AC_PROG_LIBTOOL
 
 # fortran support
+AC_ARG_ENABLE([fortran],
+              AC_HELP_STRING([--enable-fortran],
+                             [Enable fortran compatibility and features]))
+AC_MSG_CHECKING(if fortran is wanted )
+if test "x$enable_fortran" = "xyes"; then
+AC_MSG_RESULT(yes)
 AC_PROG_FC
 AC_FC_LIBRARY_LDFLAGS
 AC_FC_DUMMY_MAIN
+AM_CONDITIONAL([HAVE_FORTRAN], [true])
+else
+AC_MSG_RESULT(no)
+AM_CONDITIONAL([HAVE_FORTRAN], [false])
+fi
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_MODE_T
@@ -143,9 +154,11 @@ AC_CHECK_HEADERS(mntent.h sys/mount.h)
 
 # look for MPI and set flags
 LX_FIND_MPI
+if test "x$enable_fortran" = "xyes"; then
 AC_LANG_PUSH([Fortran])
 LX_FIND_MPI
 AC_LANG_POP
+fi
 
 # look for leveldb library, sets LEVELDB_CFLAGS/LDFLAGS/LIBS
 UNIFYCR_AC_LEVELDB

@@ -2,7 +2,7 @@ libexec_PROGRAMS = \
   cr-posix cr-gotcha cr-static \
   read-posix read-gotcha read-static \
   write-posix write-gotcha write-static \
-  writeread-posix writeread-gotcha writeread-static writeread-ftn \
+  writeread-posix writeread-gotcha writeread-static \
   sysio-write-gotcha sysio-write-static \
   sysio-read-gotcha sysio-read-static \
   sysio-writeread-gotcha sysio-writeread-static sysio-writeread-posix \
@@ -13,6 +13,11 @@ libexec_PROGRAMS = \
   app-mpiio-gotcha app-mpiio-static \
   app-btio-gotcha app-btio-static \
   app-tileio-gotcha app-tileio-static
+
+if HAVE_FORTRAN
+libexec_PROGRAMS += \
+  writeread-ftn
+endif
 
 if HAVE_HDF5
 libexec_PROGRAMS += \
@@ -32,11 +37,13 @@ noinst_HEADERS = \
 test_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) \
    -I$(top_srcdir)/client/src -I$(top_srcdir)/common/src
 
+if HAVE_FORTRAN
 test_ftn_flags   = $(AM_FCFLAGS) $(MPI_FFLAGS) \
    -I$(top_srcdir)/client/src -I$(top_srcdir)/common/src
 test_ftn_ldadd   = $(top_builddir)/client/src/libunifycrf.la -lrt -lm $(FCLIBS)
 test_ftn_ldflags = $(AM_LDFLAGS) $(MPI_FLDFLAGS) \
     $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
+endif
 
 test_gotcha_ldadd   = $(top_builddir)/client/src/libunifycr_gotcha.la -lrt -lm
 test_gotcha_ldflags = $(AM_LDFLAGS) $(MPI_CLDFLAGS) \
@@ -187,11 +194,6 @@ writeread_static_CPPFLAGS = $(test_cppflags)
 writeread_static_LDADD    = $(test_static_ldadd)
 writeread_static_LDFLAGS  = $(test_static_ldflags)
 
-writeread_ftn_SOURCES  = writeread.f90
-writeread_ftn_FCFLAGS  = $(test_ftn_flags)
-writeread_ftn_LDADD    = $(test_ftn_ldadd)
-writeread_ftn_LDFLAGS  = $(test_ftn_ldflags)
-
 app_mpiio_gotcha_SOURCES  = app-mpiio.c
 app_mpiio_gotcha_CPPFLAGS = $(test_cppflags)
 app_mpiio_gotcha_LDADD    = $(test_gotcha_ldadd)
@@ -221,6 +223,15 @@ app_tileio_static_SOURCES  = app-tileio.c
 app_tileio_static_CPPFLAGS = $(test_cppflags)
 app_tileio_static_LDADD    = $(test_static_ldadd)
 app_tileio_static_LDFLAGS  = $(test_static_ldflags)
+
+if HAVE_FORTRAN
+
+writeread_ftn_SOURCES  = writeread.f90
+writeread_ftn_FCFLAGS  = $(test_ftn_flags)
+writeread_ftn_LDADD    = $(test_ftn_ldadd)
+writeread_ftn_LDFLAGS  = $(test_ftn_ldflags)
+
+endif
 
 if HAVE_HDF5
 
