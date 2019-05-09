@@ -12,7 +12,7 @@ In this section, we describe how to build UnifyCR with I/O interception.
     "An MPI distribution that supports MPI_THREAD_MULTIPLE and per-object locking of
     critical sections (this excludes OpenMPI up to version 3.0.1, the current version as of this writing)"
 
-    as specified in the project `github <https://github.com/mdhim/mdhim-tng>`_
+    as specified in the project `github <https://github.com/mdhim/mdhim-tng>`_.
 
 .. _build-label:
 
@@ -34,12 +34,22 @@ or LMod installed then installing the environment-modules package with spack
 is unnecessary (so you can safely skip that step).
 
 If you use Dotkit then replace ``spack load`` with ``spack use``.
+First, install Spack if you don't already have it:
 
 .. code-block:: Bash
 
     $ git clone https://github.com/spack/spack
     $ ./spack/bin/spack install environment-modules
     $ . spack/share/spack/setup-env.sh
+
+Make use of Spack's `shell support <https://spack.readthedocs.io/en/latest/getting_started.html#add-spack-to-the-shell>`_
+to automatically add Spack to your ``PATH`` and allow the use of the ``spack``
+command.
+
+Then install UnifyCR:
+
+.. code-block:: Bash
+
     $ spack install unifycr
     $ spack load unifycr
 
@@ -52,15 +62,17 @@ build is desired. Type ``spack info unifycr`` for more info.
 .. table:: UnifyCR Build Variants
    :widths: auto
 
-   =======  ========================================  ========================
+   =======  ========================================  =========================
    Variant  Command                                   Description
-   =======  ========================================  ========================
-   Debug    ``spack install unifycr+debug``           Enable debug build
+   =======  ========================================  =========================
    HDF5     ``spack install unifycr+hdf5``            Build with parallel HDF5
 
             ``spack install unifycr+hdf5 ^hdf5~mpi``  Build with serial HDF5
+   Fortran  ``spack install unifycr+fortran``         Build with gfortran
    NUMA     ``spack install unifycr+numa``            Build with NUMA
-   =======  ========================================  ========================
+   pmpi     ``spack install unifycr+pmpi``            Transparent mount/unmount
+   PMIx     ``spack install unifycr+pmix``            Enable PMIx build options
+   =======  ========================================  =========================
 
 .. attention::
 
@@ -96,17 +108,9 @@ If you use Dotkit then replace ``spack load`` with ``spack use``.
 
 .. code-block:: Bash
 
-    $ spack install environment-modules
-    $
     $ spack install leveldb
     $ spack install gotcha@0.0.2
     $ spack install flatcc
-    $ 
-    $ git clone https://xgitlab.cels.anl.gov/sds/sds-repo.git sds-repo.git
-    $ cd sds-repo.git
-    $ spack repo add .
-    $ cd ..
-    $
     $ spack install margo
 
 .. tip::
@@ -130,9 +134,26 @@ Then to build UnifyCR:
     $ spack load margo
     $
     $ ./autogen.sh
-    $ ./configure --prefix=/path/to/install --enable-debug
+    $ ./configure --prefix=/path/to/install
     $ make
     $ make install
+
+.. note:: **Fortran Compatibility**
+
+    To build with gfortran compatibility, include the ``--enable-fortran``
+    configure option:
+
+    ``./configure --prefix=/path/to/install/ --enable-fortran``
+
+    There is a known `ifort_issue <https://github.com/LLNL/UnifyCR/issues/300>`_
+    with the Intel Fortran compiler as well as an `xlf_issue <://github.com/LLNL/UnifyCR/issues/304>`_
+    with the IBM Fortran compiler. Other Fortran compilers are currently
+    unknown.
+
+To see all available build configuration options, type ``./configure --help``
+after ``./autogen.sh`` has been run.
+
+.. TODO: Add a section in build docs that shows all the build config options
 
 Build the Dependencies without Spack
 """""""""""""""""""""""""""""""""""""
@@ -162,7 +183,7 @@ Then to build UnifyCR:
 
     $ export PKG_CONFIG_PATH=path/to/mercury/lib/pkgconfig:path/to/argobots/lib/pkgconfig:path/to/margo/lib/pkgconfig
     $ ./autogen.sh
-    $ ./configure --prefix=/path/to/install --enable-debug --with-gotcha=/path/to/gotcha --with-leveldb=/path/to/leveldb  --with-flatcc=/path/to/flatcc
+    $ ./configure --prefix=/path/to/install --with-gotcha=/path/to/gotcha --with-leveldb=/path/to/leveldb  --with-flatcc=/path/to/flatcc
     $ make
     $ make install
 
