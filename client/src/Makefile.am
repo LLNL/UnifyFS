@@ -1,11 +1,19 @@
-lib_LTLIBRARIES = libunifycr.la libunifycr_gotcha.la libunifycrf.la
+lib_LTLIBRARIES = libunifycr.la libunifycr_gotcha.la
+
+if HAVE_FORTRAN
+lib_LTLIBRARIES += libunifycrf.la
+endif
 
 libunifycrdir = $(includedir)
 libunifycr_gotchadir = $(includedir)
 
 AM_CFLAGS = -Wall -Wno-strict-aliasing
 
-include_HEADERS = unifycr.h unifycrf.h
+include_HEADERS = unifycr.h
+
+if HAVE_FORTRAN
+include_HEADERS += unifycrf.h
+endif
 
 CLIENT_COMMON_CPPFLAGS = \
   -I$(top_builddir)/client \
@@ -67,7 +75,11 @@ libunifycr_gotcha_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS) $(GOTCHA_CFLAGS)
 libunifycr_gotcha_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS) $(GOTCHA_LDFLAGS)
 libunifycr_gotcha_la_LIBADD   = $(CLIENT_COMMON_LIBADD) -lgotcha
 
+if HAVE_FORTRAN
+
 libunifycrf_la_SOURCES  = unifycrf.c
 libunifycrf_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS)
 libunifycrf_la_CFLAGS   = $(AM_CFLAGS) $(CLIENT_COMMON_CFLAGS)
 libunifycrf_la_LIBADD   = libunifycr_gotcha.la
+
+endif
