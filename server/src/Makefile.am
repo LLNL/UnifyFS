@@ -13,7 +13,6 @@ libunifycrd_a_SOURCES = \
     unifycr_request_manager.h \
     unifycr_service_manager.c \
     unifycr_service_manager.h \
-    unifycr_setup.h \
     unifycr_sock.c \
     unifycr_sock.h
 

@@ -53,9 +53,12 @@
 extern arraylist_t* app_config_list;
 extern arraylist_t* thrd_list;
 
-extern int glb_rank, glb_size;
+extern char glb_host[UNIFYCR_MAX_HOSTNAME];
+extern int glb_mpi_rank, glb_mpi_size;
+
 extern int* local_rank_lst;
 extern int local_rank_cnt;
+
 extern size_t max_recs_per_slice;
 
 /* defines commands for messages sent to service manager threads */
@@ -248,5 +251,17 @@ typedef struct {
 } fattr_val_t;
 
 int invert_sock_ids[MAX_NUM_CLIENTS];
+
+typedef struct {
+    char* hostname;
+    char* margo_svr_addr_str;
+    hg_addr_t margo_svr_addr;
+    int mpi_rank;
+} server_info_t;
+
+extern int glb_svr_rank;
+extern size_t glb_num_servers;
+extern server_info_t* glb_servers;
+
 
 #endif // UNIFYCR_GLOBAL_H

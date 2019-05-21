@@ -48,6 +48,7 @@
 
 #include "cm_enumerator.h"
 #include "rm_enumerator.h"
+#include "unifycr_const.h"
 
 
 /**
@@ -60,6 +61,7 @@ struct _unifycr_args {
     char* mountpoint;          /* mountpoint */
     char* server_path;         /* full path to installed unifycrd */
     char* share_dir;           /* full path to shared file system directory */
+    char* share_hostfile;      /* full path to shared server hostfile */
     char* stage_in;            /* data path to stage-in */
     char* stage_out;           /* data path to stage-out (drain) */
     char* script;              /* path to custom launch/terminate script */

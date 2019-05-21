@@ -37,8 +37,6 @@ unifycr_log_level_t unifycr_log_level = 5;
 /* pointer to log file stream */
 FILE* unifycr_log_stream; // = NULL
 
-int glb_rank;
-
 /* used within LOG macro to build a timestamp */
 time_t unifycr_log_time;
 struct tm* unifycr_log_ltime;

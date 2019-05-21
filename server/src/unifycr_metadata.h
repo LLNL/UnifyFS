@@ -50,11 +50,11 @@ typedef struct {
 #define UNIFYCR_KEY_OFF(keyp) (((unifycr_key_t*)keyp)->offset)
 
 typedef struct {
-    size_t addr;      /* data offset in server */
-    size_t len;       /* length of data at addr */
-    int delegator_id; /* rank of server where data lives */
-    int app_id;       /* application id in server */
-    int rank;         /* client id in server */
+    size_t addr;        /* data offset in server */
+    size_t len;         /* length of data at addr */
+    int app_id;         /* application id in server */
+    int rank;           /* client id in server */
+    int delegator_rank; /* delegator/server rank hosting data */
 } unifycr_val_t;
 
 #define UNIFYCR_VAL_SZ (sizeof(unifycr_val_t))

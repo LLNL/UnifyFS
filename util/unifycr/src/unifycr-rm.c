@@ -84,7 +84,6 @@ static int invalid_read_resource(unifycr_resource_t* resource)
 }
 
 
-
 /**
  * @brief Parse a hostfile containing one host per line
  *
@@ -143,6 +142,44 @@ static int parse_hostfile(unifycr_resource_t* resource,
 
 out:
     fclose(fp);
+
+    return ret;
+}
+
+/**
+ * @brief Write a server-shared hostfile
+ *
+ * @param resource  The job resource record
+ * @param args      The command-line options
+ *
+ * @return 0 on success, negative errno otherwise
+ */
+static int write_hostfile(unifycr_resource_t* resource,
+                          unifycr_args_t* args)
+{
+    int ret = 0;
+    size_t i;
+    FILE* fp = NULL;
+    char hostfile[UNIFYCR_MAX_FILENAME];
+
+    if (NULL == args->share_dir) {
+        return -EINVAL;
+    }
+
+    snprintf(hostfile, sizeof(hostfile), "%s/unifycrd.hosts",
+             args->share_dir);
+    fp = fopen(hostfile, "w");
+    if (!fp) {
+        return -errno;
+    }
+
+    // first line: number of hosts
+    fprintf(fp, "%zu\n", resource->n_nodes);
+    for (i = 0; i < resource->n_nodes; i++) {
+        fprintf(fp, "%s\n", resource->nodes[i]);
+    }
+    fclose(fp);
+    args->share_hostfile = strdup(hostfile);
 
     return ret;
 }
@@ -350,12 +387,11 @@ static size_t construct_server_argv(unifycr_args_t* args,
 
     if (args->debug) {
         if (server_argv != NULL) {
-            server_argv[argc] = strdup("-d");
-            server_argv[argc + 1] = strdup("-v");
+            server_argv[argc] = strdup("-v");
             snprintf(number, sizeof(number), "%d", args->debug);
-            server_argv[argc + 2] = strdup(number);
+            server_argv[argc + 1] = strdup(number);
         }
-        argc += 3;
+        argc += 2;
     }
 
     if (args->cleanup) {
@@ -382,13 +418,13 @@ static size_t construct_server_argv(unifycr_args_t* args,
         argc += 2;
     }
 
-    if (args->share_dir != NULL) {
-        if (server_argv != NULL) {
-            server_argv[argc] = strdup("-S");
-            server_argv[argc + 1] = strdup(args->share_dir);
-        }
-        argc += 2;
+    if (server_argv != NULL) {
+        server_argv[argc] = strdup("-S");
+        server_argv[argc + 1] = strdup(args->share_dir);
+        server_argv[argc + 2] = strdup("-H");
+        server_argv[argc + 3] = strdup(args->share_hostfile);
     }
+    argc += 4;
 
     return argc;
 }
@@ -744,9 +780,16 @@ int unifycr_detect_resources(unifycr_resource_t* resource)
 int unifycr_start_servers(unifycr_resource_t* resource,
                           unifycr_args_t* args)
 {
+    int rc;
 
     if ((resource == NULL) || (args == NULL)) {
         return -EINVAL;
+    }
+
+    rc = write_hostfile(resource, args);
+    if (rc) {
+        fprintf(stderr, "ERROR: failed to write shared server hostfile\n");
+        return rc;
     }
 
     if (args->script != NULL) {

@@ -24,6 +24,7 @@ size_t generate_write_reqs(test_cfg* cfg, char* srcbuf,
     size_t blk_sz = cfg->block_sz;
     size_t tran_sz = cfg->chunk_sz;
     size_t n_tran_per_blk = blk_sz / tran_sz;
+    int rankbyte = (int)'0' + cfg->rank;
 
     size_t num_reqs = cfg->n_blocks * n_tran_per_blk;
     struct aiocb* req;
@@ -31,12 +32,6 @@ size_t generate_write_reqs(test_cfg* cfg, char* srcbuf,
     if (NULL == reqs) {
         *reqs_out = NULL;
         return 0;
-    }
-
-    if (!cfg->io_check) {
-        // fill srcbuf with unique character per rank
-        int byte = (int)'0' + cfg->rank;
-        memset(srcbuf, byte, tran_sz);
     }
 
     req = reqs;
@@ -53,6 +48,9 @@ size_t generate_write_reqs(test_cfg* cfg, char* srcbuf,
         if (cfg->io_check) {
             // generate lipsum in source block
             lipsum_generate((srcbuf + ndx), blk_sz, blk_off);
+        } else {
+            // fill srcbuf with unique rank character
+            memset((srcbuf + ndx), rankbyte, blk_sz);
         }
 
         for (j = 0; j < n_tran_per_blk; j++) {

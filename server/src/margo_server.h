@@ -30,8 +30,11 @@ typedef struct ServerRpcContext {
 extern ServerRpcContext_t* unifycrd_rpc_context;
 
 extern bool margo_use_tcp;
+extern bool margo_lazy_connect;
 
 int margo_server_rpc_init(void);
 int margo_server_rpc_finalize(void);
+
+int margo_connect_servers(void);
 
 #endif // MARGO_SERVER_H

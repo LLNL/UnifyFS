@@ -43,18 +43,15 @@
 #ifndef UNIFYCR_H
 #define UNIFYCR_H
 
+#include <limits.h>
 #include <stddef.h>      // size_t
 #include <sys/types.h>   // off_t
 
-#include <limits.h>
-
 #include "unifycr_const.h"
 
-#ifndef HOST_NAME_MAX
-# define HOST_NAME_MAX 256
+#ifdef __cplusplus
+extern "C" {
 #endif
-
-/* TODO: namespace C */
 
 /* linked list of chunk information given to an external library wanting
  * to RDMA out a file from UNIFYCR */
@@ -69,7 +66,7 @@ typedef struct {
 /*data structures defined for unifycr********************/
 
 typedef struct {
-    char hostname[HOST_NAME_MAX];
+    char hostname[UNIFYCR_MAX_HOSTNAME];
     int rank;
 } name_rank_pair_t;
 
@@ -101,5 +98,10 @@ int unifycr_transfer_file_parallel(const char* src, const char* dst)
 {
     return unifycr_transfer_file(src, dst, 1);
 }
+
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif /* UNIFYCR_H */

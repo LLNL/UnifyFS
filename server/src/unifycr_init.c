@@ -47,9 +47,13 @@
 // margo rpcs
 #include "margo_server.h"
 
-int* local_rank_lst;
-int local_rank_cnt;
-int glb_rank, glb_size;
+
+int glb_mpi_rank, glb_mpi_size;
+char glb_host[UNIFYCR_MAX_HOSTNAME];
+
+int glb_svr_rank = -1;      // this server's index into glb_servers array
+size_t glb_num_servers;     // size of glb_servers array
+server_info_t* glb_servers; // array of server_info_t
 
 arraylist_t* app_config_list;
 arraylist_t* thrd_list;
@@ -57,6 +61,11 @@ arraylist_t* thrd_list;
 int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
 
 unifycr_cfg_t server_cfg;
+
+#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
+int* local_rank_lst;
+int local_rank_cnt;
+#endif
 
 /*
  * Perform steps to create a daemon process:
@@ -137,15 +146,78 @@ void exit_request(int sig)
     }
 }
 
+static int allocate_servers(size_t n_servers)
+{
+    glb_num_servers = n_servers;
+    glb_servers = (server_info_t*) calloc(n_servers, sizeof(server_info_t));
+    if (NULL == glb_servers) {
+        LOGERR("failed to allocate server_info array");
+        return (int)UNIFYCR_ERROR_NOMEM;
+    }
+    return (int)UNIFYCR_SUCCESS;
+}
+
+static int process_servers_hostfile(const char* hostfile)
+{
+    int rc;
+    size_t i, cnt;
+    FILE* fp = NULL;
+    char hostbuf[UNIFYCR_MAX_HOSTNAME+1];
+
+    if (NULL == hostfile) {
+        return (int)UNIFYCR_ERROR_INVAL;
+    }
+    fp = fopen(hostfile, "r");
+    if (!fp) {
+        LOGERR("failed to open hostfile %s", hostfile);
+        return (int)UNIFYCR_FAILURE;
+    }
+
+    // scan first line: number of hosts
+    rc = fscanf(fp, "%zu\n", &cnt);
+    if (1 != rc) {
+        LOGERR("failed to scan hostfile host count");
+        fclose(fp);
+        return (int)UNIFYCR_FAILURE;
+    }
+    rc = allocate_servers(cnt);
+    if ((int)UNIFYCR_SUCCESS != rc) {
+        fclose(fp);
+        return (int)UNIFYCR_FAILURE;
+    }
+
+    // scan host lines
+    for (i = 0; i < cnt; i++) {
+        memset(hostbuf, 0, sizeof(hostbuf));
+        rc = fscanf(fp, "%s\n", hostbuf);
+        if (1 != rc) {
+            LOGERR("failed to scan hostfile host line %zu", i);
+            fclose(fp);
+            return (int)UNIFYCR_FAILURE;
+        }
+        glb_servers[i].hostname = strdup(hostbuf);
+        // NOTE: following assumes one server per host
+        if (0 == strcmp(glb_host, hostbuf)) {
+            glb_svr_rank = (int)i;
+            LOGDBG("found myself at hostfile index=%zu, mpi_rank=%d",
+                   i, glb_mpi_rank);
+            glb_servers[i].mpi_rank = glb_mpi_rank;
+        }
+    }
+    fclose(fp);
+
+    return (int)UNIFYCR_SUCCESS;
+}
+
 int main(int argc, char* argv[])
 {
     int provided;
     int rc;
     int kv_rank, kv_nranks;
-    int srvr_rank_idx = 0;
     bool daemon = true;
     pthread_t svcmgr_thrd;
     struct sigaction sa;
+    char rank_str[16] = {0};
     char dbg_fname[UNIFYCR_MAX_FILENAME] = {0};
 
     rc = unifycr_config_init(&server_cfg, argc, argv);
@@ -170,54 +242,6 @@ int main(int argc, char* argv[])
     rc = sigaction(SIGQUIT, &sa, NULL);
     rc = sigaction(SIGTERM, &sa, NULL);
 
-    rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
-    if (rc != MPI_SUCCESS) {
-        exit(1);
-    }
-
-    rc = MPI_Comm_rank(MPI_COMM_WORLD, &glb_rank);
-    if (rc != MPI_SUCCESS) {
-        exit(1);
-    }
-
-    rc = MPI_Comm_size(MPI_COMM_WORLD, &glb_size);
-    if (rc != MPI_SUCCESS) {
-        exit(1);
-    }
-
-    // start logging
-    snprintf(dbg_fname, sizeof(dbg_fname), "%s/%s.%d",
-             server_cfg.log_dir, server_cfg.log_file, glb_rank);
-    rc = unifycr_log_open(dbg_fname);
-    if (rc != UNIFYCR_SUCCESS) {
-        LOGERR("%s", unifycr_error_enum_description((unifycr_error_e)rc));
-    }
-
-    kv_rank = glb_rank;
-    kv_nranks = glb_size;
-    rc = unifycr_keyval_init(&server_cfg, &kv_rank, &kv_nranks);
-    if (rc != (int)UNIFYCR_SUCCESS) {
-        exit(1);
-    }
-    if (glb_rank != kv_rank) {
-        LOGDBG("mismatch on MPI (%d) vs kvstore (%d) rank",
-               glb_rank, kv_rank);
-    }
-    if (glb_size != kv_nranks) {
-        LOGDBG("mismatch on MPI (%d) vs kvstore (%d) num ranks",
-               glb_size, kv_nranks);
-    }
-
-    rc = unifycr_write_runstate(&server_cfg);
-    if (rc != (int)UNIFYCR_SUCCESS) {
-        exit(1);
-    }
-
-    rc = CountTasksPerNode(glb_rank, glb_size);
-    if (rc < 0) {
-        exit(1);
-    }
-
     app_config_list = arraylist_create();
     if (app_config_list == NULL) {
         LOGERR("%s", unifycr_error_enum_description(UNIFYCR_ERROR_NOMEM));
@@ -230,6 +254,72 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
+    rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+    if (rc != MPI_SUCCESS) {
+        exit(1);
+    }
+
+    rc = MPI_Comm_rank(MPI_COMM_WORLD, &glb_mpi_rank);
+    if (rc != MPI_SUCCESS) {
+        exit(1);
+    }
+
+    rc = MPI_Comm_size(MPI_COMM_WORLD, &glb_mpi_size);
+    if (rc != MPI_SUCCESS) {
+        exit(1);
+    }
+
+    // start logging
+    gethostname(glb_host, sizeof(glb_host));
+    snprintf(dbg_fname, sizeof(dbg_fname), "%s/%s.%s.%d",
+             server_cfg.log_dir, server_cfg.log_file, glb_host, glb_mpi_rank);
+    rc = unifycr_log_open(dbg_fname);
+    if (rc != UNIFYCR_SUCCESS) {
+        LOGERR("%s", unifycr_error_enum_description((unifycr_error_e)rc));
+    }
+
+    if (NULL != server_cfg.server_hostfile) {
+        rc = process_servers_hostfile(server_cfg.server_hostfile);
+        if (rc != (int)UNIFYCR_SUCCESS) {
+            LOGERR("failed to gather server information");
+            exit(1);
+        }
+    }
+
+    kv_rank = glb_mpi_rank;
+    kv_nranks = glb_mpi_size;
+    rc = unifycr_keyval_init(&server_cfg, &kv_rank, &kv_nranks);
+    if (rc != (int)UNIFYCR_SUCCESS) {
+        exit(1);
+    }
+    if (glb_mpi_rank != kv_rank) {
+        LOGDBG("mismatch on MPI (%d) vs kvstore (%d) rank",
+               glb_mpi_rank, kv_rank);
+    }
+    if (glb_mpi_size != kv_nranks) {
+        LOGDBG("mismatch on MPI (%d) vs kvstore (%d) num ranks",
+               glb_mpi_size, kv_nranks);
+    }
+
+    // TEMPORARY: remove once we fully eliminate use of MPI in sever
+    snprintf(rank_str, sizeof(rank_str), "%d", glb_mpi_rank);
+    rc = unifycr_keyval_publish_remote(key_unifycrd_mpi_rank, rank_str);
+    if (rc != (int)UNIFYCR_SUCCESS) {
+        exit(1);
+    }
+
+    if (NULL == server_cfg.server_hostfile) {
+        glb_svr_rank = kv_rank;
+        rc = allocate_servers((size_t)kv_nranks);
+        glb_servers[glb_svr_rank].hostname = strdup(glb_host);
+        glb_servers[glb_svr_rank].mpi_rank = glb_mpi_rank;
+    }
+
+    rc = unifycr_write_runstate(&server_cfg);
+    if (rc != (int)UNIFYCR_SUCCESS) {
+        exit(1);
+    }
+
     LOGDBG("initializing rpc service");
     rc = configurator_bool_val(server_cfg.margo_tcp, &margo_use_tcp);
     rc = margo_server_rpc_init();
@@ -238,16 +328,32 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    LOGDBG("creating server domain socket");
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    LOGDBG("connecting rpc servers");
+    rc = margo_connect_servers();
+    if (rc != UNIFYCR_SUCCESS) {
+        LOGERR("%s", unifycr_error_enum_description(UNIFYCR_ERROR_MARGO));
+        exit(1);
+    }
+
+#if defined(UNIFYCR_USE_DOMAIN_SOCKET)
+    int srvr_rank_idx = 0;
 #if defined(UNIFYCR_MULTIPLE_DELEGATORS)
-    srvr_rank_idx = find_rank_idx(glb_rank, local_rank_lst,
+    rc = CountTasksPerNode(glb_mpi_rank, glb_mpi_size);
+    if (rc < 0) {
+        exit(1);
+    }
+    srvr_rank_idx = find_rank_idx(glb_mpi_rank, local_rank_lst,
                                   local_rank_cnt);
-#endif
+#endif // UNIFYCR_MULTIPLE_DELEGATORS
+    LOGDBG("creating server domain socket");
     rc = sock_init_server(srvr_rank_idx);
     if (rc != 0) {
         LOGERR("%s", unifycr_error_enum_description(UNIFYCR_ERROR_SOCKET));
         exit(1);
     }
+#endif // UNIFYCR_USE_DOMAIN_SOCKET
 
     /* launch the service manager */
     LOGDBG("launching service manager thread");
@@ -264,11 +370,12 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
+    MPI_Barrier(MPI_COMM_WORLD);
     LOGDBG("finished service initialization");
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    int timeout_ms = 2000; /* in milliseconds */
     while (1) {
+#ifdef UNIFYCR_USE_DOMAIN_SOCKET
+        int timeout_ms = 2000; /* in milliseconds */
         rc = sock_wait_cmd(timeout_ms);
         if (rc != UNIFYCR_SUCCESS) {
             // we ignore disconnects, they are expected
@@ -278,6 +385,9 @@ int main(int argc, char* argv[])
                 time_to_exit = 1;
             }
         }
+#else
+        sleep(1);
+#endif
         if (time_to_exit) {
             LOGDBG("starting service shutdown");
             break;
@@ -286,7 +396,7 @@ int main(int argc, char* argv[])
 
     LOGDBG("stopping service manager thread");
     int exit_cmd = XFER_COMM_EXIT;
-    MPI_Send(&exit_cmd, sizeof(int), MPI_CHAR, glb_rank,
+    MPI_Send(&exit_cmd, sizeof(int), MPI_CHAR, glb_mpi_rank,
              CLI_DATA_TAG, MPI_COMM_WORLD);
     rc = pthread_join(svcmgr_thrd, NULL);
 
@@ -296,6 +406,7 @@ int main(int argc, char* argv[])
     return unifycr_exit();
 }
 
+#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
 /**
 * count the number of delegators per node, and
 * the rank of each delegator, the results are stored
@@ -305,9 +416,9 @@ int main(int argc, char* argv[])
 */
 static int CountTasksPerNode(int rank, int numTasks)
 {
-    char       localhost[HOST_NAME_MAX];
-    char       hostname[HOST_NAME_MAX];
-    int        resultsLen = HOST_NAME_MAX;
+    char       localhost[UNIFYCR_MAX_HOSTNAME];
+    char       hostname[UNIFYCR_MAX_HOSTNAME];
+    int        resultsLen = UNIFYCR_MAX_HOSTNAME;
 
     MPI_Status status;
     int rc;
@@ -326,7 +437,7 @@ static int CountTasksPerNode(int rank, int numTasks)
                                           * sizeof(name_rank_pair_t));
             /* MPI_receive all hostnames, and compare to local hostname */
             for (i = 1; i < numTasks; i++) {
-                rc = MPI_Recv(hostname, HOST_NAME_MAX,
+                rc = MPI_Recv(hostname, UNIFYCR_MAX_HOSTNAME,
                               MPI_CHAR, MPI_ANY_SOURCE,
                               MPI_ANY_TAG,
                               MPI_COMM_WORLD, &status);
@@ -428,7 +539,7 @@ static int CountTasksPerNode(int rank, int numTasks)
         } else {
             /* non-root process performs MPI_send to send
              * hostname to root node */
-            rc = MPI_Send(localhost, HOST_NAME_MAX, MPI_CHAR,
+            rc = MPI_Send(localhost, UNIFYCR_MAX_HOSTNAME, MPI_CHAR,
                           0, 0, MPI_COMM_WORLD);
             if (rc != 0) {
                 return -1;
@@ -462,7 +573,6 @@ static int CountTasksPerNode(int rank, int numTasks)
     return 0;
 }
 
-#if defined(UNIFYCR_MULTIPLE_DELEGATORS)
 static int find_rank_idx(int my_rank,
                          int* local_rank_lst, int local_rank_cnt)
 {
@@ -475,23 +585,6 @@ static int find_rank_idx(int my_rank,
 
     return -1;
 
-}
-#endif
-
-static int compare_int(const void* a, const void* b)
-{
-    const int* ptr_a = a;
-    const int* ptr_b = b;
-
-    if (*ptr_a - *ptr_b > 0) {
-        return 1;
-    }
-
-    if (*ptr_a - *ptr_b < 0) {
-        return -1;
-    }
-
-    return 0;
 }
 
 static int compare_name_rank_pair(const void* a, const void* b)
@@ -510,7 +603,25 @@ static int compare_name_rank_pair(const void* a, const void* b)
     return 0;
 }
 
-static int unifycr_exit()
+#endif
+
+static int compare_int(const void* a, const void* b)
+{
+    const int* ptr_a = a;
+    const int* ptr_b = b;
+
+    if (*ptr_a - *ptr_b > 0) {
+        return 1;
+    }
+
+    if (*ptr_a - *ptr_b < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+static int unifycr_exit(void)
 {
     int rc = UNIFYCR_SUCCESS;
 
@@ -518,9 +629,11 @@ static int unifycr_exit()
     LOGDBG("stopping rpc service");
     margo_server_rpc_finalize();
 
+#ifdef UNIFYCR_USE_DOMAIN_SOCKET
     /* close remaining sockets */
     LOGDBG("closing sockets");
     sock_sanitize();
+#endif
 
     /* shutdown the metadata service*/
     LOGDBG("stopping metadata service");

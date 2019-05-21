@@ -22,6 +22,10 @@
 
 #include "unifycr_const.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Server commands
  */
@@ -96,5 +100,9 @@ typedef struct {
     int src_fid;   /* global file id */
     int errcode;   /* indicates whether read encountered error */
 } shm_meta_t;
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif /* UNIFYCR_META_H */

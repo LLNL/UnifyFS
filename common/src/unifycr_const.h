@@ -30,8 +30,6 @@
 #ifndef UNIFYCR_CONST_H
 #define UNIFYCR_CONST_H
 
-#include <limits.h> // provides HOST_NAME_MAX
-
 /* ********************** ERROR CODES ************************ */
 #include "err_enumerator.h"
 #define ULFS_SUCCESS ((int)UNIFYCR_SUCCESS)
@@ -50,6 +48,7 @@
 // Generic
 #define GEN_STR_LEN KIB
 #define UNIFYCR_MAX_FILENAME KIB
+#define UNIFYCR_MAX_HOSTNAME 64
 
 // Metadata
 #define MAX_FILE_CNT_PER_NODE KIB

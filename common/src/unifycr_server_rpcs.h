@@ -12,4 +12,4 @@
 
 /* TODO: placeholder for in & out structs for rpc's */
 
-#endif
+#endif // UNIFYCR_SERVER_RPCS_H

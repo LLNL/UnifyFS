@@ -93,14 +93,14 @@ static char* usage_str =
     "  -h, --help                print usage\n"
     "\n"
     "Command options for \"start\":\n"
-    "  -C, --consistency=<model> consistency model (NONE | LAMINATED | POSIX)\n"
-    "  -e, --exe=<path>          <path> where unifycrd is installed\n"
-    "  -m, --mount=<path>        mount UnifyCR at <path>\n"
-    "  -s, --script=<path>       <path> to custom launch script\n"
-    "  -S, --share-dir=<path>    shared file system <path> for use by servers\n"
-    "  -c, --cleanup             clean up the UnifyCR storage upon server exit\n"
-    "  -i, --stage-in=<path>     (NOT YET SUPPORTED) stage in file(s) at <path>\n"
-    "  -o, --stage-out=<path>    (NOT YET SUPPORTED) stage out file(s) to <path> on termination\n"
+    "  -C, --consistency=<model> [OPTIONAL] consistency model (NONE | LAMINATED | POSIX)\n"
+    "  -e, --exe=<path>          [OPTIONAL] <path> where unifycrd is installed\n"
+    "  -m, --mount=<path>        [OPTIONAL] mount UnifyCR at <path>\n"
+    "  -s, --script=<path>       [OPTIONAL] <path> to custom launch script\n"
+    "  -S, --share-dir=<path>    [REQUIRED] shared file system <path> for use by servers\n"
+    "  -c, --cleanup             [OPTIONAL] clean up the UnifyCR storage upon server exit\n"
+    "  -i, --stage-in=<path>     [OPTIONAL, NOT YET SUPPORTED] stage in file(s) at <path>\n"
+    "  -o, --stage-out=<path>    [OPTIONAL, NOT YET SUPPORTED] stage out file(s) to <path> on termination\n"
     "\n"
     "Command options for \"terminate\":\n"
     "  -s, --script=<path>       <path> to custom termination script\n"
@@ -247,6 +247,10 @@ int main(int argc, char** argv)
     fflush(stdout);
 
     if (action == ACT_START) {
+        if (NULL == cli_args.share_dir) {
+            printf("USAGE ERROR: shared directory (-S) is required!\n");
+            usage(1);
+        }
         return unifycr_start_servers(&resource, &cli_args);
     } else if (action == ACT_TERMINATE) {
         return unifycr_stop_servers(&resource, &cli_args);

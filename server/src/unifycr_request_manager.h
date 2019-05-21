@@ -36,7 +36,7 @@
 void* rm_delegate_request_thread(void* arg);
 
 /* functions called by rpc handlers to assign work
- * to request managre threads */
+ * to request manager threads */
 int rm_cmd_mread(int app_id, int client_id, int gfid,
                  size_t req_num, void* reqbuf);
 

@@ -346,7 +346,7 @@ int rm_cmd_read(
         meta->dest_offset = keyvals[i].val.addr;
 
         /* rank of the remote delegator */
-        meta->dest_delegator_rank = keyvals[i].val.delegator_id;
+        meta->dest_delegator_rank = keyvals[i].val.delegator_rank;
 
         /* dest_client_id and dest_app_id uniquely identify the remote
          * physical log file that contains the requested segments */
@@ -360,7 +360,7 @@ int rm_cmd_read(
 
         /* src_offset is the logical offset of the shared file */
         meta->src_offset         = keyvals[i].key.offset;
-        meta->src_delegator_rank = glb_rank;
+        meta->src_delegator_rank = glb_mpi_rank;
         meta->src_fid            = keyvals[i].key.fid;
         meta->src_dbg_rank       = cli_rank;
         meta->src_thrd           = thrd_id;
@@ -555,7 +555,7 @@ int rm_cmd_mread(int app_id, int client_id, int gfid,
         meta->dest_offset = keyvals[i].val.addr;
 
         /* rank of the remote delegator */
-        meta->dest_delegator_rank = keyvals[i].val.delegator_id;
+        meta->dest_delegator_rank = keyvals[i].val.delegator_rank;
 
         /* dest_client_id and dest_app_id uniquely identify the remote
          * physical log file that contains the requested segments */
@@ -569,7 +569,7 @@ int rm_cmd_mread(int app_id, int client_id, int gfid,
 
         /* src_offset is the logical offset of the shared file */
         meta->src_offset = keyvals[i].key.offset;
-        meta->src_delegator_rank = glb_rank;
+        meta->src_delegator_rank = glb_mpi_rank;
         meta->src_fid = keyvals[i].key.fid;
         meta->src_dbg_rank = cli_rank;
         meta->src_thrd = thrd_id;
@@ -751,7 +751,7 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
 
         unifycr_vals[i]->addr = meta_payload[i].mem_pos;
         unifycr_vals[i]->len = meta_payload[i].length;
-        unifycr_vals[i]->delegator_id = glb_rank;
+        unifycr_vals[i]->delegator_rank = glb_mpi_rank;
         unifycr_vals[i]->app_id = app_id;
         unifycr_vals[i]->rank = client_side_id;
 

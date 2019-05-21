@@ -138,7 +138,7 @@ static int open_log_file(app_config_t* app_config,
     /* open spill over file for reading */
     app_config->spill_log_fds[client_side_id] = open(path, O_RDONLY, 0666);
     if (app_config->spill_log_fds[client_side_id] < 0) {
-        printf("rank:%d, openning file %s failure\n", glb_rank, path);
+        printf("rank:%d, opening file %s failure\n", glb_mpi_rank, path);
         fflush(stdout);
         return (int)UNIFYCR_ERROR_FILE;
     }
@@ -156,7 +156,7 @@ static int open_log_file(app_config_t* app_config,
     app_config->spill_index_log_fds[client_side_id] =
         open(path, O_RDONLY, 0666);
     if (app_config->spill_index_log_fds[client_side_id] < 0) {
-        printf("rank:%d, openning index file %s failure\n", glb_rank, path);
+        printf("rank:%d, opening index file %s failure\n", glb_mpi_rank, path);
         fflush(stdout);
         return (int)UNIFYCR_ERROR_FILE;
     }
@@ -204,7 +204,7 @@ static thrd_ctrl_t* unifycr_rm_thrd_create(int app_id, int client_id)
     /* allocate a structure to track requests we have on each
      * remote service manager */
     thrd_ctrl->del_req_stat->req_stat = (per_del_stat_t*)
-        calloc(glb_size, sizeof(per_del_stat_t));
+        calloc(glb_mpi_size, sizeof(per_del_stat_t));
     if (thrd_ctrl->del_req_stat->req_stat == NULL) {
         LOGERR("Failed to allocate per-delegator structure for request "
                "manager thread for app_id=%d client_id=%d",

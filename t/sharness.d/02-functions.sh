@@ -64,14 +64,30 @@ process_is_not_running()
 # Create metadata directory if needed and start daemon.
 unifycrd_start_daemon()
 {
+    # Make sure metadata directory exists
     if test -z "$UNIFYCR_META_DB_PATH"; then
+        return 1
+    elif ! test -d "$UNIFYCR_META_DB_PATH" &&
+         ! mkdir $UNIFYCR_META_DB_PATH; then
         return 1
     fi
 
-    if ! test -d "$UNIFYCR_META_DB_PATH" &&
-       ! mkdir $UNIFYCR_META_DB_PATH; then
-            return 1
-    fi
+    # Generate servers hostfile
+    # if test -z "$UNIFYCR_SHAREDFS_DIR"; then
+    #     return 1
+    # elif ! test -d "$UNIFYCR_SHAREDFS_DIR" &&
+    #      ! mkdir $UNIFYCR_SHAREDFS_DIR; then
+    #     return 1
+    # fi
+    # srvr_hosts=$UNIFYCR_SHAREDFS_DIR/unifycrd.hosts
+    # if [ ! -f $srvr_hosts ]; then
+    #     touch $srvr_hosts
+    #     echo "1" >> $srvr_hosts
+    #     hostname >> $srvr_hosts
+    # fi
+    # export UNIFYCR_SERVER_HOSTFILE=$srvr_hosts
+
+    # run server daemon
     $UNIFYCRD
 }
 
@@ -84,5 +100,6 @@ unifycrd_stop_daemon()
 # Remove the metadata directory.
 unifycrd_cleanup()
 {
-    rm -rf $UNIFYCR_META_DB_PATH
+    test -d "$UNIFYCR_META_DB_PATH" && rm -rf $UNIFYCR_META_DB_PATH
+    # test -d "$UNIFYCR_SHAREDFS_DIR" && rm -rf $UNIFYCR_SHAREDFS_DIR
 }

@@ -1319,7 +1319,7 @@ void* sm_service_reads(void* ctx)
     }
 
     /* allocate memory to hold meta data for read replies */
-    bytes = glb_size * MAX_NUM_CLIENTS * sizeof(rank_ack_meta_t);
+    bytes = glb_mpi_size * MAX_NUM_CLIENTS * sizeof(rank_ack_meta_t);
     rank_ack_task.num       = 0;
     rank_ack_task.ack_metas = (rank_ack_meta_t*)malloc(bytes);
 
@@ -1327,7 +1327,7 @@ void* sm_service_reads(void* ctx)
      * application client
      * (num delegaotrs * max num clients per delegator) */
     int i;
-    for (i = 0; i < glb_size * MAX_NUM_CLIENTS; i++) {
+    for (i = 0; i < glb_mpi_size * MAX_NUM_CLIENTS; i++) {
         /* get pointer to current structure */
         rank_ack_meta_t* ack_meta = &rank_ack_task.ack_metas[i];
 

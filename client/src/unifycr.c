@@ -68,10 +68,6 @@ static int unifycr_mounted = -1;
 
 static int unifycr_fpos_enabled   = 1;  /* whether we can use fgetpos/fsetpos */
 
-/*
- * unifycr variable:
- * */
-
 unifycr_cfg_t client_cfg;
 
 unifycr_index_buf_t unifycr_indices;
@@ -105,6 +101,7 @@ void* shm_recv_buf;
 
 char cmd_buf[CMD_BUF_SIZE] = {0};
 
+int client_rank;
 int app_id;
 size_t unifycr_key_slice_range;
 
@@ -2057,7 +2054,7 @@ void fill_client_mount_info(unifycr_mount_in_t* in)
 
     in->app_id             = app_id;
     in->local_rank_idx     = local_rank_idx;
-    in->dbg_rank           = glb_rank;
+    in->dbg_rank           = client_rank;
     in->num_procs_per_node = local_rank_cnt;
     in->req_buf_sz         = shm_req_size;
     in->recv_buf_sz        = shm_recv_size;
@@ -2288,8 +2285,8 @@ static int find_rank_idx(int rank, int* local_rank_lst, int local_rank_cnt)
  */
 static int CountTasksPerNode(int rank, int numTasks)
 {
-    char hostname[HOST_NAME_MAX];
-    char localhost[HOST_NAME_MAX];
+    char hostname[UNIFYCR_MAX_HOSTNAME];
+    char localhost[UNIFYCR_MAX_HOSTNAME];
     int resultsLen = 30;
     MPI_Status status;
     int rc;
@@ -2314,7 +2311,7 @@ static int CountTasksPerNode(int rank, int numTasks)
              * than 30
              */
             for (i = 1; i < numTasks; i++) {
-                rc = MPI_Recv(hostname, HOST_NAME_MAX,
+                rc = MPI_Recv(hostname, UNIFYCR_MAX_HOSTNAME,
                               MPI_CHAR, MPI_ANY_SOURCE,
                               MPI_ANY_TAG, MPI_COMM_WORLD,
                               &status);
@@ -2423,7 +2420,7 @@ static int CountTasksPerNode(int rank, int numTasks)
             /*
              * non-root process performs MPI_send to send hostname to root node
              */
-            rc = MPI_Send(localhost, HOST_NAME_MAX, MPI_CHAR,
+            rc = MPI_Send(localhost, UNIFYCR_MAX_HOSTNAME, MPI_CHAR,
                           0, 0, MPI_COMM_WORLD);
             if (rc != 0) {
                 LOGERR("cannot send host name");
@@ -2491,7 +2488,7 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
     /* record our rank for debugging messages,
      * record the value we should use for an app_id */
     app_id = l_app_id;
-    glb_rank = rank;
+    client_rank = rank;
 
     /* print log messages to stderr */
     unifycr_log_open(NULL);
@@ -2521,7 +2518,7 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
         LOGERR("failed to update configuration from runstate.");
         return UNIFYCR_FAILURE;
     }
-    if ((glb_rank != kv_rank) || (size != kv_nranks)) {
+    if ((client_rank != kv_rank) || (size != kv_nranks)) {
         LOGDBG("mismatch on mount vs kvstore rank/size");
     }
 

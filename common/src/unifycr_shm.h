@@ -15,7 +15,9 @@
 #ifndef UNIFYCR_SHM_H
 #define UNIFYCR_SHM_H
 
-/* TODO: same functions exist in client code, move this to common */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* allocate and attach a named shared memory region of a particular size
  * and mmap into our memory, returns starting memory address on success,
@@ -28,6 +30,8 @@ void* unifycr_shm_alloc(const char* name, size_t size);
  * returns UNIFYCR_SUCCESS on success */
 int unifycr_shm_free(const char* name, size_t size, void** paddr);
 
-/* release a shared memory region mapping */
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif // UNIFYCR_SHM_H

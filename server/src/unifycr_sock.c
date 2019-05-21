@@ -41,7 +41,6 @@
 #include "unifycr_global.h"
 #include "unifycr_keyval.h"
 #include "unifycr_log.h"
-#include "unifycr_setup.h"
 #include "unifycr_sock.h"
 
 char sock_path[UNIFYCR_MAX_FILENAME];

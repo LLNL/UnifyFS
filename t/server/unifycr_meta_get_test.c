@@ -5,6 +5,10 @@
 #include "unifycr_metadata.h"
 #include "t/lib/tap.h"
 
+#define TEST_META_GFID_VALUE 0xbeef
+#define TEST_META_FID_VALUE  0xfeed
+#define TEST_META_FILE "/unifycr/filename/to/nowhere"
+
 int unifycr_set_file_attribute_test(void)
 {
     int rc;
@@ -12,11 +16,9 @@ int unifycr_set_file_attribute_test(void)
     /* create dummy file attribute */
     unifycr_file_attr_t fattr = {0};
 
-    fattr.gfid = 0xbeef;
-    //fattr.gfid = 16;
-    fattr.fid = 0xfeed;
-    //fattr.fid = 8;
-    snprintf(fattr.filename, 1024,  "/unifycr/filename/to/nowhere");
+    fattr.gfid = TEST_META_GFID_VALUE;
+    fattr.fid = TEST_META_FID_VALUE;
+    snprintf(fattr.filename, sizeof(fattr.filename), TEST_META_FILE);
     fflush(NULL);
 
     rc = unifycr_set_file_attribute(&fattr);
@@ -30,34 +32,27 @@ int unifycr_get_file_attribute_test(void)
     int rc;
     unifycr_file_attr_t fattr;
 
-    rc = unifycr_get_file_attribute(0xbeef, &fattr);
-    //rc = unifycr_get_file_attribute(16, &fattr);
-
+    rc = unifycr_get_file_attribute(TEST_META_GFID_VALUE, &fattr);
     ok(UNIFYCR_SUCCESS == rc &&
-        0xbeef == fattr.gfid  &&
-        //16 == fattr.gfid  &&
-        0xfeed == fattr.fid &&
-        //8 == fattr.fid &&
-        (0 == strcmp(fattr.filename, "/unifycr/filename/to/nowhere")),
-//        0 == fattr.file_attr,
+        TEST_META_GFID_VALUE == fattr.gfid &&
+        TEST_META_FID_VALUE == fattr.fid &&
+        (0 == strcmp(fattr.filename, TEST_META_FILE)),
         "Retrieve file attributes (rc = %d, gfid = 0x%02X, fid = 0x%02X)",
         rc, fattr.gfid, fattr.fid
     );
     return 0;
 }
 
-
 // this test is not run right now
 int unifycr_get_file_extents_test(void)
 {
-    unifycr_keyval_t keyval[16];
+    int rc, num_values, num_keys;
+    int key_lens[16];
     unifycr_key_t keys[16];
-
-    int rc, num_values, num_keys, key_lens[16];
+    unifycr_keyval_t keyval[16];
 
     rc = unifycr_get_file_extents(num_keys, &keys, key_lens,
                                   &num_values, &keyval);
-
     ok(UNIFYCR_SUCCESS == rc,
         "Retrieved file extents (rc = %d)", rc
     );
