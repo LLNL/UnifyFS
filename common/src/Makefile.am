@@ -22,10 +22,11 @@ BASE_SRCS = \
   unifycr_const.h \
   unifycr_configurator.h \
   unifycr_configurator.c \
+  unifycr_keyval.h \
+  unifycr_keyval.c \
   unifycr_log.h \
   unifycr_log.c \
   unifycr_meta.h \
-  unifycr_pmix.h \
   unifycr_rpc_util.h \
   unifycr_rpc_util.c \
   unifycr_client_rpcs.h \
@@ -35,17 +36,24 @@ BASE_SRCS = \
   unifycr_shm.h \
   unifycr_shm.c
 
-OPT_SRCS =
+OPT_FLAGS =
 OPT_LIBS =
+OPT_SRCS =
 
 if USE_PMIX
-  OPT_SRCS += unifycr_pmix.c
+  OPT_FLAGS += -DUSE_PMIX
   OPT_LIBS += -lpmix
+endif
+
+if USE_PMI2
+  OPT_FLAGS += -DUSE_PMI2
+  OPT_LIBS += -lpmi2
 endif
 
 libunifycr_common_la_SOURCES = $(BASE_SRCS) $(OPT_SRCS)
 
 libunifycr_common_la_CPPFLAGS = \
+  $(OPT_FLAGS) \
   $(MERCURY_CFLAGS) \
   $(ARGOBOTS_CFLAGS) \
   $(MARGO_CFLAGS) \

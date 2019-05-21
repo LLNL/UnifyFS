@@ -21,7 +21,7 @@ void rpc_publish_remote_server_addr(const char* addr);
 
 /* lookup address of server */
 char* rpc_lookup_local_server_addr(void);
-char* rpc_lookup_remote_server_addr(const char* hostname);
+char* rpc_lookup_remote_server_addr(int srv_rank);
 
 /* remove server rpc address file */
 void rpc_clean_local_server_addr(void);

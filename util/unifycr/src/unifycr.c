@@ -72,13 +72,14 @@ static struct option const long_opts[] = {
     { "help", no_argument, NULL, 'h' },
     { "mount", required_argument, NULL, 'm' },
     { "script", required_argument, NULL, 's' },
+    { "share-dir", required_argument, NULL, 'S' },
     { "stage-in", required_argument, NULL, 'i' },
     { "stage-out", required_argument, NULL, 'o' },
     { 0, 0, 0, 0 },
 };
 
 static char* program;
-static char* short_opts = ":cC:de:hi:m:o:s:";
+static char* short_opts = ":cC:de:hi:m:o:s:S:";
 static char* usage_str =
     "\n"
     "Usage: %s <command> [options...]\n"
@@ -96,7 +97,8 @@ static char* usage_str =
     "  -e, --exe=<path>          <path> where unifycrd is installed\n"
     "  -m, --mount=<path>        mount UnifyCR at <path>\n"
     "  -s, --script=<path>       <path> to custom launch script\n"
-    "  -c, --cleanup             (NOT YET SUPPORTED) clean up the UnifyCR storage upon server exit\n"
+    "  -S, --share-dir=<path>    shared file system <path> for use by servers\n"
+    "  -c, --cleanup             clean up the UnifyCR storage upon server exit\n"
     "  -i, --stage-in=<path>     (NOT YET SUPPORTED) stage in file(s) at <path>\n"
     "  -o, --stage-out=<path>    (NOT YET SUPPORTED) stage out file(s) to <path> on termination\n"
     "\n"
@@ -120,6 +122,7 @@ static void parse_cmd_arguments(int argc, char** argv)
     unifycr_cm_e consistency = UNIFYCR_CM_LAMINATED;
     char* mountpoint = NULL;
     char* script = NULL;
+    char* share_dir = NULL;
     char* srvr_exe = NULL;
     char* stage_in = NULL;
     char* stage_out = NULL;
@@ -155,6 +158,10 @@ static void parse_cmd_arguments(int argc, char** argv)
             script = strdup(optarg);
             break;
 
+        case 'S':
+            share_dir = strdup(optarg);
+            break;
+
         case 'i':
             printf("WARNING: stage-in not yet supported!\n");
             stage_in = strdup(optarg);
@@ -178,6 +185,7 @@ static void parse_cmd_arguments(int argc, char** argv)
     cli_args.script = script;
     cli_args.mountpoint = mountpoint;
     cli_args.server_path = srvr_exe;
+    cli_args.share_dir = share_dir;
     cli_args.stage_in = stage_in;
     cli_args.stage_out = stage_out;
 }
@@ -217,6 +225,7 @@ int main(int argc, char** argv)
                unifycr_cm_enum_str(cli_args.consistency));
         printf("mountpoint:\t%s\n", cli_args.mountpoint);
         printf("script:\t%s\n", cli_args.script);
+        printf("share_dir:\t%s\n", cli_args.share_dir);
         printf("server:\t%s\n", cli_args.server_path);
         printf("stage_in:\t%s\n", cli_args.stage_in);
         printf("stage_out:\t%s\n", cli_args.stage_out);

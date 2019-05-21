@@ -382,6 +382,14 @@ static size_t construct_server_argv(unifycr_args_t* args,
         argc += 2;
     }
 
+    if (args->share_dir != NULL) {
+        if (server_argv != NULL) {
+            server_argv[argc] = strdup("-S");
+            server_argv[argc + 1] = strdup(args->share_dir);
+        }
+        argc += 2;
+    }
+
     return argc;
 }
 
@@ -593,8 +601,8 @@ static int srun_launch(unifycr_resource_t* resource,
     argv[0] = strdup("srun");
     argv[1] = strdup("-N");
     argv[2] = strdup(n_nodes);
-    argv[3] = strdup("-n");
-    argv[4] = strdup(n_nodes);
+    argv[3] = strdup("--ntasks-per-node");
+    argv[4] = strdup("1");
     construct_server_argv(args, argv + srun_argc);
 
     execvp(argv[0], argv);

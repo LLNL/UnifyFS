@@ -2159,9 +2159,7 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
     int flag;
     struct sockaddr_un serv_addr;
     char tmp_path[UNIFYCR_MAX_FILENAME] = {0};
-#ifdef HAVE_PMIX_H
-    char* pmix_path = NULL;
-#endif
+    char* pmi_path = NULL;
 
     client_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (client_sockfd < 0) {
@@ -2177,14 +2175,12 @@ static int unifycr_init_socket(int proc_id, int l_num_procs_per_node,
     snprintf(tmp_path, sizeof(tmp_path), "%s.%d.%d",
              SOCKET_PATH, getuid(), (proc_id / nprocs_per_del));
 
-#ifdef HAVE_PMIX_H
-    // lookup domain socket path in PMIx
-    if (unifycr_pmix_lookup(pmix_key_unifycrd_socket, 0, &pmix_path) == 0) {
+    // lookup domain socket path in key-val store
+    if (unifycr_keyval_lookup_local(key_unifycrd_socket, &pmi_path) == 0) {
         memset(tmp_path, 0, sizeof(tmp_path));
-        snprintf(tmp_path, sizeof(tmp_path), "%s", pmix_path);
-        free(pmix_path);
+        snprintf(tmp_path, sizeof(tmp_path), "%s", pmi_path);
+        free(pmi_path);
     }
-#endif
 
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sun_family = AF_UNIX;
@@ -2472,6 +2468,7 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
                   int l_app_id)
 {
     int rc;
+    int kv_rank, kv_nranks;
     bool b;
     char* cfgval;
 
@@ -2503,12 +2500,23 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
         LOGERR("failed to initialize configuration.");
         return UNIFYCR_FAILURE;
     }
+    client_cfg.ptype = UNIFYCR_CLIENT;
 
     // update configuration from runstate file
     rc = unifycr_read_runstate(&client_cfg, NULL);
     if (rc) {
         LOGERR("failed to update configuration from runstate.");
         return UNIFYCR_FAILURE;
+    }
+
+    // initialize k-v store access
+    rc = unifycr_keyval_init(&client_cfg, &kv_rank, &kv_nranks);
+    if (rc) {
+        LOGERR("failed to update configuration from runstate.");
+        return UNIFYCR_FAILURE;
+    }
+    if ((glb_rank != kv_rank) || (size != kv_nranks)) {
+        LOGDBG("mismatch on mount vs kvstore rank/size");
     }
 
     /************************

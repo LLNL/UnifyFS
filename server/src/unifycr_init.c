@@ -34,6 +34,7 @@
 
 // common headers
 #include "unifycr_configurator.h"
+#include "unifycr_keyval.h"
 #include "unifycr_runstate.h"
 
 // server components
@@ -140,6 +141,7 @@ int main(int argc, char* argv[])
 {
     int provided;
     int rc;
+    int kv_rank, kv_nranks;
     int srvr_rank_idx = 0;
     bool daemon = true;
     pthread_t svcmgr_thrd;
@@ -150,6 +152,7 @@ int main(int argc, char* argv[])
     if (rc != 0) {
         exit(1);
     }
+    server_cfg.ptype = UNIFYCR_SERVER;
 
     rc = configurator_bool_val(server_cfg.unifycr_daemonize, &daemon);
     if (rc != 0) {
@@ -188,6 +191,21 @@ int main(int argc, char* argv[])
     rc = unifycr_log_open(dbg_fname);
     if (rc != UNIFYCR_SUCCESS) {
         LOGERR("%s", unifycr_error_enum_description((unifycr_error_e)rc));
+    }
+
+    kv_rank = glb_rank;
+    kv_nranks = glb_size;
+    rc = unifycr_keyval_init(&server_cfg, &kv_rank, &kv_nranks);
+    if (rc != (int)UNIFYCR_SUCCESS) {
+        exit(1);
+    }
+    if (glb_rank != kv_rank) {
+        LOGDBG("mismatch on MPI (%d) vs kvstore (%d) rank",
+               glb_rank, kv_rank);
+    }
+    if (glb_size != kv_nranks) {
+        LOGDBG("mismatch on MPI (%d) vs kvstore (%d) num ranks",
+               glb_size, kv_nranks);
     }
 
     rc = unifycr_write_runstate(&server_cfg);
@@ -507,6 +525,10 @@ static int unifycr_exit()
     /* shutdown the metadata service*/
     LOGDBG("stopping metadata service");
     meta_sanitize();
+
+    /* finalize kvstore service*/
+    LOGDBG("finalizing kvstore service");
+    unifycr_keyval_fini();
 
     /* TODO: notify the service threads to exit */
 

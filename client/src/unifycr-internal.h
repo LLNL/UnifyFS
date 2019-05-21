@@ -92,9 +92,9 @@
 // common headers
 #include "unifycr_configurator.h"
 #include "unifycr_const.h"
+#include "unifycr_keyval.h"
 #include "unifycr_log.h"
 #include "unifycr_meta.h"
-#include "unifycr_pmix.h"
 #include "unifycr_shm.h"
 
 // client headers
