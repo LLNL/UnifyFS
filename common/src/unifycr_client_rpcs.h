@@ -11,6 +11,10 @@
 #include <mercury_proc_string.h>
 #include <mercury_types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* unifycr_mount_rpc (client => server)
  *
  * connect application client to the server, and
@@ -142,4 +146,8 @@ MERCURY_GEN_PROC(unifycr_mread_in_t,
 MERCURY_GEN_PROC(unifycr_mread_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifycr_mread_rpc)
 
+#ifdef __cplusplus
+} // extern "C"
 #endif
+
+#endif // UNIFYCR_CLIENT_RPCS_H

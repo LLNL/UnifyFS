@@ -172,8 +172,6 @@ struct secondary_bulk_info *mdhimCreateSecondaryBulkInfo(struct index_t *seconda
 							 int **secondary_key_lens,
 							 int *num_keys, int info_type);
 void mdhimReleaseSecondaryBulkInfo(struct secondary_bulk_info *si);
-int mdhimSanitize(char *dbfilename, char *statfilename, char *manifestfilename);
-int rmrf(char *path);
 
 #ifdef __cplusplus
 }

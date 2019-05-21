@@ -37,6 +37,7 @@ const char* key_runstate           = "unifycr.runstate";
 const char* key_unifycrd_socket    = "unifycrd.socket";
 const char* key_unifycrd_margo_shm = "unifycrd.margo-shm";
 const char* key_unifycrd_margo_svr = "unifycrd.margo-svr";
+const char* key_unifycrd_mpi_rank  = "unifycrd.mpi-rank";
 
 // key-value store state
 static int kv_initialized; // = 0
@@ -366,7 +367,6 @@ static int unifycr_pmix_fini(void)
     return rc;
 }
 
-// lookup a key-value pair
 static int unifycr_pmix_lookup(const char* key,
                                char** oval)
 {

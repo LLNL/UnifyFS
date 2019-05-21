@@ -17,11 +17,16 @@
 
 #include "unifycr_configurator.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // keys we use
 const char* key_runstate;           // path to runstate file
 const char* key_unifycrd_socket;    // server domain socket path
 const char* key_unifycrd_margo_shm; // client-server margo address
 const char* key_unifycrd_margo_svr; // server-server margo address
+const char* key_unifycrd_mpi_rank;  // server-server MPI rank
 
 // initialize key-value store
 int unifycr_keyval_init(unifycr_cfg_t* cfg,
@@ -47,5 +52,9 @@ int unifycr_keyval_lookup_local(const char* key,
 int unifycr_keyval_lookup_remote(int rank,
                                  const char* key,
                                  char** oval);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif // UNIFYCR_KEYVAL_H

@@ -27,14 +27,18 @@
  * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
-#ifndef __LOG_H__
-#define __LOG_H__
+#ifndef __UNIFYCR_LOG_H__
+#define __UNIFYCR_LOG_H__
 
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum {
     LOG_FATAL = 1,
@@ -45,10 +49,7 @@ typedef enum {
 } unifycr_log_level_t;
 
 extern unifycr_log_level_t unifycr_log_level;
-
 extern FILE* unifycr_log_stream;
-extern int glb_rank;
-
 extern time_t unifycr_log_time;
 extern struct tm* unifycr_log_ltime;
 extern char unifycr_log_timestamp[256];
@@ -70,8 +71,8 @@ extern char unifycr_log_timestamp[256];
         if (NULL == unifycr_log_stream) { \
             unifycr_log_stream = stderr; \
         } \
-        fprintf(unifycr_log_stream, "%s rank=%d tid=%ld @ %s:%d in %s: ", \
-            unifycr_log_timestamp, glb_rank, (long)gettid(), \
+        fprintf(unifycr_log_stream, "%s tid=%ld @ %s:%d in %s: ", \
+            unifycr_log_timestamp, (long)gettid(), \
             __FILE__, __LINE__, __func__); \
         fprintf(unifycr_log_stream, __VA_ARGS__); \
         fprintf(unifycr_log_stream, "\n"); \
@@ -90,4 +91,8 @@ int unifycr_log_open(const char* file);
  * returns UNIFYCR_SUCCESS on success */
 int unifycr_log_close(void);
 
-#endif /* LOG_H */
+#ifdef __cplusplus
+} // extern "C"
+#endif
+
+#endif /* UNIFYCR_LOG_H */

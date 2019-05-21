@@ -27,7 +27,9 @@
  * Please read https://github.com/llnl/burstfs/LICNSE for full license text.
  */
 
+#define _XOPEN_SOURCE 500
 #include <assert.h>
+#include <ftw.h>
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -52,7 +54,6 @@ char* manifest_path;
 struct mdhim_brm_t* brm, *brmp;
 struct mdhim_bgetrm_t* bgrm, *bgrmp;
 
-mdhim_options_t* db_opts;
 struct mdhim_t* md;
 
 int md_size;
@@ -73,7 +74,8 @@ void debug_log_key_val(const char* ctx,
         LOGDBG("@%s - key(fid=%d, offset=%lu), "
                "val(del=%d, len=%lu, addr=%lu, app=%d, rank=%d)",
                ctx, key->fid, key->offset,
-               val->delegator_id, val->len, val->addr, val->app_id, val->rank);
+               val->delegator_rank, val->len, val->addr,
+               val->app_id, val->rank);
     } else if (key != NULL) {
         LOGDBG("@%s - key(fid=%d, offset=%lu)",
                ctx, key->fid, key->offset);
@@ -103,7 +105,7 @@ int unifycr_key_compare(unifycr_key_t* a, unifycr_key_t* b)
 */
 int meta_init_store(unifycr_cfg_t* cfg)
 {
-    int rc, ser_ratio;
+    int rc, ratio;
     size_t path_len;
     long svr_ratio, range_sz;
     MPI_Comm comm = MPI_COMM_WORLD;
@@ -112,20 +114,17 @@ int meta_init_store(unifycr_cfg_t* cfg)
         return -1;
     }
 
-    db_opts = calloc(1, sizeof(struct mdhim_options_t));
+    mdhim_options_t* db_opts = mdhim_options_init();
     if (db_opts == NULL) {
         return -1;
     }
+    mdhim_options_set_db_type(db_opts, LEVELDB);
+    mdhim_options_set_db_name(db_opts, cfg->meta_db_name);
+    mdhim_options_set_key_type(db_opts, MDHIM_UNIFYCR_KEY);
+    mdhim_options_set_debug_level(db_opts, MLOG_CRIT);
 
-    /* UNIFYCR_META_DB_PATH: file that stores the metadata */
-    db_opts->db_path = strdup(cfg->meta_db_path);
-    if (db_opts->db_path == NULL) {
-        return -1;
-    }
-
-    db_opts->manifest_path = NULL;
-    db_opts->db_type = LEVELDB;
-    db_opts->db_create_new = 1;
+    /* UNIFYCR_META_DB_PATH: root directory for metadata */
+    mdhim_options_set_db_path(db_opts, cfg->meta_db_path);
 
     /* number of metadata servers =
      *   number of unifycr servers / UNIFYCR_META_SERVER_RATIO */
@@ -134,39 +133,18 @@ int meta_init_store(unifycr_cfg_t* cfg)
     if (rc != 0) {
         return -1;
     }
-    ser_ratio = (int) svr_ratio;
-    db_opts->rserver_factor = ser_ratio;
-
-    db_opts->db_paths = NULL;
-    db_opts->num_paths = 0;
-    db_opts->num_wthreads = 1;
-
-    path_len = strlen(db_opts->db_path) + strlen(MANIFEST_FILE_NAME) + 2;
-    manifest_path = malloc(path_len);
-    if (manifest_path == NULL) {
-        return -1;
-    }
-    sprintf(manifest_path, "%s/%s", db_opts->db_path, MANIFEST_FILE_NAME);
-    db_opts->manifest_path = manifest_path;
-
-    db_opts->db_name = strdup(cfg->meta_db_name);
-    if (db_opts->db_name == NULL) {
-        return -1;
-    }
-
-    db_opts->db_key_type = MDHIM_UNIFYCR_KEY;
-    db_opts->debug_level = MLOG_CRIT;
+    ratio = (int) svr_ratio;
+    mdhim_options_set_server_factor(db_opts, ratio);
 
     /* indices/attributes are striped to servers according
-     * to config setting for UNIFYCR_META_RANGE_SIZE.
-     */
+     * to config setting for UNIFYCR_META_RANGE_SIZE. */
     range_sz = 0;
     rc = configurator_int_val(cfg->meta_range_size, &range_sz);
     if (rc != 0) {
         return -1;
     }
     max_recs_per_slice = (size_t) range_sz;
-    db_opts->max_recs_per_slice = (uint64_t) range_sz;
+    mdhim_options_set_max_recs_per_slice(db_opts, (uint64_t)range_sz);
 
     md = mdhimInit(&comm, db_opts);
 
@@ -174,8 +152,9 @@ int meta_init_store(unifycr_cfg_t* cfg)
     unifycr_indexes[0] = md->primary_index;
 
     /*this index is created for storing file attribute metadata*/
-    unifycr_indexes[1] = create_global_index(md, ser_ratio, 1,
-                         LEVELDB, MDHIM_INT_KEY, "file_attr");
+    unifycr_indexes[1] = create_global_index(md, ratio, 1,
+                                             LEVELDB, MDHIM_INT_KEY,
+                                             "file_attr");
 
     MPI_Comm_size(md->mdhim_comm, &md_size);
 
@@ -198,13 +177,13 @@ int meta_init_indices(void)
 
     /* init index metadata */
     unifycr_keys = (unifycr_key_t**)
-        malloc(MAX_META_PER_SEND * sizeof(unifycr_key_t*));
+        calloc(MAX_META_PER_SEND, sizeof(unifycr_key_t*));
     if (unifycr_keys == NULL) {
         return (int)UNIFYCR_ERROR_NOMEM;
     }
 
     unifycr_vals = (unifycr_val_t**)
-        malloc(MAX_META_PER_SEND * sizeof(unifycr_val_t*));
+        calloc(MAX_META_PER_SEND, sizeof(unifycr_val_t*));
     if (unifycr_vals == NULL) {
         return (int)UNIFYCR_ERROR_NOMEM;
     }
@@ -223,13 +202,13 @@ int meta_init_indices(void)
 
     /* init attribute metadata */
     fattr_keys = (fattr_key_t**)
-        malloc(MAX_FILE_CNT_PER_NODE * sizeof(fattr_key_t*));
+        calloc(MAX_FILE_CNT_PER_NODE, sizeof(fattr_key_t*));
     if (fattr_keys == NULL) {
         return (int)UNIFYCR_ERROR_NOMEM;
     }
 
     fattr_vals = (fattr_val_t**)
-        malloc(MAX_FILE_CNT_PER_NODE * sizeof(fattr_val_t*));
+        calloc(MAX_FILE_CNT_PER_NODE, sizeof(fattr_val_t*));
     if (fattr_vals == NULL) {
         return (int)UNIFYCR_ERROR_NOMEM;
     }
@@ -267,81 +246,83 @@ void print_bget_indices(int app_id, int cli_id,
     }
 }
 
-void print_fsync_indices(unifycr_key_t** unifycr_keys,
-                         unifycr_val_t** unifycr_vals,
+void print_fsync_indices(unifycr_key_t** keys,
+                         unifycr_val_t** vals,
                          size_t num_entries)
 {
     size_t i;
     for (i = 0; i < num_entries; i++) {
         LOGDBG("fid:%d, offset:%lu, addr:%lu, len:%lu, del_id:%d",
-               unifycr_keys[i]->fid, unifycr_keys[i]->offset,
-               unifycr_vals[i]->addr, unifycr_vals[i]->len,
-               unifycr_vals[i]->delegator_id);
+               keys[i]->fid, keys[i]->offset,
+               vals[i]->addr, vals[i]->len,
+               vals[i]->delegator_rank);
     }
 }
 
 void meta_free_indices(void)
 {
     int i;
-    for (i = 0; i < MAX_META_PER_SEND; i++) {
-        if (NULL != unifycr_keys[i]) {
-            free(unifycr_keys[i]);
+    if (NULL != unifycr_keys) {
+        for (i = 0; i < MAX_META_PER_SEND; i++) {
+            if (NULL != unifycr_keys[i]) {
+                free(unifycr_keys[i]);
+            }
+            if (NULL != unifycr_vals[i]) {
+                free(unifycr_vals[i]);
+            }
         }
-        if (NULL != unifycr_vals[i]) {
-            free(unifycr_vals[i]);
-        }
+        free(unifycr_keys);
+        free(unifycr_vals);
     }
-    free(unifycr_keys);
-    free(unifycr_vals);
-
-    for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
-        if (NULL != fattr_keys[i]) {
-            free(fattr_keys[i]);
+    if (NULL != fattr_keys) {
+        for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
+            if (NULL != fattr_keys[i]) {
+                free(fattr_keys[i]);
+            }
+            if (NULL != fattr_vals[i]) {
+                free(fattr_vals[i]);
+            }
         }
-        if (NULL != fattr_vals[i]) {
-            free(fattr_vals[i]);
-        }
+        free(fattr_keys);
+        free(fattr_vals);
     }
-    free(fattr_keys);
-    free(fattr_vals);
 }
+
+static int remove_cb(const char* fpath, const struct stat* sb,
+                     int typeflag, struct FTW* ftwbuf)
+{
+    int rc = remove(fpath);
+    if (rc) {
+        LOGERR("failed to remove(%s)", fpath);
+    }
+    return rc;
+}
+
+static int remove_mdhim_db_filetree(char* db_root_path)
+{
+    LOGDBG("remove MDHIM DB filetree at %s", db_root_path);
+    return nftw(db_root_path, remove_cb, 64, FTW_DEPTH | FTW_PHYS);
+}
+
 
 int meta_sanitize(void)
 {
-    int rc = UNIFYCR_SUCCESS;
+    int rc;
+    char dbpath[UNIFYCR_MAX_FILENAME] = {0};
 
-    char dbfilename[UNIFYCR_MAX_FILENAME] = {0};
-    char statfilename[UNIFYCR_MAX_FILENAME] = {0};
-    char manifestname[UNIFYCR_MAX_FILENAME] = {0};
-
-    char dbfilename1[UNIFYCR_MAX_FILENAME] = {0};
-    char statfilename1[UNIFYCR_MAX_FILENAME] = {0};
-    char manifestname1[UNIFYCR_MAX_FILENAME] = {0};
-    sprintf(dbfilename, "%s/%s-%d-%d", md->db_opts->db_path,
-            md->db_opts->db_name, unifycr_indexes[0]->id, md->mdhim_rank);
-
-    sprintf(statfilename, "%s_stats", dbfilename);
-    sprintf(manifestname, "%s%d_%d_%d", md->db_opts->manifest_path,
-            unifycr_indexes[0]->type,
-            unifycr_indexes[0]->id, md->mdhim_rank);
-
-    sprintf(dbfilename1, "%s/%s-%d-%d", md->db_opts->db_path,
-            md->db_opts->db_name, unifycr_indexes[1]->id, md->mdhim_rank);
-
-    sprintf(statfilename1, "%s_stats", dbfilename1);
-    sprintf(manifestname1, "%s%d_%d_%d", md->db_opts->manifest_path,
-            unifycr_indexes[1]->type,
-            unifycr_indexes[1]->id, md->mdhim_rank);
+    snprintf(dbpath, sizeof(dbpath), "%s", md->db_opts->db_path);
 
     mdhimClose(md);
-    rc = mdhimSanitize(dbfilename, statfilename, manifestname);
-    rc = mdhimSanitize(dbfilename1, statfilename1, manifestname1);
+    md = NULL;
 
-    mdhim_options_destroy(db_opts);
+    rc = remove_mdhim_db_filetree(dbpath);
+    if (rc) {
+        LOGERR("failure during MDHIM file tree removal");
+    }
 
     meta_free_indices();
 
-    return rc;
+    return UNIFYCR_SUCCESS;
 }
 
 // New API

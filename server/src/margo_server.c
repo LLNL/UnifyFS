@@ -14,10 +14,12 @@
 
 #include "margo_server.h"
 #include "unifycr_global.h"
+#include "unifycr_keyval.h"
 
 // global variables
 ServerRpcContext_t* unifycrd_rpc_context;
 bool margo_use_tcp = true;
+bool margo_lazy_connect; // = false
 
 static const char* PROTOCOL_MARGO_SHM   = "na+sm://";
 static const char* PROTOCOL_MARGO_VERBS = "ofi+verbs://";
@@ -65,7 +67,7 @@ static margo_instance_id setup_remote_target(void)
     LOGDBG("margo RPC server: %s", self_string);
     margo_addr_free(mid, addr_self);
 
-    /* publish rpc address of server for local clients */
+    /* publish rpc address of server for remote servers */
     rpc_publish_remote_server_addr(self_string);
 
     return mid;
@@ -191,7 +193,7 @@ int margo_server_rpc_init(void)
 
 /* margo_server_rpc_finalize
  *
- * Finaalize the server's Margo RPC functionality, for
+ * Finalize the server's Margo RPC functionality, for
  * both intra-node (client-server shared memory) and
  * inter-node (server-server).
  */
@@ -216,4 +218,62 @@ int margo_server_rpc_finalize(void)
     }
 
     return rc;
+}
+
+/* margo_connect_servers
+ *
+ * Using address strings found in glb_servers, resolve
+ * each peer server's margo address.
+ */
+int margo_connect_servers(void)
+{
+    int rc;
+    int ret = (int)UNIFYCR_SUCCESS;
+    size_t i;
+    hg_return_t hret;
+
+    for (i = 0; i < glb_num_servers; i++) {
+        int remote_mpi_rank = -1;
+        char* mpi_rank_str = NULL;
+        char* margo_addr_str = NULL;
+
+        if (i == glb_svr_rank) {
+            continue;
+        }
+
+        // NOTE: this really doesn't belong here, and will eventually go away
+        rc = unifycr_keyval_lookup_remote(i, key_unifycrd_mpi_rank,
+                                          &mpi_rank_str);
+        if ((int)UNIFYCR_SUCCESS == rc) {
+            remote_mpi_rank = atoi(mpi_rank_str);
+            free(mpi_rank_str);
+        } else {
+            LOGERR("server index=%zu - MPI rank lookup failed", i);
+            ret = (int)UNIFYCR_FAILURE;
+        }
+        glb_servers[i].mpi_rank = remote_mpi_rank;
+
+        margo_addr_str = rpc_lookup_remote_server_addr(i);
+        glb_servers[i].margo_svr_addr_str = margo_addr_str;
+        if (NULL != margo_addr_str) {
+            LOGDBG("server index=%zu, mpi_rank=%d, margo_addr=%s",
+                i, remote_mpi_rank, margo_addr_str);
+            if (!margo_lazy_connect) {
+                glb_servers[i].margo_svr_addr = HG_ADDR_NULL;
+                hret = margo_addr_lookup(unifycrd_rpc_context->svr_mid,
+                                         glb_servers[i].margo_svr_addr_str,
+                                         &(glb_servers[i].margo_svr_addr));
+                if (hret != HG_SUCCESS) {
+                    LOGERR("server index=%zu - margo_addr_lookup(%s) failed",
+                           i, margo_addr_str);
+                    ret = (int)UNIFYCR_FAILURE;
+                }
+            }
+        } else {
+            LOGERR("server index=%zu - margo addr string lookup failed", i);
+            ret = (int)UNIFYCR_FAILURE;
+        }
+    }
+
+    return ret;
 }
