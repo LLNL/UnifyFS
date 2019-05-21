@@ -206,24 +206,6 @@ int rm_cmd_filesize(
     int gfid,      /* global file id of read request */
     size_t* outsize) /* output file size */
 {
-    /* get pointer to app structure for this app id */
-    app_config_t* app_config =
-        (app_config_t*)arraylist_get(app_config_list, app_id);
-
-    /* get thread id for this client */
-    int thrd_id = app_config->thrd_idxs[client_id];
-
-    /* look up thread control structure */
-    thrd_ctrl_t* thrd_ctrl =
-        (thrd_ctrl_t*)arraylist_get(thrd_list, thrd_id);
-
-    /* get debug rank for this client */
-    int cli_rank = app_config->dbg_ranks[client_id];
-
-    /* wait for lock for shared data structures holding requests
-     * and condition variable */
-    pthread_mutex_lock(&thrd_ctrl->thrd_lock);
-
     /* set offset and length to request *all* key/value pairs
      * for this file */
     size_t offset = 0;
@@ -236,74 +218,46 @@ int rm_cmd_filesize(
 
     /* get the locations of all the read requests from the
      * key-value store*/
-    int num_vals;
-    int unifycr_key_lens[2] = {sizeof(unifycr_key_t), sizeof(unifycr_key_t)};
-
     unifycr_key_t key1, key2;
     unifycr_key_t* unifycr_keys[2] = {&key1, &key2};
-    unifycr_keyval_t* keyvals;
-    keyvals = calloc(sizeof(unifycr_keyval_t), MAX_META_PER_SEND);
 
     /* create key to describe first byte we'll read */
-    unifycr_keys[0]->fid = gfid;
+    unifycr_keys[0]->fid    = gfid;
     unifycr_keys[0]->offset = offset;
 
     /* create key to describe last byte we'll read */
-    unifycr_keys[1]->fid = gfid;
+    unifycr_keys[1]->fid    = gfid;
     unifycr_keys[1]->offset = offset + length - 1;
 
+    int unifycr_key_lens[2] = {sizeof(unifycr_key_t), sizeof(unifycr_key_t)};
+
+    /* look up all entries in this range */
+    int num_vals;
+    unifycr_keyval_t* keyvals = calloc(sizeof(unifycr_keyval_t),
+        MAX_META_PER_SEND);
     int rc = unifycr_get_file_extents(2, unifycr_keys, unifycr_key_lens,
                                       &num_vals, &keyvals);
 
-    if (UNIFYCR_SUCCESS != rc || keyvals == NULL) {
+    /* TODO: if there are file extents not accounted for we should
+     * either return 0 for that date (holes) or EOF if reading past
+     * the end of the file */
+
+    if (UNIFYCR_SUCCESS != rc || num_vals == 0) {
         // we need to let the client know that there was an error
-        fprintf(stderr, "Unable to get values for file extends");
-        fflush(NULL);
+        free(keyvals);
+        return UNIFYCR_FAILURE;
     }
 
-    // set up the thread_control delegator request set
-    // TODO: make this a function
-    for (int i = 0; i < num_vals; i++) {
-        send_msg_t* meta = &thrd_ctrl->del_req_set->msg_meta[i];
-
-        /* physical offset of the requested file segment on the log file */
-        meta->dest_offset = keyvals[i].val.addr;
-
-        /* rank of the remote delegator */
-        meta->dest_delegator_rank = keyvals[i].val.delegator_id;
-
-        /* dest_client_id and dest_app_id uniquely identify the remote
-         * physical log file that contains the requested segments */
-        meta->dest_app_id = keyvals[i].val.app_id;
-        meta->dest_client_id = keyvals[i].val.rank;
-        meta->length = (size_t)keyvals[i].val.len;
-
-        /* src_app_id and src_cli_id identifies the requested client */
-        meta->src_app_id = app_id;
-        meta->src_cli_id = client_id;
-
-        /* src_offset is the logical offset of the shared file */
-        meta->src_offset = keyvals[i].key.offset;
-        meta->src_delegator_rank = glb_rank;
-        meta->src_fid = keyvals[i].key.fid;
-        meta->src_dbg_rank = cli_rank;
-        meta->src_thrd = thrd_id;
-    }
-
-    thrd_ctrl->del_req_set->num = num_vals;
-
-    // cleanup
-    free(keyvals);
     /* compute our file size by iterating over each file
      * segment and taking the max logical offset */
     int i;
     size_t filesize = 0;
-    for (i = 0; i < thrd_ctrl->del_req_set->num; i++) {
-        /* get pointer to next send_msg structure */
-        send_msg_t* msg = &(thrd_ctrl->del_req_set->msg_meta[i]);
+    for (i = 0; i < num_vals; i++) {
+        /* get pointer to next key value pair */
+        unifycr_keyval_t* kv = &keyvals[i];
 
         /* get last byte offset for this segment of the file */
-        size_t last_offset = msg->src_offset + msg->length;
+        size_t last_offset = kv->key.offset + kv->val.len;
 
         /* update our filesize if this offset is bigger than the current max */
         if (last_offset > filesize) {
@@ -311,8 +265,8 @@ int rm_cmd_filesize(
         }
     }
 
-    /* done updating shared variables, release the lock */
-    pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
+    // cleanup
+    free(keyvals);
 
     *outsize = filesize;
     return rc;
@@ -344,36 +298,41 @@ int rm_cmd_read(
     /* get debug rank for this client */
     int cli_rank = app_config->dbg_ranks[client_id];
 
-    /* wait for lock for shared data structures holding requests
-     * and condition variable */
-    pthread_mutex_lock(&thrd_ctrl->thrd_lock);
-
     /* get the locations of all the read requests from the
-     * key-value store*/
-    int num_vals;
-    int unifycr_key_lens[2] = {sizeof(unifycr_key_t), sizeof(unifycr_key_t)};
-
+     * key-value store */
     unifycr_key_t key1, key2;
     unifycr_key_t* unifycr_keys[2] = {&key1, &key2};
-    unifycr_keyval_t* keyvals;
-    keyvals = calloc(sizeof(unifycr_keyval_t), MAX_META_PER_SEND);
 
     /* create key to describe first byte we'll read */
-    unifycr_keys[0]->fid = gfid;
+    unifycr_keys[0]->fid    = gfid;
     unifycr_keys[0]->offset = offset;
 
     /* create key to describe last byte we'll read */
-    unifycr_keys[1]->fid = gfid;
+    unifycr_keys[1]->fid    = gfid;
     unifycr_keys[1]->offset = offset + length - 1;
 
+    int unifycr_key_lens[2] = {sizeof(unifycr_key_t), sizeof(unifycr_key_t)};
+
+    /* look up all entries in this range */
+    int num_vals;
+    unifycr_keyval_t* keyvals = calloc(sizeof(unifycr_keyval_t),
+        MAX_META_PER_SEND);
     int rc = unifycr_get_file_extents(2, unifycr_keys, unifycr_key_lens,
                                       &num_vals, &keyvals);
 
-    if (UNIFYCR_SUCCESS != rc || keyvals == NULL) {
-        // we need to let the client know that there was an error
-        fprintf(stderr, "Unable to get values for file extends");
-        fflush(NULL);
+    /* TODO: if there are file extents not accounted for we should
+     * either return 0 for that date (holes) or EOF if reading past
+     * the end of the file */
+
+    if (UNIFYCR_SUCCESS != rc || num_vals == 0) {
+        /* failed to find any key / value pairs */
+        free(keyvals);
+        return UNIFYCR_FAILURE;
     }
+
+    /* wait for lock for shared data structures holding requests
+     * and condition variable */
+    pthread_mutex_lock(&thrd_ctrl->thrd_lock);
 
     // set up the thread_control delegator request set
     // TODO: make this a function
@@ -391,26 +350,27 @@ int rm_cmd_read(
 
         /* dest_client_id and dest_app_id uniquely identify the remote
          * physical log file that contains the requested segments */
-        meta->dest_app_id = keyvals[i].val.app_id;
+        meta->dest_app_id    = keyvals[i].val.app_id;
         meta->dest_client_id = keyvals[i].val.rank;
-        meta->length = (size_t)keyvals[i].val.len;
+        meta->length         = (size_t)keyvals[i].val.len;
 
         /* src_app_id and src_cli_id identifies the requested client */
         meta->src_app_id = app_id;
         meta->src_cli_id = client_id;
 
         /* src_offset is the logical offset of the shared file */
-        meta->src_offset = keyvals[i].key.offset;
+        meta->src_offset         = keyvals[i].key.offset;
         meta->src_delegator_rank = glb_rank;
-        meta->src_fid = keyvals[i].key.fid;
-        meta->src_dbg_rank = cli_rank;
-        meta->src_thrd = thrd_id;
+        meta->src_fid            = keyvals[i].key.fid;
+        meta->src_dbg_rank       = cli_rank;
+        meta->src_thrd           = thrd_id;
     }
-
-    thrd_ctrl->del_req_set->num = num_vals;
 
     // cleanup
     free(keyvals);
+
+    thrd_ctrl->del_req_set->num = num_vals;
+
     /* sort read requests to be sent to the same delegators. */
     qsort(thrd_ctrl->del_req_set->msg_meta,
           thrd_ctrl->del_req_set->num,
@@ -653,27 +613,35 @@ int rm_cmd_mread(int app_id, int client_id, int gfid,
     }
     del_cnt++;
 
+    /* record total number of delegators we'll send requests to */
     thrd_ctrl->del_req_stat->del_cnt = del_cnt;
 
+    /* debug print */
     print_remote_del_reqs(app_id, thrd_id, thrd_ctrl->del_req_stat);
 
-    LOGDBG("wake up the service thread for the requesting client");
-    /*wake up the service thread for the requesting client*/
+    /* wake up the service thread for the requesting client */
     if (!thrd_ctrl->has_waiting_delegator) {
-        LOGDBG("has waiting delegator");
+        /* delegator thread is not waiting, but we are in critical
+         * section, we just added requests so we must wait for delegator
+         * to signal us that it's reached the critical section before
+         * we escaple so we don't overwrite these requests before it
+         * has had a chance to process them */
         thrd_ctrl->has_waiting_dispatcher = 1;
         pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
-        LOGDBG("has waiting dispatcherr");
+
+        /* delegator thread has signaled us that it's now waiting,
+         * so signal it to go ahead and then release the lock,
+         * so it can start */
         thrd_ctrl->has_waiting_dispatcher = 0;
         pthread_cond_signal(&thrd_ctrl->thrd_cond);
-        LOGDBG("signaled");
     } else {
-        LOGDBG("does not have waiting delegator");
+        /* have a delegator thread waiting on condition variable,
+         * signal it to begin processing the requests we just added */
         pthread_cond_signal(&thrd_ctrl->thrd_cond);
     }
-    LOGDBG("woked");
+
+    /* done updating shared variables, release the lock */
     pthread_mutex_unlock(&thrd_ctrl->thrd_lock);
-    LOGDBG("unlocked");
 
     return rc;
 }

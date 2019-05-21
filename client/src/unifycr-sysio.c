@@ -1868,6 +1868,7 @@ int unifycr_fd_logreadlist(read_req_t* read_reqs, int count)
     /* prepare our shared memory buffer for delegator */
     delegator_signal();
 
+    int read_rc;
     if (read_req_set.count > 1) {
         /* got multiple read requests,
          * build up a flat buffer to include them all */
@@ -1898,8 +1899,8 @@ int unifycr_fd_logreadlist(read_req_t* read_reqs, int count)
                read_req_set.count, buffer, size);
 
         /* invoke read rpc here */
-        invoke_client_mread_rpc(app_id, local_rank_idx, ptr_meta_entry->gfid,
-                                read_req_set.count, size, buffer);
+        read_rc = invoke_client_mread_rpc(app_id, local_rank_idx,
+            ptr_meta_entry->gfid, read_req_set.count, size, buffer);
 
         flatcc_builder_clear(&builder);
         free(buffer);
@@ -1909,7 +1910,13 @@ int unifycr_fd_logreadlist(read_req_t* read_reqs, int count)
         size_t offset = read_req_set.read_reqs[0].offset;
         size_t length = read_req_set.read_reqs[0].length;
         LOGDBG("read: offset:%zu, len:%zu", offset, length);
-        invoke_client_read_rpc(app_id, local_rank_idx, gfid, offset, length);
+        read_rc = invoke_client_read_rpc(app_id, local_rank_idx, gfid,
+            offset, length);
+    }
+
+    /* bail out with error if we failed to even start the read */
+    if (read_rc != UNIFYCR_SUCCESS) {
+        return read_rc;
     }
 
     /*
