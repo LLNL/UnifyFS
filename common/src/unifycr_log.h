@@ -67,7 +67,7 @@ extern char unifycr_log_timestamp[256];
         unifycr_log_ltime = localtime(&unifycr_log_time); \
         strftime(unifycr_log_timestamp, sizeof(unifycr_log_timestamp), \
             "%Y-%m-%dT%H:%M:%S", unifycr_log_ltime); \
-        if (unifycr_log_stream == NULL) { \
+        if (NULL == unifycr_log_stream) { \
             unifycr_log_stream = stderr; \
         } \
         fprintf(unifycr_log_stream, "%s rank=%d tid=%ld @ %s:%d in %s: ", \

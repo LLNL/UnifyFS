@@ -59,11 +59,11 @@ struct _unifycr_args {
     unifycr_cm_e consistency;  /* consistency model */
     char* mountpoint;          /* mountpoint */
     char* server_path;         /* full path to installed unifycrd */
+    char* share_dir;           /* full path to shared file system directory */
     char* stage_in;            /* data path to stage-in */
     char* stage_out;           /* data path to stage-out (drain) */
     char* script;              /* path to custom launch/terminate script */
 };
-
 typedef struct _unifycr_args unifycr_args_t;
 
 /**
@@ -74,7 +74,6 @@ struct _unifycr_resource {
     size_t n_nodes;            /* number of nodes in job allocation */
     char** nodes;              /* allocated node names */
 };
-
 typedef struct _unifycr_resource unifycr_resource_t;
 
 /**

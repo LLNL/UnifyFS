@@ -37,10 +37,10 @@
 #include <unistd.h>
 
 #include "arraylist.h"
-#include "unifycr_log.h"
 #include "unifycr_const.h"
 #include "unifycr_global.h"
-#include "unifycr_pmix.h"
+#include "unifycr_keyval.h"
+#include "unifycr_log.h"
 #include "unifycr_setup.h"
 #include "unifycr_sock.h"
 
@@ -97,10 +97,8 @@ int sock_init_server(int srvr_id)
     sock_add(server_sockfd); // puts server fd at index 0 of poll_set
     LOGDBG("completed sock init server");
 
-#ifdef HAVE_PMIX_H
     // publish domain socket path
-    unifycr_pmix_publish(pmix_key_unifycrd_socket, sock_path);
-#endif
+    unifycr_keyval_publish_local(key_unifycrd_socket, sock_path);
 
     return 0;
 }

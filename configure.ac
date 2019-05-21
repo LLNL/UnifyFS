@@ -100,6 +100,18 @@ else
 AM_CONDITIONAL([USE_PMIX], [false])
 fi
 
+# PMI2 support build option
+AC_ARG_ENABLE([pmi],
+              AC_HELP_STRING([--enable-pmi],
+                             [Enable PMI2 build options.]))
+if test "x$enable_pmi" = "xyes"; then
+AC_CHECK_HEADERS([pmi2.h],
+                 [AM_CONDITIONAL([USE_PMI2], [true])],
+                 [AM_CONDITIONAL([USE_PMI2], [false])])
+else
+AM_CONDITIONAL([USE_PMI2], [false])
+fi
+
 CHECK_NUMA
 
 AC_ARG_WITH(pkgconfigdir,
