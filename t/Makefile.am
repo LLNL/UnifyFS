@@ -80,7 +80,8 @@ test_meta_cppflags = \
 	-I$(top_srcdir)/common/src \
 	-D_GNU_SOURCE \
 	$(AM_CPPFLAGS) \
-        $(MPI_CFLAGS)
+	$(MARGO_CFLAGS) \
+	$(MPI_CFLAGS)
 
 test_cppflags = \
 	-I$(top_srcdir) \
@@ -88,7 +89,7 @@ test_cppflags = \
 	-I$(top_srcdir)/common/src \
 	-D_GNU_SOURCE \
 	$(AM_CPPFLAGS) \
-        $(MPI_CFLAGS)
+	$(MPI_CFLAGS)
 
 sys_sysio_gotcha_t_SOURCES = sys/sysio_suite.h \
                              sys/sysio_suite.c \
