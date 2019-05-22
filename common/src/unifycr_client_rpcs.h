@@ -1,5 +1,5 @@
-#ifndef __UNIFYCR_CLIENTCALLS_RPC_H
-#define __UNIFYCR_CLIENTCALLS_RPC_H
+#ifndef __UNIFYCR_CLIENT_RPCS_H
+#define __UNIFYCR_CLIENT_RPCS_H
 
 /*
  * Declarations for client-server margo RPCs (shared-memory)
@@ -45,8 +45,8 @@ MERCURY_GEN_PROC(unifycr_unmount_in_t,
 MERCURY_GEN_PROC(unifycr_unmount_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifycr_unmount_rpc)
 
+/* need to transfer timespec structs */
 typedef struct timespec sys_timespec_t;
-
 MERCURY_GEN_STRUCT_PROC(sys_timespec_t,
                         ((uint64_t)(tv_sec))
                         ((uint64_t)(tv_nsec)))

@@ -1,5 +1,5 @@
-#ifndef __UNIFYCR_SERVERCALLS_RPC_H
-#define __UNIFYCR_SERVERCALLS_RPC_H
+#ifndef __UNIFYCR_SERVER_RPCS_H
+#define __UNIFYCR_SERVER_RPCS_H
 
 /*
  * Declarations for server-server margo RPCs
