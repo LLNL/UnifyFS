@@ -82,6 +82,7 @@ unsigned long unifycr_max_index_entries; /* max metadata log entries */
 unsigned int unifycr_max_fattr_entries;
 int unifycr_spillmetablock;
 
+int global_rank_cnt;    /* count of world ranks */
 int* local_rank_lst;
 int local_rank_cnt;
 int local_rank_idx;
@@ -2298,6 +2299,8 @@ static int CountTasksPerNode(int rank, int numTasks)
         LOGERR("failed to get the processor's name");
     }
 
+    global_rank_cnt = numTasks;
+
     if (numTasks > 0) {
         if (rank == 0) {
             int i;
@@ -2755,27 +2758,81 @@ int unifycr_unmount(void)
 
 enum {
     UNIFYCR_TX_STAGE_OUT = 0,
-    UNIFYCR_TX_STAGE_IN,
+    UNIFYCR_TX_STAGE_IN = 1,
+    UNIFYCR_TX_SERIAL = 0,
+    UNIFYCR_TX_PARALLEL = 1,
 };
 
 static
-int unifycr_do_transfer_file(const char* src, const char* dst, int direction)
+ssize_t do_transfer_data(int fd_src, int fd_dst, off_t offset, size_t count)
+{
+    ssize_t ret = 0;
+    off_t pos = 0;
+    ssize_t n_written = 0;
+    ssize_t n_left = 0;
+    ssize_t n_processed = 0;
+    size_t len = UNIFYCR_TX_BUFSIZE;
+    char buf[UNIFYCR_TX_BUFSIZE] = { 0, };
+
+    pos = lseek(fd_src, offset, SEEK_SET);
+    if (pos == (off_t) -1) {
+        LOGERR("lseek failed (%d: %s)\n", errno, strerror(errno));
+        ret = -1;
+        goto out;
+    }
+
+    pos = lseek(fd_dst, offset, SEEK_SET);
+    if (pos == (off_t) -1) {
+        LOGERR("lseek failed (%d: %s)\n", errno, strerror(errno));
+        ret = -1;
+        goto out;
+    }
+
+    while (count > n_processed) {
+        if (len > count) {
+            len = count;
+        }
+
+        n_left = read(fd_src, buf, len);
+
+        if (n_left == 0) {  /* EOF */
+            break;
+        } else if (n_left < 0) {   /* error */
+            ret = errno;
+            goto out;
+        }
+
+        do {
+            n_written = write(fd_dst, buf, n_left);
+
+            if (n_written < 0) {
+                ret = errno;
+                goto out;
+            } else if (n_written == 0 && errno && errno != EAGAIN) {
+                ret = errno;
+                goto out;
+            }
+
+            n_left -= n_written;
+            n_processed += n_written;
+        } while (n_left);
+    }
+
+out:
+    return ret;
+}
+
+static int do_transfer_file_serial(const char* src, const char* dst,
+                                   struct stat* sb_src, int dir)
 {
     int ret = 0;
     int fd_src = 0;
     int fd_dst = 0;
-    ssize_t n_read = 0;
-    ssize_t n_written = 0;
-    ssize_t n_left = 0;
     char buf[UNIFYCR_TX_BUFSIZE] = { 0, };
 
     /*
-     * for now, we do not use the @direction hint.
+     * for now, we do not use the @dir hint.
      */
-
-    if (!buf) {
-        return ENOMEM;
-    }
 
     fd_src = open(src, O_RDONLY);
     if (fd_src < 0) {
@@ -2788,36 +2845,13 @@ int unifycr_do_transfer_file(const char* src, const char* dst, int direction)
         goto out_close_src;
     }
 
-    while (1) {
-        n_read = read(fd_src, buf, UNIFYCR_TX_BUFSIZE);
-
-        if (n_read == 0) {  /* EOF */
-            break;
-        } else if (n_read < 0) {   /* error */
-            ret = errno;
-            goto out_close_dst;
-        }
-
-        n_left = n_read;
-
-        do {
-            n_written = write(fd_dst, buf, n_left);
-
-            if (n_written < 0) {
-                ret = errno;
-                goto out_close_dst;
-            } else if (n_written == 0 && errno && errno != EAGAIN) {
-                ret = errno;
-                goto out_close_dst;
-            }
-
-            n_left -= n_written;
-        } while (n_left);
+    ret = do_transfer_data(fd_src, fd_dst, 0, sb_src->st_size);
+    if (ret < 0) {
+        LOGERR("do_transfer_data failed!");
+    } else {
+        fsync(fd_dst);
     }
 
-    fsync(fd_dst);
-
-out_close_dst:
     close(fd_dst);
 out_close_src:
     close(fd_src);
@@ -2825,10 +2859,92 @@ out_close_src:
     return ret;
 }
 
-int unifycr_transfer_file(const char* src, const char* dst)
+static int do_transfer_file_parallel(const char* src, const char* dst,
+                                     struct stat* sb_src, int dir)
 {
     int ret = 0;
-    int direction = 0;
+    int rank = 0;
+    int fd_src = 0;
+    int fd_dst = 0;
+    uint64_t total_chunks = 0;
+    uint64_t chunk_start = 0;
+    uint64_t remainder = 0;
+    uint64_t n_chunks = 0;
+    uint64_t offset = 0;
+    uint64_t len = 0;
+    uint64_t size = sb_src->st_size;
+
+    rank = local_rank_lst[local_rank_idx];
+
+    fd_src = open(src, O_RDONLY);
+    if (fd_src < 0) {
+        return errno;
+    }
+
+    fd_dst = open(dst, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd_dst < 0) {
+        ret = errno;
+        goto out_close_src;
+    }
+
+    /*
+     * if the file is smaller than (rankcount*buffersize), just do with the
+     * serial mode.
+     *
+     * FIXME: is this assumtion fair even for the large rank count?
+     */
+    if (UNIFYCR_TX_BUFSIZE * global_rank_cnt > size) {
+        if (rank == 0) {
+            ret = do_transfer_file_serial(src, dst, sb_src, dir);
+            if (ret) {
+                LOGERR("do_transfer_file_parallel failed");
+            }
+
+            return ret;
+        }
+    }
+
+    total_chunks = size / UNIFYCR_TX_BUFSIZE;
+    if (size % UNIFYCR_TX_BUFSIZE) {
+        total_chunks++;
+    }
+
+    n_chunks = total_chunks / global_rank_cnt;
+    remainder = total_chunks % global_rank_cnt;
+
+    chunk_start = n_chunks * rank;
+    if (rank < remainder) {
+        chunk_start += rank;
+        n_chunks += 1;
+    } else {
+        chunk_start += remainder;
+    }
+
+    offset = chunk_start * UNIFYCR_TX_BUFSIZE;
+
+    if (rank == global_rank_cnt - 1) {
+        len = (n_chunks - 1) * UNIFYCR_TX_BUFSIZE;
+        len += size % UNIFYCR_TX_BUFSIZE;
+    } else {
+        len = n_chunks * UNIFYCR_TX_BUFSIZE;
+    }
+
+    LOGDBG("parallel transfer (%d/%d): offset=%lu, length=%lu\n",
+           rank, global_rank_cnt, (unsigned long) offset, (unsigned long) len);
+
+    ret = do_transfer_data(fd_src, fd_dst, offset, len);
+
+    close(fd_dst);
+out_close_src:
+    close(fd_src);
+
+    return ret;
+}
+
+int unifycr_transfer_file(const char* src, const char* dst, int parallel)
+{
+    int ret = 0;
+    int dir = 0;
     struct stat sb_src = { 0, };
     struct stat sb_dst = { 0, };
     int unify_src = 0;
@@ -2842,7 +2958,7 @@ int unifycr_transfer_file(const char* src, const char* dst)
     }
 
     if (unifycr_intercept_path(src)) {
-        direction = UNIFYCR_TX_STAGE_OUT;
+        dir = UNIFYCR_TX_STAGE_OUT;
         unify_src = 1;
     }
 
@@ -2854,7 +2970,7 @@ int unifycr_transfer_file(const char* src, const char* dst)
     pos += sprintf(pos, "%s", dst);
 
     if (unifycr_intercept_path(dst)) {
-        direction = UNIFYCR_TX_STAGE_IN;
+        dir = UNIFYCR_TX_STAGE_IN;
         unify_dst = 1;
     }
 
@@ -2871,6 +2987,10 @@ int unifycr_transfer_file(const char* src, const char* dst)
         return -EINVAL;
     }
 
-    return unifycr_do_transfer_file(src_path, dst_path, direction);
+    if (parallel) {
+        return do_transfer_file_parallel(src_path, dst_path, &sb_src, dir);
+    } else {
+        return do_transfer_file_serial(src_path, dst_path, &sb_src, dir);
+    }
 }
 

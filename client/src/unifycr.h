@@ -84,9 +84,22 @@ int compare_fattr(const void* a, const void* b);
  *
  * @param src source file path
  * @param dst destination file path
+ * @param parallel parallel transfer if set (parallel=1)
  *
  * @return 0 on success, negative errno otherwise.
  */
-int unifycr_transfer_file(const char* src, const char* dst);
+int unifycr_transfer_file(const char* src, const char* dst, int parallel);
+
+static inline
+int unifycr_transfer_file_serial(const char* src, const char* dst)
+{
+    return unifycr_transfer_file(src, dst, 0);
+}
+
+static inline
+int unifycr_transfer_file_parallel(const char* src, const char* dst)
+{
+    return unifycr_transfer_file(src, dst, 1);
+}
 
 #endif /* UNIFYCR_H */

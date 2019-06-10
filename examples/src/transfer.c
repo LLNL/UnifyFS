@@ -36,6 +36,7 @@
 static int rank;
 static int total_ranks;
 static int rank_worker;
+static int parallel;
 static int debug;
 
 static char* mountpoint = "/unifycr";  /* unifycr mountpoint */
@@ -50,12 +51,13 @@ static struct option long_opts[] = {
     { "debug", 0, 0, 'd' },
     { "help", 0, 0, 'h' },
     { "mount", 1, 0, 'm' },
+    { "parallel", 0, 0, 'p' },
     { "rank", 1, 0, 'r' },
     { "unmount", 0, 0, 'u' },
     { 0, 0, 0, 0},
 };
 
-static char* short_opts = "dhm:r:u";
+static char* short_opts = "dhm:pr:u";
 
 static const char* usage_str =
     "\n"
@@ -67,6 +69,7 @@ static const char* usage_str =
     " -h, --help                   help message\n"
     " -m, --mount=<mountpoint>     use <mountpoint> for unifycr\n"
     "                              (default: /unifycr)\n"
+    " -p, --parallel               parallel transfer\n"
     " -r, --rank=<rank>            use <rank> for transfer (default: 0)\n"
     " -u, --unmount                unmount the filesystem after test\n"
     "\n";
@@ -107,6 +110,10 @@ int main(int argc, char** argv)
             mountpoint = strdup(optarg);
             break;
 
+        case 'p':
+            parallel = 1;
+            break;
+
         case 'r':
             rank_worker = atoi(optarg);
             break;
@@ -143,26 +150,30 @@ int main(int argc, char** argv)
         goto out;
     }
 
-    if (rank_worker >= total_ranks) {
-        test_print(rank, "%d is not a valid rank");
-        goto out;
-    }
+    if (parallel) {
+        ret = unifycr_transfer_file_parallel(srcpath, dstpath);
+        if (ret) {
+            test_print(rank, "copy failed (%d: %s)", ret, strerror(ret));
+        }
+    } else {
+        if (rank_worker >= total_ranks) {
+            test_print(rank, "%d is not a valid rank");
+            goto out;
+        }
 
-    MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
 
-    if (rank != rank_worker) {
-        goto donothing;
-    }
-
-    ret = unifycr_transfer_file(srcpath, dstpath);
-    if (ret) {
-        test_print(rank, "copy failed (%d: %s)", ret, strerror(ret));
+        if (rank == rank_worker) {
+            ret = unifycr_transfer_file_serial(srcpath, dstpath);
+            if (ret) {
+                test_print(rank, "copy failed (%d: %s)", ret, strerror(ret));
+            }
+        }
     }
 
     free(dstpath);
     free(srcpath);
 
-donothing:
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (unmount) {
