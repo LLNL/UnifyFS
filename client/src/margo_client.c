@@ -260,8 +260,13 @@ int invoke_client_metaset_rpc(unifycr_file_attr_t* f_meta)
     in.fid      = f_meta->fid;
     in.gfid     = f_meta->gfid;
     in.filename = f_meta->filename;
-    /* TODO: unifycr_metaset_in_t is missing struct stat info
-     * in->file_attr = f_meta->file_attr; */
+    in.mode     = f_meta->mode;
+    in.uid      = f_meta->uid;
+    in.gid      = f_meta->gid;
+    in.size     = f_meta->size;
+    in.atime    = f_meta->atime;
+    in.mtime    = f_meta->mtime;
+    in.ctime    = f_meta->ctime;
 
     LOGDBG("invoking the metaset rpc function in client");
     hret = margo_forward(handle, &in);
