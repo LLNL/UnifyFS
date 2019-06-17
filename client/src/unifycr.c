@@ -750,6 +750,9 @@ void unifycr_init_file_attr(unifycr_file_attr_t* fattr, int isdir)
 
         fattr->mode = isdir ? UNIFYCR_STAT_DEFAULT_DIR_MODE
                             : UNIFYCR_STAT_DEFAULT_FILE_MODE;
+
+        fattr->uid = getuid();
+        fattr->gid = getgid();
     }
 }
 
