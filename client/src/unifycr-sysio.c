@@ -1368,7 +1368,7 @@ static int unifycr_split_read_requests(read_req_t* req,
     size_t req_start = req->offset;
     size_t req_end   = req->offset + req->length - 1;
 
-    /* compute offset of first and lasy byte of slice
+    /* compute offset of first and last byte of slice
      * that contains first byte of request */
     size_t slice_start = (req->offset / slice_range) * slice_range;
     size_t slice_end   = slice_start + slice_range - 1;
@@ -1668,24 +1668,24 @@ static int unifycr_match_received_ack(read_req_t* read_reqs, int count,
 
 /* notify our delegator that the shared memory buffer
  * is now clear and ready to hold more read data */
-static int delegator_signal()
+static void delegator_signal(void)
 {
-    int rc = UNIFYCR_SUCCESS;
+    LOGDBG("receive buffer now empty");
 
-    /* set shm flag to 0 to signal delegator we're done */
-    volatile int* ptr_flag = (volatile int*)shm_recv_buf;
-    *ptr_flag = 0;
+    /* set shm flag to signal delegator we're done */
+    shm_header_t* hdr = (shm_header_t*)shm_recv_buf;
+    hdr->state = SHMEM_REGION_EMPTY;
 
     /* TODO: MEM_FLUSH */
-
-    return rc;
 }
 
 /* wait for delegator to inform us that shared memory buffer
  * is filled with read data */
-static int delegator_wait()
+static int delegator_wait(void)
 {
-#ifdef USE_DOMAIN_SOCKET
+    int rc = (int)UNIFYCR_SUCCESS;
+
+#if defined(UNIFYCR_USE_DOMAIN_SOCKET)
     /* wait for signal on socket */
     cmd_fd.events = POLLIN | POLLPRI;
     cmd_fd.revents = 0;
@@ -1714,18 +1714,24 @@ static int delegator_wait()
     shm_wait_tm.tv_nsec = SHM_WAIT_INTERVAL;
 
     /* get pointer to flag in shared memory */
-    volatile int* ptr_flag = (volatile int*)shm_recv_buf;
-
-    /* TODO: MEM_FETCH */
+    shm_header_t* hdr = (shm_header_t*)shm_recv_buf;
 
     /* wait for server to set flag to non-zero */
-    while (*ptr_flag == 0) {
+    int max_sleep = 5000000; // 5s
+    volatile int* vip = (volatile int*)&(hdr->state);
+    while (*vip == SHMEM_REGION_EMPTY) {
         /* not there yet, sleep for a while */
         nanosleep(&shm_wait_tm, NULL);
         /* TODO: MEM_FETCH */
+        max_sleep--;
+        if (0 == max_sleep) {
+            LOGERR("timed out waiting for non-empty");
+            rc = (int)UNIFYCR_ERROR_SHMEM;
+            break;
+        }
     }
 
-    return UNIFYCR_SUCCESS;
+    return rc;
 }
 
 /* copy read data from shared memory buffer to user buffers from read
@@ -1737,34 +1743,31 @@ static int process_read_data(read_req_t* read_reqs, int count, int* done)
     int rc = UNIFYCR_SUCCESS;
 
     /* get pointer to start of shared memory buffer */
-    char* shmptr = (char*)shm_recv_buf;
+    shm_header_t* shm_hdr = (shm_header_t*)shm_recv_buf;
+    char* shmptr = ((char*)shm_hdr) + sizeof(shm_header_t);
 
-    /* extract pointer to flag */
-    int* ptr_flag = (int*)shmptr;
-    shmptr += sizeof(int);
-
-    /* extract pointer to size */
-    int* ptr_size = (int*)shmptr;
-    shmptr += sizeof(int);
-
-    /* extract number of read replies in buffer */
-    int* ptr_num = (int*)shmptr;
-    shmptr += sizeof(int);
-    int num = *ptr_num;
+    size_t num = shm_hdr->meta_cnt;
+    if (0 == num) {
+        LOGDBG("no read responses available");
+        return rc;
+    }
 
     /* process each of our replies */
-    int j;
-    for (j = 0; j < num; j++) {
+    size_t i;
+    for (i = 0; i < num; i++) {
         /* get pointer to current read reply header */
         shm_meta_t* msg = (shm_meta_t*)shmptr;
         shmptr += sizeof(shm_meta_t);
 
         /* define request object */
         read_req_t req;
-        req.fid     = msg->src_fid;
+        req.fid     = msg->gfid;
         req.offset  = msg->offset;
         req.length  = msg->length;
         req.errcode = msg->errcode;
+
+        LOGDBG("read reply: gfid=%d offset=%zu size=%zu",
+               req.fid, req.offset, req.length);
 
         /* get pointer to data */
         req.buf = shmptr;
@@ -1779,13 +1782,9 @@ static int process_read_data(read_req_t* read_reqs, int count, int* done)
     }
 
     /* set done flag if there is no more data */
-    if (*ptr_flag == 2) {
+    if (shm_hdr->state == SHMEM_REGION_DATA_COMPLETE) {
         *done = 1;
-    };
-
-    /* zero out size and count in recv buffer */
-    *ptr_size = 0;
-    *ptr_num  = 0;
+    }
 
     return rc;
 }
@@ -1899,8 +1898,7 @@ int unifycr_fd_logreadlist(read_req_t* read_reqs, int count)
                read_req_set.count, buffer, size);
 
         /* invoke read rpc here */
-        read_rc = invoke_client_mread_rpc(app_id, local_rank_idx,
-            ptr_meta_entry->gfid, read_req_set.count, size, buffer);
+        read_rc = invoke_client_mread_rpc(read_req_set.count, size, buffer);
 
         flatcc_builder_clear(&builder);
         free(buffer);
@@ -1910,8 +1908,7 @@ int unifycr_fd_logreadlist(read_req_t* read_reqs, int count)
         size_t offset = read_req_set.read_reqs[0].offset;
         size_t length = read_req_set.read_reqs[0].length;
         LOGDBG("read: offset:%zu, len:%zu", offset, length);
-        read_rc = invoke_client_read_rpc(app_id, local_rank_idx, gfid,
-            offset, length);
+        read_rc = invoke_client_read_rpc(gfid, offset, length);
     }
 
     /* bail out with error if we failed to even start the read */
@@ -1926,14 +1923,17 @@ int unifycr_fd_logreadlist(read_req_t* read_reqs, int count)
 
     int done = 0;
     while (!done) {
-        delegator_wait();
-
-        int tmp_rc = process_read_data(read_reqs, count, &done);
+        int tmp_rc = delegator_wait();
         if (tmp_rc != UNIFYCR_SUCCESS) {
             rc = UNIFYCR_FAILURE;
+            done = 1;
+        } else {
+            tmp_rc = process_read_data(read_reqs, count, &done);
+            if (tmp_rc != UNIFYCR_SUCCESS) {
+                rc = UNIFYCR_FAILURE;
+            }
+            delegator_signal();
         }
-
-        delegator_signal();
     }
 
     return rc;
@@ -2145,7 +2145,7 @@ int UNIFYCR_WRAP(fsync)(int fd)
         if (meta->storage == FILE_STORAGE_LOGIO) {
             /* invoke fsync rpc to register index metadata with server */
             int gfid = get_gfid(fid);
-            invoke_client_fsync_rpc(app_id, local_rank_idx, gfid);
+            invoke_client_fsync_rpc(gfid);
         }
 
         meta->needs_sync = 0;

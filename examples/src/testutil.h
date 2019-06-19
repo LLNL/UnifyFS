@@ -547,10 +547,6 @@ int test_process_argv(test_cfg* cfg,
             cfg->use_prdwr = 1;
             break;
 
-        case 's':
-            cfg->io_shuffle = 1;
-            break;
-
         case 'S':
             cfg->use_stdio = 1;
             break;
@@ -565,6 +561,10 @@ int test_process_argv(test_cfg* cfg,
 
         case 'V':
             cfg->use_vecio = 1;
+            break;
+
+        case 'x':
+            cfg->io_shuffle = 1;
             break;
 
         case 'h':

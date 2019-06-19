@@ -61,8 +61,7 @@ static void register_client_rpcs(void)
 }
 
 /* initialize margo client-server rpc */
-int unifycr_client_rpc_init(int local_rank_idx,
-                            int app_id)
+int unifycr_client_rpc_init(void)
 {
     /* initialize margo */
     hg_return_t hret;
@@ -335,9 +334,7 @@ int invoke_client_metaget_rpc(int gfid,
 }
 
 /* invokes the client fsync rpc function */
-int invoke_client_fsync_rpc(int app_id,
-                            int local_rank_idx,
-                            int gfid)
+int invoke_client_fsync_rpc(int gfid)
 {
     hg_handle_t handle;
     unifycr_fsync_in_t in;
@@ -376,9 +373,7 @@ int invoke_client_fsync_rpc(int app_id,
 }
 
 /* invokes the client filesize rpc function */
-int invoke_client_filesize_rpc(int app_id,
-                               int local_rank_idx,
-                               int gfid,
+int invoke_client_filesize_rpc(int gfid,
                                size_t* outsize)
 {
     int32_t ret;
@@ -423,9 +418,7 @@ int invoke_client_filesize_rpc(int app_id,
 }
 
 /* invokes the client read rpc function */
-int invoke_client_read_rpc(int app_id,
-                           int local_rank_idx,
-                           int gfid,
+int invoke_client_read_rpc(int gfid,
                            size_t offset,
                            size_t length)
 {
@@ -469,10 +462,7 @@ int invoke_client_read_rpc(int app_id,
 }
 
 /* invokes the client mread rpc function */
-int invoke_client_mread_rpc(int app_id,
-                            int local_rank_idx,
-                            int gfid,
-                            int read_count,
+int invoke_client_mread_rpc(int read_count,
                             size_t size,
                             void* buffer)
 {
@@ -500,7 +490,6 @@ int invoke_client_mread_rpc(int app_id,
     /* fill in input struct */
     in.app_id         = (int32_t)app_id;
     in.local_rank_idx = (int32_t)local_rank_idx;
-    in.gfid           = (int32_t)gfid;
     in.read_count     = (int32_t)read_count;
     in.bulk_size      = (hg_size_t)size;
 

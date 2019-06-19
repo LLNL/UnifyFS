@@ -139,7 +139,6 @@ DECLARE_MARGO_RPC_HANDLER(unifycr_read_rpc)
 MERCURY_GEN_PROC(unifycr_mread_in_t,
                  ((int32_t)(app_id))
                  ((int32_t)(local_rank_idx))
-                 ((int32_t)(gfid))
                  ((int32_t)(read_count))
                  ((hg_size_t)(bulk_size))
                  ((hg_bulk_t)(bulk_handle)))

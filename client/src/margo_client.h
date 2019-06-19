@@ -29,8 +29,7 @@ typedef struct ClientRpcContext {
 } client_rpc_context_t;
 
 
-int unifycr_client_rpc_init(int local_rank_idx,
-                            int app_id);
+int unifycr_client_rpc_init(void);
 
 int unifycr_client_rpc_finalize(void);
 
@@ -45,25 +44,16 @@ int invoke_client_metaset_rpc(unifycr_file_attr_t* f_meta);
 int invoke_client_metaget_rpc(int gfid,
                               unifycr_file_attr_t* f_meta);
 
-int invoke_client_fsync_rpc(int app_id,
-                            int local_rank_idx,
-                            int gfid);
+int invoke_client_fsync_rpc(int gfid);
 
-int invoke_client_filesize_rpc(int app_id,
-                               int local_rank_idx,
-                               int gfid,
+int invoke_client_filesize_rpc(int gfid,
                                size_t* filesize);
 
-int invoke_client_read_rpc(int app_id,
-                               int local_rank_idx,
-                               int gfid,
-                               size_t offset,
-                               size_t length);
+int invoke_client_read_rpc(int gfid,
+                           size_t offset,
+                           size_t length);
 
-int invoke_client_mread_rpc(int app_id,
-                            int local_rank_idx,
-                            int gfid,
-                            int read_count,
+int invoke_client_mread_rpc(int read_count,
                             size_t size,
                             void* buffer);
 

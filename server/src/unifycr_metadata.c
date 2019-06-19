@@ -27,21 +27,22 @@
  * Please read https://github.com/llnl/burstfs/LICNSE for full license text.
  */
 
+// NOTE: following two lines needed for nftw(), MUST COME FIRST IN FILE
 #define _XOPEN_SOURCE 500
-#include <assert.h>
 #include <ftw.h>
-#include <sys/stat.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
 
-#include "arraylist.h"
-#include "indexes.h"
-#include "mdhim.h"
-#include "unifycr_log.h"
-#include "unifycr_metadata.h"
+// common headers
 #include "unifycr_client_rpcs.h"
 #include "ucr_read_builder.h"
+
+// server headers
+#include "unifycr_global.h"
+#include "unifycr_metadata.h"
+
+// MDHIM headers
+#include "indexes.h"
+#include "mdhim.h"
+
 
 unifycr_key_t** unifycr_keys;
 unifycr_val_t** unifycr_vals;
@@ -55,13 +56,7 @@ struct mdhim_brm_t* brm, *brmp;
 struct mdhim_bgetrm_t* bgrm, *bgrmp;
 
 struct mdhim_t* md;
-
 int md_size;
-int unifycr_key_lens[MAX_META_PER_SEND] = {0};
-int unifycr_val_lens[MAX_META_PER_SEND] = {0};
-
-int fattr_key_lens[MAX_FILE_CNT_PER_NODE] = {0};
-int fattr_val_lens[MAX_FILE_CNT_PER_NODE] = {0};
 
 struct index_t* unifycr_indexes[2];
 size_t max_recs_per_slice;
@@ -408,7 +403,7 @@ int unifycr_get_file_attribute(int gfid,
  *
  */
 int unifycr_get_file_extents(int num_keys, unifycr_key_t** keys,
-                             int* unifycr_key_lens, int* num_values,
+                             int* key_lens, int* num_values,
                              unifycr_keyval_t** keyvals)
 {
     /*
@@ -427,7 +422,7 @@ int unifycr_get_file_extents(int num_keys, unifycr_key_t** keys,
 
     md->primary_index = unifycr_indexes[0];
     bgrm = mdhimBGet(md, md->primary_index, (void**)keys,
-                     unifycr_key_lens, num_keys, MDHIM_RANGE_BGET);
+                     key_lens, num_keys, MDHIM_RANGE_BGET);
 
     while (bgrm) {
         bgrmp = bgrm;
@@ -465,15 +460,15 @@ int unifycr_get_file_extents(int num_keys, unifycr_key_t** keys,
  *
  */
 int unifycr_set_file_extents(int num_entries,
-                             unifycr_key_t** keys, int* unifycr_key_lens,
-                             unifycr_val_t** vals, int* unifycr_val_lens)
+                             unifycr_key_t** keys, int* key_lens,
+                             unifycr_val_t** vals, int* val_lens)
 {
     int rc = UNIFYCR_SUCCESS;
 
     md->primary_index = unifycr_indexes[0];
 
-    brm = mdhimBPut(md, (void**)(keys), unifycr_key_lens,
-                    (void**)(vals), unifycr_val_lens, num_entries,
+    brm = mdhimBPut(md, (void**)(keys), key_lens,
+                    (void**)(vals), val_lens, num_entries,
                     NULL, NULL);
     brmp = brm;
     if (!brmp || brmp->error) {

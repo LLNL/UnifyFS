@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <pthread.h>
 #include <unistd.h>
 
 #include "unifycr_const.h"
@@ -91,15 +92,38 @@ typedef struct {
     int fid;
 } unifycr_index_t;
 
-/* defines header for read reply as written by request manager
- * back to application client via shared memory, the data
- * payload of length bytes immediately follows the header */
+/* Header for read request reply in client shared memory region.
+ * The associated data payload immediately follows the header in
+ * the shmem region.
+ *   offset  - offset within file
+ *   length  - data size
+ *   gfid    - global file id
+ *   errcode - read error code (zero on success) */
 typedef struct {
-    size_t offset; /* offset within file */
-    size_t length; /* number of bytes */
-    int src_fid;   /* global file id */
-    int errcode;   /* indicates whether read encountered error */
+    size_t offset;
+    size_t length;
+    int gfid;
+    int errcode;
 } shm_meta_t;
+
+/* State values for client shared memory region */
+typedef enum {
+    SHMEM_REGION_EMPTY = 0,        // set by client to indicate drain complete
+    SHMEM_REGION_DATA_READY = 1,   // set by server to initiate client drain
+    SHMEM_REGION_DATA_COMPLETE = 2 // set by server when done writing data
+} shm_region_state_e;
+
+/* Header for client shared memory region.
+ *   sync     - for synchronizing updates/access by server threads
+ *   meta_cnt - number of shm_meta_t (i.e., read replies) currently in shmem
+ *   bytes    - total bytes of shmem region in use (shm_meta_t + payloads)
+ *   state    - region state variable used for client-server coordination */
+ typedef struct {
+    pthread_mutex_t sync;
+    volatile size_t meta_cnt;
+    volatile size_t bytes;
+    volatile shm_region_state_e state;
+} shm_header_t;
 
 #ifdef __cplusplus
 } // extern "C"

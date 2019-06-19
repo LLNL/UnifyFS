@@ -14,17 +14,18 @@
 #include <stdbool.h>
 
 #include <margo.h>
-#include <mercury.h>
-#include <abt.h>
 
-#include "unifycr_client_rpcs.h"
-#include "unifycr_server_rpcs.h"
-#include "unifycr_rpc_util.h"
+typedef struct ServerRpcIds {
+    hg_id_t hello_id;
+    hg_id_t request_id;
+    hg_id_t chunk_read_request_id;
+    hg_id_t chunk_read_response_id;
+} server_rpcs_t;
 
 typedef struct ServerRpcContext {
     margo_instance_id shm_mid;
     margo_instance_id svr_mid;
-    /* TODO: rpc id's executed on client go here */
+    server_rpcs_t rpcs;
 } ServerRpcContext_t;
 
 extern ServerRpcContext_t* unifycrd_rpc_context;

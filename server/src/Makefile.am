@@ -18,8 +18,7 @@ libunifycrd_a_SOURCES = \
 
 bin_PROGRAMS = unifycrd
 
-unifycrd_SOURCES = unifycr_init.c \
-                   unifycr_init.h
+unifycrd_SOURCES = unifycr_init.c
 
 unifycrd_LDFLAGS = -static \
   $(LEVELDB_LDFLAGS) \

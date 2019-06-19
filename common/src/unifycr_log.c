@@ -28,6 +28,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 #include "unifycr_log.h"
 #include "unifycr_const.h"
 
@@ -42,10 +43,22 @@ time_t unifycr_log_time;
 struct tm* unifycr_log_ltime;
 char unifycr_log_timestamp[256];
 
+/* used to reduce source file name length */
+size_t unifycr_log_source_base_len; // = 0
+static const char* this_file = __FILE__;
+
 /* open specified file as log file stream,
  * returns UNIFYCR_SUCCESS on success */
 int unifycr_log_open(const char* file)
 {
+    if (0 == unifycr_log_source_base_len) {
+        // NOTE: if you change the source location of this file, update string
+        char* srcdir = strstr(this_file, "common/src/unifycr_log.c");
+        if (NULL != srcdir) {
+            unifycr_log_source_base_len = srcdir - this_file;
+        }
+    }
+
     FILE* logf = fopen(file, "a");
     if (logf == NULL) {
         /* failed to open file name, fall back to stderr */
