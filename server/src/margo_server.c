@@ -12,9 +12,15 @@
  * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
  */
 
-#include "margo_server.h"
-#include "unifycr_global.h"
+// common headers
 #include "unifycr_keyval.h"
+#include "unifycr_client_rpcs.h"
+#include "unifycr_server_rpcs.h"
+#include "unifycr_rpc_util.h"
+
+// server headers
+#include "unifycr_global.h"
+#include "margo_server.h"
 
 // global variables
 ServerRpcContext_t* unifycrd_rpc_context;
@@ -42,7 +48,7 @@ static margo_instance_id setup_remote_target(void)
         margo_protocol = PROTOCOL_MARGO_VERBS;
     }
 
-    mid = margo_init(margo_protocol, MARGO_SERVER_MODE, 1, 1);
+    mid = margo_init(margo_protocol, MARGO_SERVER_MODE, 1, 4);
     if (mid == MARGO_INSTANCE_NULL) {
         LOGERR("margo_init(%s)", margo_protocol);
         return mid;
@@ -73,9 +79,28 @@ static margo_instance_id setup_remote_target(void)
     return mid;
 }
 
+/* register server-server RPCs */
 static void register_server_server_rpcs(margo_instance_id mid)
 {
+    unifycrd_rpc_context->rpcs.hello_id =
+        MARGO_REGISTER(mid, "server_hello_rpc",
+                       server_hello_in_t, server_hello_out_t,
+                       server_hello_rpc);
 
+    unifycrd_rpc_context->rpcs.request_id =
+        MARGO_REGISTER(mid, "server_request_rpc",
+                       server_request_in_t, server_request_out_t,
+                       server_request_rpc);
+
+    unifycrd_rpc_context->rpcs.chunk_read_request_id =
+        MARGO_REGISTER(mid, "chunk_read_request_rpc",
+                       chunk_read_request_in_t, chunk_read_request_out_t,
+                       chunk_read_request_rpc);
+
+    unifycrd_rpc_context->rpcs.chunk_read_response_id =
+        MARGO_REGISTER(mid, "chunk_read_response_rpc",
+                       chunk_read_response_in_t, chunk_read_response_out_t,
+                       chunk_read_response_rpc);
 }
 
 /* setup_local_target - Initializes the client-server margo target */
@@ -88,7 +113,7 @@ static margo_instance_id setup_local_target(void)
     hg_size_t self_string_sz = sizeof(self_string);
     margo_instance_id mid;
 
-    mid = margo_init(PROTOCOL_MARGO_SHM, MARGO_SERVER_MODE, 1, 1);
+    mid = margo_init(PROTOCOL_MARGO_SHM, MARGO_SERVER_MODE, 1, -1);
     if (mid == MARGO_INSTANCE_NULL) {
         LOGERR("margo_init(%s)", PROTOCOL_MARGO_SHM);
         return mid;
@@ -119,9 +144,9 @@ static margo_instance_id setup_local_target(void)
     return mid;
 }
 
+/* register client-server RPCs */
 static void register_client_server_rpcs(margo_instance_id mid)
 {
-    /* register client-server RPCs */
     MARGO_REGISTER(mid, "unifycr_mount_rpc",
                    unifycr_mount_in_t, unifycr_mount_out_t,
                    unifycr_mount_rpc);
@@ -209,9 +234,9 @@ int margo_server_rpc_finalize(void)
         rpc_clean_local_server_addr();
 
         /* shut down margo */
+        margo_finalize(ctx->svr_mid);
+        /* NOTE: 2nd call to margo_finalize() sometimes crashes - Margo bug? */
         margo_finalize(ctx->shm_mid);
-        /* NOTE: 2nd call to margo_finalize() hangs - Margo bug?
-         * margo_finalize(ctx->svr_mid); */
 
         /* free memory allocated for context structure */
         free(ctx);
@@ -237,10 +262,6 @@ int margo_connect_servers(void)
         char* mpi_rank_str = NULL;
         char* margo_addr_str = NULL;
 
-        if (i == glb_svr_rank) {
-            continue;
-        }
-
         // NOTE: this really doesn't belong here, and will eventually go away
         rc = unifycr_keyval_lookup_remote(i, key_unifycrd_mpi_rank,
                                           &mpi_rank_str);
@@ -257,7 +278,7 @@ int margo_connect_servers(void)
         glb_servers[i].margo_svr_addr_str = margo_addr_str;
         if (NULL != margo_addr_str) {
             LOGDBG("server index=%zu, mpi_rank=%d, margo_addr=%s",
-                i, remote_mpi_rank, margo_addr_str);
+                   i, remote_mpi_rank, margo_addr_str);
             if (!margo_lazy_connect) {
                 glb_servers[i].margo_svr_addr = HG_ADDR_NULL;
                 hret = margo_addr_lookup(unifycrd_rpc_context->svr_mid,

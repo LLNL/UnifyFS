@@ -512,8 +512,8 @@ static int jsrun_terminate(unifycr_resource_t* resource,
     char** argv = NULL;
     char n_nodes[16];
 
-    // full command: jsrun <jsrun args> pkill unifycrd
-    jsrun_argc = 11;
+    // full command: jsrun <jsrun args> pkill -n unifycrd
+    jsrun_argc = 12;
     snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
 
     // setup full command argv
@@ -529,7 +529,8 @@ static int jsrun_terminate(unifycr_resource_t* resource,
     argv[7] = strdup("-c1");
     argv[8] = strdup("-a1");
     argv[9] = strdup("pkill");
-    argv[10] = strdup("unifycrd");
+    argv[10] = strdup("-n");
+    argv[11] = strdup("unifycrd");
 
     execvp(argv[0], argv);
     perror("failed to execvp() jsrun to pkill unifycrd");
@@ -588,8 +589,8 @@ static int mpirun_terminate(unifycr_resource_t* resource,
     char** argv = NULL;
     char n_nodes[16];
 
-    // full command: mpirun <mpirun args> pkill unifycrd
-    mpirun_argc = 7;
+    // full command: mpirun <mpirun args> pkill -n unifycrd
+    mpirun_argc = 8;
     snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
 
     // setup full command argv
@@ -601,7 +602,8 @@ static int mpirun_terminate(unifycr_resource_t* resource,
     argv[3] = strdup("--map-by");
     argv[4] = strdup("ppr:1:node");
     argv[5] = strdup("pkill");
-    argv[6] = strdup("unifycrd");
+    argv[6] = strdup("-n");
+    argv[7] = strdup("unifycrd");
 
     execvp(argv[0], argv);
     perror("failed to execvp() mpirun to pkill unifycrd");
@@ -661,8 +663,8 @@ static int srun_terminate(unifycr_resource_t* resource,
     char** argv = NULL;
     char n_nodes[16];
 
-    // full command: srun <srun args> pkill unifycrd
-    srun_argc = 7;
+    // full command: srun <srun args> pkill -n unifycrd
+    srun_argc = 8;
     snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
 
     // setup full command argv
@@ -674,7 +676,8 @@ static int srun_terminate(unifycr_resource_t* resource,
     argv[3] = strdup("-n");
     argv[4] = strdup(n_nodes);
     argv[5] = strdup("pkill");
-    argv[6] = strdup("unifycrd");
+    argv[6] = strdup("-n");
+    argv[7] = strdup("unifycrd");
 
     execvp(argv[0], argv);
     perror("failed to execvp() srun to pkill unifycrd");
@@ -730,8 +733,8 @@ static int script_terminate(unifycr_resource_t* resource,
     char** argv = NULL;
     char n_nodes[16];
 
-    // full command: <script> <#nodes> pkill unifycrd
-    script_argc = 4;
+    // full command: <script> <#nodes> pkill -n unifycrd
+    script_argc = 5;
     snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
 
     // setup full command argv
@@ -740,6 +743,7 @@ static int script_terminate(unifycr_resource_t* resource,
     argv[0] = strdup(args->script);
     argv[1] = strdup(n_nodes);
     argv[2] = strdup("pkill");
+    argv[3] = strdup("-n");
     argv[3] = strdup("unifycrd");
 
     execvp(argv[0], argv);

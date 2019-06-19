@@ -32,10 +32,14 @@
 #include <mpi.h>
 
 #include "unifycr_global.h"
+#include "unifycr_request_manager.h"
+#include "unifycr_service_manager.h"
+#include "unifycr_server_rpcs.h"
+#include "margo_server.h"
 
 /* The service manager thread runs in a loop waiting for incoming
  * requests.  When it receives a message, it unpacks all read
- * requests and appends them to the service_msgs list.  It delays
+ * requests and appends them to the sm->service_msgs list.  It delays
  * for some time in acting on requests in the hopes of buffering
  * read bursts to make I/O more efficient.  If no read request
  * has come in, and the delay time out has expired, and there are
@@ -61,7 +65,7 @@
  * MPI_Isend calls.  The MPI_Request objects for those isends are
  * added to a pending_sends list, which is later waited on.
  *
- * After replying to all service_msgs, the service manager
+ * After replying to all sm->service_msgs, the service manager
  * thread again starts listening for more incoming requests */
 
 /* records info needed to build read reply to send back to
@@ -93,8 +97,8 @@ typedef struct {
  * the memory/files holding the source data */
 typedef struct {
     size_t size;      /* size of read operation */
-    int start_idx;    /* index of starting read request */
-    int end_idx;      /* index of ending read request */
+    int start_idx;    /* service_msgs_t.msg[] index of starting request */
+    int end_idx;      /* service_msgs_t.msg[] index of ending request */
     int app_id;       /* app id holding requested data */
     int cli_id;       /* client id holding requested data */
     int arrival_time; /* time stamp when read request arrived */
@@ -145,37 +149,65 @@ typedef struct {
     int num;                    /* number of items in list */
 } rank_ack_task_t;
 
-/* records list of read requests from requesting delegators */
-static service_msgs_t service_msgs;
+/* Service Manager state */
+typedef struct {
+    /* the SM thread */
+    pthread_t thrd;
 
-/* list of read tasks that must be executed,
- * generated from read requests */
-static task_set_t read_task_set;
+    /* state synchronization mutex */
+    pthread_mutex_t sync;
 
-/* list of read reply data for each delegator */
-static rank_ack_task_t rank_ack_task;
+    /* thread status */
+    int initialized;
+    volatile int time_to_exit;
 
-/* list of outstanding read operations */
-static arraylist_t* pended_reads;
+    /* thread return status code */
+    int sm_exit_rc;
 
-/* list of outstanding send operations */
-static arraylist_t* pended_sends;
+    /* list of chunk read requests from remote delegators */
+    arraylist_t* chunk_reads;
 
-/* list of buffers to be used in send operations */
-static arraylist_t* send_buf_list;
+    /* records list of read requests from requesting delegators */
+    service_msgs_t service_msgs;
 
-/* counter for time waited before creating read tasks,
- * used to buffer multiple read requests before responding
- * with the idea that reads come in bursts */
-static int wait_time = 0;
+    /* list of read tasks that must be executed,
+     * generated from read requests */
+    task_set_t read_task_set;
 
-/* tracks running total of bytes in current read burst */
-static long burst_data_sz = 0;
+    /* list of read reply data for each delegator */
+    rank_ack_task_t rank_ack_task;
 
-/* this will point to a buffer to hold read data while gathering it
- * from source memory/files and before being packed into send buffers
- * for sending read replies */
-static char* read_buf;
+    /* list of outstanding read operations */
+    arraylist_t* pended_reads;
+
+    /* list of outstanding send operations */
+    arraylist_t* pended_sends;
+
+    /* list of buffers to be used in send operations */
+    arraylist_t* send_buf_list;
+
+    /* tracks running total of bytes in current read burst */
+    long burst_data_sz;
+
+    /* buffer to hold read data while gathering it from source
+     * memory/files and before being packed into send buffers
+     * for read replies */
+    char* read_buf;
+} svcmgr_state_t;
+svcmgr_state_t* sm; // = NULL
+
+#define SM_LOCK() \
+do { \
+    LOGDBG("locking service manager state"); \
+    pthread_mutex_lock(&(sm->sync)); \
+} while (0)
+
+#define SM_UNLOCK() \
+do { \
+    LOGDBG("unlocking service manager state"); \
+    pthread_mutex_unlock(&(sm->sync)); \
+} while (0)
+
 
 /* sort read requests into log files by
  * app id, then client id, then log offset */
@@ -211,17 +243,16 @@ static int compare_send_msg(const void* a, const void* b)
     return 0;
 }
 
-/* starts a new read task based on read request in service_msgs
+/* starts a new read task based on read request in sm->service_msgs
  * at given index */
-static void reset_read_tasks(task_set_t* read_task_set,
-                             service_msgs_t* service_msgs, int index)
+static void create_msg_read_task(int index)
 {
     /* get pointer to service message at given index */
-    send_msg_t* msg = &service_msgs->msg[index];
+    send_msg_t* msg = &sm->service_msgs.msg[index];
 
     /* get pointer to current read task */
-    int idx = read_task_set->num;
-    read_task_t* read_task = &read_task_set->read_tasks[idx];
+    int idx = sm->read_task_set.num;
+    read_task_t* read_task = &sm->read_task_set.read_tasks[idx];
 
     /* copy fields from message to read task */
     read_task->start_idx    = index;
@@ -232,43 +263,39 @@ static void reset_read_tasks(task_set_t* read_task_set,
     read_task->arrival_time = msg->arrival_time;
 }
 
-/**
-* Cluster read requests based on file
-* offset and ages; Each log file is uniquely
-* identified by client-side app_id and client_id, so
-* from these two, we can locate the target
-* log file (generated by the client-side program).
-* @param: service_msgs: a list of received messages
-* @param: read_task_set: a list of read tasks containing
-* the clustered read requests
-* return success/error
-*/
-static int sm_cluster_reads(task_set_t* read_task_set,
-                            service_msgs_t* service_msgs)
+/*
+ * Cluster read requests based on file offset and age.
+ * Each log file is uniquely identified by client-side app_id
+ * and client_id, so we can locate the target log file
+ * (generated by the client-side program).
+ *
+ * @return success/error
+ */
+static int sm_cluster_reads(void)
 {
     /* sort service messages by log file (app_id, client_id)
      * and then by offset within each log file */
-    qsort(service_msgs->msg, service_msgs->num,
+    qsort(sm->service_msgs.msg, sm->service_msgs.num,
           sizeof(send_msg_t), compare_send_msg);
 
     /* initialize count of read tasks */
-    read_task_set->num = 0;
+    sm->read_task_set.num = 0;
 
     /* create read task given first service message */
-    reset_read_tasks(read_task_set, service_msgs, 0);
-    read_task_set->num++;
+    create_msg_read_task(0);
+    sm->read_task_set.num++;
 
     /* iterate over each service message and create read tasks,
      * will merge multiple read requests into read tasks
      * when two requests refer to contiguous data in a log file */
     int i;
-    for (i = 1; i < service_msgs->num; i++) {
+    for (i = 1; i < sm->service_msgs.num; i++) {
         /* get pointer to current service message */
-        send_msg_t* msg = &service_msgs->msg[i];
+        send_msg_t* msg = &sm->service_msgs.msg[i];
 
         /* get pointer to preivous read task */
         read_task_t* last_read =
-            &read_task_set->read_tasks[read_task_set->num - 1];
+            &sm->read_task_set.read_tasks[sm->read_task_set.num - 1];
 
         /* check whether current message reads from the same log file,
          * as our last read task */
@@ -276,14 +303,14 @@ static int sm_cluster_reads(task_set_t* read_task_set,
             (last_read->cli_id != msg->dest_client_id)) {
             /* reading on a different local log file,
              * so create a new read task for this message */
-            reset_read_tasks(read_task_set, service_msgs, i);
-            read_task_set->num++;
+            create_msg_read_task(i);
+            sm->read_task_set.num++;
         } else {
             /* this message reads from the same log file as our last
              * read request */
 
             /* get pointer to previous read request */
-            send_msg_t* last_msg = &service_msgs->msg[i - 1];
+            send_msg_t* last_msg = &sm->service_msgs.msg[i - 1];
 
             /* see if we can tack current message on to
              * previous read request */
@@ -311,14 +338,14 @@ static int sm_cluster_reads(task_set_t* read_task_set,
                      * individual read request should be smaller
                      * than read_block_size. The larger one
                      * has already been split by the initiator */
-                    reset_read_tasks(read_task_set, service_msgs, i);
-                    read_task_set->num++;
+                    create_msg_read_task(i);
+                    sm->read_task_set.num++;
                 }
             } else {
                 /* not contiguous from the last offset,
                  * start a new read request */
-                reset_read_tasks(read_task_set, service_msgs, i);
-                read_task_set->num++;
+                create_msg_read_task(i);
+                sm->read_task_set.num++;
             }
         }
     }
@@ -345,27 +372,24 @@ static int compare_rank_thrd(int src_rank, int src_thrd,
     return 0;
 }
 
-/* returns index where delegator (rank,thread),
+/* Returns index where delegator (rank, thread),
  * should be in list, caller must check whether
  * delegator at that position matches */
-static int find_ack_meta(
-    rank_ack_task_t* rank_ack_task,
-    int src_rank,
-    int src_thrd,
-    int* found)
+static int find_ack_meta(int src_rank, int src_thrd,
+                         int* found)
 {
     /* assume we won't find item */
     *found = 0;
 
     /* if nothing in list, place this as first item */
-    if (rank_ack_task->num == 0) {
+    if (sm->rank_ack_task.num == 0) {
         return 0;
     }
 
-    rank_ack_meta_t* metas = rank_ack_task->ack_metas;
+    rank_ack_meta_t* metas = sm->rank_ack_task.ack_metas;
 
     /* if list has one item, compare to that item */
-    if (rank_ack_task->num == 1) {
+    if (sm->rank_ack_task.num == 1) {
         /* compare to first item */
         int cmp = compare_rank_thrd(src_rank, src_thrd,
                                     metas[0].rank_id, metas[0].thrd_id);
@@ -384,7 +408,7 @@ static int find_ack_meta(
 
     /* execute binary search for item location in list */
     int left  = 0;
-    int right = rank_ack_task->num - 1;
+    int right = sm->rank_ack_task.num - 1;
     int mid   = (left + right) / 2;
     while (right > left + 1) {
         /* compare item to middle element */
@@ -410,7 +434,8 @@ static int find_ack_meta(
 
     /* two elements left in the list, compare to left element */
     int cmp_left = compare_rank_thrd(src_rank, src_thrd,
-                                     metas[left].rank_id, metas[left].thrd_id);
+                                     metas[left].rank_id,
+                                     metas[left].thrd_id);
     if (cmp_left < 0) {
         /* item should come before left element */
         return left;
@@ -422,7 +447,8 @@ static int find_ack_meta(
 
     /* item is larger than left element, so compare to right */
     int cmp_right = compare_rank_thrd(src_rank, src_thrd,
-        metas[right].rank_id, metas[right].thrd_id);
+                                      metas[right].rank_id,
+                                      metas[right].thrd_id);
     if (cmp_right < 0) {
         /* item should come before right element */
         return right;
@@ -436,31 +462,29 @@ static int find_ack_meta(
     return (right + 1);
 }
 
-/* insert read reply list for specified (rank_id, thrd_id) delegator
+/* Insert read reply list for specified (rank_id, thrd_id) delegator
  * into ack list, keep ordered by rank,thread for fast lookup */
-static int insert_ack_meta(
-    rank_ack_task_t* rank_ack_task,
-    ack_meta_t* ack,
-    int pos,
-    int rank_id,
-    int thrd_id,
-    int src_cli_rank)
+static int insert_ack_meta(ack_meta_t* ack,
+                           int pos,
+                           int rank_id,
+                           int thrd_id,
+                           int src_cli_rank)
 {
     /* get pointer to array of read reply data for delegators */
-    rank_ack_meta_t* metas = rank_ack_task->ack_metas;
+    rank_ack_meta_t* metas = sm->rank_ack_task.ack_metas;
 
     /* check whether insert location is in middle of the list */
-    if (pos < rank_ack_task->num) {
+    if (pos < sm->rank_ack_task.num) {
         /* need to insert in the middle, bump all entries
          * past pos up a slot */
         int i;
-        for (i = rank_ack_task->num - 1; i >= pos; i--) {
+        for (i = sm->rank_ack_task.num - 1; i >= pos; i--) {
             metas[i + 1] = metas[i];
         }
     }
 
     /* get pointer to ack meta data structure */
-    rank_ack_meta_t* ack_meta = &metas[pos];
+    rank_ack_meta_t* ack_meta = &(metas[pos]);
 
     /* initialize with values */
     ack_meta->ack_list     = arraylist_create();
@@ -479,12 +503,12 @@ static int insert_ack_meta(
     arraylist_add(ack_meta->ack_list, ack);
 
     /* increment the number of entries in our list */
-    rank_ack_task->num++;
+    sm->rank_ack_task.num++;
 
     return UNIFYCR_SUCCESS;
 }
 
-/* send back ack to the remote delegator
+/* Send back ack to the remote delegator.
  * packs read replies into a send buffer, sends data with isend,
  * adds record of send to pending sends list */
 static int sm_ack_remote_delegator(rank_ack_meta_t* ack_meta)
@@ -492,32 +516,32 @@ static int sm_ack_remote_delegator(rank_ack_meta_t* ack_meta)
     int i;
 
     /* allocate more send buffers if we're at capacity */
-    if (send_buf_list->size == send_buf_list->cap) {
+    if (sm->send_buf_list->size == sm->send_buf_list->cap) {
         /* at capacity in our list, allocate more space,
          * double capacity in array */
-        size_t new_cap = 2 * send_buf_list->cap;
-        send_buf_list->elems = (void**)realloc(send_buf_list->elems,
-                                               new_cap * sizeof(void*));
+        size_t new_cap = 2 * sm->send_buf_list->cap;
+        sm->send_buf_list->elems = (void**)realloc(sm->send_buf_list->elems,
+                                                   (new_cap * sizeof(void*)));
 
         /* intialize pointers in new portion of array */
-        for (i = send_buf_list->cap; i < new_cap; i++) {
-            send_buf_list->elems[i] = NULL;
+        for (i = sm->send_buf_list->cap; i < new_cap; i++) {
+            sm->send_buf_list->elems[i] = NULL;
         }
 
         /* record new capacity */
-        send_buf_list->cap = new_cap;
+        sm->send_buf_list->cap = new_cap;
     }
 
     /* attempt to reuse allocated buffer if we can */
-    if (send_buf_list->elems[send_buf_list->size] == NULL) {
+    if (sm->send_buf_list->elems[sm->send_buf_list->size] == NULL) {
         /* need to allocate a new buffer */
-        send_buf_list->elems[send_buf_list->size] =
+        sm->send_buf_list->elems[sm->send_buf_list->size] =
             malloc(SENDRECV_BUF_LEN);
     }
 
     /* get pointer to send buffer */
-    char* send_msg_buf = send_buf_list->elems[send_buf_list->size];
-    send_buf_list->size++;
+    char* send_msg_buf = sm->send_buf_list->elems[sm->send_buf_list->size];
+    sm->send_buf_list->size++;
 
     /* running total number of bytes we'll send */
     int send_sz = 0;
@@ -560,42 +584,37 @@ static int sm_ack_remote_delegator(rank_ack_meta_t* ack_meta)
     /* send read replies to delegator (rank and thread),
      * record MPI request in ack stat structure to wait later */
     MPI_Isend(send_msg_buf, send_sz, MPI_BYTE,
-              del_rank, SER_DATA_TAG + del_thread,
+              del_rank, (int)READ_RESPONSE_TAG + del_thread,
               MPI_COMM_WORLD, &(ack_stat->req));
 
     /* add item to our list of pending sends */
-    arraylist_add(pended_sends, ack_stat);
+    arraylist_add(sm->pended_sends, ack_stat);
 
     return UNIFYCR_SUCCESS;
 }
 
 /*
- * insert a message to an entry of ack (read reply) list corresponding
+ * Insert a message to an entry of ack (read reply) list corresponding
  * to its destination delegator.
  *
- * @param: rank_ack_task: a list of ack for each (rank, thrd) pair
- * @param: mem_addr: address of data to be acked in mem_pool
- * @param service_msgs and index: identifies msg to be inserted
- *  to ack_lst
+ * @param mem_addr  : address of data to be acked in mem_pool
+ * @param index     : identifies msg to be inserted to ack_lst
  * @param src_offset: offset of the requested segment on the logical
- *  file (not the physical log file on SSD.
- *  E.g. for N-1 pattern, logical
- *  offset is the offset on the shared file)
- * @param len: length of the message
- * */
-static int insert_to_ack_list(
-    rank_ack_task_t* rank_ack_task,
-    char* mem_addr,
-    service_msgs_t* service_msgs,
-    int index,
-    size_t src_offset,
-    size_t len,
-    int errcode)
+ *                    file (not the physical log file on SSD).
+ *                    e.g., for N-1 pattern, logical offset
+ *                          is the offset in the shared file
+ * @param len       : length of the message
+ */
+static int insert_to_ack_list(char* mem_addr,
+                              int index,
+                              size_t src_offset,
+                              size_t len,
+                              int errcode)
 {
     int rc = 0;
 
     /* get pointer to read request we are replying to */
-    send_msg_t* msg = &service_msgs->msg[index];
+    send_msg_t* msg = &sm->service_msgs.msg[index];
 
     /* allocate a new structure to record ack meta data */
     ack_meta_t* ack = (ack_meta_t*)malloc(sizeof(ack_meta_t));
@@ -610,24 +629,22 @@ static int insert_to_ack_list(
 
     /* after setting the ack for this message, link it
      * to a ack list based on its destination. */
-
     int src_rank     = msg->src_delegator_rank;
     int src_thrd     = msg->src_thrd;
     int src_cli_rank = msg->src_dbg_rank;
 
     /* find the position in the list for target delegator */
     int found = 0;
-    int pos = find_ack_meta(rank_ack_task, src_rank, src_thrd, &found);
+    int pos = find_ack_meta(src_rank, src_thrd, &found);
 
     /* check whether delegator at this position is the target */
     if (! found) {
         /* it's not, so insert new entry for the target into the
          * list at this position */
-        rc = insert_ack_meta(rank_ack_task, ack, pos,
-                             src_rank, src_thrd, src_cli_rank);
+        rc = insert_ack_meta(ack, pos, src_rank, src_thrd, src_cli_rank);
     } else {
         /* found the corresponding entry for target delegator */
-        rank_ack_meta_t* ack_meta = &rank_ack_task->ack_metas[pos];
+        rank_ack_meta_t* ack_meta = &(sm->rank_ack_task.ack_metas[pos]);
 
         /* compute number of read replies waiting to be sent */
         int num_entries = arraylist_size(ack_meta->ack_list);
@@ -644,6 +661,7 @@ static int insert_to_ack_list(
          * existing send block */
         if (curr_bytes + bytes > SENDRECV_BUF_LEN) {
             /* not enough room, send the current list of read replies */
+            LOGDBG("early ack due to full send buffer");
             rc = sm_ack_remote_delegator(ack_meta);
 
             /* start a new list */
@@ -669,16 +687,19 @@ static int insert_to_ack_list(
     return UNIFYCR_SUCCESS;
 }
 
-/* insert the data read for each element in read task list to read
- * reply list, data will be sent later */
-static int batch_insert_to_ack_list(
-    rank_ack_task_t* rank_ack_task, /* read reply list for delegator */
-    read_task_t* read_task,         /* data returned from read task */
-    service_msgs_t* service_msgs,   /* read requests */
-    char* mem_addr,                 /* memory loc to copy read data */
-    int start_offset,               /* first offset in read task */
-    int end_offset,                 /* last offset in read task */
-    int errcode)                    /* error code on read (pass/fail) */
+/* Insert the data read for each element in read task list to read
+ * reply list, data will be sent later
+ * @param read_task   : data returned from read task
+ * @param mem_addr    : memory loc to copy read data
+ * @param start_offset: first offset in read task
+ * @param end_offset  : last offset in read task
+ * @param errcode     : error code on read (pass/fail)
+ */
+static int batch_insert_to_ack_list(read_task_t* read_task,
+                                    char* mem_addr,
+                                    int start_offset,
+                                    int end_offset,
+                                    int errcode)
 {
     /* search for the starting read request in service msgs for
      * a given region of read_task_t identified by start_offset
@@ -689,7 +710,7 @@ static int batch_insert_to_ack_list(
      *    read_task_t: -----------******************------------
      *    service_msgs:[    ],[*********],[***], [******],[      ]
      *
-     * */
+     */
 
     /* find index in read requests such that it contains starting
      * offset for read task */
@@ -697,7 +718,7 @@ static int batch_insert_to_ack_list(
     int cur_offset = 0;
     while (1) {
         /* get pointer to current read request */
-        send_msg_t* msg = &service_msgs->msg[idx];
+        send_msg_t* msg = &sm->service_msgs.msg[idx];
 
         /* check whether end offset of this read request comes
          * at or after starting offset of read task */
@@ -722,7 +743,7 @@ static int batch_insert_to_ack_list(
     int mem_pos = 0;
     while (1) {
         /* get pointer to read request */
-        send_msg_t* msg = &service_msgs->msg[idx];
+        send_msg_t* msg = &sm->service_msgs.msg[idx];
 
         /* stop if we reached the read request that contains the last
          * byte of our read task */
@@ -745,8 +766,7 @@ static int batch_insert_to_ack_list(
         }
 
         /* add entry to read reply list */
-        insert_to_ack_list(rank_ack_task, mem_addr + mem_pos,
-                           service_msgs, idx, offset, length, errcode);
+        insert_to_ack_list(mem_addr + mem_pos, idx, offset, length, errcode);
 
         /* update our offset into read reply buffer */
         mem_pos += length;
@@ -764,140 +784,125 @@ static int batch_insert_to_ack_list(
         long length = (end_offset - start_offset + 1) - mem_pos;
 
         /* starting offset for read request */
-        long offset = service_msgs->msg[idx].src_offset;
+        long offset = sm->service_msgs.msg[idx].src_offset;
 
         /* add entry to read reply list */
-        insert_to_ack_list(rank_ack_task, mem_addr + mem_pos,
-                           service_msgs, idx, offset, length, errcode);
+        insert_to_ack_list(mem_addr + mem_pos, idx, offset, length, errcode);
     }
 
     return UNIFYCR_SUCCESS;
 }
 
-/**
-* Wait until all data are read and sent
-* @param: read_task_set: a list of reading task
-* @param: service_msgs: a list of received read requests
-* @param: a list of send tasks for acknowledging the
-* requesting delegators
-* return success/error
-*/
-static int sm_wait_until_digested(task_set_t* read_task_set,
-                                  service_msgs_t* service_msgs,
-                                  rank_ack_task_t* read_ack_task)
+/*
+ * Wait until all data are read and sent.
+ * @return success/error
+ */
+static int sm_wait_until_digested(void)
 {
-    int i;
+    int i, rc, counter;
+    read_task_t* read_task;
 
     /* pointer to array of boolean flags for whether we need to test
      * outstanding operations */
     int* flags = NULL;
 
     /* get number of pending read operations */
-    int num_pended_reads = arraylist_size(pended_reads);
+    int num_pended_reads = arraylist_size(sm->pended_reads);
     if (num_pended_reads > 0) {
-        /* allocate space for pending flags */
-        size_t flags_size = num_pended_reads * sizeof(int);
-        flags = (int*)malloc(flags_size);
+        /* allocate space for pending flags, setting all to 0 */
+        flags = (int*) calloc(num_pended_reads, sizeof(int));
 
-        /* set all flags to 0 */
-        memset(flags, 0, flags_size);
-    }
-
-    /* wait for all pending read operations to complete */
-    long counter = 0;
-    while (1) {
-        /* check whether we have processed all reads */
-        if (counter == num_pended_reads) {
-            break;
-        }
-
-        /* iterate over pending reads */
-        for (i = 0; i < num_pended_reads; i++) {
-            /* get meta data for this pending read */
-            pended_read_t* pendread =
-                (pended_read_t*)arraylist_get(pended_reads, i);
-
-            /* don't need to check if we failed to even submit
-             * the read operation */
-            if (flags[i] != 1 && pendread->err_submit) {
-                /* mark that this read operation has completed */
-                flags[i] = 1;
-                counter++;
-
-                /* failed to submit, so we failed to read */
-                int errcode = (int)UNIFYCR_ERROR_READ;
-
-                /* add read reply to ack_list as failed */
-                batch_insert_to_ack_list(read_ack_task,
-                    &read_task_set->read_tasks[pendread->index],
-                    service_msgs,
-                    pendread->mem_pos,
-                    pendread->start_pos,
-                    pendread->end_pos,
-                    errcode);
-
-                continue;
+        /* wait for all pending read operations to complete */
+        counter = 0;
+        while (1) {
+            /* check whether we have processed all reads */
+            if (counter == num_pended_reads) {
+                LOGDBG("all pending reads completed");
+                break;
             }
+            LOGDBG("waiting for %d pending reads",
+                   (num_pended_reads - counter));
 
-            /* check whether this read has completed */
-            if (flags[i] != 1 &&
-                    aio_error(&pendread->read_cb) != EINPROGRESS) {
-                /* mark that this read operation has completed */
-                flags[i] = 1;
-                counter++;
+            /* iterate over pending reads */
+            for (i = 0; i < num_pended_reads; i++) {
+                if (flags[i] != 1) {
+                    int errcode = UNIFYCR_SUCCESS;
 
-                /* assume that we succeeded */
-                int errcode = UNIFYCR_SUCCESS;
+                    /* get meta data for this pending read */
+                    pended_read_t* pr =
+                        (pended_read_t*)arraylist_get(sm->pended_reads, i);
 
-                /* get return code for read operation */
-                ssize_t ret_code = aio_return(&pendread->read_cb);
+                    read_task = NULL;
+                    if (pr->index != -1) {
+                        read_task = &(sm->read_task_set.read_tasks[pr->index]);
+                    }
 
-                /* check that read completed without error */
-                if (ret_code != (ssize_t)pendread->read_cb.aio_nbytes) {
-                    /* read error or short read,
-                     * consider either case as a read error */
-                    errcode = (int)UNIFYCR_ERROR_READ;
+                    if (pr->err_submit) { /* failed to submit */
+                        /* mark that this read operation failed */
+                        errcode = (int)UNIFYCR_ERROR_READ;
+                        flags[i] = 1;
+                        counter++;
+
+                        if (NULL != read_task) {
+                            /* add read reply to ack_list as failed */
+                            batch_insert_to_ack_list(read_task,
+                                                     pr->mem_pos,
+                                                     pr->start_pos,
+                                                     pr->end_pos,
+                                                     errcode);
+                        }
+                    } else if (aio_error(&pr->read_cb) != EINPROGRESS) {
+                        /* mark that this read operation has completed */
+                        flags[i] = 1;
+                        counter++;
+
+                        /* check that read completed without error */
+                        ssize_t readrc = aio_return(&pr->read_cb);
+                        if (readrc == -1) {
+                            errcode = errno;
+                        } else if (readrc != (ssize_t)pr->read_cb.aio_nbytes) {
+                            /* short read considered as error */
+                            errcode = (int)UNIFYCR_ERROR_READ;
+                        }
+
+                        if (NULL != read_task) {
+                            /* add read reply to ack_list */
+                            batch_insert_to_ack_list(read_task,
+                                                     pr->mem_pos,
+                                                     pr->start_pos,
+                                                     pr->end_pos,
+                                                     errcode);
+                        }
+                    }
                 }
-
-                /* add read reply to ack_list */
-                batch_insert_to_ack_list(read_ack_task,
-                    &read_task_set->read_tasks[pendread->index],
-                    service_msgs,
-                    pendread->mem_pos,
-                    pendread->start_pos,
-                    pendread->end_pos,
-                    errcode);
             }
         }
-    }
 
-    /* free flags array */
-    if (flags != NULL) {
         free(flags);
         flags = NULL;
-    }
 
-    /* reset our list of pending read operations */
-    arraylist_reset(pended_reads);
+        /* reset our list of pending read operations */
+        arraylist_reset(sm->pended_reads);
+    }
 
     /* read operations have completed,
      * send data to delegators */
 
     /* iterate over list of delegators and send remaining acks */
-    for (i = 0; i < read_ack_task->num; i++) {
+    for (i = 0; i < sm->rank_ack_task.num; i++) {
         /* get data structure for this delegator */
-        rank_ack_meta_t* ack_meta = &read_ack_task->ack_metas[i];
+        rank_ack_meta_t* ack_meta = &(sm->rank_ack_task.ack_metas[i]);
 
         /* get total number of read replies in this list */
-        long tmp_sz = arraylist_size(ack_meta->ack_list);
+        int tmp_sz = arraylist_size(ack_meta->ack_list);
 
         /* if we have read replies we have yet to send,
          * send them now */
         if (ack_meta->start_cursor < tmp_sz) {
             /* got some read replies, send them */
-            int ret_code = sm_ack_remote_delegator(ack_meta);
-            if (ret_code != UNIFYCR_SUCCESS) {
-                return ret_code;
+            rc = sm_ack_remote_delegator(ack_meta);
+            if (rc != UNIFYCR_SUCCESS) {
+                LOGERR("failed to ack delegator");
             }
         }
     }
@@ -906,73 +911,68 @@ static int sm_wait_until_digested(task_set_t* read_task_set,
 
     /* get number of outstanding sends
      * initiated in sm_ack_remote_delegator */
-    int num_pended_sends = arraylist_size(pended_sends);
+    int num_pended_sends = arraylist_size(sm->pended_sends);
     if (num_pended_sends > 0) {
-        /* got some outstandings sends, allocate space for flags */
-        size_t flags_size = num_pended_sends * sizeof(int);
-        flags = (int*)malloc(flags_size);
+        /* allocate space for flags, setting all to 0 */
+        flags = (int*)calloc(num_pended_sends, sizeof(int));
 
-        /* set all flags to 0 */
-        memset(flags, 0, flags_size);
-    }
+        /* wait until all acks are sent */
+        counter = 0;
+        while (1) {
+            /* check whether we have waited on all sends */
+            if (counter == num_pended_sends) {
+                LOGDBG("all pending sends completed");
+                break;
+            }
+            LOGDBG("waiting for %d pending sends",
+                   (num_pended_sends - counter));
 
-    /* wait until all acks are sent */
-    counter = 0;
-    while (1) {
-        /* check whether we have waited on all sends */
-        if (counter == num_pended_sends) {
-            break;
-        }
+            /* iterate over each send we issued */
+            for (i = 0; i < num_pended_sends; i++) {
+                /* if send is still outstanding, check whether it's done */
+                if (flags[i] == 0) {
+                    /* still outstanding, get data for this send */
+                    ack_stat_t* ack_stat = arraylist_get(sm->pended_sends, i);
 
-        /* iterate over each send we issued */
-        for (i = 0; i < num_pended_sends; i++) {
-            /* if send is still outstanding, check whether it's done */
-            if (flags[i] == 0) {
-                /* still outstanding, get data for this send */
-                ack_stat_t* ack_stat = arraylist_get(pended_sends, i);
+                    /* test whether send is complete */
+                    rc = MPI_Test(&ack_stat->req, &flags[i],
+                                  &ack_stat->stat);
+                    if (rc != MPI_SUCCESS) {
+                        LOGERR("MPI_Test() for pending send failed");
+                    }
 
-                /* test whether send is complete */
-                int ret_code = MPI_Test(&ack_stat->req, &flags[i],
-                                        &ack_stat->stat);
-                if (ret_code != MPI_SUCCESS) {
-                    return (int)UNIFYCR_ERROR_RECV;
-                }
-
-                /* if send completed, bump our counter */
-                if (flags[i] != 0) {
-                    counter++;
+                    /* if send completed, bump our counter */
+                    if (flags[i] != 0) {
+                        counter++;
+                    }
                 }
             }
         }
-    }
 
-    /* free flags array */
-    if (flags != NULL) {
         free(flags);
         flags = NULL;
+
+        /* clear our list of sends */
+        arraylist_reset(sm->pended_sends);
     }
 
-    /* clear our list of sends */
-    arraylist_reset(pended_sends);
-
     /* reset our list of read replies */
-    for (i = 0; i < read_ack_task->num; i++) {
-        rank_ack_meta_t* ack_meta = &(read_ack_task->ack_metas[i]);
-
+    for (i = 0; i < sm->rank_ack_task.num; i++) {
+        rank_ack_meta_t* ack_meta = &(sm->rank_ack_task.ack_metas[i]);
         arraylist_reset(ack_meta->ack_list);
         ack_meta->rank_id      = -1;
         ack_meta->thrd_id      = -1;
         ack_meta->src_sz       = 0;
         ack_meta->start_cursor = 0;
     }
-    read_ack_task->num = 0;
+    sm->rank_ack_task.num = 0;
 
     /* TODO: might be nice to free some send buffers here */
 
     /* set active send buffers back to 0,
      * we do not free send buffers so that we do not have to
      * allocate them again */
-    send_buf_list->size = 0;
+    sm->send_buf_list->size = 0;
 
     return UNIFYCR_SUCCESS;
 }
@@ -1001,30 +1001,26 @@ static int compare_read_task(const void* a, const void* b)
     return 0;
 }
 
-/**
-* Read and send the data via pipelined read, copy and send
-* @param: read_task_set: a list of reading task
-* @param: service_msgs: a list of received read requests
-* @param: a list of send tasks for acknowledging the
-* requesting delegators
-* return success/error
-*/
-static int sm_read_send_pipe(task_set_t* read_task_set,
-                             service_msgs_t* service_msgs,
-                             rank_ack_task_t* rank_ack_task)
+/*
+ * Read and send the data via pipelined read, copy and send
+ * @return success/error
+ */
+static int sm_read_send_pipe(void)
 {
+    LOGDBG("processing %d reads", sm->read_task_set.num);
+
     /* sort read tasks by size and then by arrival time */
-    qsort(read_task_set->read_tasks, read_task_set->num,
+    qsort(sm->read_task_set.read_tasks, sm->read_task_set.num,
           sizeof(read_task_t), compare_read_task);
 
     /* points to offset in read reply buffer */
-    long buf_cursor = 0;
+    size_t buf_cursor = 0;
 
     /* iterate over read tasks and pack read replies into send buffer */
     int i;
-    for (i = 0; i < read_task_set->num; i++) {
+    for (i = 0; i < sm->read_task_set.num; i++) {
         /* get pointer to current read task */
-        read_task_t* read_task = &read_task_set->read_tasks[i];
+        read_task_t* read_task = &(sm->read_task_set.read_tasks[i]);
 
         /* get size of data we are to read */
         size_t size = read_task->size;
@@ -1033,8 +1029,8 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
         if ((buf_cursor + size) > READ_BUF_SZ) {
             /* no room, wait until reads complete and send
              * out replies */
-            sm_wait_until_digested(read_task_set,
-                                   service_msgs, rank_ack_task);
+            LOGDBG("read buf exhausted");
+            sm_wait_until_digested();
 
             /* reset to start of read buffer */
             buf_cursor = 0;
@@ -1046,7 +1042,7 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
         int cli_id = read_task->cli_id;
 
         /* look up app config for given app id */
-        app_config_t* app_config =
+        app_config_t* app_config = (app_config_t*)
             arraylist_get(app_config_list, app_id);
         assert(app_config);
 
@@ -1054,7 +1050,7 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
         int start_idx = read_task->start_idx;
 
         /* get offset in log file */
-        send_msg_t* msg = &service_msgs->msg[start_idx];
+        send_msg_t* msg = &sm->service_msgs.msg[start_idx];
         size_t offset = msg->dest_offset;
 
         /* prepare read opertions based on data location */
@@ -1065,7 +1061,7 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
                             app_config->data_offset + offset;
 
             /* copy data into read reply buffer */
-            char* buf_ptr = read_buf + buf_cursor;
+            char* buf_ptr = sm->read_buf + buf_cursor;
             memcpy(buf_ptr, log_ptr, size);
             buf_cursor += size;
 
@@ -1073,19 +1069,19 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
             int errcode = UNIFYCR_SUCCESS;
 
             /* prepare read reply meta data */
-            batch_insert_to_ack_list(rank_ack_task, read_task,
-                service_msgs, buf_ptr, 0, size - 1, errcode);
+            batch_insert_to_ack_list(read_task, buf_ptr,
+                                     0, size - 1, errcode);
         } else if (offset < app_config->data_size) {
             /* part of the requested data is in shared memory,
              * compute size in shared memory */
-            long sz_from_mem = app_config->data_size - offset;
+            size_t sz_from_mem = app_config->data_size - offset;
 
             /* get pointer to position in shared memory */
             char* log_ptr = app_config->shm_superblocks[cli_id] +
                             app_config->data_offset + offset;
 
             /* copy data into read reply buffer */
-            char* buf_ptr = read_buf + buf_cursor;
+            char* buf_ptr = sm->read_buf + buf_cursor;
             memcpy(buf_ptr, log_ptr, sz_from_mem);
             buf_cursor += sz_from_mem;
 
@@ -1097,7 +1093,7 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
 
             /* read data from spillover file */
             int fd = app_config->spill_log_fds[cli_id];
-            ssize_t nread = pread(fd, read_buf + buf_cursor,
+            ssize_t nread = pread(fd, sm->read_buf + buf_cursor,
                                   sz_from_ssd, 0);
             if (nread != (ssize_t)sz_from_ssd) {
                 /* read error or short read,
@@ -1107,8 +1103,8 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
             buf_cursor += sz_from_ssd;
 
             /* prepare read reply meta data */
-            batch_insert_to_ack_list(rank_ack_task, read_task,
-                service_msgs, buf_ptr, 0, size - 1, errcode);
+            batch_insert_to_ack_list(read_task, buf_ptr,
+                                     0, size - 1, errcode);
         } else {
             /* all requested data in the current read task
              * are in spillover files */
@@ -1121,7 +1117,7 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
             /* fill in aio fields */
             memset(&ptr->read_cb, 0, sizeof(struct aiocb));
             ptr->read_cb.aio_fildes = fd;
-            ptr->read_cb.aio_buf    = read_buf + buf_cursor;
+            ptr->read_cb.aio_buf    = sm->read_buf + buf_cursor;
             ptr->read_cb.aio_offset = offset - app_config->data_size;
             ptr->read_cb.aio_nbytes = size;
 
@@ -1133,7 +1129,7 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
             ptr->end_pos   = size - 1;
 
             /* send buffer location to copy data when complete */
-            ptr->mem_pos = read_buf + buf_cursor;
+            ptr->mem_pos = sm->read_buf + buf_cursor;
 
             /* submit read as aio operation */
             ptr->err_submit = 0;
@@ -1145,29 +1141,29 @@ static int sm_read_send_pipe(task_set_t* read_task_set,
             buf_cursor += size;
 
             /* enqueue entry in our list of pending reads */
-            arraylist_add(pended_reads, ptr);
+            arraylist_add(sm->pended_reads, ptr);
         }
 
         /* update accounting for burst size */
-        burst_data_sz += size;
+        sm->burst_data_sz += size;
     }
 
     /* have initiated all read tasks, wait for them to finish
      * and send results to delegators */
-    sm_wait_until_digested(read_task_set, service_msgs, rank_ack_task);
+    sm_wait_until_digested();
 
     return UNIFYCR_SUCCESS;
 }
 
-/**
-* decode the message received from request_manager
-* @param receive buffer that contains the requests
-* @return success/error code
-*/
-static int sm_decode_msg(char* recv_msg_buf)
+/* Decode the read-request message received from request_manager
+ *
+ * @param msg_buf: message buffer containing request(s)
+ * @return success/error code
+ */
+int sm_decode_msg(char* msg_buf)
 {
     /* get pointer to start of receive buffer */
-    char* ptr = recv_msg_buf;
+    char* ptr = msg_buf;
 
     /* advance past command */
     ptr += sizeof(int);
@@ -1176,152 +1172,299 @@ static int sm_decode_msg(char* recv_msg_buf)
     int num = *((int*)ptr);
     ptr += sizeof(int);
 
-    LOGDBG("decoding %d requests", num);
-
     /* get pointer to read request */
     send_msg_t* msg = (send_msg_t*)ptr;
 
-    /* allocate a larger array of service requests if needed */
-    if (num + service_msgs.num >= service_msgs.cap) {
-        /* get a larger buffer (2x what is currently needed) */
-        size_t count = 2 * (num + service_msgs.num);
-
-        /* allocate larger buffer (2x what is currently needed) */
-        size_t bytes = count * sizeof(send_msg_t);
-        service_msgs.msg =
-            (send_msg_t*)realloc(service_msgs.msg, bytes);
-        if (service_msgs.msg == NULL) {
-            /* failed to allocate memory */
-            return (int)UNIFYCR_ERROR_NOMEM;
-        }
-
-        /* got the memory, increase the capacity */
-        service_msgs.cap = count;
-
-        /* allocate corresponding space for read tasks */
-        bytes = count * sizeof(read_task_t);
-        read_task_set.read_tasks =
-            (read_task_t*)realloc(read_task_set.read_tasks, bytes);
-        if (read_task_set.read_tasks == NULL) {
-            /* failed to allocate memory */
-            return (int)UNIFYCR_ERROR_NOMEM;
-        }
-
-        /* got the memory, increase the capacity */
-        read_task_set.cap = count;
-    }
+    assert(NULL != sm);
+    SM_LOCK();
 
     /* get current timestamp as integer */
     int now = (int)time(NULL);
+
+    LOGDBG("decoding %d requests", num);
+
+    /* allocate a larger array of service requests if needed */
+    if (num + sm->service_msgs.num >= sm->service_msgs.cap) {
+        /* get a larger buffer (2x what is currently needed) */
+        size_t count = 2 * (num + sm->service_msgs.num);
+
+        /* allocate larger buffer (2x what is currently needed) */
+        size_t bytes = count * sizeof(send_msg_t);
+        sm->service_msgs.msg =
+            (send_msg_t*)realloc(sm->service_msgs.msg, bytes);
+        if (sm->service_msgs.msg == NULL) {
+            /* failed to allocate memory */
+            SM_UNLOCK();
+            return (int)UNIFYCR_ERROR_NOMEM;
+        }
+
+        /* got the memory, increase the capacity */
+        sm->service_msgs.cap = count;
+
+        /* allocate corresponding space for read tasks */
+        bytes = count * sizeof(read_task_t);
+        sm->read_task_set.read_tasks =
+            (read_task_t*)realloc(sm->read_task_set.read_tasks, bytes);
+        if (sm->read_task_set.read_tasks == NULL) {
+            /* failed to allocate memory */
+            SM_UNLOCK();
+            return (int)UNIFYCR_ERROR_NOMEM;
+        }
+
+        /* got the memory, increase the capacity */
+        sm->read_task_set.cap = count;
+    }
 
     /* unpack read requests to fill in service messages */
     int iter;
     for (iter = 0; iter < num; iter++) {
         /* copy values from read request */
-        service_msgs.msg[service_msgs.num] = msg[iter];
+        sm->service_msgs.msg[sm->service_msgs.num] = msg[iter];
 
         /* set time stamp on when we received this request */
-        service_msgs.msg[service_msgs.num].arrival_time = now;
+        sm->service_msgs.msg[sm->service_msgs.num].arrival_time = now;
 
         /* increment the number of service requests
          * and go to next read request */
-        service_msgs.num++;
+        sm->service_msgs.num++;
     }
+
+    SM_UNLOCK();
 
     return UNIFYCR_SUCCESS;
 }
 
-/* clean up state and resources allocated by service manager thread
- * before shutting down */
-static int sm_exit()
+/* Decode and issue chunk-reads received from request manager
+ *
+ * @param src_rank      : source delegator rank
+ * @param src_app_id    : app id at source delegator
+ * @param src_client_id : client id at source delegator
+ * @param src_req_id    : request id at source delegator
+ * @param num_chks      : number of chunk requests
+ * @param msg_buf       : message buffer containing request(s)
+ * @return success/error code
+ */
+int sm_issue_chunk_reads(int src_rank,
+                         int src_app_id,
+                         int src_client_id,
+                         int src_req_id,
+                         int num_chks,
+                         char* msg_buf)
 {
-    int rc = UNIFYCR_SUCCESS;
+    /* get pointer to start of receive buffer */
+    char* ptr = msg_buf;
 
-    arraylist_free(pended_reads);
-    arraylist_free(pended_sends);
-    arraylist_free(send_buf_list);
+    /* advance past command */
+    ptr += sizeof(int);
 
-    free(service_msgs.msg);
-    free(read_task_set.read_tasks);
+    /* extract number of chunk read requests */
+    int num = *((int*)ptr);
+    ptr += sizeof(int);
+    assert(num == num_chks);
+
+    size_t total_data_sz = *((size_t*)ptr);
+    ptr += sizeof(size_t);
+
+    /* get pointer to read request */
+    chunk_read_req_t* reqs = (chunk_read_req_t*)ptr;
+
+    remote_chunk_reads_t* rcr = (remote_chunk_reads_t*)
+        calloc(1, sizeof(remote_chunk_reads_t));
+    if (NULL == rcr) {
+        LOGERR("failed to allocate remote_chunk_reads");
+        return UNIFYCR_ERROR_NOMEM;
+    }
+    rcr->rank = src_rank;
+    rcr->app_id = src_app_id;
+    rcr->client_id = src_client_id;
+    rcr->rdreq_id = src_req_id;
+    rcr->num_chunks = num_chks;
+    rcr->reqs = NULL;
+
+    size_t resp_sz = sizeof(chunk_read_resp_t) * num_chks;
+    size_t buf_sz = resp_sz + total_data_sz;
+    rcr->total_sz = buf_sz;
+
+    // NOTE: calloc() is required here, don't use malloc
+    char* crbuf = (char*) calloc(1, buf_sz);
+    if (NULL == crbuf) {
+        LOGERR("failed to allocate chunk_read_reqs");
+        free(rcr);
+        return UNIFYCR_ERROR_NOMEM;
+    }
+    chunk_read_resp_t* resp = (chunk_read_resp_t*)crbuf;
+    rcr->resp = resp;
+
+    char* databuf = crbuf + resp_sz;
+
+    LOGDBG("issuing %d requests, total data size = %zu",
+           num_chks, total_data_sz);
+
+    /* points to offset in read reply buffer */
+    size_t buf_cursor = 0;
 
     int i;
-    for (i = 0; i < rank_ack_task.num; i++) {
-        arraylist_free(rank_ack_task.ack_metas[i].ack_list);
+    int last_app = -1;
+    app_config_t* app_config = NULL;
+    for (i = 0; i < num_chks; i++) {
+        chunk_read_req_t* rreq = reqs + i;
+        chunk_read_resp_t* rresp = resp + i;
+
+        /* get size of data we are to read */
+        size_t size = rreq->nbytes;
+        size_t offset = rreq->log_offset;
+
+        /* record request metadata in response */
+        rresp->nbytes = size;
+        rresp->offset = rreq->offset;
+        LOGDBG("reading chunk(offset=%zu, size=%zu)", rreq->offset, size);
+
+        /* get app id and client id for this read task,
+         * defines log files holding data */
+        int app_id = rreq->log_app_id;
+        int cli_id = rreq->log_client_id;
+        if (app_id != last_app) {
+            /* look up app config for given app id */
+            app_config = (app_config_t*)
+                arraylist_get(app_config_list, app_id);
+            assert(app_config);
+            last_app = app_id;
+        }
+        int spillfd = app_config->spill_log_fds[cli_id];
+        char* log_ptr = app_config->shm_superblocks[cli_id] +
+                        app_config->data_offset + offset;
+
+        char* buf_ptr = databuf + buf_cursor;
+
+        /* prepare read opertions based on data location */
+        size_t sz_from_mem = 0;
+        size_t sz_from_spill = 0;
+        if ((offset + size) <= app_config->data_size) {
+            /* requested data is totally in shared memory */
+            sz_from_mem = size;
+        } else if (offset < app_config->data_size) {
+            /* part of the requested data is in shared memory */
+            sz_from_mem = app_config->data_size - offset;
+            sz_from_spill = size - sz_from_mem;
+        } else {
+            /* all requested data is in spillover file */
+            sz_from_spill = size;
+        }
+        if (sz_from_mem > 0) {
+            /* read data from shared memory */
+            memcpy(buf_ptr, log_ptr, sz_from_mem);
+            rresp->read_rc = sz_from_mem;
+        }
+        if (sz_from_spill > 0) {
+            /* read data from spillover file */
+            ssize_t nread = pread(spillfd, (buf_ptr + sz_from_mem),
+                                  sz_from_spill, 0);
+            if (-1 == nread) {
+                rresp->read_rc = (ssize_t)(-errno);
+            } else {
+                rresp->read_rc += nread;
+            }
+        }
+        buf_cursor += size;
+
+        /* update accounting for burst size */
+        sm->burst_data_sz += size;
     }
 
-    return rc;
+    if (src_rank != glb_mpi_rank) {
+        /* add chunk_reads to svcmgr response list */
+        LOGDBG("adding to svcmgr chunk_reads");
+        assert(NULL != sm);
+        SM_LOCK();
+        arraylist_add(sm->chunk_reads, rcr);
+        SM_UNLOCK();
+        LOGDBG("done adding to svcmgr chunk_reads");
+        return UNIFYCR_SUCCESS;
+    } else { /* response is for myself */
+        LOGDBG("responding to myself");
+        int rc = rm_post_chunk_read_responses(src_app_id, src_client_id,
+                                              src_rank, src_req_id,
+                                              num_chks, buf_sz, crbuf);
+        if (rc != (int)UNIFYCR_SUCCESS) {
+            LOGERR("failed to handle chunk read responses");
+        }
+        /* clean up allocated buffers */
+        free(rcr);
+        return rc;
+    }
 }
 
-/* return code for service manager thread,
- * this is global since we return its address
- * from the pthread entry point function */
-int sm_rc;
-
-/* entry point for the service thread, service the read requests
- * received from the requesting delegators, executes a loop constantly
- * waiting on incoming message, for each message that comes in,
- * appends read requests to service_msgs list, if no message has
- * arrived, and after some wait time (to catch bursty reads),
- * then convert read requests into read tasks, execute read tasks
- * to build read replies, and send read replies back to delegators */
-void* sm_service_reads(void* ctx)
+/* initialize and launch service manager thread */
+int svcmgr_init(void)
 {
-    /* allocate a buffer to hold read data before packing
-     * into send buffers */
-    read_buf = malloc(READ_BUF_SZ);
-    if (read_buf == NULL) {
-        // TODO: we need a better way to handle this case
-        LOGERR("failed to allocate read buffer!");
-        sm_rc = (int)UNIFYCR_ERROR_NOMEM;
-        return (void*)&sm_rc;
+    sm = (svcmgr_state_t*)calloc(1, sizeof(svcmgr_state_t));
+    if (NULL == sm) {
+        LOGERR("failed to allocate service manager state!");
+        return (int)UNIFYCR_ERROR_NOMEM;
     }
 
-    /* initialize value on how long to wait before processing
-     * incoming read requests */
-    long bursty_interval = MAX_BURSTY_INTERVAL / 10;
+    /* allocate a buffer to hold read data before packing
+     * into send buffers */
+    sm->read_buf = malloc(READ_BUF_SZ);
+    if (sm->read_buf == NULL) {
+        LOGERR("failed to allocate service manager read buffer!");
+        svcmgr_fini();
+        return (int)UNIFYCR_ERROR_NOMEM;
+    }
 
     /* tracks how much data we process in each burst */
-    burst_data_sz = 0;
+    sm->burst_data_sz = 0;
+
+    /* allocate a list to track chunk read requests */
+    sm->chunk_reads = arraylist_create();
+    if (sm->chunk_reads == NULL) {
+        LOGERR("failed to allocate service manager chunk_reads!");
+        svcmgr_fini();
+        return (int)UNIFYCR_ERROR_NOMEM;
+    }
 
     /* intialize our data structure for holding read requests */
     size_t bytes = MAX_META_PER_SEND * sizeof(send_msg_t);
-    service_msgs.msg = (send_msg_t*)malloc(bytes);
-    service_msgs.num = 0;
-    service_msgs.cap = MAX_META_PER_SEND;
+    sm->service_msgs.msg = (send_msg_t*)malloc(bytes);
+    sm->service_msgs.num = 0;
+    sm->service_msgs.cap = MAX_META_PER_SEND;
 
     /* intialize our data structure for holding read tasks */
     bytes = MAX_META_PER_SEND * sizeof(read_task_t);
-    read_task_set.read_tasks = (read_task_t*)malloc(bytes);
-    read_task_set.num        = 0;
-    read_task_set.cap        = MAX_META_PER_SEND;
+    sm->read_task_set.read_tasks = (read_task_t*)malloc(bytes);
+    sm->read_task_set.num        = 0;
+    sm->read_task_set.cap        = MAX_META_PER_SEND;
 
     /* allocate a list to track pending data read operations */
-    pended_reads = arraylist_create();
-    if (pended_reads == NULL) {
-        sm_rc = (int)UNIFYCR_ERROR_NOMEM;
-        return (void*)&sm_rc;
+    sm->pended_reads = arraylist_create();
+    if (sm->pended_reads == NULL) {
+        LOGERR("failed to allocate service manager pended_reads!");
+        svcmgr_fini();
+        return (int)UNIFYCR_ERROR_NOMEM;
     }
 
     /* allocate a list to track outstanding sends back to
      * requesting delegators */
-    pended_sends = arraylist_create();
-    if (pended_sends == NULL) {
-        sm_rc = (int)UNIFYCR_ERROR_NOMEM;
-        return (void*)&sm_rc;
+    sm->pended_sends = arraylist_create();
+    if (sm->pended_sends == NULL) {
+        LOGERR("failed to allocate service manager pended_sends!");
+        svcmgr_fini();
+        return (int)UNIFYCR_ERROR_NOMEM;
     }
 
     /* allocate a list to track pending send operations
      * that need to be initiated back to requesting delegators */
-    send_buf_list = arraylist_create();
-    if (send_buf_list == NULL) {
-        sm_rc = (int)UNIFYCR_ERROR_NOMEM;
-        return (void*)&sm_rc;
+    sm->send_buf_list = arraylist_create();
+    if (sm->send_buf_list == NULL) {
+        LOGERR("failed to allocate service manager send_buf_list!");
+        svcmgr_fini();
+        return (int)UNIFYCR_ERROR_NOMEM;
     }
 
     /* allocate memory to hold meta data for read replies */
     bytes = glb_mpi_size * MAX_NUM_CLIENTS * sizeof(rank_ack_meta_t);
-    rank_ack_task.num       = 0;
-    rank_ack_task.ack_metas = (rank_ack_meta_t*)malloc(bytes);
+    sm->rank_ack_task.num       = 0;
+    sm->rank_ack_task.ack_metas = (rank_ack_meta_t*)malloc(bytes);
 
     /* initialize each ack_meta structure, keep one for each potential
      * application client
@@ -1329,15 +1472,113 @@ void* sm_service_reads(void* ctx)
     int i;
     for (i = 0; i < glb_mpi_size * MAX_NUM_CLIENTS; i++) {
         /* get pointer to current structure */
-        rank_ack_meta_t* ack_meta = &rank_ack_task.ack_metas[i];
-
-        /* initialize fields */
+        rank_ack_meta_t* ack_meta = &(sm->rank_ack_task.ack_metas[i]);
         ack_meta->ack_list     = NULL;
         ack_meta->rank_id      = -1;
         ack_meta->thrd_id      = -1;
         ack_meta->src_sz       = 0;
         ack_meta->start_cursor = 0;
     }
+
+    int rc = pthread_mutex_init(&(sm->sync), NULL);
+    if (0 != rc) {
+        LOGERR("failed to initialize service manager mutex!");
+        svcmgr_fini();
+        return (int)UNIFYCR_ERROR_THRDINIT;
+    }
+
+    sm->initialized = 1;
+
+    rc = pthread_create(&(sm->thrd), NULL,
+                        sm_service_reads, (void*)sm);
+    if (rc != 0) {
+        LOGERR("failed to create service manager thread");
+        svcmgr_fini();
+        return (int)UNIFYCR_ERROR_THRDINIT;
+    }
+
+    return (int)UNIFYCR_SUCCESS;
+}
+
+/* join service manager thread (if created) and clean up state */
+int svcmgr_fini(void)
+{
+    if (NULL != sm) {
+        if (sm->thrd) {
+            // int exit_cmd = (int)SVC_CMD_EXIT;
+            // MPI_Send(&exit_cmd, sizeof(int), MPI_CHAR, glb_mpi_rank,
+            //          (int)READ_REQUEST_TAG, MPI_COMM_WORLD);
+            sm->time_to_exit = 1;
+            pthread_join(sm->thrd, NULL);
+        }
+        if (sm->initialized) {
+            SM_LOCK();
+        }
+
+        arraylist_free(sm->chunk_reads);
+        arraylist_free(sm->pended_reads);
+        arraylist_free(sm->pended_sends);
+        arraylist_free(sm->send_buf_list);
+
+        if (NULL != sm->service_msgs.msg) {
+            free(sm->service_msgs.msg);
+        }
+        if (NULL != sm->read_task_set.read_tasks) {
+            free(sm->read_task_set.read_tasks);
+        }
+
+        int i;
+        for (i = 0; i < sm->rank_ack_task.num; i++) {
+            arraylist_free(sm->rank_ack_task.ack_metas[i].ack_list);
+        }
+
+        if (sm->initialized) {
+            SM_UNLOCK();
+            pthread_mutex_destroy(&(sm->sync));
+        }
+
+        free(sm);
+        sm = NULL;
+    }
+    return (int)UNIFYCR_SUCCESS;
+}
+
+/* iterate over list of chunk reads and send responses */
+static int send_chunk_read_responses(void)
+{
+    int rc = (int)UNIFYCR_SUCCESS;
+    pthread_mutex_lock(&(sm->sync));
+    int num_chunk_reads = arraylist_size(sm->chunk_reads);
+    if (num_chunk_reads) {
+        LOGDBG("processing %d chunk read responses", num_chunk_reads);
+        for (int i = 0; i < num_chunk_reads; i++) {
+            /* get data structure */
+            remote_chunk_reads_t* rcr = (remote_chunk_reads_t*)
+                arraylist_get(sm->chunk_reads, i);
+            rc = invoke_chunk_read_response_rpc(rcr);
+            if (rc != UNIFYCR_SUCCESS) {
+                LOGERR("failed to send chunk read responses");
+            }
+        }
+        arraylist_reset(sm->chunk_reads);
+    }
+    pthread_mutex_unlock(&(sm->sync));
+    return rc;
+}
+
+/* entry point for the service thread, service the read requests
+ * received from the requesting delegators, executes a loop constantly
+ * waiting on incoming message, for each message that comes in,
+ * appends read requests to sm->service_msgs list, if no message has
+ * arrived, and after some wait time (to catch bursty reads),
+ * then convert read requests into read tasks, execute read tasks
+ * to build read replies, and send read replies back to delegators */
+void* sm_service_reads(void* ctx)
+{
+    int rc;
+
+    LOGDBG("I am service manager thread!");
+    assert(sm == (svcmgr_state_t*)ctx);
 
     /* received message format:
      *   cmd, req_num, a list of read requests */
@@ -1347,23 +1588,33 @@ void* sm_service_reads(void* ctx)
      * (mitigate problems thread stack size limits) */
     char* req_msg_buf = (char*)malloc(REQ_BUF_LEN);
 
+    /* counter for timed wait before creating read tasks,
+     * used to buffer multiple read requests before responding
+     * with the idea that reads come in bursts */
+    int wait_time = 0;
+
+    /* initialize value on how long to wait before processing
+     * incoming read requests */
+    long bursty_interval = MAX_BURSTY_INTERVAL / 10;
+
     /* listen and server incoming requests until signaled to exit */
     MPI_Status status;
-    int done = 0;
-    while (!done) {
+    while (!sm->time_to_exit) {
         /* post a receive for incoming request */
         MPI_Request request;
         MPI_Irecv(req_msg_buf, REQ_BUF_LEN, MPI_BYTE,
-                  MPI_ANY_SOURCE, CLI_DATA_TAG,
+                  MPI_ANY_SOURCE, (int)READ_REQUEST_TAG,
                   MPI_COMM_WORLD, &request);
 
         /* test whether we received anything */
         int irecv_flag = 0;
-        int return_code = MPI_Test(&request, &irecv_flag, &status);
-        if (return_code != MPI_SUCCESS) {
-            sm_rc = (int)UNIFYCR_ERROR_RECV;
-            return (void*)&sm_rc;
+        int mpi_rc = MPI_Test(&request, &irecv_flag, &status);
+        if (mpi_rc != MPI_SUCCESS) {
+            sm->sm_exit_rc = (int)UNIFYCR_ERROR_RECV;
+            return NULL;
         }
+
+        send_chunk_read_responses();
 
         /* as long as we keep receiving requests, we'll keep skipping
          * the while loop below (and its sleep) and keep appending
@@ -1375,6 +1626,13 @@ void* sm_service_reads(void* ctx)
          * bursty behavior
          * */
         while (!irecv_flag) {
+
+            if (sm->time_to_exit) {
+                break;
+            }
+
+            send_chunk_read_responses();
+
             /* if we have not received anything, sleep */
             if (bursty_interval > MIN_SLEEP_INTERVAL) {
                 usleep(SLEEP_INTERVAL); /* wait an interval */
@@ -1388,35 +1646,37 @@ void* sm_service_reads(void* ctx)
                 (bursty_interval <= MIN_SLEEP_INTERVAL)) {
                 /* if time to wait has expired, and if we have some
                  * queued read requests, do some work */
-                if (service_msgs.num > 0) {
+
+                pthread_mutex_lock(&(sm->sync));
+                if (sm->service_msgs.num > 0) {
                     /* run through list of read requests and generate
                      * read tasks, merge requests for contiguous data
                      * into a single read task */
-                    int rc = sm_cluster_reads(&read_task_set,
-                                              &service_msgs);
+                    rc = sm_cluster_reads();
                     if (rc != 0) {
-                        sm_rc = rc;
-                        return (void*)&sm_rc;
+                        sm->sm_exit_rc = rc;
+                        pthread_mutex_unlock(&(sm->sync));
+                        return NULL;
                     }
 
                     /* execute read tasks, wait for them to complete,
                      * then pack read replies, send to delegators, and
                      * finally wait for sends to complete */
-                    rc = sm_read_send_pipe(&read_task_set,
-                                           &service_msgs, &rank_ack_task);
+                    rc = sm_read_send_pipe();
                     if (rc != 0) {
-                        sm_rc = rc;
-                        return (void*)&sm_rc;
+                        sm->sm_exit_rc = rc;
+                        pthread_mutex_unlock(&(sm->sync));
+                        return NULL;
                     }
 
                     /* have processed all read requests and read tasks,
                      * prep them for next message */
-                    service_msgs.num  = 0;
-                    read_task_set.num = 0;
+                    sm->service_msgs.num  = 0;
+                    sm->read_task_set.num = 0;
 
                     /* determine how long to wait next time based on
                      * how much data we just processed in this burst */
-                    if (burst_data_sz >= LARGE_BURSTY_DATA) {
+                    if (sm->burst_data_sz >= LARGE_BURSTY_DATA) {
                         /* for large bursts above a threshold,
                          * wait for a fixed amount of time */
                         bursty_interval = MAX_BURSTY_INTERVAL;
@@ -1424,13 +1684,13 @@ void* sm_service_reads(void* ctx)
                         /* for smaller bursts, set delay proportionally
                          * to burst size we just processed */
                         bursty_interval =
-                            (long)((double)burst_data_sz / MIB) *
-                            SLEEP_SLICE_PER_UNIT;
+                            (SLEEP_SLICE_PER_UNIT * sm->burst_data_sz) / MIB;
                     }
 
                     /* reset our burst size counter */
-                    burst_data_sz = 0;
+                    sm->burst_data_sz = 0;
                 }
+                pthread_mutex_unlock(&(sm->sync));
 
                 /* reset our timer */
                 wait_time = 0;
@@ -1438,30 +1698,27 @@ void* sm_service_reads(void* ctx)
 
             /* test for receive again, will break while loop
              * if we find something */
-            return_code = MPI_Test(&request, &irecv_flag, &status);
-            if (return_code != MPI_SUCCESS) {
-                sm_rc = (int)UNIFYCR_ERROR_RECV;
-                return (void*)&sm_rc;
+            mpi_rc = MPI_Test(&request, &irecv_flag, &status);
+            if (mpi_rc != MPI_SUCCESS) {
+                sm->sm_exit_rc = (int)UNIFYCR_ERROR_RECV;
+                return NULL;
             }
         }
 
-        /* got a message, reset wait time */
-        wait_time = 0;
+        if (irecv_flag) {
+            /* got a message, reset wait time */
+            wait_time = 0;
 
-        /* first value of receive buffer is integer holding command */
-        int cmd = *((int*)req_msg_buf);
-
-        /* check whether this is a request for data */
-        if (cmd == XFER_COMM_DATA)  {
-            /* got a request for data, append read requests in message
-             * to our service_msgs list */
-            sm_decode_msg(req_msg_buf);
-        } else if (cmd == XFER_COMM_EXIT) {
-            /* time to exit, free off data structures */
-            sm_exit();
-
-            /* set flag to exit */
-            done = 1;
+            /* first value of receive buffer is integer holding command */
+            int reqcmd = *((int*)req_msg_buf);
+            if (reqcmd == (int)SVC_CMD_RDREQ_MSG)  {
+                /* got a request for data, append read requests in message
+                 * to our sm->service_msgs list */
+                sm_decode_msg(req_msg_buf);
+            } else if (reqcmd == (int)SVC_CMD_EXIT) {
+                /* time to exit */
+                sm->time_to_exit = 1;
+            }
         }
     }
 
@@ -1469,7 +1726,279 @@ void* sm_service_reads(void* ctx)
     free(req_msg_buf);
     req_msg_buf = NULL;
 
-    LOGDBG("thread exiting");
+    LOGDBG("service manager thread exiting");
 
-    return (void*)&sm_rc;
+    sm->sm_exit_rc = (int)UNIFYCR_SUCCESS;
+    return NULL;
 }
+
+/* BEGIN MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
+
+/* invokes the chunk_read_response rpc */
+int invoke_chunk_read_response_rpc(remote_chunk_reads_t* rcr)
+{
+    int rc = (int)UNIFYCR_SUCCESS;
+    int dst_srvr_rank = rcr->rank;
+    hg_handle_t handle;
+    chunk_read_response_in_t in;
+    chunk_read_response_out_t out;
+    hg_return_t hret;
+    hg_addr_t dst_srvr_addr;
+    hg_size_t bulk_sz = rcr->total_sz;
+    void* data_buf = (void*)rcr->resp;
+
+    assert(dst_srvr_rank < (int)glb_num_servers);
+    dst_srvr_addr = glb_servers[dst_srvr_rank].margo_svr_addr;
+
+    hret = margo_create(unifycrd_rpc_context->svr_mid, dst_srvr_addr,
+                        unifycrd_rpc_context->rpcs.chunk_read_response_id,
+                        &handle);
+    assert(hret == HG_SUCCESS);
+
+    /* fill in input struct */
+    in.src_rank = (int32_t)glb_mpi_rank;
+    in.app_id = (int32_t)rcr->app_id;
+    in.client_id = (int32_t)rcr->client_id;
+    in.req_id = (int32_t)rcr->rdreq_id;
+    in.num_chks = (int32_t)rcr->num_chunks;
+    in.bulk_size = bulk_sz;
+
+    /* register request buffer for bulk remote access */
+    hret = margo_bulk_create(unifycrd_rpc_context->svr_mid, 1,
+                             &data_buf, &bulk_sz,
+                             HG_BULK_READ_ONLY, &in.bulk_handle);
+    assert(hret == HG_SUCCESS);
+
+    LOGDBG("invoking the chunk-read-response rpc function");
+    hret = margo_forward(handle, &in);
+    if (hret != HG_SUCCESS) {
+        rc = (int)UNIFYCR_FAILURE;
+    } else {
+        /* decode response */
+        hret = margo_get_output(handle, &out);
+        if (hret == HG_SUCCESS) {
+            rc = (int)out.ret;
+            LOGDBG("chunk-read-response rpc to %d - ret=%d",
+                   dst_srvr_rank, rc);
+            margo_free_output(handle, &out);
+        } else {
+            rc = (int)UNIFYCR_FAILURE;
+        }
+    }
+
+    margo_bulk_free(in.bulk_handle);
+    margo_destroy(handle);
+
+    /* free response data buffer */
+    free(data_buf);
+    rcr->resp = NULL;
+
+    return rc;
+}
+
+/* BEGIN MARGO SERVER-SERVER RPC HANDLERS */
+
+/* handler for server-server hello
+ *
+ * print the message, and return my rank */
+static void server_hello_rpc(hg_handle_t handle)
+{
+    int rc, src_rank;
+    hg_return_t hret;
+    char* msg;
+    server_hello_in_t in;
+    server_hello_out_t out;
+
+    /* get input params */
+    rc = margo_get_input(handle, &in);
+    assert(rc == HG_SUCCESS);
+    src_rank = (int)in.src_rank;
+    msg = strdup(in.message_str);
+    if (NULL != msg) {
+        LOGDBG("got message '%s' from server %d", msg, src_rank);
+        free(msg);
+    }
+
+    /* fill output structure to return to caller */
+    out.ret = (int32_t)glb_mpi_rank;
+
+    /* send output back to caller */
+    hret = margo_respond(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* free margo resources */
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(server_hello_rpc)
+
+/* handler for server-server request
+ *
+ * decode payload based on tag, and call appropriate svcmgr routine */
+static void server_request_rpc(hg_handle_t handle)
+{
+    int rc, req_id, src_rank, tag;
+    int32_t ret;
+    hg_return_t hret;
+    hg_bulk_t bulk_handle;
+    size_t bulk_sz;
+    server_request_in_t in;
+    server_request_out_t out;
+
+    /* get input params */
+    rc = margo_get_input(handle, &in);
+    assert(rc == HG_SUCCESS);
+    src_rank = (int)in.src_rank;
+    req_id = (int)in.req_id;
+    tag = (int)in.req_tag;
+    bulk_sz = (size_t)in.bulk_size;
+
+    LOGDBG("handling request from server %d: tag=%d req=%d sz=%zu",
+           src_rank, tag, req_id, bulk_sz);
+
+    /* get margo info */
+    const struct hg_info* hgi = margo_get_info(handle);
+    assert(NULL != hgi);
+    margo_instance_id mid = margo_hg_info_get_instance(hgi);
+    assert(mid != MARGO_INSTANCE_NULL);
+
+    int reqcmd = 0;
+    void* reqbuf = NULL;
+    if (bulk_sz) {
+        /* allocate and register local target buffer for bulk access */
+        reqbuf = malloc(bulk_sz);
+        if (NULL == reqbuf) {
+            ret = (int32_t)UNIFYCR_ERROR_NOMEM;
+            goto request_out;
+        }
+        hret = margo_bulk_create(mid, 1, &reqbuf, &in.bulk_size,
+                                 HG_BULK_WRITE_ONLY, &bulk_handle);
+        assert(hret == HG_SUCCESS);
+
+        /* pull request data */
+        hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
+                                   in.bulk_handle, 0,
+                                   bulk_handle, 0, in.bulk_size);
+        assert(hret == HG_SUCCESS);
+        reqcmd = *(int*)reqbuf;
+    }
+
+    switch (tag) {
+      case (int)READ_REQUEST_TAG: {
+        /* verify this is a request for data */
+        if (reqcmd == (int)SVC_CMD_RDREQ_MSG) {
+            LOGDBG("request command: SVC_CMD_RDREQ_MSG");
+            /* got a request for data, append read requests in message
+             * to our sm->service_msgs list */
+            sm_decode_msg((char*)reqbuf);
+            ret = (int32_t)UNIFYCR_SUCCESS;
+        } else {
+            LOGERR("invalid request command %d from server %d",
+                   reqcmd, src_rank);
+            ret = (int32_t)UNIFYCR_ERROR_INVAL;
+        }
+        break;
+      }
+      default: {
+        LOGERR("invalid request tag %d", tag);
+        ret = (int32_t)UNIFYCR_ERROR_INVAL;
+        break;
+      }
+    }
+
+request_out:
+
+    /* fill output structure and return to caller */
+    out.ret = ret;
+    hret = margo_respond(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* free margo resources */
+    margo_free_input(handle, &in);
+    if (NULL != reqbuf) {
+        margo_bulk_free(bulk_handle);
+        free(reqbuf);
+    }
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(server_request_rpc)
+
+/* handler for server-server request
+ *
+ * decode payload based on tag, and call appropriate svcmgr routine */
+static void chunk_read_request_rpc(hg_handle_t handle)
+{
+    int rc, req_id, num_chks;
+    int src_rank, app_id, client_id;
+    int32_t ret;
+    hg_return_t hret;
+    hg_bulk_t bulk_handle;
+    size_t bulk_sz;
+    chunk_read_request_in_t in;
+    chunk_read_request_out_t out;
+
+    /* get input params */
+    rc = margo_get_input(handle, &in);
+    assert(rc == HG_SUCCESS);
+    src_rank = (int)in.src_rank;
+    app_id = (int)in.app_id;
+    client_id = (int)in.client_id;
+    req_id = (int)in.req_id;
+    num_chks = (int)in.num_chks;
+    bulk_sz = (size_t)in.bulk_size;
+
+    LOGDBG("handling chunk read request from server %d: "
+           "req=%d num_chunks=%d bulk_sz=%zu",
+           src_rank, req_id, num_chks, bulk_sz);
+
+    /* get margo info */
+    const struct hg_info* hgi = margo_get_info(handle);
+    assert(NULL != hgi);
+    margo_instance_id mid = margo_hg_info_get_instance(hgi);
+    assert(mid != MARGO_INSTANCE_NULL);
+
+    int reqcmd = (int)SVC_CMD_INVALID;
+    void* reqbuf = NULL;
+    if (bulk_sz) {
+        /* allocate and register local target buffer for bulk access */
+        reqbuf = malloc(bulk_sz);
+        if (NULL != reqbuf) {
+            hret = margo_bulk_create(mid, 1, &reqbuf, &in.bulk_size,
+                                     HG_BULK_WRITE_ONLY, &bulk_handle);
+            assert(hret == HG_SUCCESS);
+
+            /* pull request data */
+            hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
+                                       in.bulk_handle, 0,
+                                       bulk_handle, 0, in.bulk_size);
+            assert(hret == HG_SUCCESS);
+            reqcmd = *(int*)reqbuf;
+        }
+    }
+    /* verify this is a request for data */
+    if (reqcmd == (int)SVC_CMD_RDREQ_CHK) {
+        LOGDBG("request command: SVC_CMD_RDREQ_CHK");
+        /* chunk read request */
+        sm_issue_chunk_reads(src_rank, app_id, client_id, req_id,
+                             num_chks, (char*)reqbuf);
+        ret = (int32_t)UNIFYCR_SUCCESS;
+    } else {
+        LOGERR("invalid chunk read request command %d from server %d",
+               reqcmd, src_rank);
+        ret = (int32_t)UNIFYCR_ERROR_INVAL;
+    }
+
+    /* fill output structure and return to caller */
+    out.ret = ret;
+    hret = margo_respond(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* free margo resources */
+    margo_free_input(handle, &in);
+    if (NULL != reqbuf) {
+        margo_bulk_free(bulk_handle);
+        free(reqbuf);
+    }
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(chunk_read_request_rpc)

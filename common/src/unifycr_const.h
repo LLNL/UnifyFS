@@ -56,23 +56,22 @@
 // Request Manager
 #define RECV_BUF_CNT 4               /* number of remote read buffers */
 #define SENDRECV_BUF_LEN (8 * MIB)   /* remote read buffer size */
-#define MAX_META_PER_SEND (64 * KIB) /* max read request count per server */
+#define MAX_META_PER_SEND (4 * KIB)  /* max read request count per server */
 #define REQ_BUF_LEN (MAX_META_PER_SEND * 128) /* read requests (send_msg_t) */
-#define SHM_WAIT_INTERVAL 100 /* unit: ns */
+#define SHM_WAIT_INTERVAL 1000       /* unit: ns */
+#define RM_MAX_ACTIVE_REQUESTS 64    /* number of concurrent read requests */
 
 // Service Manager
 #define LARGE_BURSTY_DATA (512 * MIB)
 #define MAX_BURSTY_INTERVAL 10000 /* unit: us */
 #define MIN_SLEEP_INTERVAL 10     /* unit: us */
-#define SLEEP_INTERVAL 100        /* unit: us */
-#define SLEEP_SLICE_PER_UNIT 10   /* unit: us */
+#define SLEEP_INTERVAL 500        /* unit: us */
+#define SLEEP_SLICE_PER_UNIT 50   /* unit: us */
 #define READ_BLOCK_SIZE MIB
 #define READ_BUF_SZ GIB
 
 // Request and Service Managers, Command Handler
 #define MAX_NUM_CLIENTS 64 /* app processes per server */
-#define CLI_DATA_TAG 5001
-#define SER_DATA_TAG 6001
 
 // Client and Command Handler
 #define CMD_BUF_SIZE (2 * KIB)

@@ -49,10 +49,9 @@
  * @param sock_id: position in poll_set in unifycr_sock.h
  * @return success/error code
  */
-static int attach_to_shm(
-    app_config_t* app_config,
-    int app_id,
-    int client_side_id)
+static int attach_to_shm(app_config_t* app_config,
+                         int app_id,
+                         int client_side_id)
 {
     char shm_name[GEN_STR_LEN] = {0};
 
@@ -105,6 +104,11 @@ static int attach_to_shm(
         return (int)UNIFYCR_ERROR_SHMEM;
     }
     app_config->shm_recv_bufs[client_side_id] = addr;
+    shm_header_t* shm_hdr = (shm_header_t*)addr;
+    pthread_mutex_init(&(shm_hdr->sync), NULL);
+    shm_hdr->meta_cnt = 0;
+    shm_hdr->bytes = 0;
+    shm_hdr->state = SHMEM_REGION_EMPTY;
 
     /* copy name of request buffer region */
     strcpy(app_config->recv_buf_name[client_side_id], shm_name);
@@ -164,128 +168,9 @@ static int open_log_file(app_config_t* app_config,
     return UNIFYCR_SUCCESS;
 }
 
-/* create a request manager thread for the given app_id
- * and client_id, returns pointer to thread control structure
- * on success and NULL on failure */
-static thrd_ctrl_t* unifycr_rm_thrd_create(int app_id, int client_id)
-{
-    /* allocate a new thread control structure */
-    thrd_ctrl_t* thrd_ctrl = (thrd_ctrl_t*)calloc(1, sizeof(thrd_ctrl_t));
-    if (thrd_ctrl == NULL) {
-        LOGERR("Failed to allocate structure for request "
-               "manager thread for app_id=%d client_id=%d",
-               app_id, client_id);
-        return NULL;
-    }
 
-    /* allocate an array for listing read requests from client */
-    thrd_ctrl->del_req_set = (msg_meta_t*)calloc(1, sizeof(msg_meta_t));
-    if (thrd_ctrl->del_req_set == NULL) {
-        LOGERR("Failed to allocate read request structure for request "
-               "manager thread for app_id=%d client_id=%d",
-               app_id, client_id);
-        free(thrd_ctrl);
-        return NULL;
-    }
 
-    /* allocate structure for tracking outstanding read requests
-     * this delegator has with service managers on other nodes */
-    thrd_ctrl->del_req_stat = (del_req_stat_t*)
-        calloc(1, sizeof(del_req_stat_t));
-    if (thrd_ctrl->del_req_stat == NULL) {
-        LOGERR("Failed to allocate delegator structure for request "
-               "manager thread for app_id=%d client_id=%d",
-               app_id, client_id);
-        free(thrd_ctrl->del_req_set);
-        free(thrd_ctrl);
-        return NULL;
-    }
-
-    /* allocate a structure to track requests we have on each
-     * remote service manager */
-    thrd_ctrl->del_req_stat->req_stat = (per_del_stat_t*)
-        calloc(glb_mpi_size, sizeof(per_del_stat_t));
-    if (thrd_ctrl->del_req_stat->req_stat == NULL) {
-        LOGERR("Failed to allocate per-delegator structure for request "
-               "manager thread for app_id=%d client_id=%d",
-               app_id, client_id);
-        free(thrd_ctrl->del_req_stat);
-        free(thrd_ctrl->del_req_set);
-        free(thrd_ctrl);
-        return NULL;
-    }
-
-    /* initialize lock for shared data structures between
-     * main thread and request delegator thread */
-    int rc = pthread_mutex_init(&(thrd_ctrl->thrd_lock), NULL);
-    if (rc != 0) {
-        LOGERR("pthread_mutex_init failed for request "
-               "manager thread app_id=%d client_id=%d rc=%d (%s)",
-               app_id, client_id, rc, strerror(rc));
-        free(thrd_ctrl->del_req_stat->req_stat);
-        free(thrd_ctrl->del_req_stat);
-        free(thrd_ctrl->del_req_set);
-        free(thrd_ctrl);
-        return NULL;
-    }
-
-    /* initailize condition variable to flow control
-     * work between main thread and request delegator thread */
-    rc = pthread_cond_init(&(thrd_ctrl->thrd_cond), NULL);
-    if (rc != 0) {
-        LOGERR("pthread_cond_init failed for request "
-               "manager thread app_id=%d client_id=%d rc=%d (%s)",
-               app_id, client_id, rc, strerror(rc));
-        pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
-        free(thrd_ctrl->del_req_stat->req_stat);
-        free(thrd_ctrl->del_req_stat);
-        free(thrd_ctrl->del_req_set);
-        free(thrd_ctrl);
-        return NULL;
-    }
-
-    /* record app and client id this thread will be serving */
-    thrd_ctrl->app_id    = app_id;
-    thrd_ctrl->client_id = client_id;
-
-    /* initialize flow control flags */
-    thrd_ctrl->exit_flag              = 0;
-    thrd_ctrl->exited                 = 0;
-    thrd_ctrl->has_waiting_delegator  = 0;
-    thrd_ctrl->has_waiting_dispatcher = 0;
-
-    /* insert our thread control structure into our list of
-     * active request manager threads, important to do this before
-     * launching thread since it uses list to lookup its structure */
-    rc = arraylist_add(thrd_list, thrd_ctrl);
-    if (rc != 0) {
-        pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
-        pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
-        free(thrd_ctrl->del_req_stat->req_stat);
-        free(thrd_ctrl->del_req_stat);
-        free(thrd_ctrl->del_req_set);
-        free(thrd_ctrl);
-        return NULL;
-    }
-
-    /* launch request manager thread */
-    rc = pthread_create(&(thrd_ctrl->thrd), NULL,
-                        rm_delegate_request_thread, (void*)thrd_ctrl);
-    if (rc != 0) {
-        LOGERR("failed to create request manager thread for "
-               "app_id=%d client_id=%d - rc=%d (%s)",
-               app_id, client_id, rc, strerror(rc));
-        pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
-        pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
-        free(thrd_ctrl->del_req_stat->req_stat);
-        free(thrd_ctrl->del_req_stat);
-        free(thrd_ctrl->del_req_set);
-        free(thrd_ctrl);
-        return NULL;
-    }
-
-    return thrd_ctrl;
-}
+/* BEGIN MARGO CLIENT-SERVER RPC HANDLER FUNCTIONS */
 
 /* called by client to register with the server, client provides a
  * structure of values on input, some of which specify global
@@ -301,11 +186,12 @@ static thrd_ctrl_t* unifycr_rm_thrd_create(int app_id, int client_id)
 static void unifycr_mount_rpc(hg_handle_t handle)
 {
     int rc;
+    int ret = (int)UNIFYCR_SUCCESS;
 
     /* get input params */
     unifycr_mount_in_t in;
-    int ret = margo_get_input(handle, &in);
-    assert(ret == HG_SUCCESS);
+    hg_return_t hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
 
     /* read app_id and client_id from input */
     int app_id    = in.app_id;
@@ -368,10 +254,9 @@ static void unifycr_mount_rpc(hg_handle_t handle)
 
     /* convert client_addr_str sent in input struct to margo hg_addr_t,
      * which is the address type needed to call rpc functions, etc */
-    hg_return_t hret =
-        margo_addr_lookup(unifycrd_rpc_context->shm_mid,
-                          in.client_addr_str,
-                          &(tmp_config->client_addr[client_id]));
+    hret = margo_addr_lookup(unifycrd_rpc_context->shm_mid,
+                             in.client_addr_str,
+                             &(tmp_config->client_addr[client_id]));
 
     /* record client id of process on this node */
     tmp_config->client_ranks[client_id] = client_id;
@@ -396,12 +281,12 @@ static void unifycr_mount_rpc(hg_handle_t handle)
     }
 
     /* create request manager thread */
-    thrd_ctrl_t* thrd_ctrl = unifycr_rm_thrd_create(app_id, client_id);
-    if (thrd_ctrl != NULL) {
+    reqmgr_thrd_t* rm_thrd = unifycr_rm_thrd_create(app_id, client_id);
+    if (rm_thrd != NULL) {
         /* TODO: seems like it would be cleaner to avoid thread_list
          * and instead just record address to struct */
         /* remember id for thread control for this client */
-        tmp_config->thrd_idxs[client_id] = arraylist_size(thrd_list) - 1;
+        tmp_config->thrd_idxs[client_id] = rm_thrd->thrd_ndx;
     } else {
         /* failed to create request manager thread */
         LOGERR("unifycr_rm_thrd_create() failed for app_id=%d client_id=%d",
@@ -428,8 +313,8 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
 {
     /* get input params */
     unifycr_unmount_in_t in;
-    int margo_ret = margo_get_input(handle, &in);
-    assert(margo_ret == HG_SUCCESS);
+    hg_return_t hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
 
     /* read app_id and client_id from input */
     int app_id    = in.app_id;
@@ -440,7 +325,7 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
     out.ret = UNIFYCR_SUCCESS;
 
     /* send output back to caller */
-    hg_return_t hret = margo_respond(handle, &out);
+    hret = margo_respond(handle, &out);
     assert(hret == HG_SUCCESS);
 
     /* free margo resources */
@@ -455,7 +340,7 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
     int thrd_id = app_config->thrd_idxs[client_id];
 
     /* look up thread control structure */
-    thrd_ctrl_t* thrd_ctrl = (thrd_ctrl_t *)arraylist_get(thrd_list, thrd_id);
+    reqmgr_thrd_t* thrd_ctrl = rm_get_thread(thrd_id);
 
     /* shutdown the delegator thread */
     rm_cmd_exit(thrd_ctrl);
@@ -474,10 +359,6 @@ static void unifycr_unmount_rpc(hg_handle_t handle)
                          (void**)&(app_config->shm_recv_bufs[client_id]));
     }
 
-    /* close the client socket connection */
-    // MJB TODO: following is broken, uses client_id as index, fix it
-    // sock_sanitize_client(client_id);
-
     /* free margo hg_addr_t client addresses in app_config struct */
     margo_addr_free(unifycrd_rpc_context->shm_mid,
                     app_config->client_addr[client_id]);
@@ -490,14 +371,14 @@ static void unifycr_metaget_rpc(hg_handle_t handle)
 {
     /* get input params */
     unifycr_metaget_in_t in;
-    int ret = margo_get_input(handle, &in);
-    assert(ret == HG_SUCCESS);
+    hg_return_t hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
 
     /* given the global file id, look up file attributes
      * from key/value store */
     unifycr_file_attr_t attr_val;
 
-    ret = unifycr_get_file_attribute(in.gfid, &attr_val);
+    int ret = unifycr_get_file_attribute(in.gfid, &attr_val);
 
     /* build our output values */
     unifycr_metaget_out_t out;
@@ -513,7 +394,7 @@ static void unifycr_metaget_rpc(hg_handle_t handle)
     out.ret = ret;
 
     /* send output back to caller */
-    hg_return_t hret = margo_respond(handle, &out);
+    hret = margo_respond(handle, &out);
     assert(hret == HG_SUCCESS);
 
     /* free margo resources */
@@ -528,8 +409,8 @@ static void unifycr_metaset_rpc(hg_handle_t handle)
 {
     /* get input params */
     unifycr_metaset_in_t in;
-    int ret = margo_get_input(handle, &in);
-    assert(ret == HG_SUCCESS);
+    hg_return_t hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
 
     /* store file name for given global file id */
     unifycr_file_attr_t fattr;
@@ -544,14 +425,14 @@ static void unifycr_metaset_rpc(hg_handle_t handle)
     fattr.mtime = in.mtime;
     fattr.ctime = in.ctime;
 
-    ret = unifycr_set_file_attribute(&fattr);
+    int ret = unifycr_set_file_attribute(&fattr);
 
     /* build our output values */
     unifycr_metaset_out_t out;
     out.ret = ret;
 
     /* return to caller */
-    hg_return_t hret = margo_respond(handle, &out);
+    hret = margo_respond(handle, &out);
     assert(hret == HG_SUCCESS);
 
     /* free margo resources */
@@ -567,19 +448,19 @@ static void unifycr_fsync_rpc(hg_handle_t handle)
 {
     /* get input params */
     unifycr_fsync_in_t in;
-    int ret = margo_get_input(handle, &in);
-    assert(ret == HG_SUCCESS);
+    hg_return_t hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
 
     /* given global file id, read index metadata from client and
      * insert into global index key/value store */
-    ret = rm_cmd_fsync(in.app_id, in.local_rank_idx, in.gfid);
+    int ret = rm_cmd_fsync(in.app_id, in.local_rank_idx, in.gfid);
 
     /* build our output values */
     unifycr_metaset_out_t out;
     out.ret = ret;
 
     /* return to caller */
-    hg_return_t hret = margo_respond(handle, &out);
+    hret = margo_respond(handle, &out);
     assert(hret == HG_SUCCESS);
 
     /* free margo resources */
@@ -595,14 +476,14 @@ static void unifycr_filesize_rpc(hg_handle_t handle)
 {
     /* get input params */
     unifycr_filesize_in_t in;
-    int ret = HG_Get_input(handle, &in);
-    assert(ret == HG_SUCCESS);
+    hg_return_t hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
 
     /* read data for a single read request from client,
      * returns data to client through shared memory */
     size_t filesize;
-    ret = rm_cmd_filesize(in.app_id, in.local_rank_idx,
-        in.gfid, &filesize);
+    int ret = rm_cmd_filesize(in.app_id, in.local_rank_idx,
+                              in.gfid, &filesize);
 
     /* build our output values */
     unifycr_filesize_out_t out;
@@ -610,7 +491,7 @@ static void unifycr_filesize_rpc(hg_handle_t handle)
     out.filesize = (hg_size_t) filesize;
 
     /* return to caller */
-    hg_return_t hret = margo_respond(handle, &out);
+    hret = margo_respond(handle, &out);
     assert(hret == HG_SUCCESS);
 
     /* free margo resources */
@@ -627,20 +508,20 @@ static void unifycr_read_rpc(hg_handle_t handle)
 {
     /* get input params */
     unifycr_read_in_t in;
-    int ret = margo_get_input(handle, &in);
-    assert(ret == HG_SUCCESS);
+    hg_return_t hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
 
     /* read data for a single read request from client,
      * returns data to client through shared memory */
-    ret = rm_cmd_read(in.app_id, in.local_rank_idx,
-                      in.gfid, in.offset, in.length);
+    int ret = rm_cmd_read(in.app_id, in.local_rank_idx,
+                          in.gfid, in.offset, in.length);
 
     /* build our output values */
     unifycr_read_out_t out;
     out.ret = ret;
 
     /* return to caller */
-    hg_return_t hret = margo_respond(handle, &out);
+    hret = margo_respond(handle, &out);
     assert(hret == HG_SUCCESS);
 
     /* free margo resources */
@@ -658,8 +539,8 @@ static void unifycr_mread_rpc(hg_handle_t handle)
 {
     /* get input params */
     unifycr_mread_in_t in;
-    int ret = margo_get_input(handle, &in);
-    assert(ret == HG_SUCCESS);
+    hg_return_t hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
 
     /* allocate buffer to hold array of read requests */
     hg_size_t size = in.bulk_size;
@@ -674,17 +555,18 @@ static void unifycr_mread_rpc(hg_handle_t handle)
 
     /* register local target buffer for bulk access */
     hg_bulk_t bulk_handle;
-    hg_return_t hret = margo_bulk_create(mid, 1, &buffer,
-        &size, HG_BULK_WRITE_ONLY, &bulk_handle);
+    hret = margo_bulk_create(mid, 1, &buffer, &size,
+                             HG_BULK_WRITE_ONLY, &bulk_handle);
+    assert(hret == HG_SUCCESS);
 
     /* get list of read requests */
-    hret = margo_bulk_transfer(mid, HG_BULK_PULL,
-        hgi->addr, in.bulk_handle, 0, bulk_handle, 0, size);
+    hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
+                               in.bulk_handle, 0, bulk_handle, 0, size);
     assert(hret == HG_SUCCESS);
 
     /* initiate read operations to fetch data for read requests */
-    ret = rm_cmd_mread(in.app_id, in.local_rank_idx,
-                       in.gfid, in.read_count, buffer);
+    int ret = rm_cmd_mread(in.app_id, in.local_rank_idx,
+                           in.read_count, buffer);
 
     /* build our output values */
     unifycr_mread_out_t out;

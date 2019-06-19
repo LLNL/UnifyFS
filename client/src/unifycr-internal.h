@@ -325,7 +325,6 @@ extern unifycr_index_buf_t unifycr_indices;
 extern unsigned long unifycr_max_index_entries;
 extern long unifycr_spillover_max_chunks;
 
-extern int* local_rank_lst;
 extern int local_rank_cnt;
 extern int local_rank_idx;
 extern int local_del_cnt;

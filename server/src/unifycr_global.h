@@ -33,10 +33,12 @@
 // system headers
 #include <assert.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 // common headers
@@ -51,21 +53,27 @@
 #include <pthread.h>
 
 extern arraylist_t* app_config_list;
-extern arraylist_t* thrd_list;
+extern arraylist_t* rm_thrd_list;
 
 extern char glb_host[UNIFYCR_MAX_HOSTNAME];
 extern int glb_mpi_rank, glb_mpi_size;
-
-extern int* local_rank_lst;
-extern int local_rank_cnt;
 
 extern size_t max_recs_per_slice;
 
 /* defines commands for messages sent to service manager threads */
 typedef enum {
-    XFER_COMM_DATA, /* message contains read requests */
-    XFER_COMM_EXIT, /* indicates service manager thread should exit */
-} service_cmd_lst_t;
+    SVC_CMD_INVALID = 0,
+    SVC_CMD_RDREQ_MSG = 1, /* read requests (send_msg_t) */
+    SVC_CMD_RDREQ_CHK,     /* read requests (chunk_read_req_t) */
+    SVC_CMD_EXIT,          /* service manager thread should exit */
+} service_cmd_e;
+
+typedef enum {
+    READ_REQUEST_TAG = 5001,
+    READ_RESPONSE_TAG = 6001,
+    CHUNK_REQUEST_TAG = 7001,
+    CHUNK_RESPONSE_TAG = 8001
+} service_tag_e;
 
 /* this defines a read request as sent from the request manager to the
  * service manager, it contains info about the physical location of
@@ -110,10 +118,10 @@ typedef struct {
  * back to request manager, data payload of length bytes immediately
  * follows the header */
 typedef struct {
-    size_t src_offset; /* logical offset in file */
+    size_t src_offset; /* file offset */
     size_t length;     /* number of bytes */
-    int src_fid;    /* global file id */
-    int errcode;    /* indicates whether read was successful */
+    int src_fid;       /* global file id */
+    int errcode;       /* indicates whether read was successful */
 } recv_msg_t;
 
 /* defines a fixed-length list of read requests */
@@ -122,70 +130,48 @@ typedef struct {
     send_msg_t msg_meta[MAX_META_PER_SEND]; /* list of requests */
 } msg_meta_t;
 
-/* one entry per delegator for which we have active read requests,
- * records rank of delegator and request count */
+// NEW READ REQUEST STRUCTURES
+typedef enum {
+    READREQ_INIT = 0,
+    READREQ_STARTED,           /* chunk requests issued */
+    READREQ_PARTIAL_COMPLETE,  /* some reads completed */
+    READREQ_COMPLETE           /* all reads completed */
+} readreq_status_e;
+
 typedef struct {
-    int req_cnt; /* number of requests to this delegator */
-    int del_id;  /* rank of delegator */
-} per_del_stat_t;
+    size_t nbytes;      /* size of data chunk */
+    size_t offset;      /* file offset */
+    size_t log_offset;  /* remote log offset */
+    int log_app_id;     /* remote log application id */
+    int log_client_id;  /* remote log client id */
+} chunk_read_req_t;
 
-/* records list of delegator information (rank, req count) for
- * set of delegators we have active read requests for */
 typedef struct {
-    per_del_stat_t* req_stat; /* delegator rank and request count */
-    int del_cnt; /* number of delegators we have read requests for */
-} del_req_stat_t;
+    size_t offset;    /* file offset */
+    size_t nbytes;    /* requested read size */
+    ssize_t read_rc;  /* bytes read (or negative error code) */
+} chunk_read_resp_t;
 
-/* this structure is created by the main thread for each request
- * manager thread, contains shared data structures where main thread
- * issues read requests and request manager processes them, contains
- * condition variable and lock for coordination between threads */
 typedef struct {
-    /* request manager thread */
-    pthread_t thrd;
+    int rank;                /* remote delegator rank */
+    int rdreq_id;            /* read-request id */
+    int app_id;              /* app id of requesting client process */
+    int client_id;           /* client id of requesting client process */
+    int num_chunks;          /* number of chunk requests/responses */
+    readreq_status_e status; /* summary status for chunk reads */
+    size_t total_sz;         /* total size of data requested */
+    chunk_read_req_t* reqs;  /* @RM: subarray of server_read_req_t.chunks
+                              * @SM: received requests buffer */
+    chunk_read_resp_t* resp; /* @RM: received responses buffer
+                              * @SM: allocated responses buffer */
+} remote_chunk_reads_t;
 
-    /* condition variable to synchronize request manager thread
-     * and main thread delivering work */
-    pthread_cond_t  thrd_cond;
-
-    /* lock for shared data structures (variables below) */
-    pthread_mutex_t thrd_lock;
-
-    /* flag indicating that request manager thread is waiting
-     * for work inside of critical region */
-    int has_waiting_delegator;
-
-    /* flag indicating main thread is in critical section waiting
-     * for request manager thread */
-    int has_waiting_dispatcher;
-
-    /* a list of read requests to be sent to each delegator,
-     * main thread adds items to this list, request manager
-     * processes them */
-    msg_meta_t* del_req_set;
-
-    /* statistics of read requests to be sent to each delegator */
-    del_req_stat_t* del_req_stat;
-
-    /* buffer to build read request messages */
-    char del_req_msg_buf[REQ_BUF_LEN];
-
-    /* memory for posting receives for incoming read reply messages
-     * from the service threads */
-    char del_recv_msg_buf[RECV_BUF_CNT][SENDRECV_BUF_LEN];
-
-    /* flag set to indicate request manager thread should exit */
-    int exit_flag;
-
-    /* flag set after thread has exited and join completed */
-    int exited;
-
-    /* app_id this thread is serving */
-    int app_id;
-
-    /* client_id this thread is serving */
-    int client_id;
-} thrd_ctrl_t;
+typedef struct {
+    size_t length;  /* length of data to read */
+    size_t offset;  /* file offset */
+    int gfid;       /* global file id */
+    int errcode;    /* request completion status */
+} client_read_req_t;
 
 /* one of these structures is created for each app id,
  * it contains info for each client like names, file descriptors,
@@ -253,13 +239,13 @@ typedef struct {
 int invert_sock_ids[MAX_NUM_CLIENTS];
 
 typedef struct {
-    char* hostname;
+    //char* hostname;
     char* margo_svr_addr_str;
     hg_addr_t margo_svr_addr;
     int mpi_rank;
 } server_info_t;
 
-extern int glb_svr_rank;
+extern char glb_host[UNIFYCR_MAX_HOSTNAME];
 extern size_t glb_num_servers;
 extern server_info_t* glb_servers;
 

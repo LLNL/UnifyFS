@@ -53,6 +53,7 @@ extern FILE* unifycr_log_stream;
 extern time_t unifycr_log_time;
 extern struct tm* unifycr_log_ltime;
 extern char unifycr_log_timestamp[256];
+extern size_t unifycr_log_source_base_len;
 
 #if defined(__NR_gettid)
 #define gettid() syscall(__NR_gettid)
@@ -64,6 +65,7 @@ extern char unifycr_log_timestamp[256];
 
 #define LOG(level, ...) \
     if (level <= unifycr_log_level) { \
+        const char* srcfile = __FILE__ + unifycr_log_source_base_len; \
         unifycr_log_time = time(NULL); \
         unifycr_log_ltime = localtime(&unifycr_log_time); \
         strftime(unifycr_log_timestamp, sizeof(unifycr_log_timestamp), \
@@ -71,9 +73,9 @@ extern char unifycr_log_timestamp[256];
         if (NULL == unifycr_log_stream) { \
             unifycr_log_stream = stderr; \
         } \
-        fprintf(unifycr_log_stream, "%s tid=%ld @ %s:%d in %s: ", \
+        fprintf(unifycr_log_stream, "%s tid=%ld @ %s() [%s:%d] ", \
             unifycr_log_timestamp, (long)gettid(), \
-            __FILE__, __LINE__, __func__); \
+            __func__, srcfile, __LINE__); \
         fprintf(unifycr_log_stream, __VA_ARGS__); \
         fprintf(unifycr_log_stream, "\n"); \
         fflush(unifycr_log_stream); \

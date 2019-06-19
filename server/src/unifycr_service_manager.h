@@ -30,7 +30,29 @@
 #ifndef UNIFYCR_SERVICE_MANAGER_H
 #define UNIFYCR_SERVICE_MANAGER_H
 
-/* Service Manager pthread main */
+#include "unifycr_global.h"
+
+/* service manager pthread routine */
 void* sm_service_reads(void* ctx);
 
-#endif
+/* initialize and launch service manager */
+int svcmgr_init(void);
+
+/* join service manager thread and cleanup its state */
+int svcmgr_fini(void);
+
+/* process service request message */
+int sm_decode_msg(char* msg_buf);
+
+/* decode and issue chunk reads contained in message buffer */
+int sm_issue_chunk_reads(int src_rank,
+                         int src_app_id,
+                         int src_client_id,
+                         int src_req_id,
+                         int num_chks,
+                         char* msg_buf);
+
+/* MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
+int invoke_chunk_read_response_rpc(remote_chunk_reads_t* rcr);
+
+#endif // UNIFYCR_SERVICE_MANAGER_H
