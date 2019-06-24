@@ -11,6 +11,7 @@
  * For details, see https://github.com/LLNL/UnifyCR.
  * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
  */
+#include <config.h>
 
 #include <unistd.h>
 #include <stdlib.h>
