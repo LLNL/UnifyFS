@@ -872,8 +872,8 @@ int test_create_file(test_cfg* cfg, const char* filepath, int access)
         fmode = test_access_to_stdio_mode(access);
     }
 
-    // rank 0 creates
-    if (cfg->rank == 0) {
+    // rank 0 creates or all ranks create if using file-per-process
+    if (cfg->rank == 0 || cfg->io_pattern == IO_PATTERN_NN) {
         if (cfg->use_stdio) {
             fp = fopen(filepath, fmode);
             if (NULL == fp) {
@@ -892,12 +892,14 @@ int test_create_file(test_cfg* cfg, const char* filepath, int access)
         }
     }
 
-    // barrier enforces create before open
-    test_barrier(cfg);
+    if (cfg->io_pattern == IO_PATTERN_N1) {
+        // barrier enforces create before open
+        test_barrier(cfg);
 
-    // other ranks just do normal open
-    if (cfg->rank != 0) {
-        return test_open_file(cfg, filepath, access);
+        // other ranks just do normal open
+        if (cfg->rank != 0) {
+            return test_open_file(cfg, filepath, access);
+        }
     }
     return 0;
 }
