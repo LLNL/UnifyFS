@@ -2513,6 +2513,8 @@ int unifycr_mount(const char prefix[], int rank, size_t size,
     }
 
     // initialize k-v store access
+    kv_rank = client_rank;
+    kv_nranks = size;
     rc = unifycr_keyval_init(&client_cfg, &kv_rank, &kv_nranks);
     if (rc) {
         LOGERR("failed to update configuration from runstate.");
