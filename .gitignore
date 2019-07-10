@@ -85,3 +85,5 @@ t/sys/open.t
 t/test-results/
 t/unifycr_unmount.t
 t/test_run_env.sh
+deps
+install
