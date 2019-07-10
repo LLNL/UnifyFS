@@ -174,6 +174,10 @@ LX_FIND_MPI
 AC_LANG_POP
 fi
 
+if test "$have_C_mpi" != "yes" ; then
+    AC_MSG_ERROR(["Couldn't find MPI"])
+fi
+
 # look for leveldb library, sets LEVELDB_CFLAGS/LDFLAGS/LIBS
 UNIFYCR_AC_LEVELDB
 
