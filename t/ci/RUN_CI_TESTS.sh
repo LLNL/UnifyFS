@@ -80,7 +80,6 @@ echo "Started RUN_TESTS.sh @: $(date)"
 
 # Set up CI_DIR if this script is called first
 CI_DIR=${CI_DIR:-"$(dirname "$(readlink -fm $BASH_SOURCE)")"}
-echo "CI_DIR in run_test: $CI_DIR"
 
 # test_done gets called in 990-stop-server.sh if this is not set.
 # If not set, tests can be run individually
@@ -103,6 +102,12 @@ echo "Setup time -- $(elapsed_time start_time setup_time)"
 
 # writeread example tests
 source $CI_DIR/100-writeread-tests.sh
+
+# write example tests
+source $CI_DIR/110-write-tests.sh
+
+# read example tests
+source $CI_DIR/120-read-tests.sh
 
 ##############################################################################
 # DO NOT add additional tests after this point
