@@ -76,6 +76,8 @@ in the *examples/src* directory and the GOTCHA example programs in the
 
 ------------
 
+.. _run-ex-label:
+
 Running the Examples
 ====================
 
@@ -88,41 +90,53 @@ to aid in this process.
 
 .. code-block:: none
 
-    [prompt]$ ./sysio-write-static --help
+    [prompt]$ ./write-static --help
 
-    Usage: sysio-write-static [options...]
+    Usage: write-static [options...]
 
     Available options:
-     -b, --blocksize=<size in bytes>  logical block size for the target file
-                                      (default 1048576, 1MB)
-     -n, --nblocks=<count>            count of blocks each process will write
-                                      (default 128)
-     -c, --chunksize=<size in bytes>  I/O chunk size for each write operation
-                                      (default 64436, 64KB)
-     -d, --debug                      pause before running test
-                                      (handy for attaching in debugger)
-     -f, --filename=<filename>        target file name under mountpoint
-                                      (default: testfile)
-     -h, --help                       help message
-     -L, --lipsum                     generate contents to verify correctness
-     -m, --mount=<mountpoint>         use <mountpoint> for unifycr
-                                      (default: /unifycr)
-     -P, --pwrite                     use pwrite(2) instead of write(2)
-     -p, --pattern=<pattern>          should be 'n1'(n to 1) or 'nn' (n to n)
-                                      (default: n1)
-     -S, --synchronous                sync metadata on each write
-     -s, --standard                   do not use unifycr but run standard I/O
-     -u, --unmount                    unmount the filesystem after test
-
-Notice the mountpoint is defaulted to ``-mount=/unifycr``. If you chose a
-different mountpoint during :doc:`start-stop`, the ``-m`` option for the
-example will need to be provided to match.
+     -a, --appid=<id>          use given application id
+                               (default: 0)
+     -A, --aio                 use asynchronous I/O instead of read|write
+                               (default: off)
+     -b, --blocksize=<bytes>   I/O block size
+                               (default: 16 MiB)
+     -c, --chunksize=<bytes>   I/O chunk size for each operation
+                               (default: 1 MiB)
+     -d, --debug               for debugging, wait for input (at rank 0) at start
+                               (default: off)
+     -f, --file=<filename>     target file name (or path) under mountpoint
+                               (default: 'testfile')
+     -k, --check               check data contents upon read
+                               (default: off)
+     -L, --listio              use lio_listio instead of read|write
+                               (default: off)
+     -m, --mount=<mountpoint>  use <mountpoint> for unifycr
+                               (default: /unifycr)
+     -M, --mapio               use mmap instead of read|write
+                               (default: off)
+     -n, --nblocks=<count>     count of blocks each process will read|write
+                               (default: 32)
+     -p, --pattern=<pattern>   'n1' (N-to-1 shared file) or 'nn' (N-to-N file per process)
+                               (default: 'n1')
+     -P, --prdwr               use pread|pwrite instead of read|write
+                               (default: off)
+     -S, --stdio               use fread|fwrite instead of read|write
+                               (default: off)
+     -U, --disable-unifycr     do not use UnifyCR
+                               (default: enable UnifyCR)
+     -v, --verbose             print verbose information
+                               (default: off)
+     -V, --vecio               use readv|writev instead of read|write
+                               (default: off)
+     -x, --shuffle             read different data than written
+                               (default: off)
 
 One form of running this example could be:
 
 .. code-block:: Bash
 
-    $ srun -N4 -n4 sysio-write-static -m /myMountPoint -f myTestFile
+    $ srun -N4 -n4 write-static -m /myMountPoint -f myTestFile
 
 .. explicit external hyperlink targets
 
