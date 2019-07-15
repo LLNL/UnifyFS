@@ -71,6 +71,7 @@ build is desired. Type ``spack info unifycr`` for more info.
    Fortran  ``spack install unifycr+fortran``         Build with gfortran
    NUMA     ``spack install unifycr+numa``            Build with NUMA
    pmpi     ``spack install unifycr+pmpi``            Transparent mount/unmount
+   PMI      ``spack install unifycr+pmi``             Enable PMI2 build options
    PMIx     ``spack install unifycr+pmix``            Enable PMIx build options
    =======  ========================================  =========================
 
@@ -97,6 +98,8 @@ Building the Dependencies
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 UnifyCR requires MPI, LevelDB, and GOTCHA(version 0.0.2).
+
+.. _spack-build-label:
 
 Build the Dependencies with Spack
 """"""""""""""""""""""""""""""""""

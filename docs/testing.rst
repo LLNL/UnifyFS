@@ -1,15 +1,23 @@
-*************
+=============
 Testing Guide
-*************
-
-Implementing Tests
-==================
+=============
 
 We can never have enough testing. Any additional tests you can write are always
 greatly appreciated.
 
+----------
+Unit Tests
+----------
+
+Implementing Tests
+******************
+
+The UnifyCR Test Suite uses the `Test Anything Protocol`_ (TAP) and the
+Automake test harness. This test suite has two types of TAP tests (shell scripts
+and C) to allow for testing multiple aspects of UnifyCR.
+
 Shell Script Tests
-------------------
+^^^^^^^^^^^^^^^^^^
 
 Test cases in shell scripts are implemented with sharness_, which is included
 in the UnifyCR source distribution. See the file sharness.sh_ for all available
@@ -52,7 +60,7 @@ Here is an example of a sharness test:
 .. _C-tests-label:
 
 C Program Tests
----------------
+^^^^^^^^^^^^^^^
 
 C programs use the `libtap library`_ to implement test cases. Convenience
 functions common to test cases written in C are implemented in the library
@@ -94,7 +102,7 @@ Here is an example libtap test:
 ------------
 
 Adding Tests
-============
+************
 
 The UnifyCR Test Suite uses the `Test Anything Protocol`_ (TAP) and the
 Automake test harness. By convention, test scripts and programs that output
@@ -106,7 +114,7 @@ To add a new test case to the test harness, follow the existing examples in
 so that it gets included in the source distribution tarball.
 
 Test Suites
------------
+^^^^^^^^^^^
 
 If multiple tests fit within the same category (i.e., tests for creat and mkdir
 both fall under tests for sysio) then create a test suite to run those tests.
@@ -158,7 +166,7 @@ sysio_suite in `t/Makefile.am`_ and `t/sys/sysio_suite.c`_:
       wrappers, add a suite and flags for both a gotcha and a static build)
 
 Test Cases
-----------
+^^^^^^^^^^
 
 For testing C code, test cases are written using the `libtap library`_. See the
 :ref:`C Program Tests <C-tests-label>` section above on how to write these
@@ -185,7 +193,7 @@ in (i.e., testing a wrapper that doesn't have any tests yet):
 ------------
 
 Running the Tests
-=================
+*****************
 
 To manually run the UnifyCR test suite, simply run ``make check`` from your
 build/t directory. If changes are made to existing files in the test suite, the
@@ -218,7 +226,7 @@ pull request is created or updated. All pull requests must pass these tests
 before they will be accepted.
 
 Interpreting the Results
-------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. sidebar:: TAP Output
 
@@ -282,13 +290,506 @@ ERROR
     ERROR.
 
 Running the Examples
---------------------
+^^^^^^^^^^^^^^^^^^^^
+
+To run any of these examples manually, refer to the :doc:`examples`
+documentation.
 
 The UnifyCR examples_ are also being used as integration tests with
 continuation integration tools such as Bamboo_ or GitLab_.
 
+------------
+
+-----------------
+Integration Tests
+-----------------
+
+The UnifyCR examples_ are being used as integration tests with continuation
+integration tools such as Bamboo_ or GitLab_.
+
 To run any of these examples manually, refer to the :doc:`examples`
 documentation.
+
+------------
+
+Running the Tests
+*****************
+
+.. attention::
+
+    UnifyCR's integration test suite requires MPI and currently only supports
+    ``srun`` and ``jsrun`` MPI launch commands. Changes are coming to support
+    ``mpirun``.
+
+UnifyCR's integration tests are primarly set up to be run all as one suite.
+However, they can be run individually if desired.
+
+The testing scripts in `t/ci`_ depend on sharness_, which is set up in the
+containing *t/* directory. These tests will not function properly if moved or if
+they cannot find the sharness files.
+
+.. important::
+
+    Whether running all tests or individual tests, first make sure you have
+    either interactively allocated nodes or are submitting a batch job to run
+    them.
+
+    Also make sure all :ref:`dependencies <spack-build-label>` are installed and
+    loaded.
+
+By default, the integration tests will use the number of processes-per-node as
+there are nodes allocated for the job (i.e., if 4 nodes were allocated, then 4
+processes will be run per node). This can be changed by setting the
+:ref:`$CI_NPROCS <ci-nprocs-label>` environment variable.
+
+.. note::
+
+    In order to run the the integration tests from a Spack_ installation of
+    UnifyCR, you'll need to tell Spack to use a different location for staging
+    builds in order to have the source files available from inside an allocation.
+
+    Open your Spack config file
+
+        ``spack config edit config``
+
+    and provide a path that is visible during job allocations:
+
+        .. code-block:: yaml
+
+            config:
+              build_stage:
+              - /visible/path/from/all/allocated/nodes
+              # or build directly inside Spack's install directory
+              - $spack/var/spack/stage
+
+    Then make sure to include the ``--keep-stage`` option when installing:
+
+        ``spack install --keep-stage unifycr``
+
+Running All Tests
+^^^^^^^^^^^^^^^^^
+
+To run all of the tests, simply run ``./RUN_CI_TESTS.sh``.
+
+.. code-block:: BASH
+
+    $ ./RUN_CI_TESTS.sh
+
+or
+
+.. code-block:: BASH
+
+    $ prove -v RUN_CI_TESTS.sh
+
+Running Individual Tests
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+In order to run individual tests, testing functions and variables need to be set
+up first, and the UnifyCR server needs to be started. To do this, first source
+the *t/ci/001-setup.sh* script followed by *002-start-server.sh*. Then source
+each desired test script after that preceded by ``$CI_DIR/``. When finished,
+source the *990-stop-server.sh* script last to stop the server and clean up.
+
+.. code-block:: BASH
+
+    $ . full/path/to/001-setup.sh
+    $ . $CI_DIR/002-start-server.sh
+    $ . $CI_DIR/100-writeread-tests.sh
+    $ . $CI_DIR/990-stop-server.sh
+
+Configuration Variables
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Along with the already provided :doc:`configuration` options/environment
+variables, there are available environment variables used by the integration
+testing suite that can be set in order to change the default behavior. They are
+listed below in the order they are set up.
+
+``CI_PROJDIR``
+""""""""""""""
+
+USAGE: ``CI_PROJDIR=/base/location/to/search/for/UnifyCR/source/files``
+
+During setup, the integration tests will search for the ``unifycrd`` executable
+and installed example scripts if the UnifyCR install directory is not provided by
+the user with the ``UNIFYCR_INSTALL`` envar. ``CI_PROJDIR`` is the base location
+where this search will start and defaults to ``CI_PROJDIR=$HOME``.
+
+
+``UNIFYCR_INSTALL``
+"""""""""""""""""""
+
+USAGE: ``UNIFYCR_INSTALL=/path/to/dir/containing/UnifyCR/bin/directory``
+
+The full path to the directory containing the *bin/* and *libexec/* directories
+for a UnifyCR installation. Set this envar to prevent the integration tests from
+searching for a UnifyCR install directory automatically.
+
+.. _ci-nprocs-label:
+
+``CI_NPROCS``
+"""""""""""""
+
+USAGE: ``CI_NPROCS=<number-of-process-per-node>``
+
+The number of processes to use per node inside a job allocation. This defaults
+to the number of processes per node as there are nodes in the allocation (i.e.,
+if 4 nodes were allocated, then 4 processes will be run per node). This should
+be adjusted if fewer processes are desired on multiple nodes, multiple processes
+are desired on a single node, or a large number of nodes have been allocated.
+
+``CI_LOG_CLEANUP``
+""""""""""""""""""
+
+USAGE: ``CI_LOG_CLEANUP=yes|YES|no|NO``
+
+In the event ``$UNIFYCR_LOG_DIR`` has **not** been set, the logs will be put in
+``$SHARNESS_TRASH_DIRECTORY``, as set up by sharness.sh_, and cleaned up
+automatically after the tests have run. The logs will be in a
+*<system-name>_<jobid>/* subdirectory. Should any tests fail, the trash
+directory will not be cleaned up for debugging purposes. Setting
+``CI_LOG_CLEANUP=no|NO`` will move the *<system-name>_<jobid>/* logs directory
+to ``$CI_DIR`` (the directory containing the integration tests) to
+allow them to persist even when all tests pass. This envar defauls to ``yes``.
+
+.. note::
+
+    Setting ``$UNIFYCR_LOG_DIR`` will put all created logs in the designated path
+    and will not clean them up.
+
+``CI_HOST_CLEANUP``
+"""""""""""""""""""
+
+USAGE: ``CI_HOST_CLEANUP=yes|YES|no|NO``
+
+After all tests have run, the nodes on which the tests were ran will
+automatically be cleaned up. This cleanup includes ensuring ``unifycrd`` has
+stopped and deleting any files created by UnifyCR or its dependencies. Set
+``CI_HOST_CLEANUP=no|NO`` to skip cleaning up. This envar defaults to ``yes``.
+
+.. note::
+
+    PDSH_ is required for cleanup and cleaning up is simply skipped if not
+    found.
+
+``CI_CLEANUP``
+""""""""""""""
+
+USAGE: ``CI_CLEANUP=yes|YES|no|NO``
+
+Setting this to ``no|NO`` sets both ``$CI_LOG_CLEANUP`` and ``$CI_HOST_CLEANUP``
+to ``no|NO``.
+
+``CI_TEMP_DIR``
+""""""""""""""""
+
+USAGE: ``CI_TEMP_DIR=/path/for/temporary/files/created/by/UnifyCR``
+
+Can be used as a shortcut to set ``UNIFYCR_RUNSTATE_DIR`` and
+``UNIFYCR_META_DB_PATH`` to the same path.  This envar defaults to
+``CI_TEMP_DIR=${TMPDIR}/unifycr.${USER}.${JOB_ID}``.
+
+``CI_STORAGE_DIR``
+"""""""""""""""""""
+
+USAGE: ``CI_STORAGE_DIR=/path/for/storage/files/``
+
+Can be used as a shortcut to set ``UNIFYCR_SPILLOVER_DATA_DIR`` and
+``UNIFYCR_SPILLOVER_META_DIR`` to the same path.  This envar defaults to
+``CI_STORAGE_DIR=${TMPDIR}/unifycr.${USER}.${JOB_ID}``.
+
+``CI_TEST_POSIX``
+"""""""""""""""""
+
+USAGE: ``CI_TEST_POSIX=yes|YES|no|NO``
+
+Determines whether any ``<example-name>-posix`` tests should be run since they
+require a real mountpoint to exist.
+
+This envar defaults to ``yes``. However, when ``$UNIFYCR_MOUNTPOINT`` is set to a
+real directory, this envar is switched to ``no``. The idea behind this is that
+the tests can be run a first time with a fake mountpoint (which will also run
+the posix tests), and then the tests can be run again with a real mountpoint and
+the posix tests wont be run twice. This behavior can be overridden by setting
+``CI_TEST_POSIX=yes|YES`` before running the integration tests when
+``$UNIFYCR_MOUNTPOINT`` is set to an existing directory.
+
+An example of testing a posix example can be see :ref:`below <posix-ex-label>`.
+
+.. note::
+
+    The the posix mountpoint envar, ``CI_POSIX_MP``, is set up inside
+    ``$SHARNESS_TRASH_DIRECTORY`` automatically and cleaned up afterwards.
+    However, this envar can be set before running the integration tests as well.
+    If setting this, ensure that it is a shared file system that all allocated
+    nodes can see.
+
+------------
+
+Adding New Tests
+****************
+
+In order to add additional tests, create a script after the fashion of
+`t/ci/100-writeread-tests.sh`_ where the prefixed number indicates the desired
+order for running the tests. Then source that script in `t/ci/RUN_CI_TESTS.sh`_
+in the desired order.
+
+Just like the helpers functions found in sharness.d_, there are continuous
+integration helper functions (see :ref:`below <helper-label>` for more details)
+available in `t/ci/ci-functions.sh`_. These exist to help make adding new tests
+as simple as possible.
+
+One particularly useful function is ``unify_run_test()``. Currently, this
+function is set up to work for the *write*, *read*, *writeread*, and
+*checkpoint-restart* examples. This function sets up the MPI job run command and
+default arguments as well as any default arguments wanted by all examples. See
+:ref:`below <unify-run-test-label>` for details.
+
+.. _helper-label:
+
+Example Helper Functions
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+There are helper functions available in `t/ci/ci-functions.sh`_ that can make
+running and testing the examples much easier. These may get adjusted over time
+to accommodate other examples, or additional functions may need to be written.
+Some of the main helper functions that might be useful for running examples are:
+
+.. _unify-run-test-label:
+
+``unify_run_test()``
+""""""""""""""""""""
+
+USAGE: ``unify_run_test app_name "app_args" [output_variable_name]``
+
+Given a example application name and application args, this function runs the
+example with the appropriate MPI runner and args. This function is meant to make
+running the cr, write, read, and writeread examples as easy as possible.
+
+The ``build_test_command()`` function is called by this function which
+automatically sets any options that are always wanted (-vkf as well as -U and
+the appropriate -m if posix test or not). The stderr output file is also created
+(based on the filename that is autogenerated) and the appropriate option is set
+for the MPI job run command.
+
+Args that can be passed in are ([-pncbx][-A|-M|-P|-S|-V]). All other args (see
+:ref:`Running the Examples <run-ex-label>`) are set automatically, including the
+filename (which is generated based on the input ``$app_name`` and ``$app_args``).
+
+The third parameter is an optional "pass-by-reference" parameter that can
+contain the variable name for the resulting output to be stored in, allowing
+this function to be used in one of two ways:
+
+.. code-block:: BASH
+    :caption: Using command substitution
+
+    app_output=$(unify_run_test $app_name "$app_args")
+
+or
+
+.. code-block:: BASH
+    :caption: Using a "pass-by-reference" variable
+
+    unifycr_run_test $app_name "$app_args" app_output
+
+This function returns the return code of the executed example as well as the
+output produced by running the example.
+
+.. note::
+
+    If ``unify_run_test()`` is simply called with only two arguments and without
+    using command substitution, the resulting output will be sent to the standard
+    output.
+
+The results can then be tested with sharness_:
+
+.. code-block:: BASH
+    :emphasize-lines: 7,11-14
+
+    basetest=writeread
+    runmode=static
+
+    app_name=${basetest}-${runmode}
+    app_args="-p n1 -n32 -c $((16 * $KB)) -b $MB
+
+    unify_run_test $app_name "$app_args" app_output
+    rc=$?
+    line_count=$(echo "$app_output" | wc -l)
+
+    test_expect_success "$app_name $app_args: (line_count=$line_count, rc=$rc)" '
+        test $rc = 0 &&
+        test $line_count = 8
+    '
+
+``get_filename()``
+""""""""""""""""""
+
+USAGE: ``get_filename app_name app_args [app_suffix]``
+
+Builds and returns the filename for an example so that if it shows up in the
+``$UNIFYCR_MOUNTPOINT`` (when using an existing mountpoint), it can be tracked
+to its originating test for debugging. Error files are created with this
+filename and a ``.err`` suffix and placed in the logs directory for debugging.
+
+Also allows testers to get what the filename will be in advance if called
+from a test suite. This can be used for posix tests to ensure the file showed
+up in the mount point, as well as for cp/stat tests that potentially need the
+filename from a previous test.
+
+Note that the filename created by ``unify_run_test()`` will have a ``.app``
+suffix.
+
+Returns a string with the spaces removed and hyphens replaced by underscores.
+
+.. code-block:: BASH
+
+    get_filename write-static "-p n1 -n 32 -c 1024 -b 1048576" ".app"
+    write-static_pn1_n32_c1KB_b1MB.app
+
+Some uses cases may be:
+
+- posix tests where the file existence is checked for after a test was run
+- cp/stat tests where an already existing filename from a prior test is needed
+
+For example:
+
+.. _posix-ex-label:
+
+.. code-block:: BASH
+    :emphasize-lines: 10,15
+
+    basetest=writeread
+    runmode=posix
+
+    app_name=${basetest}-${runmode}
+    app_args="-p nn -n32 -c $((16 * $KB)) -b $MB
+
+    unify_run_test $app_name "$app_args" app_output
+    rc=$?
+    line_count=$(echo "$app_output" | wc -l)
+    filename=$(get_filename $app_name "$app_args" ".app")
+
+    test_expect_success POSIX "$app_name $app_args: (line_count=$line_count, rc=$rc)" '
+        test $rc = 0 &&
+        test $line_count = 8 &&
+        test_path_has_file_per_process $CI_POSIX_MP $filename
+    '
+
+Sharness Helper Functions
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+There are also additional sharness functions for testing the examples available
+when `t/ci/ci-functions.sh`_ is sourced. These are to be used with sharness_ for
+testing the results of running the examples with or without using the
+:ref:`Example Helper Functions <helper-label>`.
+
+``process_is_running()``
+""""""""""""""""""""""""
+
+USAGE: ``process_is_running process_name seconds_before_giving_up``
+
+Checks if a process with the given name is running on every host, retrying up to
+a given number of seconds before giving up. This function overrides the
+``process_is_running()`` function used by the UnifyCR unit tests. The primary
+difference being that this function checks for the process on every host.
+
+Expects two arguments:
+
+- $1 - Name of a process to check for
+- $2 - Number of seconds to wait before giving up
+
+.. code-block:: BASH
+    :emphasize-lines:
+
+    test_expect_success "unifycrd is running" '
+        process_is_running unifycrd 5
+    '
+
+``process_is_not_running()``
+""""""""""""""""""""""""""""
+
+USAGE: ``process_is_not_running process_name seconds_before_giving_up``
+
+Checks if a process with the given name is not running on every host, retrying
+up to a given number of seconds before giving up. This function overrides the
+``process_is_not_running()`` function used by the UnifyCR unit tests. The primary
+difference being that this function checks that the process is not running on
+every host.
+
+Expects two arguments:
+
+- $1 - Name of a process to check for
+- $2 - Number of seconds to wait before giving up
+
+.. code-block:: BASH
+
+    test_expect_success "unifycrd is not running" '
+        process_is_not_running unifycrd 5
+    '
+
+``test_path_is_dir()``
+""""""""""""""""""""""
+
+USAGE: ``test_path_is_dir dir_name [optional]``
+
+Checks that a directory with the given name exists and is accessible from each
+host. Does NOT need to be a shared directory. This function overrides the
+``test_path_is_dir()`` function in sharness.sh_, the primary difference being
+that this function checks for the dir on every host in the allocation.
+
+Takes once argument with an optional second:
+
+- $1 - Path of the directory to check for
+- $2 - Can be given to provide a more precise diagnosis
+
+.. code-block:: BASH
+
+    test_expect_success "$dir_name is an existing directory" '
+        test_path_is_dir $dir_name
+    '
+
+``test_path_is_shared_dir()``
+"""""""""""""""""""""""""""""
+
+USAGE: ``test_path_is_shared_dir dir_name [optional]``
+
+Check if same directory (actual directory, not just name) exists and is
+accessible from each host.
+
+Takes once argument with an optional second:
+
+- $1 - Path of the directory to check for
+- $2 - Can be given to provide a more precise diagnosis
+
+.. code-block:: BASH
+
+    test_expect_success "$dir_name is a shared directory" '
+        test_path_is_shared_dir $dir_name
+    '
+
+``test_path_has_file_per_process()``
+""""""""""""""""""""""""""""""""""""
+
+USAGE: ``test_path_has_file_per_process dir_path file_name [optional]``
+
+Check if the provided directory path contains a file-per-process of the provided
+file name. Assumes the directory is a shared directory.
+
+Takes two arguments with an optional third:
+
+- $1 - Path of the shared directory to check for the files
+- $2 - File name without the appended process number
+- $3 - Can be given to provided a more precise diagnosis
+
+.. code-block:: BASH
+
+    test_expect_success "$dir_name has file-per-process of $file_name" '
+        test_path_has_file_per_process $dir_name $file_name
+    '
+
+There are other helper functions available as well, most of which are being used
+by the test suite itself. Details on these functions can be found in their
+comments in `t/ci/ci-functions.sh`_.
 
 .. explicit external hyperlink targets
 
@@ -297,12 +798,18 @@ documentation.
 .. _examples: https://github.com/LLNL/UnifyCR/tree/dev/examples/src
 .. _libtap library: https://github.com/zorgnax/libtap
 .. _lib/testutil.c: https://github.com/LLNL/UnifyCR/blob/dev/t/lib/testutil.c
-.. _t/Makefile.am: https://github.com/LLNL/UnifyCR/blob/dev/t/Makefile.am
-.. _t/sys/sysio_suite.c: https://github.com/LLNL/UnifyCR/blob/dev/t/sys/sysio_suite.c
-.. _Test Anything Protocol: https://testanything.org
-.. _Travis CI: https://docs.travis-ci.com
+.. _PDSH: https://github.com/chaos/pdsh
 .. _sharness: https://github.com/chriscool/sharness
 .. _sharness.d: https://github.com/LLNL/UnifyCR/tree/dev/t/sharness.d
 .. _sharness.d/00-test-env.sh: https://github.com/LLNL/UnifyCR/blob/dev/t/sharness.d/00-test-env.sh
 .. _sharness.d/01-unifycr-settings.sh: https://github.com/LLNL/UnifyCR/blob/dev/t/sharness.d/01-unifycr-settings.sh
 .. _sharness.sh: https://github.com/LLNL/UnifyCR/blob/dev/t/sharness.sh
+.. _Spack: https://github.com/spack/spack
+.. _t/ci: https://github.com/LLNL/UnifyCR/blob/dev/t/ci
+.. _t/Makefile.am: https://github.com/LLNL/UnifyCR/blob/dev/t/Makefile.am
+.. _t/sys/sysio_suite.c: https://github.com/LLNL/UnifyCR/blob/dev/t/sys/sysio_suite.c
+.. _t/ci/100-writeread-tests.sh: https://github.com/LLNL/UnifyCR/blob/dev/t/ci/100-writeread-tests.sh
+.. _t/ci/ci-functions.sh: https://github.com/LLNL/UnifyCR/blob/dev/t/ci/ci-functions.sh
+.. _t/ci/RUN_CI_TESTS.sh: https://github.com/LLNL/UnifyCR/blob/dev/t/ci/RUN_CI_TESTS.sh
+.. _Test Anything Protocol: https://testanything.org
+.. _Travis CI: https://docs.travis-ci.com
