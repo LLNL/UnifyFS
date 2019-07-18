@@ -43,6 +43,7 @@ cd ..
 
 echo "### building leveldb ###"
 cd leveldb
+git checkout 1.22
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
 	-DBUILD_SHARED_LIBS=yes ..
@@ -62,21 +63,28 @@ cd ..
 
 echo "### building argobots ###"
 cd argobots
-./autogen.sh && ./configure --prefix="$INSTALL_DIR"
+./autogen.sh && CC=gcc ./configure --prefix="$INSTALL_DIR"
 make -j $(nproc) && make install
 cd ..
 
 echo "### building mercury ###"
 cd mercury
 mkdir -p build && cd build
-cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DMERCURY_USE_BOOST_PP=ON \
-	-DBUILD_SHARED_LIBS=on ..
+cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+      -DMERCURY_USE_BOOST_PP=ON \
+      -DMERCURY_USE_CHECKSUMS=ON \
+      -DMERCURY_USE_EAGER_BULK=ON \
+      -DMERCURY_USE_SYSTEM_MCHECKSUM=OFF \
+      -DNA_USE_BMI=ON \
+      -DMERCURY_USE_XDR=OFF \
+      -DBUILD_SHARED_LIBS=on ..
 make -j $(nproc) && make install
 cd ..
 cd ..
 
 echo "### building margo ###"
 cd margo
+git checkout v0.4.3
 export PKG_CONFIG_PATH="$INSTALL_DIR/lib/pkgconfig"
 ./prepare.sh
 ./configure --prefix="$INSTALL_DIR"
