@@ -3,11 +3,11 @@
 	implicit none
 
 	include 'mpif.h'
-	include 'unifycrf.h'
+	include 'unifyfsf.h'
 
 	character*1024 :: basefname = "file"
 	character*1024 :: fname, file_suffix
-	character*1024 :: prefix = "/unifycr"
+	character*1024 :: prefix = "/unifyfs"
 	integer(kind=4) :: flag;
 	integer(kind=4) :: outflags;
 	integer(kind=4) :: valid;
@@ -32,7 +32,7 @@
 	call MPI_COMM_SIZE(MPI_COMM_WORLD, nprocs, ierr)
 	call MPI_COMM_RANK(MPI_COMM_WORLD, mynod, ierr)
 
-	call UNIFYCR_MOUNT(prefix, mynod, nprocs, 0, ierr)
+	call UNIFYFS_MOUNT(prefix, mynod, nprocs, 0, ierr)
 
 	nodeoff=2**21
 
@@ -52,7 +52,7 @@
 !	read(readunit,iostat=ios) R1
 !	close(readunit)
 
-	call UNIFYCR_UNMOUNT(ierr)
+	call UNIFYFS_UNMOUNT(ierr)
 	call MPI_FINALIZE(ierr)
 
 	end program write_read_F

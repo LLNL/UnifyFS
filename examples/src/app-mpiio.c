@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 #include <config.h>
 
@@ -26,7 +26,7 @@
 #include <libgen.h>
 #include <getopt.h>
 #include <mpi.h>
-#include <unifycr.h>
+#include <unifyfs.h>
 
 #include "testlib.h"
 
@@ -42,7 +42,7 @@ static size_t blocksize = MIB;      /* 1 MiB */
 static size_t nblocks   = 128;      /* Each process writes 128 MiB */
 static size_t chunksize = 64 * KIB; /* 64 KiB for each write() call */
 
-static int standard; /* do not use UnifyCR when set */
+static int standard; /* do not use UnifyFS when set */
 static int type;     /* 0 for write (default), 1 for read */
 static int iomode = MPI_MODE_CREATE | MPI_MODE_RDWR;
 static int pattern = IO_PATTERN_N1;
@@ -60,9 +60,9 @@ static int rank;
 static int total_ranks;
 
 static int debug;                   /* pause for attaching debugger */
-static int unmount;                 /* unmount unifycr after test */
+static int unmount;                 /* unmount unifyfs after test */
 static char* buf;                   /* I/O buffer */
-static char* mountpoint = "/unifycr";   /* unifycr mountpoint */
+static char* mountpoint = "/unifyfs";   /* unifyfs mountpoint */
 static char* filename = "testfile"; /* testfile name under mountpoint */
 static char targetfile[NAME_MAX];   /* target file name */
 
@@ -244,9 +244,9 @@ static const char* usage_str =
     "                                  (handy for attaching in debugger)\n"
     " -f, --filename=<filename>        target file name (default: testfile)\n"
     " -h, --help                       help message\n"
-    " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-    "                                  (default: /unifycr)\n"
-    " -s, --standard                   do not use unifycr but run standard I/O\n"
+    " -m, --mount=<mountpoint>         use <mountpoint> for unifyfs\n"
+    "                                  (default: /unifyfs)\n"
+    " -s, --standard                   do not use unifyfs but run standard I/O\n"
     " -t, --type=<write|read>          I/O type\n"
     "                                  should be 'write' (default) or 'read'\n"
     " -u, --unmount                    unmount the filesystem after test\n"
@@ -341,13 +341,13 @@ int main(int argc, char* argv[])
         if (debug) {
             test_pause(rank, "Attempting to mount");
         }
-        ret = unifycr_mount(mountpoint, rank, total_ranks, 0);
+        ret = unifyfs_mount(mountpoint, rank, total_ranks, 0);
         if (ret) {
-            test_print(rank, "unifycr_mount failed (return = %d)", ret);
+            test_print(rank, "unifyfs_mount failed (return = %d)", ret);
             exit(-1);
         }
         if (!standard) {
-            printf("[%d]: unifycr mounted at %s\n", rank, mountpoint);
+            printf("[%d]: unifyfs mounted at %s\n", rank, mountpoint);
         }
     }
 
@@ -397,7 +397,7 @@ int main(int argc, char* argv[])
     }
 
     if (!standard && unmount) {
-        unifycr_unmount();
+        unifyfs_unmount();
     }
 
     MPI_Finalize();

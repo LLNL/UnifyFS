@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -395,7 +395,7 @@ int get_slice_num(struct mdhim_t *md, struct index_t *index, void *key, int key_
 	/* Convert the key to a slice number  */
 	slice_num = key_num/index->mdhim_max_recs_per_slice;
 
-	if (key_type == MDHIM_UNIFYCR_KEY) {
+	if (key_type == MDHIM_UNIFYFS_KEY) {
 		unsigned long *meta_pair = get_meta_pair(key, key_len);
 		unsigned long surplus =	meta_pair[1];
 		unsigned long highval = (meta_pair[0] << 1);
@@ -1026,7 +1026,7 @@ rangesrv_list *get_range_servers_from_range(struct mdhim_t *md, struct index_t *
 			ret_rp->first_key = cur_stat->min;
 		}
 		else {
-			if (unifycr_compare(ret_rp->first_key, cur_stat->min) > 0 ) {
+			if (unifyfs_compare(ret_rp->first_key, cur_stat->min) > 0 ) {
 				ret_rp->first_key = cur_stat->min;
 			}
 		}	

@@ -1,18 +1,18 @@
 #!/bin/bash
 #
-# This test checks that I/O to the UnifyCR mount point was properly
-# intercepted and redirected to the UnifyCR daemon.
+# This test checks that I/O to the UnifyFS mount point was properly
+# intercepted and redirected to the UnifyFS daemon.
 #
 
-# If this test fails, then at least one file made it to the UnifyCr mountpoint.
+# If this test fails, then at least one file made it to the UnifyFS mountpoint.
 # This most likely means the corresponding wrapped function is failing in some
 # way and the call is falling through to the operating system.
-test_description="Verify UnifyCR intercepted mount point is empty"
+test_description="Verify UnifyFS intercepted mount point is empty"
 
 . $(dirname $0)/sharness.sh
 
-test_expect_success "Intercepted mount point $UNIFYCR_MOUNT_POINT is empty" '
-    test_dir_is_empty $UNIFYCR_MOUNT_POINT
+test_expect_success "Intercepted mount point $UNIFYFS_MOUNT_POINT is empty" '
+    test_dir_is_empty $UNIFYFS_MOUNT_POINT
 '
 
 test_done

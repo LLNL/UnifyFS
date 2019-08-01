@@ -7,23 +7,23 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 
 /* This is the collection of metadata tests to be run inside of
  * metadata_suite.c. These tests are testing the wrapper functions found in
- * server/src/unifycr_metadata.c.
+ * server/src/unifyfs_metadata.c.
  */
 
 
 #ifndef METADATA_SUITE_H
 #define METADATA_SUITE_H
 
-int unifycr_set_file_attribute_test(void);
-int unifycr_get_file_attribute_test(void);
-int unifycr_get_file_extents_test(void);
+int unifyfs_set_file_attribute_test(void);
+int unifyfs_get_file_attribute_test(void);
+int unifyfs_get_file_extents_test(void);
 
 #endif /* METADATA_SUITE_H */

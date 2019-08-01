@@ -7,17 +7,17 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 #include "pmpi_wrappers.h"
-#include "unifycr.h"
+#include "unifyfs.h"
 #include <mpi.h>
 #include <stdio.h>
 
-int unifycr_mpi_init(int* argc, char*** argv)
+int unifyfs_mpi_init(int* argc, char*** argv)
 {
     int rc, ret;
     int rank;
@@ -34,10 +34,10 @@ int unifycr_mpi_init(int* argc, char*** argv)
     //fprintf(stderr, "DEBUG: %s - after PMPI_Init(), rank=%d ret=%d\n",
     //        __func__, rank, ret);
 
-    rc = unifycr_mount("/unifycr", rank, (size_t)world_sz, app_id);
-    if (UNIFYCR_SUCCESS != rc) {
-        fprintf(stderr, "UNIFYCR ERROR: unifycr_mount() failed with '%s'\n",
-                unifycr_error_enum_description((unifycr_error_e)rc));
+    rc = unifyfs_mount("/unifyfs", rank, (size_t)world_sz, app_id);
+    if (UNIFYFS_SUCCESS != rc) {
+        fprintf(stderr, "UNIFYFS ERROR: unifyfs_mount() failed with '%s'\n",
+                unifyfs_error_enum_description((unifyfs_error_e)rc));
     }
 
     return ret;
@@ -45,28 +45,28 @@ int unifycr_mpi_init(int* argc, char*** argv)
 
 int MPI_Init(int* argc, char*** argv)
 {
-    return unifycr_mpi_init(argc, argv);
+    return unifyfs_mpi_init(argc, argv);
 }
 
 void mpi_init_(MPI_Fint* ierr)
 {
     int argc = 0;
     char** argv = NULL;
-    int rc = unifycr_mpi_init(&argc, &argv);
+    int rc = unifyfs_mpi_init(&argc, &argv);
 
     if (NULL != ierr) {
         *ierr = (MPI_Fint)rc;
     }
 }
 
-int unifycr_mpi_finalize(void)
+int unifyfs_mpi_finalize(void)
 {
     int rc, ret;
 
-    rc = unifycr_unmount();
-    if (UNIFYCR_SUCCESS != rc) {
-        fprintf(stderr, "UNIFYCR ERROR: unifycr_unmount() failed with '%s'\n",
-                unifycr_error_enum_description((unifycr_error_e)rc));
+    rc = unifyfs_unmount();
+    if (UNIFYFS_SUCCESS != rc) {
+        fprintf(stderr, "UNIFYFS ERROR: unifyfs_unmount() failed with '%s'\n",
+                unifyfs_error_enum_description((unifyfs_error_e)rc));
     }
 
     //fprintf(stderr, "DEBUG: %s - before PMPI_Finalize()\n", __func__);
@@ -81,12 +81,12 @@ int unifycr_mpi_finalize(void)
 
 int MPI_Finalize(void)
 {
-    return unifycr_mpi_finalize();
+    return unifyfs_mpi_finalize();
 }
 
 void mpi_finalize_(MPI_Fint* ierr)
 {
-    int rc = unifycr_mpi_finalize();
+    int rc = unifyfs_mpi_finalize();
 
     if (NULL != ierr) {
         *ierr = (MPI_Fint)rc;

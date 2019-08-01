@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# This is an easy-bake script to download and build all UnifyCR's dependencies.
+# This is an easy-bake script to download and build all UnifyFS's dependencies.
 #
 
 ROOT="$(pwd)"

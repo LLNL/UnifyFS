@@ -41,20 +41,20 @@ test_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) \
 if HAVE_FORTRAN
 test_ftn_flags   = $(AM_FCFLAGS) $(MPI_FFLAGS) \
    -I$(top_srcdir)/client/src -I$(top_srcdir)/common/src
-test_ftn_ldadd   = $(top_builddir)/client/src/libunifycrf.la -lrt -lm $(FCLIBS)
+test_ftn_ldadd   = $(top_builddir)/client/src/libunifyfsf.la -lrt -lm $(FCLIBS)
 test_ftn_ldflags = $(AM_LDFLAGS) $(MPI_FLDFLAGS) \
     $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 endif
 
-test_gotcha_ldadd   = $(top_builddir)/client/src/libunifycr_gotcha.la -lrt -lm
+test_gotcha_ldadd   = $(top_builddir)/client/src/libunifyfs_gotcha.la -lrt -lm
 test_gotcha_ldflags = $(AM_LDFLAGS) $(MPI_CLDFLAGS) \
     $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 
-test_posix_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) -DDISABLE_UNIFYCR
+test_posix_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) -DDISABLE_UNIFYFS
 test_posix_ldadd    = -lrt -lm
 test_posix_ldflags  = $(AM_LDFLAGS) $(MPI_CLDFLAGS)
 
-test_static_ldadd   = $(top_builddir)/client/src/libunifycr.la -lrt -lm
+test_static_ldadd   = $(top_builddir)/client/src/libunifyfs.la -lrt -lm
 test_static_ldflags = -static $(CP_WRAPPERS) $(AM_LDFLAGS) $(MPI_CLDFLAGS) \
     $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 

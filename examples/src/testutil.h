@@ -7,13 +7,13 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
-#ifndef UNIFYCR_TEST_UTIL_H
-#define UNIFYCR_TEST_UTIL_H
+#ifndef UNIFYFS_TEST_UTIL_H
+#define UNIFYFS_TEST_UTIL_H
 
 #include <aio.h>
 #include <assert.h>
@@ -35,8 +35,8 @@
 #include <unistd.h>
 #include <mpi.h>
 
-#ifndef DISABLE_UNIFYCR
-# include <unifycr.h>
+#ifndef DISABLE_UNIFYFS
+# include <unifyfs.h>
 #endif
 
 /* ---------- Common Types and Definitions ---------- */
@@ -117,7 +117,7 @@ typedef struct {
     int debug;        /* during startup, wait for input at rank 0 */
     int verbose;      /* print verbose information to stderr */
     int use_mpi;
-    int use_unifycr;
+    int use_unifyfs;
 
     /* I/O behavior options */
     int io_pattern; /* N1 or NN */
@@ -163,9 +163,9 @@ void test_config_init(test_cfg* cfg)
     // set everything to 0/NULL
     memset(cfg, 0, sizeof(test_cfg));
 
-    // N-to-1 UnifyCR by default
+    // N-to-1 UnifyFS by default
     cfg->use_mpi = 1;
-    cfg->use_unifycr = 1;
+    cfg->use_unifyfs = 1;
     cfg->io_pattern = IO_PATTERN_N1;
 
     // invalidate file descriptor
@@ -189,7 +189,7 @@ void test_config_print(test_cfg* cfg)
     fprintf(stderr, "\t debug       = %d\n", cfg->debug);
     fprintf(stderr, "\t verbose     = %d\n", cfg->verbose);
     fprintf(stderr, "\t use_mpi     = %d\n", cfg->use_mpi);
-    fprintf(stderr, "\t use_unifycr = %d\n", cfg->use_unifycr);
+    fprintf(stderr, "\t use_unifyfs = %d\n", cfg->use_unifyfs);
 
     fprintf(stderr, "\n-- IO Behavior --\n");
     fprintf(stderr, "\t io_pattern  = %s\n", io_pattern_str(cfg->io_pattern));
@@ -380,7 +380,7 @@ void timer_stop(test_timer* timer)
 
 /* ---------- Option Parsing Utilities ---------- */
 
-static const char* unifycr_mntpt = "/unifycr";
+static const char* unifyfs_mntpt = "/unifyfs";
 static const char*     tmp_mntpt = "/tmp";
 
 static inline
@@ -424,7 +424,7 @@ static const struct option test_long_opts[] = {
     { "pattern", 1, 0, 'p' },
     { "prdwr", 0, 0, 'P' },
     { "stdio", 0, 0, 'S' },
-    { "disable-unifycr", 0, 0, 'U' },
+    { "disable-unifyfs", 0, 0, 'U' },
     { "verbose", 0, 0, 'v' },
     { "vecio", 0, 0, 'V' },
     { "shuffle", 0, 0, 'x' },
@@ -452,8 +452,8 @@ static const char* test_usage_str =
     "                                  (default: off)\n"
     " -L, --listio                     use lio_listio instead of read|write\n"
     "                                  (default: off)\n"
-    " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-    "                                  (default: /unifycr)\n"
+    " -m, --mount=<mountpoint>         use <mountpoint> for unifyfs\n"
+    "                                  (default: /unifyfs)\n"
     " -M, --mapio                      use mmap instead of read|write\n"
     "                                  (default: off)\n"
     " -n, --nblocks=<count>            count of blocks each process will read|write\n"
@@ -464,8 +464,8 @@ static const char* test_usage_str =
     "                                  (default: off)\n"
     " -S, --stdio                      use fread|fwrite instead of read|write\n"
     "                                  (default: off)\n"
-    " -U, --disable-unifycr            do not use UnifyCR\n"
-    "                                  (default: enable UnifyCR)\n"
+    " -U, --disable-unifyfs            do not use UnifyFS\n"
+    "                                  (default: enable UnifyFS)\n"
     " -v, --verbose                    print verbose information\n"
     "                                  (default: off)\n"
     " -V, --vecio                      use readv|writev instead of read|write\n"
@@ -552,7 +552,7 @@ int test_process_argv(test_cfg* cfg,
             break;
 
         case 'U':
-            cfg->use_unifycr = 0;
+            cfg->use_unifyfs = 0;
             break;
 
         case 'v':
@@ -595,16 +595,16 @@ int test_process_argv(test_cfg* cfg,
         exit(-1);
     }
 
-#ifdef DISABLE_UNIFYCR
-    if (cfg->use_unifycr) {
-        test_print_once(cfg, "USAGE ERROR: UnifyCR enabled, "
+#ifdef DISABLE_UNIFYFS
+    if (cfg->use_unifyfs) {
+        test_print_once(cfg, "USAGE ERROR: UnifyFS enabled, "
                              "but not compiled/linked");
         exit(-1);
     }
 #endif
 
-    if (test_is_static(program) && !cfg->use_unifycr) {
-        test_print_once(cfg, "USAGE ERROR: --disable-unifycr only valid when "
+    if (test_is_static(program) && !cfg->use_unifyfs) {
+        test_print_once(cfg, "USAGE ERROR: --disable-unifyfs only valid when "
                              "dynamically linked.");
         exit(-1);
     }
@@ -652,8 +652,8 @@ int test_process_argv(test_cfg* cfg,
 
     if (NULL == cfg->mountpt) {
         // set mountpoint default
-        if (cfg->use_unifycr) {
-            cfg->mountpt = strdup(unifycr_mntpt);
+        if (cfg->use_unifyfs) {
+            cfg->mountpt = strdup(unifyfs_mntpt);
         } else {
             cfg->mountpt = strdup(tmp_mntpt);
         }
@@ -1006,14 +1006,14 @@ int test_init(int argc, char** argv,
         test_config_print(cfg);
     }
 
-    if (cfg->use_unifycr) {
-#ifndef DISABLE_UNIFYCR
+    if (cfg->use_unifyfs) {
+#ifndef DISABLE_UNIFYFS
         if (cfg->debug) {
-            test_pause(cfg, "Before unifycr_mount()");
+            test_pause(cfg, "Before unifyfs_mount()");
         }
-        rc = unifycr_mount(cfg->mountpt, cfg->rank, cfg->n_ranks, cfg->app_id);
+        rc = unifyfs_mount(cfg->mountpt, cfg->rank, cfg->n_ranks, cfg->app_id);
         if (rc) {
-            test_print(cfg, "ERROR: unifycr_mount() failed (rc=%d)", rc);
+            test_print(cfg, "ERROR: unifyfs_mount() failed (rc=%d)", rc);
             test_abort(cfg, rc);
         }
 #endif
@@ -1040,11 +1040,11 @@ void test_fini(test_cfg* cfg)
 
     test_close_file(cfg);
 
-    if (cfg->use_unifycr) {
-#ifndef DISABLE_UNIFYCR
-        int rc = unifycr_unmount();
+    if (cfg->use_unifyfs) {
+#ifndef DISABLE_UNIFYFS
+        int rc = unifyfs_unmount();
         if (rc) {
-            test_print(cfg, "ERROR: unifycr_unmount() failed (rc=%d)", rc);
+            test_print(cfg, "ERROR: unifyfs_unmount() failed (rc=%d)", rc);
         }
 #endif
     }
@@ -1064,4 +1064,4 @@ void test_fini(test_cfg* cfg)
     memset(cfg, 0, sizeof(test_cfg));
 }
 
-#endif /* UNIFYCR_TEST_UTIL_H */
+#endif /* UNIFYFS_TEST_UTIL_H */

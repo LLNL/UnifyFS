@@ -1,5 +1,5 @@
 #
-#  Project-local sharness code for UnifyCR
+#  Project-local sharness code for UnifyFS
 #
 
 # Run command with a timeout
@@ -20,7 +20,7 @@ run_timeout()
 # Returns 0 if the named process is found, otherwise returns 1.
 process_is_running()
 {
-    local proc=${1:-"unifycrd"}
+    local proc=${1:-"unifyfsd"}
     local secs_to_wait=${2:-15}
     local max_loops=$(($secs_to_wait * 2))
     local i=0
@@ -45,7 +45,7 @@ process_is_running()
 # Returns 0 if the named process is not found, otherwise returns 1.
 process_is_not_running()
 {
-    local proc=${1:-"unifycrd"}
+    local proc=${1:-"unifyfsd"}
     local secs_to_wait=${2:-15}
     local max_loops=$(($secs_to_wait * 2))
     local i=0
@@ -62,44 +62,44 @@ process_is_not_running()
 }
 
 # Create metadata directory if needed and start daemon.
-unifycrd_start_daemon()
+unifyfsd_start_daemon()
 {
     # Make sure metadata directory exists
-    if test -z "$UNIFYCR_META_DB_PATH"; then
+    if test -z "$UNIFYFS_META_DB_PATH"; then
         return 1
-    elif ! test -d "$UNIFYCR_META_DB_PATH" &&
-         ! mkdir $UNIFYCR_META_DB_PATH; then
+    elif ! test -d "$UNIFYFS_META_DB_PATH" &&
+         ! mkdir $UNIFYFS_META_DB_PATH; then
         return 1
     fi
 
     # Generate servers hostfile
-    # if test -z "$UNIFYCR_SHAREDFS_DIR"; then
+    # if test -z "$UNIFYFS_SHAREDFS_DIR"; then
     #     return 1
-    # elif ! test -d "$UNIFYCR_SHAREDFS_DIR" &&
-    #      ! mkdir $UNIFYCR_SHAREDFS_DIR; then
+    # elif ! test -d "$UNIFYFS_SHAREDFS_DIR" &&
+    #      ! mkdir $UNIFYFS_SHAREDFS_DIR; then
     #     return 1
     # fi
-    # srvr_hosts=$UNIFYCR_SHAREDFS_DIR/unifycrd.hosts
+    # srvr_hosts=$UNIFYFS_SHAREDFS_DIR/unifyfsd.hosts
     # if [ ! -f $srvr_hosts ]; then
     #     touch $srvr_hosts
     #     echo "1" >> $srvr_hosts
     #     hostname >> $srvr_hosts
     # fi
-    # export UNIFYCR_SERVER_HOSTFILE=$srvr_hosts
+    # export UNIFYFS_SERVER_HOSTFILE=$srvr_hosts
 
     # run server daemon
-    $UNIFYCRD
+    $UNIFYFSD
 }
 
-# Kill UnifyCR daemon.
-unifycrd_stop_daemon()
+# Kill UnifyFS daemon.
+unifyfsd_stop_daemon()
 {
-    while killall -q -s TERM unifycrd 2>/dev/null; do :; done
+    while killall -q -s TERM unifyfsd 2>/dev/null; do :; done
 }
 
 # Remove the metadata directory.
-unifycrd_cleanup()
+unifyfsd_cleanup()
 {
-    test -d "$UNIFYCR_META_DB_PATH" && rm -rf $UNIFYCR_META_DB_PATH
-    # test -d "$UNIFYCR_SHAREDFS_DIR" && rm -rf $UNIFYCR_SHAREDFS_DIR
+    test -d "$UNIFYFS_META_DB_PATH" && rm -rf $UNIFYFS_META_DB_PATH
+    # test -d "$UNIFYFS_SHAREDFS_DIR" && rm -rf $UNIFYFS_SHAREDFS_DIR
 }

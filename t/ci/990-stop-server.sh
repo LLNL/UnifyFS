@@ -3,7 +3,7 @@
 # This test checks that the server terminated successfully, checks the
 # mountpoints, and then cleans up the hosts (if desired).
 
-test_description="Stopping the UnifyCR server"
+test_description="Stopping the UnifyFS server"
 
 while [[ $# -gt 0 ]]
 do
@@ -20,23 +20,23 @@ do
     esac
 done
 
-test_expect_success "unifycrd is still running" '
-    process_is_running unifycrd 10
+test_expect_success "unifyfsd is still running" '
+    process_is_running unifyfsd 10
 '
 
-$UNIFYCR_BIN/unifycr terminate -d &> ${UNIFYCR_LOG_DIR}/unifycr.terminate.out
+$UNIFYFS_BIN/unifyfs terminate -d &> ${UNIFYFS_LOG_DIR}/unifyfs.terminate.out
 
-test_expect_success "unifycrd has stopped" '
-    process_is_not_running unifycrd 10
+test_expect_success "unifyfsd has stopped" '
+    process_is_not_running unifyfsd 10
 '
 
-test_expect_success "verify unifycrd has stopped" '
-    test_must_fail process_is_running unifycrd 10
+test_expect_success "verify unifyfsd has stopped" '
+    test_must_fail process_is_running unifyfsd 10
 '
 
-# If UNIFYCR_MOUNTPOINT is an existing dir, verify that is it empty
-test_expect_success REAL_MP "Verify UNIFYCR_MOUNTPOINT ($UNIFYCR_MP) is empty" '
-    test_dir_is_empty $UNIFYCR_MP
+# If UNIFYFS_MOUNTPOINT is an existing dir, verify that is it empty
+test_expect_success REAL_MP "Verify UNIFYFS_MOUNTPOINT ($UNIFYFS_MP) is empty" '
+    test_dir_is_empty $UNIFYFS_MP
 '
 
 # Cleanup posix mountpoint

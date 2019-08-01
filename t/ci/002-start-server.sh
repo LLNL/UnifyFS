@@ -1,10 +1,10 @@
 #!/bin/sh
 
-# This test check the mountpoints and then starts the unifycrd server. It then
+# This test check the mountpoints and then starts the unifyfsd server. It then
 # checks that the server is still running for all subsequent tests. If the
 # servers fails to start, cleanup_hosts is called and testing is exited.
 
-test_description="Start the UnifyCR server"
+test_description="Start the UnifyFS server"
 
 while [[ $# -gt 0 ]]
 do
@@ -23,22 +23,22 @@ done
 
 # Verify we have the mountpoints needed for testing
 if test_have_prereq REAL_MP; then
-    test_expect_success "UNIFYCR_MOUNTPOINT ($UNIFYCR_MP) is real directory" '
-        test_path_is_dir $UNIFYCR_MP ||
+    test_expect_success "UNIFYFS_MOUNTPOINT ($UNIFYFS_MP) is real directory" '
+        test_path_is_dir $UNIFYFS_MP ||
         { test_set_prereq FAIL; return 1; }
     '
 
-    # If FAIL prereq is set, then UNIFYCR_MOUNTPOINT was set to a real dir, but
+    # If FAIL prereq is set, then UNIFYFS_MOUNTPOINT was set to a real dir, but
     # it is not a shared directory. If this is the case, no point in starting
     # servers to proceed with tests.
     if test_have_prereq FAIL; then
-        say "UNIFYCR_MOUNTPOINT set to real dir; dir not found on all hosts."
+        say "UNIFYFS_MOUNTPOINT set to real dir; dir not found on all hosts."
         say "Exiting."
         test_done
     fi
 else # ensure mountpoint is a non-real directory
-    test_expect_success "UNIFYCR_MOUNTPOINT ($UNIFYCR_MP) is fake directory" '
-        test_must_fail test_path_is_dir $UNIFYCR_MP
+    test_expect_success "UNIFYFS_MOUNTPOINT ($UNIFYFS_MP) is fake directory" '
+        test_must_fail test_path_is_dir $UNIFYFS_MP
     '
 fi
 
@@ -50,42 +50,42 @@ test_expect_success TEST_POSIX "CI_POSIX_MP ($CI_POSIX_MP) is shared dir" '
 '
 
 # Start the server
-test_expect_success "unifycrd hasn't started yet" '
-    process_is_not_running unifycrd 10
+test_expect_success "unifyfsd hasn't started yet" '
+    process_is_not_running unifyfsd 10
 '
 
-$UNIFYCR_BIN/unifycr start -c -d -S $UNIFYCR_SHAREDFS_DIR \
-    -e $UNIFYCR_BIN/unifycrd &> ${UNIFYCR_LOG_DIR}/unifycr.start.out &
+$UNIFYFS_BIN/unifyfs start -c -d -S $UNIFYFS_SHAREDFS_DIR \
+    -e $UNIFYFS_BIN/unifyfsd &> ${UNIFYFS_LOG_DIR}/unifyfs.start.out &
 
-test_expect_success "unifycrd started" '
-    process_is_running unifycrd 10 ||
+test_expect_success "unifyfsd started" '
+    process_is_running unifyfsd 10 ||
     { test_set_prereq FAIL; return 1; }
 '
 
-# If FAIL prereq is set, then unifycrd failed to start.
+# If FAIL prereq is set, then unifyfsd failed to start.
 # No point in proceeding with testing, so cleanup and exit early
 if test_have_prereq FAIL; then
-    say "unifycrd failed to start."
+    say "unifyfsd failed to start."
     say "Try setting longer wait time. Cleaning up and exiting."
     cleanup_hosts
     test_done
 fi
 
-# If unifycrd doesn't stay running running, set fail test prereq
-test_expect_success "unifycrd hasn't died" '
-    test_must_fail process_is_not_running unifycrd 10 ||
+# If unifyfsd doesn't stay running running, set fail test prereq
+test_expect_success "unifyfsd hasn't died" '
+    test_must_fail process_is_not_running unifyfsd 10 ||
     { test_set_prereq FAIL; return 1; }
 '
 
-# If FAIL prereq is set, then unifycrd failed to stay running.
+# If FAIL prereq is set, then unifyfsd failed to stay running.
 # No point in proceeding with testing, so cleanup and exit early
 if test_have_prereq FAIL; then
-    say "unifycrd failed to stay running. Cleaning up and exiting."
+    say "unifyfsd failed to stay running. Cleaning up and exiting."
     cleanup_hosts
     test_done
 fi
 
-# unifycrd has started by this point. Set up a trap to cleanup the hosts in the
+# unifyfsd has started by this point. Set up a trap to cleanup the hosts in the
 # event of an early/unexpected non-zero exit. This trap gets removed after the
 # final cleanup_hosts is called in 990-stop-server.sh. This is to prevent the
 # trap from triggering when the overall test suite exits with 1 if/when any

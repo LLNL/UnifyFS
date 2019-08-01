@@ -2,11 +2,11 @@
 Build & I/O Interception
 ========================
 
-In this section, we describe how to build UnifyCR with I/O interception.
+In this section, we describe how to build UnifyFS with I/O interception.
 
 .. note::
 
-    The current version of UnifyCR adopts the mdhim key-value store, which strictly
+    The current version of UnifyFS adopts the mdhim key-value store, which strictly
     requires:
 
     "An MPI distribution that supports MPI_THREAD_MULTIPLE and per-object locking of
@@ -17,7 +17,7 @@ In this section, we describe how to build UnifyCR with I/O interception.
 .. _build-label:
 
 ---------------------------
-How to Build UnifyCR
+How to Build UnifyFS
 ---------------------------
 
 To install all dependencies and set up your build environment, we recommend
@@ -46,33 +46,33 @@ Make use of Spack's `shell support <https://spack.readthedocs.io/en/latest/getti
 to automatically add Spack to your ``PATH`` and allow the use of the ``spack``
 command.
 
-Then install UnifyCR:
+Then install UnifyFS:
 
 .. code-block:: Bash
 
-    $ spack install unifycr
-    $ spack load unifycr
+    $ spack install unifyfs
+    $ spack load unifyfs
 
 .. Edit the following admonition if the default of variants are changed or when
    new variants are added.
 
-Include or remove variants with Spack when installing UnifyCR when a custom
-build is desired. Type ``spack info unifycr`` for more info.
+Include or remove variants with Spack when installing UnifyFS when a custom
+build is desired. Type ``spack info unifyfs`` for more info.
 
-.. table:: UnifyCR Build Variants
+.. table:: UnifyFS Build Variants
    :widths: auto
 
    =======  ========================================  =========================
    Variant  Command                                   Description
    =======  ========================================  =========================
-   HDF5     ``spack install unifycr+hdf5``            Build with parallel HDF5
+   HDF5     ``spack install unifyfs+hdf5``            Build with parallel HDF5
 
-            ``spack install unifycr+hdf5 ^hdf5~mpi``  Build with serial HDF5
-   Fortran  ``spack install unifycr+fortran``         Build with gfortran
-   NUMA     ``spack install unifycr+numa``            Build with NUMA
-   pmpi     ``spack install unifycr+pmpi``            Transparent mount/unmount
-   PMI      ``spack install unifycr+pmi``             Enable PMI2 build options
-   PMIx     ``spack install unifycr+pmix``            Enable PMIx build options
+            ``spack install unifyfs+hdf5 ^hdf5~mpi``  Build with serial HDF5
+   Fortran  ``spack install unifyfs+fortran``         Build with gfortran
+   NUMA     ``spack install unifyfs+numa``            Build with NUMA
+   pmpi     ``spack install unifyfs+pmpi``            Transparent mount/unmount
+   PMI      ``spack install unifyfs+pmi``             Enable PMI2 build options
+   PMIx     ``spack install unifyfs+pmix``            Enable PMIx build options
    =======  ========================================  =========================
 
 .. attention::
@@ -83,7 +83,7 @@ build is desired. Type ``spack info unifycr`` for more info.
     have these dependencies installed through Spack or haven't told Spack where
     they are locally installed on your system (i.e., through a custom
     `packages.yaml <https://spack.readthedocs.io/en/latest/build_settings.html#external-packages>`_).
-    Type ``spack spec -I unifycr`` before installing to see what Spack is going
+    Type ``spack spec -I unifyfs`` before installing to see what Spack is going
     to do.
 
 ---------------------------
@@ -91,13 +91,13 @@ build is desired. Type ``spack info unifycr`` for more info.
 Building with Autotools
 ************************
 
-Download the latest UnifyCR release from the `Releases
-<https://github.com/LLNL/UnifyCR/releases>`_ page.
+Download the latest UnifyFS release from the `Releases
+<https://github.com/LLNL/UnifyFS/releases>`_ page.
 
 Building the Dependencies
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-UnifyCR requires MPI, LevelDB, and GOTCHA(version 0.0.2).
+UnifyFS requires MPI, LevelDB, and GOTCHA(version 0.0.2).
 
 .. _spack-build-label:
 
@@ -105,7 +105,7 @@ Build the Dependencies with Spack
 """"""""""""""""""""""""""""""""""
 
 Once Spack is installed on your system (see :ref:`above <build-label>`), you
-can install just the dependencies for an easier manual installation of UnifyCR.
+can install just the dependencies for an easier manual installation of UnifyFS.
 
 If you use Dotkit then replace ``spack load`` with ``spack use``.
 
@@ -118,14 +118,14 @@ If you use Dotkit then replace ``spack load`` with ``spack use``.
 
 .. tip::
 
-    You can use ``spack install --only=dependencies unifycr`` to install all of
-    UnifyCR's dependencies without installing UnifyCR.
+    You can use ``spack install --only=dependencies unifyfs`` to install all of
+    UnifyFS's dependencies without installing UnifyFS.
 
     Keep in mind this will also install all the build dependencies and
     dependencies of dependencies if you haven't already installed them through
     Spack or told Spack where they are locally installed on your system.
 
-Then to build UnifyCR:
+Then to build UnifyFS:
 
 .. code-block:: Bash
 
@@ -148,8 +148,8 @@ Then to build UnifyCR:
 
     ``./configure --prefix=/path/to/install/ --enable-fortran``
 
-    There is a known `ifort_issue <https://github.com/LLNL/UnifyCR/issues/300>`_
-    with the Intel Fortran compiler as well as an `xlf_issue <://github.com/LLNL/UnifyCR/issues/304>`_
+    There is a known `ifort_issue <https://github.com/LLNL/UnifyFS/issues/300>`_
+    with the Intel Fortran compiler as well as an `xlf_issue <://github.com/LLNL/UnifyFS/issues/304>`_
     with the IBM Fortran compiler. Other Fortran compilers are currently
     unknown.
 
@@ -180,7 +180,7 @@ follow the instructions here: `Margo <https://xgitlab.cels.anl.gov/sds/margo>`_
     that variable the paths for the ``.pc`` files for Mercury, Argobots, and
     Margo separated by colons.
 
-Then to build UnifyCR:
+Then to build UnifyFS:
 
 .. code-block:: Bash
 
@@ -198,8 +198,8 @@ Then to build UnifyCR:
     ``--with-numa=$PATH_TO_NUMA``
 
     This is needed to enable NUMA-aware memory allocation on Linux machines. Set the
-    NUMA policy at runtime with ``UNIFYCR_NUMA_POLICY = local | interleaved``, or set
-    NUMA nodes explicitly with ``UNIFYCR_USE_NUMA_BANK = <node no.>``
+    NUMA policy at runtime with ``UNIFYFS_NUMA_POLICY = local | interleaved``, or set
+    NUMA nodes explicitly with ``UNIFYFS_USE_NUMA_BANK = <node no.>``
 
 ---------------------------
 
@@ -215,14 +215,14 @@ Statically
 Steps for static linking using --wrap:
 
 To intercept I/O calls using a static link, you must add flags to your link
-line. UnifyCR installs a unifycr-config script that returns those flags, e.g.,
+line. UnifyFS installs a unifyfs-config script that returns those flags, e.g.,
 
 .. code-block:: Bash
 
     $ mpicc -o test_write \
-          `<unifycr>/bin/unifycr-config --pre-ld-flags` \
+          `<unifyfs>/bin/unifyfs-config --pre-ld-flags` \
           test_write.c \
-          `<unifycr>/bin/unifycr-config --post-ld-flags`
+          `<unifyfs>/bin/unifyfs-config --post-ld-flags`
 
 Dynamically
 **************
@@ -238,7 +238,7 @@ C
 .. code-block:: Bash
 
     $ mpicc -o test_write test_write.c \
-        -I<unifycr>/include -L<unifycy>/lib -lunifycr_gotcha \
+        -I<unifyfs>/include -L<unifycy>/lib -lunifyfs_gotcha \
         -L<gotcha>/lib64 -lgotcha
 
 Fortran
@@ -247,4 +247,4 @@ Fortran
 .. code-block:: Bash
 
     $ mpif90 -o test_write test_write.F \
-        -I<unifycr>/include -L<unifycy>/lib -lunifycrf -lunifycr_gotcha
+        -I<unifyfs>/include -L<unifycy>/lib -lunifyfsf -lunifyfs_gotcha

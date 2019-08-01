@@ -1,18 +1,18 @@
 =====================
-UnifyCR Configuration
+UnifyFS Configuration
 =====================
 
-Here, we explain how users can customize the runtime behavior of UnifyCR. In
-particular, UnifyCR provides the following ways to configure:
+Here, we explain how users can customize the runtime behavior of UnifyFS. In
+particular, UnifyFS provides the following ways to configure:
 
-- System-wide configuration file: ``/etc/unifycr/unifycr.conf``
+- System-wide configuration file: ``/etc/unifyfs/unifyfs.conf``
 - Environment variables
-- Command line options to ``unifycrd``
+- Command line options to ``unifyfsd``
 
 All configuration settings have corresponding environment variables, but only
 certain settings have command line options. When defined via multiple methods,
 the command line options have the highest priority, followed by environment
-variables, and finally config file options from ``unifycr.conf``.
+variables, and finally config file options from ``unifyfs.conf``.
 
 The unified method for providing configuration control is adapted from
 CONFIGURATOR_. Configuration settings are grouped within named sections, and
@@ -25,10 +25,10 @@ each setting consists of a key-value pair with one of the following types:
 .. _CONFIGURATOR: https://github.com/MichaelBrim/tedium/tree/master/configurator
 
 --------------
- unifycr.conf
+ unifyfs.conf
 --------------
 
-``unifycr.conf`` specifies the system-wide configuration options. The file is
+``unifyfs.conf`` specifies the system-wide configuration options. The file is
 written in INI_ language format, as supported by the inih_ parser.
 
 .. _INI: http://en.wikipedia.org/wiki/INI_file
@@ -40,7 +40,7 @@ In this description, we use ``section.key`` as shorthand for the name of
 a given section and key.
 
 
-.. table:: ``[unifycr]`` section - main configuration settings
+.. table:: ``[unifyfs]`` section - main configuration settings
    :widths: auto
 
    =============  ======  =====================================================
@@ -50,7 +50,7 @@ a given section and key.
    consistency    STRING  consistency model [ LAMINATED | POSIX | NONE ]
    daemonize      BOOL    enable server daemonization (default: off)
    debug          BOOL    enable debug output (default: off)
-   mountpoint     STRING  mountpoint path prefix (default: /unifycr)
+   mountpoint     STRING  mountpoint path prefix (default: /unifyfs)
    =============  ======  =====================================================
 
 .. table:: ``[client]`` section - client settings
@@ -82,7 +82,7 @@ a given section and key.
    db_name        STRING  metadata database file name
    db_path        STRING  path to directory to contain metadata database
    range_size     INT     metadata range size (B) (default: 1 MiB)
-   server_ratio   INT     # of UnifyCR servers per metadata server (default: 1)
+   server_ratio   INT     # of UnifyFS servers per metadata server (default: 1)
    =============  ======  =====================================================
 
 .. table:: ``[runstate]`` section - server runstate settings
@@ -124,11 +124,11 @@ a given section and key.
  Environment Variables
 -----------------------
 
-All environment variables take the form ``UNIFYCR_SECTION_KEY``, except for
-the ``[unifycr]`` section, which uses ``UNIFYCR_KEY``. For example,
+All environment variables take the form ``UNIFYFS_SECTION_KEY``, except for
+the ``[unifyfs]`` section, which uses ``UNIFYFS_KEY``. For example,
 the setting ``log.verbosity`` has a corresponding environment variable
-named ``UNIFYCR_LOG_VERBOSITY``, while ``unifycr.mountpoint`` corresponds to
-``UNIFYCR_MOUNTPOINT``.
+named ``UNIFYFS_LOG_VERBOSITY``, while ``unifyfs.mountpoint`` corresponds to
+``UNIFYFS_MOUNTPOINT``.
 
 
 ----------------------
@@ -140,17 +140,17 @@ command line options have long and short forms. The long form uses
 ``--section-key=value``, while the short form ``-<optchar> value``, where
 the short option character is given in the below table.
 
-.. table:: ``unifycrd`` command line options
+.. table:: ``unifyfsd`` command line options
    :widths: auto
 
    ======================  ========
    LongOpt                 ShortOpt
    ======================  ========
-   --unifycr-configfile      -C
-   --unifycr-consistency     -c
-   --unifycr-daemonize       -D
-   --unifycr-debug           -d
-   --unifycr-mountpoint      -m
+   --unifyfs-configfile      -C
+   --unifyfs-consistency     -c
+   --unifyfs-daemonize       -D
+   --unifyfs-debug           -d
+   --unifyfs-mountpoint      -m
    --log-dir                 -L
    --log-file                -l
    --log-verbosity           -v

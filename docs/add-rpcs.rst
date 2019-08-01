@@ -7,7 +7,7 @@ the Margo library API.
 
 .. note::
 
-    This uses the `unifycr_mount_rpc` as an example RPC
+    This uses the `unifyfs_mount_rpc` as an example RPC
     function to follow throughout.
 
 ---------------------------
@@ -18,18 +18,18 @@ Common
 
    The struct definition macro `MERCURY_GEN_PROC()` is used to define
    both input and output parameters. For client-server RPCs, the
-   definitions should be placed in `common/src/unifycr_clientcalls_rpc.h`,
+   definitions should be placed in `common/src/unifyfs_clientcalls_rpc.h`,
    while server-server RPC structs are defined in
-   `common/src/unifycr_servercalls_rpc.h`.
+   `common/src/unifyfs_servercalls_rpc.h`.
 
    The input parameters struct should contain all values the client needs
    to pass to the server handler function.
    The output parameters struct should contain all values the server needs
    to pass back to the client upon completion of the handler function.
-   The following shows the input and output structs for `unifycr_mount_rpc`.
+   The following shows the input and output structs for `unifyfs_mount_rpc`.
 
 .. code-block:: C
-  MERCURY_GEN_PROC(unifycr_mount_in_t,
+  MERCURY_GEN_PROC(unifyfs_mount_in_t,
                    ((int32_t)(app_id))
                    ((int32_t)(local_rank_idx))
                    ((int32_t)(dbg_rank))
@@ -45,7 +45,7 @@ Common
                    ((hg_size_t)(data_offset))
                    ((hg_size_t)(data_size))
                    ((hg_const_string_t)(external_spill_dir)))
-  MERCURY_GEN_PROC(unifycr_mount_out_t,
+  MERCURY_GEN_PROC(unifyfs_mount_out_t,
                    ((hg_size_t)(max_recs_per_slice))
                    ((int32_t)(ret)))
 
@@ -65,9 +65,9 @@ Server
 
    This is the function that will be invoked on the client and executed on
    the server. Client-server RPC handler functions are implemented in
-   `server/src/unifycr_cmd_handler.c`, while server-server RPC handlers go
-   in `server/src/unifycr_service_manager.c`. The RPC handler input and output
-   parameters structs are defined in `common/src/unifycr_clientcalls_rpc.h`.
+   `server/src/unifyfs_cmd_handler.c`, while server-server RPC handlers go
+   in `server/src/unifyfs_service_manager.c`. The RPC handler input and output
+   parameters structs are defined in `common/src/unifyfs_clientcalls_rpc.h`.
 
    All the RPC handler functions follow the same protoype, which is passed
    a Mercury handle as the only argument. The handler function should use
@@ -80,7 +80,7 @@ Server
 
    After implementing the handler function, place the Margo RPC handler
    definition macro immediately following the function, for example:
-    `DEFINE_MARGO_RPC_HANDLER(unifycr_mount_rpc`
+    `DEFINE_MARGO_RPC_HANDLER(unifyfs_mount_rpc`
 
 2. Register the server RPC handler with margo.
 
@@ -88,8 +88,8 @@ Server
    function `register_client_server_rpcs()` to include a registration macro
    for the new RPC handler, for example:
 .. code-block:: C
-    MARGO_REGISTER(unifycrd_rpc_context->mid, "unifycr_mount_rpc",
-    unifycr_mount_in_t, unifycr_mount_out_t, unifycr_mount_rpc);
+    MARGO_REGISTER(unifyfsd_rpc_context->mid, "unifyfs_mount_rpc",
+    unifyfs_mount_in_t, unifyfs_mount_out_t, unifyfs_mount_rpc);
 
    The last argument to `MARGO_REGISTER()` is the handler function name. The
    prior two arguments are the input and output parameters structs. The input
@@ -117,8 +117,8 @@ Client
    the RPC handler and store its Mercury id in the newly defined `ClientRpcIds`
    variable.
    .. code-block:: C
-   client_rpc_context->rpcs.mount_id = MARGO_REGISTER(client_rpc_context->mid, "unifycr_mount_rpc",
-                                                      unifycr_mount_in_t, unifycr_mount_out_t, NULL);
+   client_rpc_context->rpcs.mount_id = MARGO_REGISTER(client_rpc_context->mid, "unifyfs_mount_rpc",
+                                                      unifyfs_mount_in_t, unifyfs_mount_out_t, NULL);
 
    When the client calls `MARGO_REGISTER()` the last parameter is `NULL`. This
    is the RPC handler function that is only defined on the server.

@@ -88,7 +88,7 @@ full_run=true
 # setup testing
 source $CI_DIR/001-setup.sh
 
-# start unifycrd
+# start unifyfsd
 source $CI_DIR/002-start-server.sh
 
 # determine time setup took
@@ -116,7 +116,7 @@ source $CI_DIR/120-read-tests.sh
 testing_time=$SECONDS
 echo "Testing time -- $(elapsed_time setup_time testing_time)"
 
-# stop unifycrd and cleanup
+# stop unifyfsd and cleanup
 source $CI_DIR/990-stop-server.sh
 
 end_time=$SECONDS

@@ -4,7 +4,7 @@
 #
 # There are convenience functions such as `unify_run_test()` and get_filename()
 # in the ci-functions.sh script that can make adding new tests easier. See the
-# full UnifyCR documentatation for more info.
+# full UnifyFS documentatation for more info.
 #
 # There are multiple ways to to run an example using `unify_run_test()`
 #     1. unify_run_test $app_name "$app_args" app_output

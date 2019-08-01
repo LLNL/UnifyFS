@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -92,6 +92,6 @@ int range_server_init_comm(struct mdhim_t *md);
 int range_server_stop(struct mdhim_t *md);
 int range_server_add_oreq(struct mdhim_t *md, MPI_Request *req, void *msg); //Add an outstanding request
 int range_server_clean_oreqs(struct mdhim_t *md); //Clean outstanding reqs
-int unifycr_compare(const char *a, const char *b);
+int unifyfs_compare(const char *a, const char *b);
 
 #endif

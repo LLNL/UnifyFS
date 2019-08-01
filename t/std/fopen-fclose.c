@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 #include <fcntl.h>
@@ -20,16 +20,16 @@
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
 
-/* This function contains the tests for UNIFYCR_WRAP(fopen) and
- * UNIFYCR_WRAP(fclose) found in client/src/unifycr-stdio.c.
+/* This function contains the tests for UNIFYFS_WRAP(fopen) and
+ * UNIFYFS_WRAP(fclose) found in client/src/unifyfs-stdio.c.
  *
  * Notice the tests are ordered in a logical testing order. Changing the order
  * or adding new tests in between two others could negatively affect the
  * desired results. */
-int fopen_fclose_test(char* unifycr_root)
+int fopen_fclose_test(char* unifyfs_root)
 {
     /* Diagnostic message for reading and debugging output */
-    diag("Starting UNIFYCR_WRAP(fopen/fclose) tests");
+    diag("Starting UNIFYFS_WRAP(fopen/fclose) tests");
 
     char path[64];
     char path2[64];
@@ -37,8 +37,8 @@ int fopen_fclose_test(char* unifycr_root)
     int rc;
 
     /* Generate a random file name in the mountpoint path to test on */
-    testutil_rand_path(path, sizeof(path), unifycr_root);
-    testutil_rand_path(path2, sizeof(path2), unifycr_root);
+    testutil_rand_path(path, sizeof(path), unifyfs_root);
+    testutil_rand_path(path2, sizeof(path2), unifyfs_root);
 
     /* Verify we can create a new file. */
     errno = 0;
@@ -80,7 +80,7 @@ int fopen_fclose_test(char* unifycr_root)
        "fclose already closed file %s should fail (rc=%d, errno=%d): %s",
        path, rc, errno, strerror(errno));
 
-    diag("Finished UNIFYCR_WRAP(fopen/fclose) tests");
+    diag("Finished UNIFYFS_WRAP(fopen/fclose) tests");
 
     return 0;
 }

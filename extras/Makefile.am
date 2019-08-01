@@ -1,8 +1,8 @@
-confdir = $(sysconfdir)/unifycr
+confdir = $(sysconfdir)/unifyfs
 
-conf_DATA = unifycr.conf
+conf_DATA = unifyfs.conf
 
-EXTRA_DIST = unifycr.conf.in
+EXTRA_DIST = unifyfs.conf.in
 
-CLEANFILES = unifycr.conf
+CLEANFILES = unifyfs.conf
 

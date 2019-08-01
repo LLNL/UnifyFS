@@ -3787,7 +3787,7 @@ sub process {
 
 			# Should start with a space.
 			#$to =~ s/^(\S)/ $1/;
-			# UNIFYCR: Should not start with a space.
+			# UNIFYFS: Should not start with a space.
 			$to =~ s/^\s+(\S)/$1/;
 			# Should not end with a space.
 			$to =~ s/\s+$//;
@@ -4316,7 +4316,7 @@ sub process {
 							}
 						}
 					} elsif ($ctx =~ /Wx[^WCE]|[^WCE]xW/) {
-						# UNIFYCR: trips on things like "extern FILE* dbg_stream;"
+						# UNIFYFS: trips on things like "extern FILE* dbg_stream;"
 						#
 						#if (ERROR("SPACING",
 						#	  "need consistent spacing around '$op' $at\n" . $hereptr)) {
