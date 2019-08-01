@@ -3,7 +3,7 @@ Assumptions
 ================
 
 In this section, we provide assumptions we make about the behavior of
-applications that use UnifyCR, and about how UnifyCR currently functions.
+applications that use UnifyFS, and about how UnifyFS currently functions.
 
 ---------------------------
 Application Behavior
@@ -28,30 +28,30 @@ Application Behavior
 ---------------------------
 Consistency Model
 ---------------------------
-In the first version of UnifyCR, lamination will be explicitly initiated
-by a UnifyCR API call. In subsequent versions, we will support implicit
-initiation of file lamination. Here, UnifyCR will determine a 
+In the first version of UnifyFS, lamination will be explicitly initiated
+by a UnifyFS API call. In subsequent versions, we will support implicit
+initiation of file lamination. Here, UnifyFS will determine a
 file to be laminated based on conditions, e.g., \texttt{fsync} or
-\texttt{ioctl} calls, or a time out on \texttt{close} operations. 
-As part of the UnifyCR project, we will
-investigate these implicit lamination conditions to determine the 
-best way to enable lamination of files without explicit UnifyCR API calls
+\texttt{ioctl} calls, or a time out on \texttt{close} operations.
+As part of the UnifyFS project, we will
+investigate these implicit lamination conditions to determine the
+best way to enable lamination of files without explicit UnifyFS API calls
 being made by the application.
 
-In the first version of UnifyCR, eventually, a process declares the file to be 
-laminated through a UnifyCR API call.
+In the first version of UnifyFS, eventually, a process declares the file to be
+laminated through a UnifyFS API call.
 After a file has been laminated, the contents of the file cannot be changed.
 The file becomes permanently read-only.
 After lamination, any process may freely read any part of the file.
-If the application process group fails before a file has been laminated, 
-UnifyCR may delete the file.
+If the application process group fails before a file has been laminated,
+UnifyFS may delete the file.
 An application can delete a laminated file.
 
 We define the laminated consistency model to enable certain optimizations
 while supporting the perceived requirements of application checkpoints.
-Since remote processes are not permitted to read arbitrary bytes within the 
+Since remote processes are not permitted to read arbitrary bytes within the
 file until lamination,
-global exchange of file data and/or data index information can be buffered 
+global exchange of file data and/or data index information can be buffered
 locally on each node until the point of lamination.
 Since file contents cannot change after lamination,
 aggressive caching may be used during the read-only phase with minimal locking.
@@ -62,10 +62,10 @@ Behavior before lamination:
 
   - open/close: A process may open/close a file multiple times.
 
-  - write: A process may write to any part of a file. If two processes write 
+  - write: A process may write to any part of a file. If two processes write
     to the same location, the value is undefined.
 
-  - read: A process may read bytes it has written. Reading other bytes is 
+  - read: A process may read bytes it has written. Reading other bytes is
     invalid.
 
   - rename: A process may rename a file.
@@ -93,31 +93,31 @@ File System Behavior
 ---------------------------
 
     - The file system exists on node local storage only and is not persisted to 
-      stable storage like a parallel file system (PFS). Can be coupled with 
+      stable storage like a parallel file system (PFS). Can be coupled with
 
     - SymphonyFS or high level I/O or checkpoint library (VeloC) to move data to
       PFS periodically, or data can be moved manually
 
-    - Can be used with checkpointing libraries (VeloC) or I/O libraries to 
+    - Can be used with checkpointing libraries (VeloC) or I/O libraries to
       support shared files on burst buffers
 
-    - File system starts empty at job start. User job must populate the file 
+    - File system starts empty at job start. User job must populate the file
       system.
 
-    - Shared file system namespace across all compute nodes in a job, even if 
+    - Shared file system namespace across all compute nodes in a job, even if
       an application process is not running on all compute nodes
 
     - Survives application termination and/or relaunch within a job
 
-    - Will transparently intercept system level I/O calls of applications and 
+    - Will transparently intercept system level I/O calls of applications and
       I/O libraries
 
 ---------------------------
 System Characteristics
 ---------------------------
 
-    - There is some storage available for storing file data on a compute node, 
-      e.g. SSD or RAM disk 
+    - There is some storage available for storing file data on a compute node,
+      e.g. SSD or RAM disk
 
-    - We can run user-level daemon processes on compute nodes concurrently with 
+    - We can run user-level daemon processes on compute nodes concurrently with
       a user application

@@ -1,28 +1,28 @@
 # Integration Testing
 
-The UnifyCR [examples](https://github.com/LLNL/UnifyCR/tree/dev/examples) are
+The UnifyFS [examples](https://github.com/LLNL/UnifyFS/tree/dev/examples) are
 being used as integration tests with continuous integration tools. These scripts
 depend on [sharness](https://github.com/chriscool/sharness) which is set up in
-the containing directory (`UnifyCR/t/`) and may not function properly if moved.
+the containing directory (`UnifyFS/t/`) and may not function properly if moved.
 
 The numbered scripts are the setup and tests being run by `RUN_CI_TESTS.sh`.
 
 `001-setup.sh`
-: Checks for an installation of UnifyCR and sets up variables needed for
+: Checks for an installation of UnifyFS and sets up variables needed for
 testing.
 
 `002-start-server.sh`
-: Starts unifycrd and tests to ensure it is running.
+: Starts unifyfsd and tests to ensure it is running.
 
 `100-900`
 : Scripts for testing the examples.
 
 `990-stop-server.sh`
-: Stops unifycrd and cleans up.
+: Stops unifyfsd and cleans up.
 
 The other scripts (`ci-functions.sh`, `setup-lsf.sh`, and `setup-slurm.sh`)
 contain helper functions and variables used by the tests. Full details can be
-found in [UnifyCR testing documentation](https://unifycr.readthedocs.io/en/dev/testing.html#integration-tests).
+found in [UnifyFS testing documentation](https://unifyfs.readthedocs.io/en/dev/testing.html#integration-tests).
 
 ## Quickstart
 
@@ -68,10 +68,10 @@ desired order.
 
 There are environment variables that can be set to change the default behavior
 of this testing suite. See our [testing
-guide](https://unifycr.readthedocs.io/en/dev/testing.html#configuration-variables)
+guide](https://unifyfs.readthedocs.io/en/dev/testing.html#configuration-variables)
 for a full list.
 
 ## Developers
 
-See our [Testing Guide](https://unifycr.readthedocs.io/en/dev/testing.html#integration-tests)
+See our [Testing Guide](https://unifyfs.readthedocs.io/en/dev/testing.html#integration-tests)
 for full documentation on writing and adding additional tests.

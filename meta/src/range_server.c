@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -50,7 +50,7 @@
 #include "mdhim_options.h"
 #include "partitioner.h"
 #include "range_server.h"
-#include "unifycr_metadata.h"
+#include "unifyfs_metadata.h"
 #include "uthash.h"
 
 int recv_counter = 0;
@@ -85,11 +85,11 @@ double starttime=0;
 
 int putflag = 1;
 
-int unifycr_compare(const char* a, const char* b) {
+int unifyfs_compare(const char* a, const char* b) {
 	int rc;
-	unifycr_key_t *keya = (unifycr_key_t *)a;
-	unifycr_key_t *keyb = (unifycr_key_t *)b;
-	rc = unifycr_key_compare(keya, keyb);
+	unifyfs_key_t *keya = (unifyfs_key_t *)a;
+	unifyfs_key_t *keyb = (unifyfs_key_t *)b;
+	rc = unifyfs_key_compare(keya, keyb);
 	return rc;
 }
 

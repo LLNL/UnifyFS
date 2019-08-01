@@ -18,57 +18,57 @@
 #define flatbuffers_extension ".bin"
 #endif
 
-typedef struct unifycr_Extent unifycr_Extent_t;
-typedef const unifycr_Extent_t *unifycr_Extent_struct_t;
-typedef unifycr_Extent_t *unifycr_Extent_mutable_struct_t;
-typedef const unifycr_Extent_t *unifycr_Extent_vec_t;
-typedef unifycr_Extent_t *unifycr_Extent_mutable_vec_t;
+typedef struct unifyfs_Extent unifyfs_Extent_t;
+typedef const unifyfs_Extent_t *unifyfs_Extent_struct_t;
+typedef unifyfs_Extent_t *unifyfs_Extent_mutable_struct_t;
+typedef const unifyfs_Extent_t *unifyfs_Extent_vec_t;
+typedef unifyfs_Extent_t *unifyfs_Extent_mutable_vec_t;
 
-typedef const struct unifycr_ReadRequest_table *unifycr_ReadRequest_table_t;
-typedef const flatbuffers_uoffset_t *unifycr_ReadRequest_vec_t;
-typedef flatbuffers_uoffset_t *unifycr_ReadRequest_mutable_vec_t;
-#ifndef unifycr_Extent_identifier
-#define unifycr_Extent_identifier flatbuffers_identifier
+typedef const struct unifyfs_ReadRequest_table *unifyfs_ReadRequest_table_t;
+typedef const flatbuffers_uoffset_t *unifyfs_ReadRequest_vec_t;
+typedef flatbuffers_uoffset_t *unifyfs_ReadRequest_mutable_vec_t;
+#ifndef unifyfs_Extent_identifier
+#define unifyfs_Extent_identifier flatbuffers_identifier
 #endif
-#define unifycr_Extent_type_hash ((flatbuffers_thash_t)0xfe153735)
-#define unifycr_Extent_type_identifier "\x35\x37\x15\xfe"
-#ifndef unifycr_ReadRequest_identifier
-#define unifycr_ReadRequest_identifier flatbuffers_identifier
+#define unifyfs_Extent_type_hash ((flatbuffers_thash_t)0xfe153735)
+#define unifyfs_Extent_type_identifier "\x35\x37\x15\xfe"
+#ifndef unifyfs_ReadRequest_identifier
+#define unifyfs_ReadRequest_identifier flatbuffers_identifier
 #endif
-#define unifycr_ReadRequest_type_hash ((flatbuffers_thash_t)0x70b2f5ee)
-#define unifycr_ReadRequest_type_identifier "\xee\xf5\xb2\x70"
+#define unifyfs_ReadRequest_type_hash ((flatbuffers_thash_t)0x70b2f5ee)
+#define unifyfs_ReadRequest_type_identifier "\xee\xf5\xb2\x70"
 
 
-struct unifycr_Extent {
+struct unifyfs_Extent {
     alignas(8) uint32_t fid;
     alignas(8) uint64_t offset;
     alignas(8) uint64_t length;
 };
-static_assert(sizeof(unifycr_Extent_t) == 24, "struct size mismatch");
+static_assert(sizeof(unifyfs_Extent_t) == 24, "struct size mismatch");
 
-static inline const unifycr_Extent_t *unifycr_Extent__const_ptr_add(const unifycr_Extent_t *p, size_t i) { return p + i; }
-static inline unifycr_Extent_t *unifycr_Extent__ptr_add(unifycr_Extent_t *p, size_t i) { return p + i; }
-static inline unifycr_Extent_struct_t unifycr_Extent_vec_at(unifycr_Extent_vec_t vec, size_t i)
+static inline const unifyfs_Extent_t *unifyfs_Extent__const_ptr_add(const unifyfs_Extent_t *p, size_t i) { return p + i; }
+static inline unifyfs_Extent_t *unifyfs_Extent__ptr_add(unifyfs_Extent_t *p, size_t i) { return p + i; }
+static inline unifyfs_Extent_struct_t unifyfs_Extent_vec_at(unifyfs_Extent_vec_t vec, size_t i)
 __flatbuffers_struct_vec_at(vec, i)
-static inline size_t unifycr_Extent__size() { return 24; }
-static inline size_t unifycr_Extent_vec_len(unifycr_Extent_vec_t vec)
+static inline size_t unifyfs_Extent__size() { return 24; }
+static inline size_t unifyfs_Extent_vec_len(unifyfs_Extent_vec_t vec)
 __flatbuffers_vec_len(vec)
-__flatbuffers_struct_as_root(unifycr_Extent)
+__flatbuffers_struct_as_root(unifyfs_Extent)
 
-__flatbuffers_define_struct_scalar_field(unifycr_Extent, fid, flatbuffers_uint32, uint32_t)
-__flatbuffers_define_struct_scalar_field(unifycr_Extent, offset, flatbuffers_uint64, uint64_t)
-__flatbuffers_define_struct_scalar_field(unifycr_Extent, length, flatbuffers_uint64, uint64_t)
+__flatbuffers_define_struct_scalar_field(unifyfs_Extent, fid, flatbuffers_uint32, uint32_t)
+__flatbuffers_define_struct_scalar_field(unifyfs_Extent, offset, flatbuffers_uint64, uint64_t)
+__flatbuffers_define_struct_scalar_field(unifyfs_Extent, length, flatbuffers_uint64, uint64_t)
 
 
-struct unifycr_ReadRequest_table { uint8_t unused__; };
+struct unifyfs_ReadRequest_table { uint8_t unused__; };
 
-static inline size_t unifycr_ReadRequest_vec_len(unifycr_ReadRequest_vec_t vec)
+static inline size_t unifyfs_ReadRequest_vec_len(unifyfs_ReadRequest_vec_t vec)
 __flatbuffers_vec_len(vec)
-static inline unifycr_ReadRequest_table_t unifycr_ReadRequest_vec_at(unifycr_ReadRequest_vec_t vec, size_t i)
-__flatbuffers_offset_vec_at(unifycr_ReadRequest_table_t, vec, i, 0)
-__flatbuffers_table_as_root(unifycr_ReadRequest)
+static inline unifyfs_ReadRequest_table_t unifyfs_ReadRequest_vec_at(unifyfs_ReadRequest_vec_t vec, size_t i)
+__flatbuffers_offset_vec_at(unifyfs_ReadRequest_table_t, vec, i, 0)
+__flatbuffers_table_as_root(unifyfs_ReadRequest)
 
-__flatbuffers_define_vector_field(0, unifycr_ReadRequest, extents, unifycr_Extent_vec_t, 0)
+__flatbuffers_define_vector_field(0, unifyfs_ReadRequest, extents, unifyfs_Extent_vec_t, 0)
 
 #include "flatcc/flatcc_epilogue.h"
 #endif /* UCR_READ_READER_H */

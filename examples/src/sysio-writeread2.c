@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 // build:  mpigcc -g -O3 -o test_ramdisk test_ramdisk.c
@@ -28,7 +28,7 @@
 #include <errno.h>
 #include <string.h>
 #include <mpi.h>
-#include <unifycr.h>
+#include <unifyfs.h>
 
 //size_t filesize = 100*1024*1024;
 size_t filesize = 1024*1024;
@@ -392,11 +392,11 @@ int main(int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &ranks);
 
-    unifycr_mount("/unifycr", rank, ranks, 0);
+    unifyfs_mount("/unifyfs", rank, ranks, 0);
 
     char name[256];
 
-    sprintf(name, "/unifycr/rank.%d", rank);
+    sprintf(name, "/unifyfs/rank.%d", rank);
 
     /* allocate space for the checkpoint data (make filesize a function of rank
      * for some variation)
@@ -406,7 +406,7 @@ int main(int argc, char *argv[])
     /* verify data integrity in file */
     checkdata(name, filesize, times);
 
-    unifycr_unmount();
+    unifyfs_unmount();
 
     MPI_Finalize();
 

@@ -7,20 +7,20 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 #include <string.h>
 #include <mpi.h>
-#include <unifycr.h>
+#include <unifyfs.h>
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
 
 #include "sysio_suite.h"
 
-/* The test suite for sysio wrappers found in client/src/unifycr-sysio.c.
+/* The test suite for sysio wrappers found in client/src/unifyfs-sysio.c.
  *
  *
  * To add new tests to existing sysio tests:
@@ -28,9 +28,9 @@
  *    <sysio_function_name>.c file.
  *
  *
- * When a new wrapper in unifycr-sysio.c needs to be tested:
+ * When a new wrapper in unifyfs-sysio.c needs to be tested:
  * 1. Create a <sysio_function_name>.c file with a function called
- *    <sysio_function_name>_test(char* unifycr_root) that contains all the TAP
+ *    <sysio_function_name>_test(char* unifyfs_root) that contains all the TAP
  *    tests specific to that wrapper.
  * 2. Add the <sysio_function_name>_test to sysio_suite.h.
  * 3. Add the <sysio_function_name>.c file to the /t/Makefile.am under the
@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
 {
     int rank_num;
     int rank;
-    char* unifycr_root;
+    char* unifyfs_root;
     int rc;
 
     MPI_Init(&argc, &argv);
@@ -50,15 +50,15 @@ int main(int argc, char* argv[])
 
     plan(NO_PLAN);
 
-    unifycr_root = testutil_get_mount_point();
+    unifyfs_root = testutil_get_mount_point();
 
-    /* Verify unifycr_mount succeeds. */
-    rc = unifycr_mount(unifycr_root, rank, rank_num, 0);
-    ok(rc == 0, "unifycr_mount at %s (rc=%d)", unifycr_root, rc);
+    /* Verify unifyfs_mount succeeds. */
+    rc = unifyfs_mount(unifyfs_root, rank, rank_num, 0);
+    ok(rc == 0, "unifyfs_mount at %s (rc=%d)", unifyfs_root, rc);
 
     /* If the mount fails, bailout, as there is no point in running the tests */
     if (rc != 0) {
-        BAIL_OUT("unifycr_mount in sysio_suite failed");
+        BAIL_OUT("unifyfs_mount in sysio_suite failed");
     }
 
     /* Add tests for new functions below in the order desired for testing.
@@ -71,15 +71,15 @@ int main(int argc, char* argv[])
      * break as that is likely to cause subsequent failures to start passing.
      */
 
-    creat_close_test(unifycr_root);
+    creat_close_test(unifyfs_root);
 
-    creat64_test(unifycr_root);
+    creat64_test(unifyfs_root);
 
-    mkdir_rmdir_test(unifycr_root);
+    mkdir_rmdir_test(unifyfs_root);
 
-    open_test(unifycr_root);
+    open_test(unifyfs_root);
 
-    open64_test(unifycr_root);
+    open64_test(unifyfs_root);
 
     done_testing();
 

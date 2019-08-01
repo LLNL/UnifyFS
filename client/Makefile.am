@@ -1,5 +1,5 @@
 SUBDIRS = src
 
-bin_SCRIPTS = unifycr-config
+bin_SCRIPTS = unifyfs-config
 
 CLEANFILES = $(bin_SCRIPTS)

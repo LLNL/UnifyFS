@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*  Copyright (c) 2018 - Michael J. Brim
@@ -27,19 +27,19 @@
 /* c-strings for enum names */
 
 #define ENUMITEM(name, desc)                                    \
-    const char *UNIFYCR_RM_ENUM_ ## name ## _NAME_STR = #name;
-UNIFYCR_RM_ENUMERATOR
+    const char *UNIFYFS_RM_ENUM_ ## name ## _NAME_STR = #name;
+UNIFYFS_RM_ENUMERATOR
 #undef ENUMITEM
 
-const char *unifycr_rm_enum_str(unifycr_rm_e e)
+const char *unifyfs_rm_enum_str(unifyfs_rm_e e)
 {
     switch (e) {
-    case UNIFYCR_RM_INVALID:
-        return "UNIFYCR_RM_INVALID";
+    case UNIFYFS_RM_INVALID:
+        return "UNIFYFS_RM_INVALID";
 #define ENUMITEM(name, desc)                                    \
-    case UNIFYCR_RM_ ## name:                                   \
-        return UNIFYCR_RM_ENUM_ ## name ## _NAME_STR;
-    UNIFYCR_RM_ENUMERATOR
+    case UNIFYFS_RM_ ## name:                                   \
+        return UNIFYFS_RM_ENUM_ ## name ## _NAME_STR;
+    UNIFYFS_RM_ENUMERATOR
 #undef ENUMITEM
     default :
         break;
@@ -50,19 +50,19 @@ const char *unifycr_rm_enum_str(unifycr_rm_e e)
 /* c-strings for enum descriptions */
 
 #define ENUMITEM(name, desc)                                    \
-    const char *UNIFYCR_RM_ENUM_ ## name ## _DESC_STR = #desc;
-UNIFYCR_RM_ENUMERATOR
+    const char *UNIFYFS_RM_ENUM_ ## name ## _DESC_STR = #desc;
+UNIFYFS_RM_ENUMERATOR
 #undef ENUMITEM
 
-const char *unifycr_rm_enum_description(unifycr_rm_e e)
+const char *unifyfs_rm_enum_description(unifyfs_rm_e e)
 {
     switch (e) {
-    case UNIFYCR_RM_INVALID:
-        return "invalid unifycr_rm_e value";
+    case UNIFYFS_RM_INVALID:
+        return "invalid unifyfs_rm_e value";
 #define ENUMITEM(name, desc)                                    \
-    case UNIFYCR_RM_ ## name:                                   \
-        return UNIFYCR_RM_ENUM_ ## name ## _DESC_STR;
-    UNIFYCR_RM_ENUMERATOR
+    case UNIFYFS_RM_ ## name:                                   \
+        return UNIFYFS_RM_ENUM_ ## name ## _DESC_STR;
+    UNIFYFS_RM_ENUMERATOR
 #undef ENUMITEM
     default :
         break;
@@ -70,24 +70,24 @@ const char *unifycr_rm_enum_description(unifycr_rm_e e)
     return NULL;
 }
 
-unifycr_rm_e unifycr_rm_enum_from_str(const char *s)
+unifyfs_rm_e unifyfs_rm_enum_from_str(const char *s)
 {
     if (0)
         ;
 #define ENUMITEM(name, desc)                    \
     else if (strcmp(s, #name) == 0)             \
-        return UNIFYCR_RM_ ## name;
-    UNIFYCR_RM_ENUMERATOR;
+        return UNIFYFS_RM_ ## name;
+    UNIFYFS_RM_ENUMERATOR;
 #undef ENUMITEM
 
-    return UNIFYCR_RM_INVALID;
+    return UNIFYFS_RM_INVALID;
 }
 
 /* validity check */
 
-int check_valid_unifycr_rm_enum(unifycr_rm_e e)
+int check_valid_unifyfs_rm_enum(unifyfs_rm_e e)
 {
-    return ((e > UNIFYCR_RM_INVALID) &&
-            (e < UNIFYCR_RM_ENUM_MAX) &&
-            (unifycr_rm_enum_str(e) != NULL));
+    return ((e > UNIFYFS_RM_INVALID) &&
+            (e < UNIFYFS_RM_ENUM_MAX) &&
+            (unifyfs_rm_enum_str(e) != NULL));
 }

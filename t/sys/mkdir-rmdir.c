@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 #include <errno.h>
@@ -20,16 +20,16 @@
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
 
-/* This function contains the tests for UNIFYCR_WRAP(mkdir) and
- * UNIFYCR_WRAP(rmdir) found in client/src/unifycr-sysio.c.
+/* This function contains the tests for UNIFYFS_WRAP(mkdir) and
+ * UNIFYFS_WRAP(rmdir) found in client/src/unifyfs-sysio.c.
  *
  * Notice the tests are ordered in a logical testing order. Changing the order
  * or adding new tests in between two others could negatively affect the
  * desired results. */
-int mkdir_rmdir_test(char* unifycr_root)
+int mkdir_rmdir_test(char* unifyfs_root)
 {
     /* Diagnostic message for reading and debugging output */
-    diag("Starting UNIFYCR_WRAP(mkdir/rmdir) tests");
+    diag("Starting UNIFYFS_WRAP(mkdir/rmdir) tests");
 
     char dir_path[64];
     char file_path[64];
@@ -42,8 +42,8 @@ int mkdir_rmdir_test(char* unifycr_root)
     int rc;
 
     /* Create random dir and file path names at the mountpoint to test on */
-    testutil_rand_path(dir_path, sizeof(dir_path), unifycr_root);
-    testutil_rand_path(file_path, sizeof(file_path), unifycr_root);
+    testutil_rand_path(dir_path, sizeof(dir_path), unifyfs_root);
+    testutil_rand_path(file_path, sizeof(file_path), unifyfs_root);
 
     /* Create path of a subdirectory under dir_path */
     strcpy(subdir_path, dir_path);
@@ -124,7 +124,7 @@ int mkdir_rmdir_test(char* unifycr_root)
     rc = close(fd);
 
     /* todo_mkdir_4: Remove when issue is resolved */
-    todo("mkdir_4: unifycr currently creates all paths as separate entities");
+    todo("mkdir_4: unifyfs currently creates all paths as separate entities");
     /* Verify creating a directory whose parent is a file fails with
      * errno=ENOTDIR */
     fd = creat(file_path, file_mode);
@@ -145,7 +145,7 @@ int mkdir_rmdir_test(char* unifycr_root)
        file_path, rc, errno, strerror(errno));
 
     /* todo_mkdir_5: Remove when issue is resolved */
-    todo("mkdir_5: unifycr currently creates all paths as separate entities");
+    todo("mkdir_5: unifyfs currently creates all paths as separate entities");
     /* Verify rmdir a non-empty directory fails with errno=ENOTEMPTY */
     errno = 0;
     rc = rmdir(dir_path);
@@ -169,10 +169,10 @@ int mkdir_rmdir_test(char* unifycr_root)
 
     /* Verify trying to rmdir the mount point fails with errno=EBUSY */
     errno = 0;
-    rc = rmdir(unifycr_root);
+    rc = rmdir(unifyfs_root);
     ok(rc < 0 && errno == EBUSY,
        "rmdir mount point %s should fail (rc=%d, errno=%d): %s",
-       unifycr_root, rc, errno, strerror(errno));
+       unifyfs_root, rc, errno, strerror(errno));
 
     /* CLEANUP
      *
@@ -180,7 +180,7 @@ int mkdir_rmdir_test(char* unifycr_root)
      * if anything actually ended up in the mountpoint, meaning a function
      * wasn't wrapped properly. */
 
-    diag("Finished UNIFYCR_WRAP(mkdir/rmdir) tests");
+    diag("Finished UNIFYFS_WRAP(mkdir/rmdir) tests");
 
     return 0;
 }

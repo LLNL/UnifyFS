@@ -1,8 +1,8 @@
-lib_LTLIBRARIES = libunifycr_common.la
+lib_LTLIBRARIES = libunifyfs_common.la
 
-include_HEADERS = unifycr_const.h err_enumerator.h
+include_HEADERS = unifyfs_const.h err_enumerator.h
 
-libunifycr_commondir = $(includedir)
+libunifyfs_commondir = $(includedir)
 
 BASE_SRCS = \
   ini.h \
@@ -19,22 +19,22 @@ BASE_SRCS = \
   ucr_read_reader.h \
   tinyexpr.h \
   tinyexpr.c \
-  unifycr_const.h \
-  unifycr_configurator.h \
-  unifycr_configurator.c \
-  unifycr_keyval.h \
-  unifycr_keyval.c \
-  unifycr_log.h \
-  unifycr_log.c \
-  unifycr_meta.h \
-  unifycr_rpc_util.h \
-  unifycr_rpc_util.c \
-  unifycr_client_rpcs.h \
-  unifycr_server_rpcs.h \
-  unifycr_runstate.h \
-  unifycr_runstate.c \
-  unifycr_shm.h \
-  unifycr_shm.c
+  unifyfs_const.h \
+  unifyfs_configurator.h \
+  unifyfs_configurator.c \
+  unifyfs_keyval.h \
+  unifyfs_keyval.c \
+  unifyfs_log.h \
+  unifyfs_log.c \
+  unifyfs_meta.h \
+  unifyfs_rpc_util.h \
+  unifyfs_rpc_util.c \
+  unifyfs_client_rpcs.h \
+  unifyfs_server_rpcs.h \
+  unifyfs_runstate.h \
+  unifyfs_runstate.c \
+  unifyfs_shm.h \
+  unifyfs_shm.c
 
 OPT_FLAGS =
 OPT_LIBS =
@@ -50,19 +50,19 @@ if USE_PMI2
   OPT_LIBS += -lpmi2
 endif
 
-libunifycr_common_la_SOURCES = $(BASE_SRCS) $(OPT_SRCS)
+libunifyfs_common_la_SOURCES = $(BASE_SRCS) $(OPT_SRCS)
 
-libunifycr_common_la_CPPFLAGS = \
+libunifyfs_common_la_CPPFLAGS = \
   $(OPT_FLAGS) \
   $(MERCURY_CFLAGS) \
   $(ARGOBOTS_CFLAGS) \
   $(MARGO_CFLAGS) \
   $(FLATCC_CFLAGS)
 
-libunifycr_common_la_LDFLAGS = \
-  -version-info $(LIBUNIFYCR_LT_VERSION)
+libunifyfs_common_la_LDFLAGS = \
+  -version-info $(LIBUNIFYFS_LT_VERSION)
 
-libunifycr_common_la_LIBADD = \
+libunifyfs_common_la_LIBADD = \
   $(OPT_LIBS) -lm -lrt
 
 AM_CFLAGS = -Wall -Wno-strict-aliasing

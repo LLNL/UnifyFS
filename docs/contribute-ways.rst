@@ -4,20 +4,20 @@ Ways to Contribute
 
 *First of all, thank you for taking the time to contribute!*
 
-By using the following guidelines, you can help us make UnifyCR even better.
+By using the following guidelines, you can help us make UnifyFS even better.
 
 Getting Started
 ===============
 
-Get UnifyCR
+Get UnifyFS
 -----------
 
-You can build and run UnifyCR by following :doc:`these instructions <build-intercept>`.
+You can build and run UnifyFS by following :doc:`these instructions <build-intercept>`.
 
 Getting Help
 ------------
 
-To contact the UnifyCR team, send an email to the `mailing list`_.
+To contact the UnifyFS team, send an email to the `mailing list`_.
 
 ---------------
 
@@ -38,7 +38,7 @@ found anything similar to your issue.
     **When opening a new issue, please include the following information at the top of the issue:**
 
     - What operating system (with version) you are using
-    - The UnifyCR version you are using
+    - The UnifyFS version you are using
     - Describe the issue you are experiencing
     - Describe how to reproduce the issue
     - Include any warnings or errors
@@ -84,7 +84,7 @@ Pull Requests
 - If your pull request improves performance, please include some benchmark
   results.
 - The pull request must pass all regression tests before being accepted.
-- All proposed changes must be approved by a UnifyCR project member.
+- All proposed changes must be approved by a UnifyFS project member.
 
 ---------------
 
@@ -102,7 +102,7 @@ able to quickly identify and resolve issues.
 Documentation
 =============
 
-As UnifyCR is continually improved and updated, it is easy for documentation to
+As UnifyFS is continually improved and updated, it is easy for documentation to
 become out-of-date. Any contributions to the documentation, no matter how
 small, is always greatly appreciated. If you are not in a position to update
 the documentation yourself, please notify us via the `mailing list`_ of
@@ -110,5 +110,5 @@ anything you notice that needs to be changed.
 
 .. explicit external hyperlink targets
 
-.. _mailing list: ecp-unifycr@exascaleproject.org
-.. _issue tracker: https://github.com/LLNL/UnifyCR/issues
+.. _mailing list: ecp-unifyfs@exascaleproject.org
+.. _issue tracker: https://github.com/LLNL/UnifyFS/issues

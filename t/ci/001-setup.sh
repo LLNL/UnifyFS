@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# This script checks for an installation of UnifyCR (either with Spack or in
-# $HOME/UnifyCR/install) and then sets up variables needed for testing.
+# This script checks for an installation of UnifyFS (either with Spack or in
+# $HOME/UnifyFS/install) and then sets up variables needed for testing.
 #
 # All of this is done in this script so that tests can be run individually if
 # desired. To run all tests simply run the RUN_TESTS.sh script. If Individual
@@ -25,7 +25,7 @@
 # Before doing either of these, make sure you have interactively allocated nodes
 # or are submitting a batch job.
 
-test_description="Set up UnifyCR testing environment"
+test_description="Set up UnifyFS testing environment"
 
 SETUP_USAGE="$(cat <<EOF
 usage: ./001-setup.sh -h|--help
@@ -69,8 +69,8 @@ done
 
 ########## Set up messages and vars needed before sourcing sharness  ##########
 
-[[ -z $infomsg ]] && infomsg="-- UNIFYCR JOB INFO:"
-[[ -z $errmsg ]] && errmsg="!!!! UNIFYCR JOB ERROR:"
+[[ -z $infomsg ]] && infomsg="-- UNIFYFS JOB INFO:"
+[[ -z $errmsg ]] && errmsg="!!!! UNIFYFS JOB ERROR:"
 
 export CI_PROJDIR=${CI_PROJDIR:-$HOME}
 export TMPDIR=${TMPDIR:-/tmp}
@@ -90,48 +90,48 @@ source $SHARNESS_DIR/sharness.d/02-functions.sh
 source $CI_DIR/ci-functions.sh
 
 
-########## Locate UnifyCR install and examples ##########
+########## Locate UnifyFS install and examples ##########
 
-# Check if we have Spack and if UnifyCR is installed.
+# Check if we have Spack and if UnifyFS is installed.
 # If don't have both, fall back to checking for non-spack install.
 # If neither, fail out.
-# Set UNIFYCR_INSTALL to skip searching.
-echo "$infomsg Looking for UnifyCR install directory..."
+# Set UNIFYFS_INSTALL to skip searching.
+echo "$infomsg Looking for UnifyFS install directory..."
 
-# Look for UnifyCR install directory if the user didn't already set
-# $UNIFYCR_INSTALL to the directory containing bin/ and libexec/
-if [[ -z $UNIFYCR_INSTALL ]]; then
-    # Check for $SPACK_ROOT and if unifycr is installed
-    if [[ -n $SPACK_ROOT && -d $(spack location -i unifycr 2>/dev/null) ]];
+# Look for UnifyFS install directory if the user didn't already set
+# $UNIFYFS_INSTALL to the directory containing bin/ and libexec/
+if [[ -z $UNIFYFS_INSTALL ]]; then
+    # Check for $SPACK_ROOT and if unifyfs is installed
+    if [[ -n $SPACK_ROOT && -d $(spack location -i unifyfs 2>/dev/null) ]];
     then
         # Might have a problem with variants and arch
-        UNIFYCR_INSTALL="$(spack location -i unifycr)"
-    # Else search for unifycrd starting in $CI_PROJDIR and omitting spack_root
-    elif [[ -x $(find_executable $CI_PROJDIR "*/bin/unifycrd" $SPACK_ROOT) ]];
+        UNIFYFS_INSTALL="$(spack location -i unifyfs)"
+    # Else search for unifyfsd starting in $CI_PROJDIR and omitting spack_root
+    elif [[ -x $(find_executable $CI_PROJDIR "*/bin/unifyfsd" $SPACK_ROOT) ]];
     then
-        # Set UNIFYCR_INSTALL to the dir containing bin/ and libexec/
-        UNIFYCR_INSTALL="$(dirname "$(dirname \
-            "$(find_executable $CI_PROJDIR "*/bin/unifycrd" $SPACK_ROOT)")")"
+        # Set UNIFYFS_INSTALL to the dir containing bin/ and libexec/
+        UNIFYFS_INSTALL="$(dirname "$(dirname \
+            "$(find_executable $CI_PROJDIR "*/bin/unifyfsd" $SPACK_ROOT)")")"
     else
-        echo >&2 "$errmsg Unable to find UnifyCR install directory"
-        echo >&2 "$errmsg \`spack install unifycr\`, set the" \
-                 "\$UNIFYCR_INSTALL envar to the directory containing bin/" \
+        echo >&2 "$errmsg Unable to find UnifyFS install directory"
+        echo >&2 "$errmsg \`spack install unifyfs\`, set the" \
+                 "\$UNIFYFS_INSTALL envar to the directory containing bin/" \
                  "and libexec/, or manually install to \$CI_PROJDIR/*"
         exit 1
     fi
 fi
 
-# Make sure UNIFYCR_INSTALL, bin/, and libexec/ exist
-if [[ -d $UNIFYCR_INSTALL && -d ${UNIFYCR_INSTALL}/bin &&
-      -d ${UNIFYCR_INSTALL}/libexec ]]; then
-    echo "$infomsg Found UnifyCR install directory: $UNIFYCR_INSTALL"
+# Make sure UNIFYFS_INSTALL, bin/, and libexec/ exist
+if [[ -d $UNIFYFS_INSTALL && -d ${UNIFYFS_INSTALL}/bin &&
+      -d ${UNIFYFS_INSTALL}/libexec ]]; then
+    echo "$infomsg Found UnifyFS install directory: $UNIFYFS_INSTALL"
 
-    UNIFYCR_BIN="$UNIFYCR_INSTALL/bin"
-    UNIFYCR_EXAMPLES="$UNIFYCR_INSTALL/libexec"
-    echo "$infomsg Found UnifyCR bin directory: $UNIFYCR_BIN"
-    echo "$infomsg Found UnifyCR examples directory: $UNIFYCR_EXAMPLES"
+    UNIFYFS_BIN="$UNIFYFS_INSTALL/bin"
+    UNIFYFS_EXAMPLES="$UNIFYFS_INSTALL/libexec"
+    echo "$infomsg Found UnifyFS bin directory: $UNIFYFS_BIN"
+    echo "$infomsg Found UnifyFS examples directory: $UNIFYFS_EXAMPLES"
 else
-    echo >&2 "$errmsg Ensure \$UNIFYCR_INSTALL exists and is the directory" \
+    echo >&2 "$errmsg Ensure \$UNIFYFS_INSTALL exists and is the directory" \
              "containing bin/ and libexec/"
 fi
 
@@ -160,14 +160,14 @@ fi
 echo "$infomsg JOB_RUN_COMMAND established: $JOB_RUN_COMMAND"
 
 
-########## Set up CI and UNIFYCR configuration variables ##########
+########## Set up CI and UNIFYFS configuration variables ##########
 
 # Turn up log verbosity
-export UNIFYCR_LOG_VERBOSITY=${UNIFYCR_LOG_VERBOSITY:-5}
+export UNIFYFS_LOG_VERBOSITY=${UNIFYFS_LOG_VERBOSITY:-5}
 
 # Set up location for logs and potentially auto cleanup if user didn't provide
 # an alternate location for the logs
-if [[ -z $UNIFYCR_LOG_DIR ]]; then
+if [[ -z $UNIFYFS_LOG_DIR ]]; then
     # User can choose to not cleanup logs on success
     export CI_LOG_CLEANUP=${CI_LOG_CLEANUP:-yes}
     # If no log cleanup, move logs to $CI_DIR
@@ -179,49 +179,49 @@ if [[ -z $UNIFYCR_LOG_DIR ]]; then
     fi
     mkdir -p $logdir
 fi
-export UNIFYCR_LOG_DIR=${UNIFYCR_LOG_DIR:-$logdir}
-echo "$infomsg Logs are in UNIFYCR_LOG_DIR: $UNIFYCR_LOG_DIR"
+export UNIFYFS_LOG_DIR=${UNIFYFS_LOG_DIR:-$logdir}
+echo "$infomsg Logs are in UNIFYFS_LOG_DIR: $UNIFYFS_LOG_DIR"
 
-export UNIFYCR_SHAREDFS_DIR=${UNIFYCR_SHAREDFS_DIR:-$UNIFYCR_LOG_DIR}
-echo "$infomsg UNIFYCR_SHAREDFS_DIR set as $UNIFYCR_SHAREDFS_DIR"
+export UNIFYFS_SHAREDFS_DIR=${UNIFYFS_SHAREDFS_DIR:-$UNIFYFS_LOG_DIR}
+echo "$infomsg UNIFYFS_SHAREDFS_DIR set as $UNIFYFS_SHAREDFS_DIR"
 
 # daemonize
-export UNIFYCR_DAEMONIZE=${UNIFYCR_DAEMONIZE:-off}
+export UNIFYFS_DAEMONIZE=${UNIFYFS_DAEMONIZE:-off}
 
 # temp
-nlt=${TMPDIR}/unifycr.${USER}.${SYSTEM_NAME}.${JOB_ID}
+nlt=${TMPDIR}/unifyfs.${USER}.${SYSTEM_NAME}.${JOB_ID}
 export CI_TEMP_DIR=${CI_TEMP_DIR:-$nlt}
-export UNIFYCR_RUNSTATE_DIR=${UNIFYCR_RUNSTATE_DIR:-$CI_TEMP_DIR}
-export UNIFYCR_META_DB_PATH=${UNIFYCR_META_DB_PATH:-$CI_TEMP_DIR}
-echo "$infomsg UNIFYCR_RUNSTATE_DIR set as $UNIFYCR_RUNSTATE_DIR"
-echo "$infomsg UNIFYCR_META_DB_PATH set as $UNIFYCR_META_DB_PATH"
+export UNIFYFS_RUNSTATE_DIR=${UNIFYFS_RUNSTATE_DIR:-$CI_TEMP_DIR}
+export UNIFYFS_META_DB_PATH=${UNIFYFS_META_DB_PATH:-$CI_TEMP_DIR}
+echo "$infomsg UNIFYFS_RUNSTATE_DIR set as $UNIFYFS_RUNSTATE_DIR"
+echo "$infomsg UNIFYFS_META_DB_PATH set as $UNIFYFS_META_DB_PATH"
 echo "$infomsg Set CI_TEMP_DIR to change both of these to same path"
 
 # storage
 nls=$nlt
 export CI_STORAGE_DIR=${CI_STORAGE_DIR:-$nls}
-export UNIFYCR_SPILLOVER_SIZE=${UNIFYCR_SPILLOVER_SIZE:-$GB}
-export UNIFYCR_SPILLOVER_ENABLED=${UNIFYCR_SPILLOVER_ENABLED:-yes}
-export UNIFYCR_SPILLOVER_DATA_DIR=${UNIFYCR_SPILLOVER_DATA_DIR:-$CI_STORAGE_DIR}
-export UNIFYCR_SPILLOVER_META_DIR=${UNIFYCR_SPILLOVER_META_DIR:-$CI_STORAGE_DIR}
-echo "$infomsg UNIFYCR_SPILLOVER_DATA_DIR set as $UNIFYCR_SPILLOVER_DATA_DIR"
-echo "$infomsg UNIFYCR_SPILLOVER_META_DIR set as $UNIFYCR_SPILLOVER_META_DIR"
+export UNIFYFS_SPILLOVER_SIZE=${UNIFYFS_SPILLOVER_SIZE:-$GB}
+export UNIFYFS_SPILLOVER_ENABLED=${UNIFYFS_SPILLOVER_ENABLED:-yes}
+export UNIFYFS_SPILLOVER_DATA_DIR=${UNIFYFS_SPILLOVER_DATA_DIR:-$CI_STORAGE_DIR}
+export UNIFYFS_SPILLOVER_META_DIR=${UNIFYFS_SPILLOVER_META_DIR:-$CI_STORAGE_DIR}
+echo "$infomsg UNIFYFS_SPILLOVER_DATA_DIR set as $UNIFYFS_SPILLOVER_DATA_DIR"
+echo "$infomsg UNIFYFS_SPILLOVER_META_DIR set as $UNIFYFS_SPILLOVER_META_DIR"
 echo "$infomsg Set CI_STORAGE_DIR to change both of these to same path"
 
 
 ########## Set up mountpoints and sharness testing prereqs ##########
 
-# Running tests with UNIFYCR_MOUNTPOINT set to a real dir will disable posix
+# Running tests with UNIFYFS_MOUNTPOINT set to a real dir will disable posix
 # tests unless user sets CI_TEST_POSIX=yes
-export UNIFYCR_MP=${UNIFYCR_MOUNTPOINT:-/unifycr}
-# If UNIFYCR_MOUNTPOINT is real dir, disable posix tests (unless user wants it)
-# and set REAL_MP prereq to enable test that checks if UNIFYCR_MOUNTPOINT is
+export UNIFYFS_MP=${UNIFYFS_MOUNTPOINT:-/unifyfs}
+# If UNIFYFS_MOUNTPOINT is real dir, disable posix tests (unless user wants it)
+# and set REAL_MP prereq to enable test that checks if UNIFYFS_MOUNTPOINT is
 # empty
-if [[ -d $UNIFYCR_MP ]]; then
+if [[ -d $UNIFYFS_MP ]]; then
     export CI_TEST_POSIX=no
     test_set_prereq REAL_MP
 fi
-echo "$infomsg UNIFYCR_MOUNTPOINT established: $UNIFYCR_MP"
+echo "$infomsg UNIFYFS_MOUNTPOINT established: $UNIFYFS_MP"
 
 export CI_TEST_POSIX=${CI_TEST_POSIX:-yes}
 # Set up a real mountpoint for posix tests to write files to and allow tests to
@@ -249,4 +249,4 @@ if ! [[ $CI_HOST_CLEANUP =~ ^(no|NO)$ || $CI_CLEANUP =~ ^(no|NO)$ ]]; then
 fi
 
 # capture environment after all job setup completed
-env &> ${UNIFYCR_LOG_DIR}/job.environ
+env &> ${UNIFYFS_LOG_DIR}/job.environ

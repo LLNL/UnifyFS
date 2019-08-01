@@ -5,7 +5,7 @@ export MB=$((2**20))
 export GB=$((2**30))
 app_id=0
 
-### Project-local sharness code for UnifyCR's integration tests ###
+### Project-local sharness code for UnifyFS's integration tests ###
 
 # Override `process_is_running()` function in sharness.d/02-functions.sh.
 # Check if a process with a given name is running on each host, retrying up to a
@@ -17,7 +17,7 @@ app_id=0
 # Returns 0 if the named process is found on each host, otherwise returns 1.
 process_is_running()
 {
-    local proc=${1:-"unifycrd"}
+    local proc=${1:-"unifyfsd"}
     local secs_to_wait=${2:-15}
     local max_loops=$(($secs_to_wait * 2))
     local i=0
@@ -44,7 +44,7 @@ process_is_running()
 # Returns 0 if the named process is not found on each host, otherwise returns 1.
 process_is_not_running()
 {
-    local proc=${1:-"unifycrd"}
+    local proc=${1:-"unifyfsd"}
     local secs_to_wait=${2:-15}
     local max_loops=$(($secs_to_wait * 2))
     local i=0
@@ -214,7 +214,7 @@ format_bytes()
 }
 
 # Build the filename for an example so that if it shows up in the
-# $UNIFYCR_MOUNTPOINT, it can be tracked to it's originating test
+# $UNIFYFS_MOUNTPOINT, it can be tracked to it's originating test
 #
 # Also allows testers to get what the filename will be in advance if called
 # from test suite. This could be used for posix tests to ensure the file showed
@@ -292,7 +292,7 @@ build_test_command()
     local l_filename="$(get_filename $1 "$2")"
 
     # Add stderr output file to finish building JOB_RUN_COMMAND
-    local l_err_filename="$app_err ${UNIFYCR_LOG_DIR}/${l_filename}.err"
+    local l_err_filename="$app_err ${UNIFYFS_LOG_DIR}/${l_filename}.err"
     local l_job_run_command="$JOB_RUN_COMMAND $l_err_filename"
 
     # Build example_command with options that are always wanted. Might need to
@@ -313,12 +313,12 @@ build_test_command()
     if [[ $3 = "posix" ]]; then
         local l_mount="-U -m $CI_POSIX_MP"
     else
-        local l_mount="-m $UNIFYCR_MP"
+        local l_mount="-m $UNIFYFS_MP"
     fi
 
     # Assemble full example_command
     local l_app_args="$2 $l_app_id $l_check $l_verbose $l_mount $l_app_filename"
-    local l_full_app_name="${UNIFYCR_EXAMPLES}/${1} $l_app_args"
+    local l_full_app_name="${UNIFYFS_EXAMPLES}/${1} $l_app_args"
 
     # Assemble full test_command
     local l_test_command="$l_job_run_command $l_full_app_name"
@@ -374,8 +374,8 @@ unify_run_test()
     fi
 
     # Fail if user passed in filename, mountpoint, verbose or disable
-    # UnifyCR since these are auto added
-    local opt='(-f|--file|-m|--mount|-v|--verbose|-U|--disable-unifycr)'
+    # UnifyFS since these are auto added
+    local opt='(-f|--file|-m|--mount|-v|--verbose|-U|--disable-unifyfs)'
     for s in $2; do
         if [[ $s =~ $opt ]]; then
             echo >&2 "$errmsg Call $FUNCNAME without $opt. Found $s"
@@ -385,7 +385,7 @@ unify_run_test()
 
     # Finally build and run the test
     local l_test_command=$(build_test_command $1 "$2" $l_runmode)
-    say "Results for unifycr_run_test: $l_test_command:"
+    say "Results for unifyfs_run_test: $l_test_command:"
 
     # Uncomment to change app_id (-a) for each test. Comment to leave as 0.
     #app_id=$(echo $(($app_id + 1)))
@@ -405,7 +405,7 @@ unify_run_test()
 
 }
 
-# Does some post-testing cleanup to include checking if any unifycrd is still
+# Does some post-testing cleanup to include checking if any unifyfsd is still
 # running and kills them after creating a stack trace. Also removes any files
 # that were leftover on the hosts.
 cleanup_hosts()
@@ -413,23 +413,23 @@ cleanup_hosts()
 
     # Capture all output from cleanup in a log
     exec 3>&1 4>&2
-    exec &> ${UNIFYCR_LOG_DIR}/hosts.cleanup
+    exec &> ${UNIFYFS_LOG_DIR}/hosts.cleanup
 
     # Get the list of hosts in this allocation
     local l_hl=$(get_hostlist)
     echo "Hostlist: $l_hl"
-    local l_app=unifycrd
+    local l_app=unifyfsd
 
     echo "+++++ cleaning processes +++++"
     echo " --- collecting stacks ---"
-    # unifycrd should have already been terminated at this point, so for each
-    # host, check if unifycrd is still running. If so, export the pid for
+    # unifyfsd should have already been terminated at this point, so for each
+    # host, check if unifyfsd is still running. If so, export the pid for
     # convenience, echo a message, and generate a stack. If not, echo it's not.
     pdsh -w $l_hl '[[ -n $(pgrep "'$l_app'") ]] && \
         (export upid=$(pgrep "'$l_app'") && \
          echo "'$l_app' (pid $upid) still running - creating stack..." && \
          gstack $upid > \
-            "'${UNIFYCR_LOG_DIR}'"/"'${l_app}'".pid-${upid}.stack) || \
+            "'${UNIFYFS_LOG_DIR}'"/"'${l_app}'".pid-${upid}.stack) || \
         echo "'$l_app' not running"'
 
     echo " --- killing processes ---"
@@ -437,12 +437,12 @@ cleanup_hosts()
 
     echo "+++++ cleaning files +++++"
     pdsh -w $l_hl 'test -f /dev/shm/svr_id && /bin/cat /dev/shm/svr_id'
-    pdsh -w $l_hl 'test -f /dev/shm/unifycrd_id && /bin/cat \
-                   /dev/shm/unifycrd_id'
-    pdsh -w $l_hl '/bin/rm -rfv /tmp/na_sm /tmp/*unifycr* /var/tmp/*unifycr* \
-                   /dev/shm/unifycrd_id /dev/shm/svr_id /dev/shm/*na_sm* \
-                   "'${UNIFYCR_SPILLOVER_DATA_DIR}'"/spill*.log \
-                   "'${UNIFYCR_SPILLOVER_META_DIR}'"/spill*.log \
+    pdsh -w $l_hl 'test -f /dev/shm/unifyfsd_id && /bin/cat \
+                   /dev/shm/unifyfsd_id'
+    pdsh -w $l_hl '/bin/rm -rfv /tmp/na_sm /tmp/*unifyfs* /var/tmp/*unifyfs* \
+                   /dev/shm/unifyfsd_id /dev/shm/svr_id /dev/shm/*na_sm* \
+                   "'${UNIFYFS_SPILLOVER_DATA_DIR}'"/spill*.log \
+                   "'${UNIFYFS_SPILLOVER_META_DIR}'"/spill*.log \
                    /dev/shm/*-recv-* /dev/shm/*-req-* /dev/shm/*-super-*'
 
     # Reset capturing all output

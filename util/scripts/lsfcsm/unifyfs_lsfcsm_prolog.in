@@ -1,0 +1,25 @@
+#!/bin/bash
+
+bindir=@unifyfs_bin_path@
+unifyfsd=$bindir/unifyfsd
+
+exec &>> /var/log/unifyfs-lsfcsm.$CSM_PRIMARY_JOB_ID
+
+echo "Starting UnifyFS daemon"
+
+if [[ -f /etc/rc.d/init.d/functions ]]; then
+    source /etc/rc.d/init.d/functions
+    echo "running: daemon --user=$CSM_USER_NAME $unifyfsd"
+    daemon --user=$CSM_USER_NAME $unifyfsd &
+elif [[ -x $(type -p runuser) ]]; then
+    echo "running: runuser -s /bin/bash $CSM_USER_NAME -c $unifyfsd"
+    runuser -s /bin/bash $CSM_USER_NAME -c $unifyfsd &
+elif [[ -x $(type -p su) ]]; then
+    echo "running: su -s /bin/bash $CSM_USER_NAME -c $unifyfsd"
+    su -s /bin/bash $CSM_USER_NAME -c $unifyfsd &
+else
+    # WHAT KIND OF SYSTEM IS THIS?
+    echo "ERROR: $0 - unable to run unifyfsd as user $CSM_USER_NAME"
+    exit 1
+fi
+

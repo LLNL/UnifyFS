@@ -12,16 +12,16 @@ Unit Tests
 Implementing Tests
 ******************
 
-The UnifyCR Test Suite uses the `Test Anything Protocol`_ (TAP) and the
+The UnifyFS Test Suite uses the `Test Anything Protocol`_ (TAP) and the
 Automake test harness. This test suite has two types of TAP tests (shell scripts
-and C) to allow for testing multiple aspects of UnifyCR.
+and C) to allow for testing multiple aspects of UnifyFS.
 
 Shell Script Tests
 ^^^^^^^^^^^^^^^^^^
 
 Test cases in shell scripts are implemented with sharness_, which is included
-in the UnifyCR source distribution. See the file sharness.sh_ for all available
-test interfaces. UnifyCR-specific sharness code is implemented in scripts in
+in the UnifyFS source distribution. See the file sharness.sh_ for all available
+test interfaces. UnifyFS-specific sharness code is implemented in scripts in
 the directory sharness.d_. Scripts in sharness.d_ are primarily used to set
 environment variables and define convenience functions. All scripts in
 sharness.d_ are automatically included when your script sources sharness.sh_.
@@ -66,7 +66,7 @@ C programs use the `libtap library`_ to implement test cases. Convenience
 functions common to test cases written in C are implemented in the library
 `lib/testutil.c`_. If your C program needs to use environment variables set by
 sharness, it can be wrapped in a shell script that first sources
-`sharness.d/00-test-env.sh`_ and `sharness.d/01-unifycr-settings.sh`_. Your
+`sharness.d/00-test-env.sh`_ and `sharness.d/01-unifyfs-settings.sh`_. Your
 wrapper shouldn't normally source sharness.sh_ itself because the TAP output
 from sharness might conflict with that from libtap.
 
@@ -104,7 +104,7 @@ Here is an example libtap test:
 Adding Tests
 ************
 
-The UnifyCR Test Suite uses the `Test Anything Protocol`_ (TAP) and the
+The UnifyFS Test Suite uses the `Test Anything Protocol`_ (TAP) and the
 Automake test harness. By convention, test scripts and programs that output
 TAP are named with a ".t" extension.
 
@@ -130,7 +130,7 @@ sysio_suite in `t/Makefile.am`_ and `t/sys/sysio_suite.c`_:
     - Create a shell script, *<####-suite-name>.t* (the #### indicates the
       order in which they should be run by the tap-driver), that wraps your
       suite and sources `sharness.d/00-test-env.sh`_ and
-      `sharness.d/01-unifycr-settings.sh`_
+      `sharness.d/01-unifyfs-settings.sh`_
     - Add this file to `t/Makefile.am`_ in the ``TESTS`` and ``check_SCRIPTS``
       variables and add the name of the file (but with a .t extension) this
       script runs to the ``libexec_PROGRAMS`` variable
@@ -141,7 +141,7 @@ sysio_suite in `t/Makefile.am`_ and `t/sys/sysio_suite.c`_:
     - Create a <test_suite_name>.c file (i.e., *sysio_suite.c*) that will
       contain the main function and mpi job that drives your suite
 
-      - Mount unifycr from this file
+      - Mount unifyfs from this file
       - Call testing functions that contain the test cases
         (created in other files) in the order desired for testing, passing the
         mount point to those functions
@@ -149,7 +149,7 @@ sysio_suite in `t/Makefile.am`_ and `t/sys/sysio_suite.c`_:
       functions to be run by this suite and ``include`` this in the
       <test_suite_name>.c file
     - Create <test_name>.c files (i.e., *open.c*) that contains the testing
-      function (i.e., ``open_test(char* unifycr_root)``) that houses the
+      function (i.e., ``open_test(char* unifyfs_root)``) that houses the
       variables and libtap tests needed to test that individual function
 
       - Add the function name to the <test_suite_name>.h file
@@ -181,7 +181,7 @@ If the test cases needing to be written don't already have a file they belong
 in (i.e., testing a wrapper that doesn't have any tests yet):
 
     1. Creata a <function_name>.c file with a function called
-       <function_name>_test(char* unifycr_root) that contains the desired
+       <function_name>_test(char* unifyfs_root) that contains the desired
        libtap test cases
     2. Add the <function_name>_test to the corresponding <test_suite_name>.h
        file
@@ -195,32 +195,32 @@ in (i.e., testing a wrapper that doesn't have any tests yet):
 Running the Tests
 *****************
 
-To manually run the UnifyCR test suite, simply run ``make check`` from your
+To manually run the UnifyFS test suite, simply run ``make check`` from your
 build/t directory. If changes are made to existing files in the test suite, the
 tests can be run again by simply doing ``make clean`` followed by ``make
 check``. Individual tests may be run by hand. The test ``0001-setup.t`` should
-normally be run first to start the UnifyCR daemon.
+normally be run first to start the UnifyFS daemon.
 
 .. note::
 
-    If you are using Spack to install UnifyCR then there are two ways to
+    If you are using Spack to install UnifyFS then there are two ways to
     manually run these tests:
 
     1. Upon your installation with Spack
 
-        ``spack install -v --test=root unifycr``
+        ``spack install -v --test=root unifyfs``
 
     2. Manually from Spack's build directory
 
-        ``spack install --keep-stage unifycr``
+        ``spack install --keep-stage unifyfs``
 
-        ``spack cd unifycr``
+        ``spack cd unifyfs``
 
         ``cd spack-build/t``
 
         ``make check``
 
-The tests in https://github.com/LLNL/UnifyCR/tree/dev/t are run automatically
+The tests in https://github.com/LLNL/UnifyFS/tree/dev/t are run automatically
 by `Travis CI`_ along with the :ref:`style checks <style-check-label>` when a
 pull request is created or updated. All pull requests must pass these tests
 before they will be accepted.
@@ -295,7 +295,7 @@ Running the Examples
 To run any of these examples manually, refer to the :doc:`examples`
 documentation.
 
-The UnifyCR examples_ are also being used as integration tests with
+The UnifyFS examples_ are also being used as integration tests with
 continuation integration tools such as Bamboo_ or GitLab_.
 
 ------------
@@ -304,7 +304,7 @@ continuation integration tools such as Bamboo_ or GitLab_.
 Integration Tests
 -----------------
 
-The UnifyCR examples_ are being used as integration tests with continuation
+The UnifyFS examples_ are being used as integration tests with continuation
 integration tools such as Bamboo_ or GitLab_.
 
 To run any of these examples manually, refer to the :doc:`examples`
@@ -317,11 +317,11 @@ Running the Tests
 
 .. attention::
 
-    UnifyCR's integration test suite requires MPI and currently only supports
+    UnifyFS's integration test suite requires MPI and currently only supports
     ``srun`` and ``jsrun`` MPI launch commands. Changes are coming to support
     ``mpirun``.
 
-UnifyCR's integration tests are primarly set up to be run all as one suite.
+UnifyFS's integration tests are primarly set up to be run all as one suite.
 However, they can be run individually if desired.
 
 The testing scripts in `t/ci`_ depend on sharness_, which is set up in the
@@ -345,7 +345,7 @@ processes will be run per node). This can be changed by setting the
 .. note::
 
     In order to run the the integration tests from a Spack_ installation of
-    UnifyCR, you'll need to tell Spack to use a different location for staging
+    UnifyFS, you'll need to tell Spack to use a different location for staging
     builds in order to have the source files available from inside an allocation.
 
     Open your Spack config file
@@ -364,7 +364,7 @@ processes will be run per node). This can be changed by setting the
 
     Then make sure to include the ``--keep-stage`` option when installing:
 
-        ``spack install --keep-stage unifycr``
+        ``spack install --keep-stage unifyfs``
 
 Running All Tests
 ^^^^^^^^^^^^^^^^^
@@ -385,7 +385,7 @@ Running Individual Tests
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 In order to run individual tests, testing functions and variables need to be set
-up first, and the UnifyCR server needs to be started. To do this, first source
+up first, and the UnifyFS server needs to be started. To do this, first source
 the *t/ci/001-setup.sh* script followed by *002-start-server.sh*. Then source
 each desired test script after that preceded by ``$CI_DIR/``. When finished,
 source the *990-stop-server.sh* script last to stop the server and clean up.
@@ -408,22 +408,22 @@ listed below in the order they are set up.
 ``CI_PROJDIR``
 """"""""""""""
 
-USAGE: ``CI_PROJDIR=/base/location/to/search/for/UnifyCR/source/files``
+USAGE: ``CI_PROJDIR=/base/location/to/search/for/UnifyFS/source/files``
 
-During setup, the integration tests will search for the ``unifycrd`` executable
-and installed example scripts if the UnifyCR install directory is not provided by
-the user with the ``UNIFYCR_INSTALL`` envar. ``CI_PROJDIR`` is the base location
+During setup, the integration tests will search for the ``unifyfsd`` executable
+and installed example scripts if the UnifyFS install directory is not provided by
+the user with the ``UNIFYFS_INSTALL`` envar. ``CI_PROJDIR`` is the base location
 where this search will start and defaults to ``CI_PROJDIR=$HOME``.
 
 
-``UNIFYCR_INSTALL``
+``UNIFYFS_INSTALL``
 """""""""""""""""""
 
-USAGE: ``UNIFYCR_INSTALL=/path/to/dir/containing/UnifyCR/bin/directory``
+USAGE: ``UNIFYFS_INSTALL=/path/to/dir/containing/UnifyFS/bin/directory``
 
 The full path to the directory containing the *bin/* and *libexec/* directories
-for a UnifyCR installation. Set this envar to prevent the integration tests from
-searching for a UnifyCR install directory automatically.
+for a UnifyFS installation. Set this envar to prevent the integration tests from
+searching for a UnifyFS install directory automatically.
 
 .. _ci-nprocs-label:
 
@@ -443,7 +443,7 @@ are desired on a single node, or a large number of nodes have been allocated.
 
 USAGE: ``CI_LOG_CLEANUP=yes|YES|no|NO``
 
-In the event ``$UNIFYCR_LOG_DIR`` has **not** been set, the logs will be put in
+In the event ``$UNIFYFS_LOG_DIR`` has **not** been set, the logs will be put in
 ``$SHARNESS_TRASH_DIRECTORY``, as set up by sharness.sh_, and cleaned up
 automatically after the tests have run. The logs will be in a
 *<system-name>_<jobid>/* subdirectory. Should any tests fail, the trash
@@ -454,7 +454,7 @@ allow them to persist even when all tests pass. This envar defauls to ``yes``.
 
 .. note::
 
-    Setting ``$UNIFYCR_LOG_DIR`` will put all created logs in the designated path
+    Setting ``$UNIFYFS_LOG_DIR`` will put all created logs in the designated path
     and will not clean them up.
 
 ``CI_HOST_CLEANUP``
@@ -463,8 +463,8 @@ allow them to persist even when all tests pass. This envar defauls to ``yes``.
 USAGE: ``CI_HOST_CLEANUP=yes|YES|no|NO``
 
 After all tests have run, the nodes on which the tests were ran will
-automatically be cleaned up. This cleanup includes ensuring ``unifycrd`` has
-stopped and deleting any files created by UnifyCR or its dependencies. Set
+automatically be cleaned up. This cleanup includes ensuring ``unifyfsd`` has
+stopped and deleting any files created by UnifyFS or its dependencies. Set
 ``CI_HOST_CLEANUP=no|NO`` to skip cleaning up. This envar defaults to ``yes``.
 
 .. note::
@@ -483,20 +483,20 @@ to ``no|NO``.
 ``CI_TEMP_DIR``
 """"""""""""""""
 
-USAGE: ``CI_TEMP_DIR=/path/for/temporary/files/created/by/UnifyCR``
+USAGE: ``CI_TEMP_DIR=/path/for/temporary/files/created/by/UnifyFS``
 
-Can be used as a shortcut to set ``UNIFYCR_RUNSTATE_DIR`` and
-``UNIFYCR_META_DB_PATH`` to the same path.  This envar defaults to
-``CI_TEMP_DIR=${TMPDIR}/unifycr.${USER}.${JOB_ID}``.
+Can be used as a shortcut to set ``UNIFYFS_RUNSTATE_DIR`` and
+``UNIFYFS_META_DB_PATH`` to the same path.  This envar defaults to
+``CI_TEMP_DIR=${TMPDIR}/unifyfs.${USER}.${JOB_ID}``.
 
 ``CI_STORAGE_DIR``
 """""""""""""""""""
 
 USAGE: ``CI_STORAGE_DIR=/path/for/storage/files/``
 
-Can be used as a shortcut to set ``UNIFYCR_SPILLOVER_DATA_DIR`` and
-``UNIFYCR_SPILLOVER_META_DIR`` to the same path.  This envar defaults to
-``CI_STORAGE_DIR=${TMPDIR}/unifycr.${USER}.${JOB_ID}``.
+Can be used as a shortcut to set ``UNIFYFS_SPILLOVER_DATA_DIR`` and
+``UNIFYFS_SPILLOVER_META_DIR`` to the same path.  This envar defaults to
+``CI_STORAGE_DIR=${TMPDIR}/unifyfs.${USER}.${JOB_ID}``.
 
 ``CI_TEST_POSIX``
 """""""""""""""""
@@ -506,13 +506,13 @@ USAGE: ``CI_TEST_POSIX=yes|YES|no|NO``
 Determines whether any ``<example-name>-posix`` tests should be run since they
 require a real mountpoint to exist.
 
-This envar defaults to ``yes``. However, when ``$UNIFYCR_MOUNTPOINT`` is set to a
+This envar defaults to ``yes``. However, when ``$UNIFYFS_MOUNTPOINT`` is set to a
 real directory, this envar is switched to ``no``. The idea behind this is that
 the tests can be run a first time with a fake mountpoint (which will also run
 the posix tests), and then the tests can be run again with a real mountpoint and
 the posix tests wont be run twice. This behavior can be overridden by setting
 ``CI_TEST_POSIX=yes|YES`` before running the integration tests when
-``$UNIFYCR_MOUNTPOINT`` is set to an existing directory.
+``$UNIFYFS_MOUNTPOINT`` is set to an existing directory.
 
 An example of testing a posix example can be see :ref:`below <posix-ex-label>`.
 
@@ -590,7 +590,7 @@ or
 .. code-block:: BASH
     :caption: Using a "pass-by-reference" variable
 
-    unifycr_run_test $app_name "$app_args" app_output
+    unifyfs_run_test $app_name "$app_args" app_output
 
 This function returns the return code of the executed example as well as the
 output produced by running the example.
@@ -627,7 +627,7 @@ The results can then be tested with sharness_:
 USAGE: ``get_filename app_name app_args [app_suffix]``
 
 Builds and returns the filename for an example so that if it shows up in the
-``$UNIFYCR_MOUNTPOINT`` (when using an existing mountpoint), it can be tracked
+``$UNIFYFS_MOUNTPOINT`` (when using an existing mountpoint), it can be tracked
 to its originating test for debugging. Error files are created with this
 filename and a ``.err`` suffix and placed in the logs directory for debugging.
 
@@ -690,7 +690,7 @@ USAGE: ``process_is_running process_name seconds_before_giving_up``
 
 Checks if a process with the given name is running on every host, retrying up to
 a given number of seconds before giving up. This function overrides the
-``process_is_running()`` function used by the UnifyCR unit tests. The primary
+``process_is_running()`` function used by the UnifyFS unit tests. The primary
 difference being that this function checks for the process on every host.
 
 Expects two arguments:
@@ -701,8 +701,8 @@ Expects two arguments:
 .. code-block:: BASH
     :emphasize-lines:
 
-    test_expect_success "unifycrd is running" '
-        process_is_running unifycrd 5
+    test_expect_success "unifyfsd is running" '
+        process_is_running unifyfsd 5
     '
 
 ``process_is_not_running()``
@@ -712,7 +712,7 @@ USAGE: ``process_is_not_running process_name seconds_before_giving_up``
 
 Checks if a process with the given name is not running on every host, retrying
 up to a given number of seconds before giving up. This function overrides the
-``process_is_not_running()`` function used by the UnifyCR unit tests. The primary
+``process_is_not_running()`` function used by the UnifyFS unit tests. The primary
 difference being that this function checks that the process is not running on
 every host.
 
@@ -723,8 +723,8 @@ Expects two arguments:
 
 .. code-block:: BASH
 
-    test_expect_success "unifycrd is not running" '
-        process_is_not_running unifycrd 5
+    test_expect_success "unifyfsd is not running" '
+        process_is_not_running unifyfsd 5
     '
 
 ``test_path_is_dir()``
@@ -795,21 +795,21 @@ comments in `t/ci/ci-functions.sh`_.
 
 .. _Bamboo: https://www.atlassian.com/software/bamboo
 .. _GitLab: https://about.gitlab.com
-.. _examples: https://github.com/LLNL/UnifyCR/tree/dev/examples/src
+.. _examples: https://github.com/LLNL/UnifyFS/tree/dev/examples/src
 .. _libtap library: https://github.com/zorgnax/libtap
-.. _lib/testutil.c: https://github.com/LLNL/UnifyCR/blob/dev/t/lib/testutil.c
+.. _lib/testutil.c: https://github.com/LLNL/UnifyFS/blob/dev/t/lib/testutil.c
 .. _PDSH: https://github.com/chaos/pdsh
 .. _sharness: https://github.com/chriscool/sharness
-.. _sharness.d: https://github.com/LLNL/UnifyCR/tree/dev/t/sharness.d
-.. _sharness.d/00-test-env.sh: https://github.com/LLNL/UnifyCR/blob/dev/t/sharness.d/00-test-env.sh
-.. _sharness.d/01-unifycr-settings.sh: https://github.com/LLNL/UnifyCR/blob/dev/t/sharness.d/01-unifycr-settings.sh
-.. _sharness.sh: https://github.com/LLNL/UnifyCR/blob/dev/t/sharness.sh
+.. _sharness.d: https://github.com/LLNL/UnifyFS/tree/dev/t/sharness.d
+.. _sharness.d/00-test-env.sh: https://github.com/LLNL/UnifyFS/blob/dev/t/sharness.d/00-test-env.sh
+.. _sharness.d/01-unifyfs-settings.sh: https://github.com/LLNL/UnifyFS/blob/dev/t/sharness.d/01-unifyfs-settings.sh
+.. _sharness.sh: https://github.com/LLNL/UnifyFS/blob/dev/t/sharness.sh
 .. _Spack: https://github.com/spack/spack
-.. _t/ci: https://github.com/LLNL/UnifyCR/blob/dev/t/ci
-.. _t/Makefile.am: https://github.com/LLNL/UnifyCR/blob/dev/t/Makefile.am
-.. _t/sys/sysio_suite.c: https://github.com/LLNL/UnifyCR/blob/dev/t/sys/sysio_suite.c
-.. _t/ci/100-writeread-tests.sh: https://github.com/LLNL/UnifyCR/blob/dev/t/ci/100-writeread-tests.sh
-.. _t/ci/ci-functions.sh: https://github.com/LLNL/UnifyCR/blob/dev/t/ci/ci-functions.sh
-.. _t/ci/RUN_CI_TESTS.sh: https://github.com/LLNL/UnifyCR/blob/dev/t/ci/RUN_CI_TESTS.sh
+.. _t/ci: https://github.com/LLNL/UnifyFS/blob/dev/t/ci
+.. _t/Makefile.am: https://github.com/LLNL/UnifyFS/blob/dev/t/Makefile.am
+.. _t/sys/sysio_suite.c: https://github.com/LLNL/UnifyFS/blob/dev/t/sys/sysio_suite.c
+.. _t/ci/100-writeread-tests.sh: https://github.com/LLNL/UnifyFS/blob/dev/t/ci/100-writeread-tests.sh
+.. _t/ci/ci-functions.sh: https://github.com/LLNL/UnifyFS/blob/dev/t/ci/ci-functions.sh
+.. _t/ci/RUN_CI_TESTS.sh: https://github.com/LLNL/UnifyFS/blob/dev/t/ci/RUN_CI_TESTS.sh
 .. _Test Anything Protocol: https://testanything.org
 .. _Travis CI: https://docs.travis-ci.com

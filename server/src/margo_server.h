@@ -28,7 +28,7 @@ typedef struct ServerRpcContext {
     server_rpcs_t rpcs;
 } ServerRpcContext_t;
 
-extern ServerRpcContext_t* unifycrd_rpc_context;
+extern ServerRpcContext_t* unifyfsd_rpc_context;
 
 extern bool margo_use_tcp;
 extern bool margo_lazy_connect;
