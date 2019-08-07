@@ -11,7 +11,7 @@ INSTALL_DIR=$ROOT/install
 
 cd deps
 
-repos=(	git://git.mcs.anl.gov/bmi
+repos=(	https://xgitlab.cels.anl.gov/sds/bmi.git
 	https://github.com/google/leveldb.git
 	https://github.com/LLNL/GOTCHA.git
 	https://github.com/pmodels/argobots.git
