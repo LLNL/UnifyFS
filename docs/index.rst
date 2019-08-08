@@ -38,6 +38,8 @@ UnifyFS: A file system for burst buffers
    :maxdepth: 2
    :caption: Reference
 
+   dependencies
+
 ==================
 Indices and tables
 ==================

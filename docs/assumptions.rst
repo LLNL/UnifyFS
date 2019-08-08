@@ -28,15 +28,13 @@ Application Behavior
 ---------------------------
 Consistency Model
 ---------------------------
-In the first version of UnifyFS, lamination will be explicitly initiated
-by a UnifyFS API call. In subsequent versions, we will support implicit
-initiation of file lamination. Here, UnifyFS will determine a
-file to be laminated based on conditions, e.g., \texttt{fsync} or
-\texttt{ioctl} calls, or a time out on \texttt{close} operations.
-As part of the UnifyFS project, we will
-investigate these implicit lamination conditions to determine the
-best way to enable lamination of files without explicit UnifyFS API calls
-being made by the application.
+In the first version of UnifyFS, lamination will be explicitly initiated by a
+UnifyFS API call. In subsequent versions, we will support implicit initiation
+of file lamination. Here, UnifyFS will determine a file to be laminated based
+on conditions, e.g., ``fsync`` or ``ioctl`` calls, or a time out on ``close``
+operations. As part of the UnifyFS project, we will investigate these implicit
+lamination conditions to determine the best way to enable lamination of files
+without explicit UnifyFS API calls being made by the application.
 
 In the first version of UnifyFS, eventually, a process declares the file to be
 laminated through a UnifyFS API call.
