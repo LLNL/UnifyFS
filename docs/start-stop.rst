@@ -49,7 +49,7 @@ for further details on customizing the UnifyFS runtime configuration.
         # store server logs in job-specific scratch area
         export UNIFYFS_LOG_DIR=$JOBSCRATCH/logs
 
-        unifyfs start --mount=/mnt/unifyfs
+        unifyfs start --share-dir=/path/to/shared/file/system &
 
 
 ``unifyfs`` provides command-line options to choose the client mountpoint,
@@ -64,26 +64,31 @@ The full usage for ``unifyfs`` is as follows:
         Usage: unifyfs <command> [options...]
 
         <command> should be one of the following:
-          start       start the unifyfs server daemon
-          terminate   terminate the unifyfs server daemon
+          start       start the UnifyFS server daemons
+          terminate   terminate the UnifyFS server daemons
 
-        Available options for "start":
-          -C, --consistency=<model> consistency model (NONE | LAMINATED | POSIX)
-          -e, --exe=<path>          <path> where unifyfsd is installed
-          -m, --mount=<path>        mount unifyfs at <path>
-          -s, --script=<path>       <path> to custom launch script
-          -i, --stage-in=<path>     stage in file(s) at <path>
-          -o, --stage-out=<path>    stage out file(s) to <path> on termination
+        Common options:
+          -d, --debug               enable debug output
+          -h, --help                print usage
 
-        Available options for "terminate":
-          -c, --cleanup             clean up the unifyfs storage on termination
+        Command options for "start":
+          -c, --cleanup             [OPTIONAL] clean up the UnifyFS storage upon server exit
+          -C, --consistency=<model> [OPTIONAL] consistency model (NONE | LAMINATED | POSIX)
+          -e, --exe=<path>          [OPTIONAL] <path> where unifyfsd is installed
+          -m, --mount=<path>        [OPTIONAL] mount UnifyFS at <path>
+          -s, --script=<path>       [OPTIONAL] <path> to custom launch script
+          -S, --share-dir=<path>    [REQUIRED] shared file system <path> for use by servers
+          -i, --stage-in=<path>     [OPTIONAL] stage in file(s) at <path>
+          -o, --stage-out=<path>    [OPTIONAL] stage out file(s) to <path> on termination
+
+        Command options for "terminate":
           -s, --script=<path>       <path> to custom termination script
 
 
 After UnifyFS servers have been successfully started, you may run your
 UnifyFS-enabled applications as you normally would (e.g., using mpirun).
-Only applications that explcitly call ``unifyfs_mount()`` and access files
-with the specified mountpoint prefix will utils UnifyFS for their I/O. All
+Only applications that explicitly call ``unifyfs_mount()`` and access files
+with the specified mountpoint prefix will utilize UnifyFS for their I/O. All
 other applications will operate unchanged.
 
 --------------------
@@ -91,7 +96,7 @@ other applications will operate unchanged.
 --------------------
 
 After all UnifyFS-enabled applications have completed running, you should
-use ``unifyfs terminate`` to terminate the servers. Typically, one would
-also pass the ``--cleanup`` option to have the servers remove temporary data
-locally stored on each node.
+use ``unifyfs terminate`` to terminate the servers. Typically, one would pass
+the ``--cleanup`` option to ``unifyfs start`` to have the servers remove
+temporary data locally stored on each node after termination.
 

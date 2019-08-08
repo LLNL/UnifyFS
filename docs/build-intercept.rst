@@ -30,7 +30,7 @@ Building with Spack
 
 These instructions assume that you do not already have a module system installed
 such as LMod, Dotkit, or Environment Modules. If your system already has Dotkit
-or LMod installed then installing the environment-modules package with spack
+or LMod installed then installing the environment-modules package with Spack
 is unnecessary (so you can safely skip that step).
 
 If you use Dotkit then replace ``spack load`` with ``spack use``.
@@ -97,7 +97,8 @@ Download the latest UnifyFS release from the `Releases
 Building the Dependencies
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-UnifyFS requires MPI, LevelDB, and GOTCHA(version 0.0.2).
+UnifyFS requires MPI, LevelDB, GOTCHA(version 0.0.2), FlatCC, and Margo.
+References to these dependencies can be found :doc:`here <dependencies>`.
 
 .. _spack-build-label:
 
@@ -125,7 +126,7 @@ If you use Dotkit then replace ``spack load`` with ``spack use``.
     dependencies of dependencies if you haven't already installed them through
     Spack or told Spack where they are locally installed on your system.
 
-Then to build UnifyFS:
+Then to manually build UnifyFS:
 
 .. code-block:: Bash
 
@@ -161,24 +162,16 @@ after ``./autogen.sh`` has been run.
 Build the Dependencies without Spack
 """""""""""""""""""""""""""""""""""""
 
-For users who cannot use Spack, you may fetch version 0.0.2 (compatibility with
-latest release in progress) of `GOTCHA <https://github.com/LLNL/GOTCHA/releases>`_
+For users who cannot use Spack, a `bootstrap.sh <https://github.com/LLNL/UnifyFS/blob/dev/bootstrap.sh>`_
+script has been provided in order to make manual installation of dependencies
+easier. Simply run this script in the desired directory for the dependencies to
+be installed.
 
-And leveldb (if not already installed on your system):
-`leveldb <https://github.com/google/leveldb/releases/tag/v1.20>`_
+.. code-block:: Bash
 
-To get flatcc `flatcc <https://github.com/dvidelabs/flatcc>`_
+    $ ./bootstrap.sh
 
-To download and install Margo and its dependencies (Mercury and Argobots)
-follow the instructions here: `Margo <https://xgitlab.cels.anl.gov/sds/margo>`_
-
-.. important::
-
-    Margo uses pkg-config to ensure it compiles and links correctly with all of
-    its dependencies' libraries. When building without Spack, you'll need to
-    manually set the ``PKG_CONFIG_PATH`` environment variable and include in
-    that variable the paths for the ``.pc`` files for Mercury, Argobots, and
-    Margo separated by colons.
+References to the UnifyFS dependencies can be found :doc:`here <dependencies>`.
 
 Then to build UnifyFS:
 

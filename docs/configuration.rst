@@ -46,10 +46,10 @@ a given section and key.
    =============  ======  =====================================================
    Key            Type    Description
    =============  ======  =====================================================
+   cleanup        BOOL    cleanup storage on server exit (default: off)
    configfile     STRING  path to custom configuration file
    consistency    STRING  consistency model [ LAMINATED | POSIX | NONE ]
    daemonize      BOOL    enable server daemonization (default: off)
-   debug          BOOL    enable debug output (default: off)
    mountpoint     STRING  mountpoint path prefix (default: /unifyfs)
    =============  ======  =====================================================
 
@@ -92,6 +92,24 @@ a given section and key.
    Key            Type    Description
    =============  ======  =====================================================
    dir            STRING  path to directory to contain server runstate file
+   =============  ======  =====================================================
+
+.. table:: ``[server]`` section - server settings
+   :widths: auto
+
+   =============  ======  =====================================================
+   Key            Type    Description
+   =============  ======  =====================================================
+   hostfile       STRING  path to server hostfile
+   =============  ======  =====================================================
+
+.. table:: ``[sharedfs]`` section - server shared files settings
+   :widths: auto
+
+   =============  ======  =====================================================
+   Key            Type    Description
+   =============  ======  =====================================================
+   dir            STRING  path to directory to contain server shared files
    =============  ======  =====================================================
 
 .. table:: ``[shmem]`` section - shared memory segment usage settings
@@ -146,14 +164,16 @@ the short option character is given in the below table.
    ======================  ========
    LongOpt                 ShortOpt
    ======================  ========
-   --unifyfs-configfile      -C
+   --unifyfs-cleanup         -C
+   --unifyfs-configfile      -f
    --unifyfs-consistency     -c
    --unifyfs-daemonize       -D
-   --unifyfs-debug           -d
    --unifyfs-mountpoint      -m
    --log-dir                 -L
    --log-file                -l
    --log-verbosity           -v
    --runstate-dir            -R
+   --server-hostfile         -H
+   --sharedfs-dir            -S
    ======================  ========
 

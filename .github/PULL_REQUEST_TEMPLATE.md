@@ -25,7 +25,7 @@
 ### Checklist:
 <!--- Go over all the following points, and put an `x` in all the boxes that apply. -->
 <!--- If you're unsure about any of these, don't hesitate to ask. We're here to help! -->
-- [ ] My code follows the UnifyCR code style requirements.
+- [ ] My code follows the UnifyFS code style requirements.
 - [ ] I have updated the documentation accordingly.
 - [ ] I have read the **CONTRIBUTING** document.
 - [ ] I have added tests to cover my changes.
