@@ -2378,3 +2378,115 @@ int UNIFYFS_WRAP(close)(int fd)
         return ret;
     }
 }
+
+/* Helper function used by fchmod() and chmod() */
+static int __chmod(int fid, mode_t mode)
+{
+    int gfid;
+    unifyfs_filemeta_t* meta;
+    const char* path;
+    int ret;
+
+    path =  unifyfs_path_from_fid(fid);
+
+    meta = unifyfs_get_meta_from_fid(fid);
+    if (!meta) {
+        LOGDBG("chmod: %s no metadata info", path);
+        errno = ENOENT;
+        return -1;
+    }
+
+    /* Once a file is laminated, you can't modify it in any way */
+    if (meta->is_laminated) {
+        LOGDBG("chmod: %s is already laminated", path);
+        errno = EROFS;
+        return -1;
+    }
+
+    gfid = unifyfs_generate_gfid(path);
+
+    /*
+     * If the chmod clears all the existing write bits, then it's a laminate.
+     *
+     * meta->mode & 0222                  Was at least one write bit set before?
+     * ((meta->mode & 0222) & mode) == 0  Will all the write bits be cleared?
+     */
+    if ((meta->mode & 0222) &&
+        (((meta->mode & 0222) & mode) == 0)) {
+
+        /*
+         * We're laminating. Calculate the file size so we can cache it
+         * (both locally and on the server).
+         */
+        ret = invoke_client_filesize_rpc(gfid, &meta->size);
+        if (ret) {
+            LOGERR("chmod: couldn't get the global file size on laminate");
+            errno = EIO;
+            return -1;
+        }
+        meta->is_laminated = 1;
+    }
+
+    /* Clear out our old permission bits, and set the new ones in */
+    meta->mode = meta->mode & ~0777;
+    meta->mode = meta->mode | mode;
+
+    ret = unifyfs_set_global_file_meta(fid, gfid);
+    if (ret) {
+        LOGERR("chmod: can't set global meta entry for %s (fid:%d)",
+               path, fid);
+        errno = EIO;
+        return -1;
+    }
+    return 0;
+}
+
+int UNIFYFS_WRAP(fchmod)(int fd, mode_t mode)
+{
+    /* check whether we should intercept this file descriptor */
+    int origfd = fd;
+    if (unifyfs_intercept_fd(&fd)) {
+
+        /* TODO: what to do if underlying file has been deleted? */
+
+        /* check that fd is actually in use */
+        int fid = unifyfs_get_fid_from_fd(fd);
+        if (fid < 0) {
+            errno = EBADF;
+            return -1;
+        }
+        LOGDBG("fchmod: setting fd %d to %o", fd, mode);
+        return __chmod(fid, mode);
+
+    } else {
+        MAP_OR_FAIL(fchmod);
+        int ret = UNIFYFS_REAL(fchmod)(fd, mode);
+        return ret;
+    }
+}
+
+
+int UNIFYFS_WRAP(chmod)(const char* path, mode_t mode)
+{
+    int fid, gfid;
+    int ret;
+    unifyfs_filemeta_t* meta;
+    /* determine whether we should intercept this path */
+    if (unifyfs_intercept_path(path)) {
+        /* check if path exists */
+        fid = unifyfs_get_fid_from_path(path);
+        if (fid < 0) {
+            LOGDBG("chmod: unifyfs_get_id_from path failed, returning -1, %s",
+                   path);
+            errno = ENOENT;
+            return -1;
+        }
+
+        LOGDBG("chmod: setting %s to %o", path, mode);
+        return __chmod(fid, mode);
+    } else {
+        MAP_OR_FAIL(chmod);
+        int ret = UNIFYFS_REAL(chmod)(path, mode);
+        return ret;
+    }
+}

@@ -65,22 +65,9 @@ t/sys/.dirstamp
 
 # test files
 client/unifyfs-runtime-config.h
-examples/src/app-btio-gotcha
-examples/src/app-btio-static
-examples/src/app-mpiio-gotcha
-examples/src/app-mpiio-static
-examples/src/sysio-read-gotcha
-examples/src/sysio-read-static
-examples/src/app-tileio-gotcha
-examples/src/app-tileio-static
-examples/src/sysio-write-gotcha
-examples/src/sysio-write-static
-examples/src/sysio-writeread-gotcha
-examples/src/sysio-writeread-static
-examples/src/sysio-writeread2-gotcha
-examples/src/sysio-writeread2-static
-examples/src/app-hdf5-create-gotcha
-examples/src/app-hdf5-writeread-gotcha
+examples/src/*-gotcha
+examples/src/*-posix
+examples/src/*-static
 t/sys/open.t
 t/test-results/
 t/unifyfs_unmount.t

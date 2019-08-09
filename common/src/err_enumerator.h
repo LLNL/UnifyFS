@@ -21,6 +21,7 @@
 
 #ifndef _UNIFYFS_ERROR_ENUMERATOR_H_
 #define _UNIFYFS_ERROR_ENUMERATOR_H_
+#include <errno.h>
 
 /**
  * @brief enumerator list expanded many times with varied ENUMITEM() definitions
@@ -91,6 +92,11 @@
 extern "C" {
 #endif
 
+/* #define __ELASTERROR if our errno.h doesn't define it for us */
+#ifndef __ELASTERROR
+#define __ELASTERROR    2000
+#endif
+
 /**
  * @brief enum for error codes
  */
@@ -98,6 +104,8 @@ typedef enum {
     UNIFYFS_INVALID_ERROR = -2,
     UNIFYFS_FAILURE = -1,
     UNIFYFS_SUCCESS = 0,
+    /* Start our error numbers after the standard errno.h ones */
+    UNIFRFS_START_OF_ERRORS = __ELASTERROR,
 #define ENUMITEM(name, desc)                    \
         UNIFYFS_ERROR_ ## name,
     UNIFYFS_ERROR_ENUMERATOR

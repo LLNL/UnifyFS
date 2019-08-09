@@ -13,7 +13,9 @@ libexec_PROGRAMS = \
   app-mpiio-gotcha app-mpiio-static \
   app-btio-gotcha app-btio-static \
   app-tileio-gotcha app-tileio-static \
-  transfer-gotcha transfer-static
+  transfer-gotcha transfer-static \
+  size-gotcha size-static \
+  chmod-gotcha chmod-static
 
 if HAVE_FORTRAN
 libexec_PROGRAMS += \
@@ -258,4 +260,23 @@ transfer_static_CPPFLAGS = $(test_cppflags)
 transfer_static_LDADD    = $(test_static_ldadd)
 transfer_static_LDFLAGS  = $(test_static_ldflags)
 
+size_gotcha_SOURCES  = size.c testutil.c
+size_gotcha_CPPFLAGS = $(test_cppflags)
+size_gotcha_LDADD    = $(test_gotcha_ldadd)
+size_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+size_static_SOURCES  = size.c testutil.c
+size_static_CPPFLAGS = $(test_cppflags)
+size_static_LDADD    = $(test_static_ldadd)
+size_static_LDFLAGS  = $(test_static_ldflags)
+
+chmod_gotcha_SOURCES  = chmod.c testutil.c
+chmod_gotcha_CPPFLAGS = $(test_cppflags)
+chmod_gotcha_LDADD    = $(test_gotcha_ldadd)
+chmod_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+chmod_static_SOURCES  = chmod.c testutil.c
+chmod_static_CPPFLAGS = $(test_cppflags)
+chmod_static_LDADD    = $(test_static_ldadd)
+chmod_static_LDFLAGS  = $(test_static_ldflags)
 

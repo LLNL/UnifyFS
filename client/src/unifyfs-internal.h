@@ -269,7 +269,6 @@ typedef struct {
 typedef struct {
     off_t size;                      /* current file size */
     off_t log_size;                  /* real size of the file for logio*/
-    int is_dir;                      /* is this file a directory */
     pthread_spinlock_t fspinlock;    /* file lock variable */
     enum flock_enum flock_status;    /* file lock status */
 
@@ -279,6 +278,10 @@ typedef struct {
 
     off_t chunks;                   /* number of chunks allocated to file */
     off_t chunkmeta_idx;            /* starting index in unifyfs_chunkmeta */
+    int is_laminated;               /* Is this file laminated */
+    uint32_t mode;                  /* st_mode bits.  This has file
+                                     * permission info and will tell you if this
+                                     * is a regular file or directory. */
 } unifyfs_filemeta_t;
 
 /* struct used to map a full path to its local file id,
@@ -467,6 +470,9 @@ unifyfs_fd_t* unifyfs_get_filedesc_from_fd(int fd);
  * otherwise return NULL */
 unifyfs_filemeta_t* unifyfs_get_meta_from_fid(int fid);
 
+/* Given a fid, return the path.  */
+const char* unifyfs_path_from_fid(int fid);
+
 /* given an UNIFYFS error code, return corresponding errno code */
 int unifyfs_err_map_to_errno(int rc);
 
@@ -550,8 +556,7 @@ int unifyfs_fid_unlink(int fid);
 
 int unifyfs_generate_gfid(const char* path);
 
-int unifyfs_set_global_file_meta(const char* path, int fid, int gfid,
-                                 int isdir);
+int unifyfs_set_global_file_meta(int fid, int gfid);
 
 int unifyfs_get_global_file_meta(int fid, int gfid,
                                  unifyfs_file_attr_t* gfattr);

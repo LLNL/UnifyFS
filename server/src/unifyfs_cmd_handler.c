@@ -391,6 +391,7 @@ static void unifyfs_metaget_rpc(hg_handle_t handle)
     out.mtime = attr_val.mtime;
     out.ctime = attr_val.ctime;
     out.filename = attr_val.filename;
+    out.is_laminated = attr_val.is_laminated;
     out.ret = ret;
 
     /* send output back to caller */
@@ -424,6 +425,7 @@ static void unifyfs_metaset_rpc(hg_handle_t handle)
     fattr.atime = in.atime;
     fattr.mtime = in.mtime;
     fattr.ctime = in.ctime;
+    fattr.is_laminated = in.is_laminated;
 
     int ret = unifyfs_set_file_attribute(&fattr);
 

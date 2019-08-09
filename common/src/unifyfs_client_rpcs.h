@@ -69,7 +69,8 @@ MERCURY_GEN_PROC(unifyfs_metaset_in_t,
                  ((uint64_t)(size))
                  ((sys_timespec_t)(atime))
                  ((sys_timespec_t)(mtime))
-                 ((sys_timespec_t)(ctime)))
+                 ((sys_timespec_t)(ctime))
+                 ((uint32_t)(is_laminated)))
 MERCURY_GEN_PROC(unifyfs_metaset_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_metaset_rpc)
 
@@ -90,7 +91,8 @@ MERCURY_GEN_PROC(unifyfs_metaget_out_t,
                  ((uint64_t)(size))
                  ((sys_timespec_t)(atime))
                  ((sys_timespec_t)(mtime))
-                 ((sys_timespec_t)(ctime)))
+                 ((sys_timespec_t)(ctime))
+                 ((uint32_t)(is_laminated)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_metaget_rpc)
 
 /* unifyfs_fsync_rpc (client => server)

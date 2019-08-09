@@ -713,7 +713,7 @@ int rm_cmd_filesize(
     int key_lens[2] = {sizeof(unifyfs_key_t), sizeof(unifyfs_key_t)};
 
     /* look up all entries in this range */
-    int num_vals;
+    int num_vals = 0;
     keyvals = (unifyfs_keyval_t*) calloc(UNIFYFS_MAX_SPLIT_CNT,
                                          sizeof(unifyfs_keyval_t));
     int rc = unifyfs_get_file_extents(2, unifyfs_keys, key_lens,
@@ -721,7 +721,7 @@ int rm_cmd_filesize(
     /* TODO: if there are file extents not accounted for we should
      * either return 0 for that date (holes) or EOF if reading past
      * the end of the file */
-    if (UNIFYFS_SUCCESS != rc || num_vals == 0) {
+    if (UNIFYFS_SUCCESS != rc) {
         // we need to let the client know that there was an error
         free(keyvals);
         return UNIFYFS_FAILURE;

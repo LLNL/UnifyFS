@@ -47,13 +47,16 @@ typedef struct {
     char filename[UNIFYFS_MAX_FILENAME];
 
     /* essential stat fields */
-    uint32_t mode;
+    uint32_t mode;   /* st_mode bits */
     uint32_t uid;
     uint32_t gid;
     uint64_t size;
     struct timespec atime;
     struct timespec mtime;
     struct timespec ctime;
+
+    /* Set when the file is laminated */
+    uint32_t is_laminated;
 } unifyfs_file_attr_t;
 
 enum {
@@ -79,6 +82,14 @@ void unifyfs_file_attr_to_stat(unifyfs_file_attr_t* fattr, struct stat* sb)
         if (fattr->size % UNIFYFS_STAT_DEFAULT_BLKSIZE > 0) {
             sb->st_blocks += 1;
         }
+
+        /*
+         * Re-purpose st_nlink to tell us if the file is laminated or not.
+         * That way, if we do eventually make /unifyfs mountable, we can easily
+         * see with 'ls -l' or stat if the file is laminated or not.
+         */
+        sb->st_nlink = fattr->is_laminated ? 1 : 0;
+
         sb->st_atime = fattr->atime.tv_sec;
         sb->st_mtime = fattr->mtime.tv_sec;
         sb->st_ctime = fattr->ctime.tv_sec;
