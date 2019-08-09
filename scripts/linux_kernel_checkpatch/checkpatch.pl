@@ -5211,6 +5211,12 @@ sub process {
 				$allowed = 0;
 			}
 
+			# Allow while conditional that comes at end of a do-while loop
+			if ($cond =~ /^(\}\swhile)/) {
+				#print "APW: ALLOWED: cond<$cond>\n";
+				$allowed = 1;
+			}
+
 			# Allow any conditional directives
 			if ($line =~ /^(.*#)/) {
 				#print "APW: ALLOWED: pre<$1>\n";
