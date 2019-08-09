@@ -240,6 +240,7 @@ static inline
 void test_print(test_cfg* cfg, const char* fmt, ...)
 {
     int err = errno;
+    char buf[1024];
 
     assert(NULL != cfg);
 
@@ -247,14 +248,19 @@ void test_print(test_cfg* cfg, const char* fmt, ...)
 
     va_list args;
     va_start(args, fmt);
-    vfprintf(stdout, fmt, args);
+    vsprintf(buf, fmt, args);
+    printf("%s", buf);
     va_end(args);
 
     if (err) {
         printf(" (errno=%d, %s)", err, strerror(err));
     }
 
-    printf("\n");
+    /* Add in a '\n' if the line didn't end with one */
+    if (buf[strlen(buf) - 1] != '\n') {
+        printf("\n");
+    }
+
     fflush(stdout);
 }
 
@@ -768,7 +774,7 @@ double test_reduce_double_min(test_cfg* cfg, double local_val)
 }
 
 /* ---------- Program Utilities ---------- */
-
+static
 int test_access_to_mmap_prot(int access)
 {
     switch (access) {
@@ -784,6 +790,7 @@ int test_access_to_mmap_prot(int access)
     return PROT_NONE;
 }
 
+static
 const char* test_access_to_stdio_mode(int access)
 {
     switch (access) {
@@ -1063,5 +1070,16 @@ void test_fini(test_cfg* cfg)
 
     memset(cfg, 0, sizeof(test_cfg));
 }
+
+/*
+ * Various C equivalents of bash commands (dd, test, mktemp, du, stat, ...)
+ */
+int dd_cmd(test_cfg* cfg, char* infile, char* outfile, unsigned long bs,
+    unsigned long count, unsigned long seek);
+int test_cmd(char* expression, char* path);
+char* mktemp_cmd(test_cfg* cfg, char* tmpdir);
+long du_cmd(test_cfg* cfg, char* filename, int apparent_size);
+int sync_cmd(test_cfg* cfg, char* filename);
+int stat_cmd(test_cfg* cfg, char* filename);
 
 #endif /* UNIFYFS_TEST_UTIL_H */

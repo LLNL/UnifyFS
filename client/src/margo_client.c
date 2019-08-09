@@ -266,6 +266,7 @@ int invoke_client_metaset_rpc(unifyfs_file_attr_t* f_meta)
     in.atime    = f_meta->atime;
     in.mtime    = f_meta->mtime;
     in.ctime    = f_meta->ctime;
+    in.is_laminated = f_meta->is_laminated;
 
     LOGDBG("invoking the metaset rpc function in client");
     hret = margo_forward(handle, &in);
@@ -326,6 +327,7 @@ int invoke_client_metaget_rpc(int gfid,
         file_meta->atime = out.atime;
         file_meta->mtime = out.mtime;
         file_meta->ctime = out.ctime;
+        file_meta->is_laminated = out.is_laminated;
     }
 
     margo_free_output(handle, &out);

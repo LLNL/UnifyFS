@@ -1,4 +1,6 @@
 int UNIFYFS_WRAP(access)(const char *path, int mode)
+int UNIFYFS_WRAP(chmod)(const char *path, mode_t mode)
+int UNIFYFS_WRAP(fchmod)(int fd, mode_t mode)
 int UNIFYFS_WRAP(mkdir)(const char *path, mode_t mode)
 int UNIFYFS_WRAP(rmdir)(const char *path)
 int UNIFYFS_WRAP(rename)(const char *oldpath, const char *newpath)

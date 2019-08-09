@@ -278,7 +278,7 @@ int unifyfs_err_map_to_errno(int rc)
     default:
         break;
     }
-    return EIO;
+    return ec;
 }
 
 /* given an errno error code, return corresponding UnifyFS error code */
@@ -649,10 +649,8 @@ static int unifyfs_fid_store_free(int fid)
 int unifyfs_fid_is_dir(int fid)
 {
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    if (meta) {
-        /* found a file with that id, return value of directory flag */
-        int rc = meta->is_dir;
-        return rc;
+    if (meta && meta->mode & S_IFDIR) {
+        return 1;
     } else {
         /* if it doesn't exist, then it's not a directory? */
         return 0;
@@ -694,6 +692,16 @@ static int unifyfs_gfid_from_fid(const int fid)
     return -EINVAL;
 }
 
+/* Given a fid, return the path.  */
+const char* unifyfs_path_from_fid(int fid)
+{
+    unifyfs_filename_t* fname = &unifyfs_filelist[fid];
+    if (fname->in_use) {
+            return fname->filename;
+    }
+    return NULL;
+}
+
 /* checks to see if a directory is empty
  * assumes that check for is_dir has already been made
  * only checks for full path matches, does not check relative paths,
@@ -732,25 +740,6 @@ off_t unifyfs_fid_size(int fid)
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     return meta->size;
-}
-
-static inline
-void unifyfs_init_file_attr(unifyfs_file_attr_t* fattr, int isdir)
-{
-    if (fattr) {
-        struct timespec tp = { 0, };
-
-        clock_gettime(CLOCK_REALTIME, &tp);
-        fattr->atime = tp;
-        fattr->mtime = tp;
-        fattr->ctime = tp;
-
-        fattr->mode = isdir ? UNIFYFS_STAT_DEFAULT_DIR_MODE
-                            : UNIFYFS_STAT_DEFAULT_FILE_MODE;
-
-        fattr->uid = getuid();
-        fattr->gid = getgid();
-    }
 }
 
 /*
@@ -795,20 +784,43 @@ static int ins_file_meta(unifyfs_fattr_buf_t* ptr_f_meta_log,
     return 0;
 }
 
-int unifyfs_set_global_file_meta(const char* path, int fid, int gfid,
-                                 int isdir)
+unifyfs_filemeta_t* meta;
+int unifyfs_set_global_file_meta(int fid, int gfid)
 {
     int ret = 0;
-    unifyfs_file_attr_t new_fmeta = { 0, };
+    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    unifyfs_file_attr_t new_fmeta = {0};
+    struct timespec tp = {0};
 
-    memset((void*) &new_fmeta, 0, sizeof(new_fmeta));
+    const char* path = unifyfs_path_from_fid(fid);
 
     sprintf(new_fmeta.filename, "%s", path);
 
     new_fmeta.fid = fid;
     new_fmeta.gfid = gfid;
 
-    unifyfs_init_file_attr(&new_fmeta, isdir);
+    clock_gettime(CLOCK_REALTIME, &tp);
+    new_fmeta.atime = tp;
+    new_fmeta.mtime = tp;
+    new_fmeta.ctime = tp;
+
+    new_fmeta.mode = meta->mode;
+    new_fmeta.is_laminated = meta->is_laminated;
+
+    if (meta->is_laminated) {
+        /*
+         * If is_laminated is set, we're either laminating for the first time,
+         * in which case meta->size will have already been calculated and
+         * filled in with the global file size, or, the file was already
+         * laminated.  In either case, we write meta->size to the server.
+         */
+        new_fmeta.size = meta->size;
+    } else {
+        new_fmeta.size = 0;
+    }
+
+    new_fmeta.uid = getuid();
+    new_fmeta.gid = getgid();
 
     ret = invoke_client_metaset_rpc(&new_fmeta);
     if (ret < 0) {
@@ -854,18 +866,13 @@ int unifyfs_gfid_stat(int gfid, struct stat* buf)
         return ret;
     }
 
-    /* execute rpc to get file size */
-    size_t filesize;
-    ret = invoke_client_filesize_rpc(gfid, &filesize);
-    if (ret != UNIFYFS_SUCCESS) {
-        return ret;
+    /* It was decided that non-laminated files return a file size of 0 */
+    if (!fattr.is_laminated) {
+        fattr.size = 0;
     }
 
     /* copy stat structure */
     unifyfs_file_attr_to_stat(&fattr, buf);
-
-    /* set the file size */
-    buf->st_size = filesize;
 
     return UNIFYFS_SUCCESS;
 }
@@ -943,11 +950,12 @@ int unifyfs_fid_create_file(const char* path)
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     meta->size    = 0;
     meta->chunks  = 0;
-    meta->is_dir  = 0;
     meta->log_size = 0;
     meta->storage = FILE_STORAGE_NULL;
     meta->needs_sync = 0;
     meta->flock_status = UNLOCKED;
+    meta->is_laminated = 0;
+    meta->mode = UNIFYFS_STAT_DEFAULT_FILE_MODE;
 
     /* PTHREAD_PROCESS_SHARED allows Process-Shared Synchronization*/
     pthread_spin_init(&meta->fspinlock, PTHREAD_PROCESS_SHARED);
@@ -1013,9 +1021,11 @@ int unifyfs_fid_create_directory(const char* path)
     }
 
     meta = unifyfs_get_meta_from_fid(fid);
-    meta->is_dir = 1;
 
-    ret = unifyfs_set_global_file_meta(path, fid, gfid, 1);
+    /* Set as directory */
+    meta->mode = (meta->mode & ~S_IFREG) | S_IFDIR;
+
+    ret = unifyfs_set_global_file_meta(fid, gfid);
     if (ret) {
         LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
                path, fid);
@@ -1274,6 +1284,17 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         (unifyfs_get_global_file_meta(fid, gfid, &gfattr) == UNIFYFS_SUCCESS);
     found_local = (fid >= 0);
 
+    /*
+     * Catch any case where we could potentially want to write to a laminated
+     * file.
+     */
+    if (gfattr.is_laminated &&
+        ((flags & (O_CREAT | O_TRUNC | O_APPEND | O_WRONLY)) ||
+         (mode & 0222))) {
+            LOGDBG("Can't open with a writable flag on laminated file.");
+            return EROFS;
+    }
+
     /* possibly, the file still exists in our local cache but globally
      * unlinked. Invalidate the entry
      *
@@ -1282,6 +1303,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
     if (found_local && !found_global) {
         LOGDBG("file found locally, but seems to be deleted globally. "
                "invalidating the local cache.");
+            return EROFS;
 
         unifyfs_fid_unlink(fid);
 
@@ -1291,7 +1313,6 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
     /* for all other three cases below, we need to open the file and allocate a
      * file descriptor for the client.
      */
-
     if (!found_local && found_global) {
         /* file has possibly been created by another process.  We need to
          * create a local meta cache and also initialize the local storage
@@ -1375,7 +1396,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         }
 
         /*create a file and send its attribute to key-value store*/
-        ret = unifyfs_set_global_file_meta(path, fid, gfid, 0);
+        ret = unifyfs_set_global_file_meta(fid, gfid);
         if (ret) {
             LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
                    path, fid);

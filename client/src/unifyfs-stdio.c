@@ -266,10 +266,11 @@ static int unifyfs_fopen_parse_mode(
     return UNIFYFS_SUCCESS;
 }
 
-/* calls unifyfs_fid_open to open specified file in mode according to
- * fopen mode semantics, initializes outstream and returns
- * UNIFYFS_SUCCESS if successful, returns some other UNIFYFS error
- * otherwise */
+/*
+ * Calls unifyfs_fid_open() to open specified file in mode according to
+ * fopen mode semantics, initializes outstream and returns UNIFYFS_SUCCESS if
+ * successful.  Returns some other UNIFYFS/errno error otherwise.
+ */
 static int unifyfs_fopen(
     const char* path,
     const char* mode,

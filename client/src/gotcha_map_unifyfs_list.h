@@ -4,6 +4,8 @@
 #include <stdio.h>
 
 UNIFYFS_DEF(access, int, (const char* path, int mode));
+UNIFYFS_DEF(chmod, int, (const char* path, mode_t mode));
+UNIFYFS_DEF(fchmod, int, (int fd, mode_t mode));
 UNIFYFS_DEF(mkdir, int, (const char* path, mode_t mode));
 UNIFYFS_DEF(rmdir, int, (const char* path));
 UNIFYFS_DEF(rename, int, (const char* oldpath, const char* newpath));
@@ -106,6 +108,8 @@ UNIFYFS_DEF(ungetwc, wint_t, (wint_t c, FILE* stream));
 
 struct gotcha_binding_t wrap_unifyfs_list[] = {
     { "access", UNIFYFS_WRAP(access), &UNIFYFS_REAL(access) },
+    { "chmod", UNIFYFS_WRAP(chmod), &UNIFYFS_REAL(chmod) },
+    { "fchmod", UNIFYFS_WRAP(fchmod), &UNIFYFS_REAL(fchmod) },
     { "mkdir", UNIFYFS_WRAP(mkdir), &UNIFYFS_REAL(mkdir) },
     { "rmdir", UNIFYFS_WRAP(rmdir), &UNIFYFS_REAL(rmdir) },
     { "rename", UNIFYFS_WRAP(rename), &UNIFYFS_REAL(rename) },

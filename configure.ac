@@ -194,6 +194,8 @@ AM_CONDITIONAL([HAVE_HDF5], [test x$with_hdf5 = xyes])
 # libc functions wrapped by unifyfs
 
 CP_WRAPPERS+="-Wl,-wrap,access"
+CP_WRAPPERS+=",-wrap,chmod"
+CP_WRAPPERS+=",-wrap,fchmod"
 CP_WRAPPERS+=",-wrap,lio_listio"
 CP_WRAPPERS+=",-wrap,mkdir"
 CP_WRAPPERS+=",-wrap,rmdir"

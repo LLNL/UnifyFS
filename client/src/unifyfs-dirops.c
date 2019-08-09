@@ -127,7 +127,7 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
          * global metadb. is it safe to invalidate the local entry and
          * re-populate with the global data?
          */
-        if (!meta->is_dir) {
+        if (!unifyfs_fid_is_dir(fid)) {
             errno = EIO;
             return NULL;
         }
@@ -146,7 +146,7 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
         }
 
         meta = unifyfs_get_meta_from_fid(fid);
-        meta->is_dir   = 1;
+        meta->mode = (meta->mode & ~S_IFREG) | S_IFDIR; /* set as directory */
         meta->size     = sb.st_size;
         meta->chunks   = sb.st_blocks;
         meta->log_size = 0;
