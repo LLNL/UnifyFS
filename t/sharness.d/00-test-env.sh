@@ -22,7 +22,9 @@ export UNIFYFS_TEST_RUN_SCRIPT=$UNIFYFS_BUILD_DIR/t/test_run_env.sh
 #
 # Find MPI job launcher.
 #
-if test -n "$(which srun 2>/dev/null)"; then
+if test -n "$(which jsrun 2>/dev/null)"; then
+    JOB_RUN_COMMAND="jsrun -r1 -n1"
+elif test -n "$(which srun 2>/dev/null)"; then
     JOB_RUN_COMMAND="srun -n1 -N1"
 elif test -n "$(which mpirun 2>/dev/null)"; then
     JOB_RUN_COMMAND="mpirun -wd $UNIFYFS_BUILD_DIR -np 1"

@@ -28,9 +28,9 @@ int main(int argc, char* argv[])
     rc = unifyfs_unmount();
     ok(rc == 0, "unifyfs_unmount succeeds (rc=%d)", rc);
 
-    done_testing();
-
     MPI_Finalize();
+
+    done_testing();
 
     return 0;
 }
