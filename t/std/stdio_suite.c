@@ -71,9 +71,9 @@ int main(int argc, char* argv[])
 
     fopen_fclose_test(unifyfs_root);
 
-    done_testing();
-
     MPI_Finalize();
+
+    done_testing();
 
     return 0;
 }

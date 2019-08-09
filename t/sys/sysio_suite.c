@@ -81,9 +81,9 @@ int main(int argc, char* argv[])
 
     open64_test(unifyfs_root);
 
-    done_testing();
-
     MPI_Finalize();
+
+    done_testing();
 
     return 0;
 }
