@@ -6,8 +6,8 @@
  ********************************************/
 
 #include <margo.h>
-#include "unifycr_meta.h"
-#include "unifycr_client_rpcs.h"
+#include "unifyfs_meta.h"
+#include "unifyfs_client_rpcs.h"
 
 typedef struct ClientRpcIds {
     hg_id_t filesize_id;
@@ -29,41 +29,31 @@ typedef struct ClientRpcContext {
 } client_rpc_context_t;
 
 
-int unifycr_client_rpc_init(int local_rank_idx,
-                            int app_id);
+int unifyfs_client_rpc_init(void);
 
-int unifycr_client_rpc_finalize(void);
+int unifyfs_client_rpc_finalize(void);
 
-void fill_client_mount_info(unifycr_mount_in_t* in);
+void fill_client_mount_info(unifyfs_mount_in_t* in);
 
 int invoke_client_mount_rpc(void);
 
 int invoke_client_unmount_rpc(void);
 
-int invoke_client_metaset_rpc(unifycr_file_attr_t* f_meta);
+int invoke_client_metaset_rpc(unifyfs_file_attr_t* f_meta);
 
 int invoke_client_metaget_rpc(int gfid,
-                              unifycr_file_attr_t* f_meta);
+                              unifyfs_file_attr_t* f_meta);
 
-int invoke_client_fsync_rpc(int app_id,
-                            int local_rank_idx,
-                            int gfid);
+int invoke_client_fsync_rpc(int gfid);
 
-int invoke_client_filesize_rpc(int app_id,
-                               int local_rank_idx,
-                               int gfid,
+int invoke_client_filesize_rpc(int gfid,
                                size_t* filesize);
 
-int invoke_client_read_rpc(int app_id,
-                               int local_rank_idx,
-                               int gfid,
-                               size_t offset,
-                               size_t length);
+int invoke_client_read_rpc(int gfid,
+                           size_t offset,
+                           size_t length);
 
-int invoke_client_mread_rpc(int app_id,
-                            int local_rank_idx,
-                            int gfid,
-                            int read_count,
+int invoke_client_mread_rpc(int read_count,
                             size_t size,
                             void* buffer);
 

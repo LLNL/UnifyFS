@@ -13,7 +13,9 @@ libexec_PROGRAMS = \
   app-mpiio-gotcha app-mpiio-static \
   app-btio-gotcha app-btio-static \
   app-tileio-gotcha app-tileio-static \
-  transfer-gotcha transfer-static
+  transfer-gotcha transfer-static \
+  size-gotcha size-static \
+  chmod-gotcha chmod-static
 
 if HAVE_FORTRAN
 libexec_PROGRAMS += \
@@ -41,20 +43,20 @@ test_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) \
 if HAVE_FORTRAN
 test_ftn_flags   = $(AM_FCFLAGS) $(MPI_FFLAGS) \
    -I$(top_srcdir)/client/src -I$(top_srcdir)/common/src
-test_ftn_ldadd   = $(top_builddir)/client/src/libunifycrf.la -lrt -lm $(FCLIBS)
+test_ftn_ldadd   = $(top_builddir)/client/src/libunifyfsf.la -lrt -lm $(FCLIBS)
 test_ftn_ldflags = $(AM_LDFLAGS) $(MPI_FLDFLAGS) \
     $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 endif
 
-test_gotcha_ldadd   = $(top_builddir)/client/src/libunifycr_gotcha.la -lrt -lm
+test_gotcha_ldadd   = $(top_builddir)/client/src/libunifyfs_gotcha.la -lrt -lm
 test_gotcha_ldflags = $(AM_LDFLAGS) $(MPI_CLDFLAGS) \
     $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 
-test_posix_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) -DDISABLE_UNIFYCR
+test_posix_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) -DDISABLE_UNIFYFS
 test_posix_ldadd    = -lrt -lm
 test_posix_ldflags  = $(AM_LDFLAGS) $(MPI_CLDFLAGS)
 
-test_static_ldadd   = $(top_builddir)/client/src/libunifycr.la -lrt -lm
+test_static_ldadd   = $(top_builddir)/client/src/libunifyfs.la -lrt -lm
 test_static_ldflags = -static $(CP_WRAPPERS) $(AM_LDFLAGS) $(MPI_CLDFLAGS) \
     $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 
@@ -258,4 +260,23 @@ transfer_static_CPPFLAGS = $(test_cppflags)
 transfer_static_LDADD    = $(test_static_ldadd)
 transfer_static_LDFLAGS  = $(test_static_ldflags)
 
+size_gotcha_SOURCES  = size.c testutil.c
+size_gotcha_CPPFLAGS = $(test_cppflags)
+size_gotcha_LDADD    = $(test_gotcha_ldadd)
+size_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+size_static_SOURCES  = size.c testutil.c
+size_static_CPPFLAGS = $(test_cppflags)
+size_static_LDADD    = $(test_static_ldadd)
+size_static_LDFLAGS  = $(test_static_ldflags)
+
+chmod_gotcha_SOURCES  = chmod.c testutil.c
+chmod_gotcha_CPPFLAGS = $(test_cppflags)
+chmod_gotcha_LDADD    = $(test_gotcha_ldadd)
+chmod_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+chmod_static_SOURCES  = chmod.c testutil.c
+chmod_static_CPPFLAGS = $(test_cppflags)
+chmod_static_LDADD    = $(test_static_ldadd)
+chmod_static_LDFLAGS  = $(test_static_ldflags)
 

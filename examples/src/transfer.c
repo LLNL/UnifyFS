@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 #include <config.h>
 
@@ -29,7 +29,7 @@
 #include <getopt.h>
 #include <time.h>
 #include <mpi.h>
-#include <unifycr.h>
+#include <unifyfs.h>
 
 #include "testlib.h"
 
@@ -39,8 +39,8 @@ static int rank_worker;
 static int parallel;
 static int debug;
 
-static char* mountpoint = "/unifycr";  /* unifycr mountpoint */
-static int unmount;                /* unmount unifycr after running the test */
+static char* mountpoint = "/unifyfs";  /* unifyfs mountpoint */
+static int unmount;                /* unmount unifyfs after running the test */
 
 static char* srcpath;
 static char* dstpath;
@@ -67,8 +67,8 @@ static const char* usage_str =
     " -d, --debug                  pause before running test\n"
     "                              (handy for attaching in debugger)\n"
     " -h, --help                   help message\n"
-    " -m, --mount=<mountpoint>     use <mountpoint> for unifycr\n"
-    "                              (default: /unifycr)\n"
+    " -m, --mount=<mountpoint>     use <mountpoint> for unifyfs\n"
+    "                              (default: /unifyfs)\n"
     " -p, --parallel               parallel transfer\n"
     " -r, --rank=<rank>            use <rank> for transfer (default: 0)\n"
     " -u, --unmount                unmount the filesystem after test\n"
@@ -144,14 +144,14 @@ int main(int argc, char** argv)
         test_pause(rank, "Attempting to mount");
     }
 
-    ret = unifycr_mount(mountpoint, rank, total_ranks, 0);
+    ret = unifyfs_mount(mountpoint, rank, total_ranks, 0);
     if (ret) {
-        test_print(rank, "unifycr_mount failed (return = %d)", ret);
+        test_print(rank, "unifyfs_mount failed (return = %d)", ret);
         goto out;
     }
 
     if (parallel) {
-        ret = unifycr_transfer_file_parallel(srcpath, dstpath);
+        ret = unifyfs_transfer_file_parallel(srcpath, dstpath);
         if (ret) {
             test_print(rank, "copy failed (%d: %s)", ret, strerror(ret));
         }
@@ -164,7 +164,7 @@ int main(int argc, char** argv)
         MPI_Barrier(MPI_COMM_WORLD);
 
         if (rank == rank_worker) {
-            ret = unifycr_transfer_file_serial(srcpath, dstpath);
+            ret = unifyfs_transfer_file_serial(srcpath, dstpath);
             if (ret) {
                 test_print(rank, "copy failed (%d: %s)", ret, strerror(ret));
             }
@@ -177,7 +177,7 @@ int main(int argc, char** argv)
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (unmount) {
-        unifycr_unmount();
+        unifyfs_unmount();
     }
 
 out:

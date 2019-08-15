@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -50,8 +50,8 @@
 #include <sys/time.h>
 #include <aio.h>
 
-#ifndef DISABLE_UNIFYCR
-# include <unifycr.h>
+#ifndef DISABLE_UNIFYFS
+# include <unifyfs.h>
 #endif
 
 #define TEST_STR_LEN 1024
@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
     size_t index, i, j, offset = 0;
     ssize_t rc;
     int ret;
-    int pat = 0, c, num_rank, rank, fd, use_unifycr = 0;
+    int pat = 0, c, num_rank, rank, fd, use_unifyfs = 0;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &num_rank);
@@ -106,14 +106,14 @@ int main(int argc, char* argv[])
         case 't': /*size of each write */
             tran_sz = atol(optarg);
             break;
-        case 'u': /* use unifycr */
-            use_unifycr = atoi(optarg);
+        case 'u': /* use unifyfs */
+            use_unifyfs = atoi(optarg);
             break;
         }
     }
 
-    if (use_unifycr) {
-        strcpy(mntpt, "/unifycr");
+    if (use_unifyfs) {
+        strcpy(mntpt, "/unifyfs");
     } else {
         strcpy(mntpt, "/tmp");
     }
@@ -148,10 +148,10 @@ int main(int argc, char* argv[])
     int byte = (int)'0' + rank;
     memset(buf, byte, tran_sz);
 
-#ifndef DISABLE_UNIFYCR
-    if (use_unifycr) {
-        ret = unifycr_mount(mntpt, rank, num_rank, 0);
-        if (UNIFYCR_SUCCESS != ret) {
+#ifndef DISABLE_UNIFYFS
+    if (use_unifyfs) {
+        ret = unifyfs_mount(mntpt, rank, num_rank, 0);
+        if (UNIFYFS_SUCCESS != ret) {
             MPI_Abort(MPI_COMM_WORLD, ret);
         }
         MPI_Barrier(MPI_COMM_WORLD);
@@ -298,9 +298,9 @@ int main(int argc, char* argv[])
         fflush(stdout);
     }
 
-#ifndef DISABLE_UNIFYCR
-    if (use_unifycr) {
-        unifycr_unmount();
+#ifndef DISABLE_UNIFYFS
+    if (use_unifyfs) {
+        unifyfs_unmount();
     }
 #endif
 

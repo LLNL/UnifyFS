@@ -2,39 +2,39 @@
 Examples
 ********
 
-There are several examples_ available on ways to use UnifyCR. These examples
+There are several examples_ available on ways to use UnifyFS. These examples
 build into static and GOTCHA versions (pure POSIX versions coming soon) and are
 also used as a form of :doc:`intregraton testing <testing>`.
 
 Examples Locations
 ==================
 
-The example programs can be found in two locations, where UnifyCR is built and
-where UnifyCR is installed.
+The example programs can be found in two locations, where UnifyFS is built and
+where UnifyFS is installed.
 
 Install Location
 ----------------
 
-Upon installation of UnifyCR, the example programs are installed into the
+Upon installation of UnifyFS, the example programs are installed into the
 *install/libexec* folder.
 
 Installed with Spack
 ^^^^^^^^^^^^^^^^^^^^
 
-The Spack installation location of UnifyCR can be found with the command
-``spack location -i unifycr``.
+The Spack installation location of UnifyFS can be found with the command
+``spack location -i unifyfs``.
 
 To easily navigate to this location and find the examples, do:
 
 .. code-block:: Bash
 
-    $ spack cd -i unifycr
+    $ spack cd -i unifyfs
     $ cd libexec
 
 Installed without Spack
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-The autotools installation of UnifyCR will place the example programs in the
+The autotools installation of UnifyFS will place the example programs in the
 *libexec/* directory of the path provided to ``--prefix=/path/to/install`` during
 the configure step of :doc:`building and installing <build-intercept>`.
 
@@ -44,16 +44,16 @@ Build Location
 Built with Spack
 ^^^^^^^^^^^^^^^^
 
-The Spack build location of UnifyCR (on a successful install) only exists when
+The Spack build location of UnifyFS (on a successful install) only exists when
 ``--keep-stage`` in included during installation or if the build fails. This
-location can be found with the command ``spack location unifycr``.
+location can be found with the command ``spack location unifyfs``.
 
 To navigate to the location of the static and POSIX examples, do:
 
 .. code-block:: Bash
 
-    $ spack install --keep-stage unifycr
-    $ spack cd unifycr
+    $ spack install --keep-stage unifyfs
+    $ spack cd unifyfs
     $ cd spack-build/examples/src
 
 The GOTCHA examples are one directory deeper in
@@ -61,25 +61,27 @@ The GOTCHA examples are one directory deeper in
 
 .. note::
 
-    If you installed UnifyCR with any variants, in order to navigate to the
+    If you installed UnifyFS with any variants, in order to navigate to the
     build directory you must include these variants in the ``spack cd``
     command. E.g.:
 
-    ``spack cd unifycr+hdf5 ^hdf5~mpi``
+    ``spack cd unifyfs+hdf5 ^hdf5~mpi``
 
 Built without Spack
 ^^^^^^^^^^^^^^^^^^^
 
-The autotools build of UnifyCR will place the static and POSIX example programs
+The autotools build of UnifyFS will place the static and POSIX example programs
 in the *examples/src* directory and the GOTCHA example programs in the
 *examples/src/.libs* directory of your build directory.
 
 ------------
 
+.. _run-ex-label:
+
 Running the Examples
 ====================
 
-In order to run any of the example programs you first need to start the UnifyCR
+In order to run any of the example programs you first need to start the UnifyFS
 server daemon on the nodes in the job allocation. To do this, see
 :doc:`start-stop`.
 
@@ -88,42 +90,54 @@ to aid in this process.
 
 .. code-block:: none
 
-    [prompt]$ ./sysio-write-static --help
+    [prompt]$ ./write-static --help
 
-    Usage: sysio-write-static [options...]
+    Usage: write-static [options...]
 
     Available options:
-     -b, --blocksize=<size in bytes>  logical block size for the target file
-                                      (default 1048576, 1MB)
-     -n, --nblocks=<count>            count of blocks each process will write
-                                      (default 128)
-     -c, --chunksize=<size in bytes>  I/O chunk size for each write operation
-                                      (default 64436, 64KB)
-     -d, --debug                      pause before running test
-                                      (handy for attaching in debugger)
-     -f, --filename=<filename>        target file name under mountpoint
-                                      (default: testfile)
-     -h, --help                       help message
-     -L, --lipsum                     generate contents to verify correctness
-     -m, --mount=<mountpoint>         use <mountpoint> for unifycr
-                                      (default: /unifycr)
-     -P, --pwrite                     use pwrite(2) instead of write(2)
-     -p, --pattern=<pattern>          should be 'n1'(n to 1) or 'nn' (n to n)
-                                      (default: n1)
-     -S, --synchronous                sync metadata on each write
-     -s, --standard                   do not use unifycr but run standard I/O
-     -u, --unmount                    unmount the filesystem after test
-
-Notice the mountpoint is defaulted to ``-mount=/unifycr``. If you chose a
-different mountpoint during :doc:`start-stop`, the ``-m`` option for the
-example will need to be provided to match.
+     -a, --appid=<id>          use given application id
+                               (default: 0)
+     -A, --aio                 use asynchronous I/O instead of read|write
+                               (default: off)
+     -b, --blocksize=<bytes>   I/O block size
+                               (default: 16 MiB)
+     -c, --chunksize=<bytes>   I/O chunk size for each operation
+                               (default: 1 MiB)
+     -d, --debug               for debugging, wait for input (at rank 0) at start
+                               (default: off)
+     -f, --file=<filename>     target file name (or path) under mountpoint
+                               (default: 'testfile')
+     -k, --check               check data contents upon read
+                               (default: off)
+     -L, --listio              use lio_listio instead of read|write
+                               (default: off)
+     -m, --mount=<mountpoint>  use <mountpoint> for unifyfs
+                               (default: /unifyfs)
+     -M, --mapio               use mmap instead of read|write
+                               (default: off)
+     -n, --nblocks=<count>     count of blocks each process will read|write
+                               (default: 32)
+     -p, --pattern=<pattern>   'n1' (N-to-1 shared file) or 'nn' (N-to-N file per process)
+                               (default: 'n1')
+     -P, --prdwr               use pread|pwrite instead of read|write
+                               (default: off)
+     -S, --stdio               use fread|fwrite instead of read|write
+                               (default: off)
+     -U, --disable-unifyfs     do not use UnifyFS
+                               (default: enable UnifyFS)
+     -v, --verbose             print verbose information
+                               (default: off)
+     -V, --vecio               use readv|writev instead of read|write
+                               (default: off)
+     -x, --shuffle             read different data than written
+                               (default: off)
 
 One form of running this example could be:
 
 .. code-block:: Bash
 
-    $ srun -N4 -n4 sysio-write-static -m /myMountPoint -f myTestFile
+    $ srun -N4 -n4 write-static -m /myMountPoint -f myTestFile
 
 .. explicit external hyperlink targets
 
-.. _examples: https://github.com/LLNL/UnifyCR/tree/dev/examples/src
+.. _examples: https://github.com/LLNL/UnifyFS/tree/dev/examples/src

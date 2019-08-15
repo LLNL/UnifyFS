@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*  Copyright (c) 2018 - Michael J. Brim
@@ -19,8 +19,9 @@
  *  MIT License - See LICENSE.tedium
  */
 
-#ifndef _UNIFYCR_ERROR_ENUMERATOR_H_
-#define _UNIFYCR_ERROR_ENUMERATOR_H_
+#ifndef _UNIFYFS_ERROR_ENUMERATOR_H_
+#define _UNIFYFS_ERROR_ENUMERATOR_H_
+#include <errno.h>
 
 /**
  * @brief enumerator list expanded many times with varied ENUMITEM() definitions
@@ -28,7 +29,7 @@
  * @param item name
  * @param item short description
  */
-#define UNIFYCR_ERROR_ENUMERATOR                                        \
+#define UNIFYFS_ERROR_ENUMERATOR                                        \
     ENUMITEM(ACCEPT, "Failed to accept RDMA connection.")               \
     ENUMITEM(ADDR, "Failed to parse IP address and port.")              \
     ENUMITEM(APPCONFIG, "Failed to initialize application config.")     \
@@ -91,42 +92,49 @@
 extern "C" {
 #endif
 
+/* #define __ELASTERROR if our errno.h doesn't define it for us */
+#ifndef __ELASTERROR
+#define __ELASTERROR    2000
+#endif
+
 /**
  * @brief enum for error codes
  */
 typedef enum {
-    UNIFYCR_INVALID_ERROR = -2,
-    UNIFYCR_FAILURE = -1,
-    UNIFYCR_SUCCESS = 0,
+    UNIFYFS_INVALID_ERROR = -2,
+    UNIFYFS_FAILURE = -1,
+    UNIFYFS_SUCCESS = 0,
+    /* Start our error numbers after the standard errno.h ones */
+    UNIFRFS_START_OF_ERRORS = __ELASTERROR,
 #define ENUMITEM(name, desc)                    \
-        UNIFYCR_ERROR_ ## name,
-    UNIFYCR_ERROR_ENUMERATOR
+        UNIFYFS_ERROR_ ## name,
+    UNIFYFS_ERROR_ENUMERATOR
 #undef ENUMITEM
-    UNIFYCR_ERROR_MAX
-} unifycr_error_e;
+    UNIFYFS_ERROR_MAX
+} unifyfs_error_e;
 
 /**
  * @brief get C-string for given error enum value
  */
-const char *unifycr_error_enum_str(unifycr_error_e e);
+const char *unifyfs_error_enum_str(unifyfs_error_e e);
 
 /**
  * @brief get description for given error enum value
  */
-const char *unifycr_error_enum_description(unifycr_error_e e);
+const char *unifyfs_error_enum_description(unifyfs_error_e e);
 
 /**
  * @brief check validity of given error enum value
  */
-int check_valid_unifycr_error_enum(unifycr_error_e e);
+int check_valid_unifyfs_error_enum(unifyfs_error_e e);
 
 /**
  * @brief get enum value for given error C-string
  */
-unifycr_error_e unifycr_error_enum_from_str(const char *s);
+unifyfs_error_e unifyfs_error_enum_from_str(const char *s);
 
 #ifdef __cplusplus
 } /* extern C */
 #endif
 
-#endif /* UNIFYCR_ERROR_ENUMERATOR_H */
+#endif /* UNIFYFS_ERROR_ENUMERATOR_H */

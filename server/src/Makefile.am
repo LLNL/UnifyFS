@@ -1,34 +1,33 @@
-noinst_LIBRARIES = libunifycrd.a
+noinst_LIBRARIES = libunifyfsd.a
 
-libunifycrd_a_SOURCES = \
+libunifyfsd_a_SOURCES = \
     arraylist.c \
     arraylist.h \
     margo_server.c \
     margo_server.h \
-    unifycr_cmd_handler.c \
-    unifycr_global.h \
-    unifycr_metadata.c \
-    unifycr_metadata.h \
-    unifycr_request_manager.c \
-    unifycr_request_manager.h \
-    unifycr_service_manager.c \
-    unifycr_service_manager.h \
-    unifycr_sock.c \
-    unifycr_sock.h
+    unifyfs_cmd_handler.c \
+    unifyfs_global.h \
+    unifyfs_metadata.c \
+    unifyfs_metadata.h \
+    unifyfs_request_manager.c \
+    unifyfs_request_manager.h \
+    unifyfs_service_manager.c \
+    unifyfs_service_manager.h \
+    unifyfs_sock.c \
+    unifyfs_sock.h
 
-bin_PROGRAMS = unifycrd
+bin_PROGRAMS = unifyfsd
 
-unifycrd_SOURCES = unifycr_init.c \
-                   unifycr_init.h
+unifyfsd_SOURCES = unifyfs_init.c
 
-unifycrd_LDFLAGS = -static \
+unifyfsd_LDFLAGS = -static \
   $(LEVELDB_LDFLAGS) \
   $(MARGO_LDFLAGS) \
   $(FLATCC_LDFLAGS)
 
-unifycrd_LDADD = \
-    libunifycrd.a \
-    $(top_builddir)/common/src/libunifycr_common.la \
+unifyfsd_LDADD = \
+    libunifyfsd.a \
+    $(top_builddir)/common/src/libunifyfs_common.la \
     $(top_builddir)/meta/src/libmdhim.a \
     $(LEVELDB_LIBS) \
     $(MPI_CLDFLAGS) \

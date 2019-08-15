@@ -17,57 +17,57 @@
 #define flatbuffers_extension ".bin"
 #endif
 
-#define __unifycr_Extent_formal_args , uint32_t v0, uint64_t v1, uint64_t v2
-#define __unifycr_Extent_call_args , v0, v1, v2
-static inline unifycr_Extent_t *unifycr_Extent_assign(unifycr_Extent_t *p, uint32_t v0, uint64_t v1, uint64_t v2)
+#define __unifyfs_Extent_formal_args , uint32_t v0, uint64_t v1, uint64_t v2
+#define __unifyfs_Extent_call_args , v0, v1, v2
+static inline unifyfs_Extent_t *unifyfs_Extent_assign(unifyfs_Extent_t *p, uint32_t v0, uint64_t v1, uint64_t v2)
 { p->fid = v0; p->offset = v1; p->length = v2;
   return p; }
-static inline unifycr_Extent_t *unifycr_Extent_copy(unifycr_Extent_t *p, const unifycr_Extent_t *p2)
+static inline unifyfs_Extent_t *unifyfs_Extent_copy(unifyfs_Extent_t *p, const unifyfs_Extent_t *p2)
 { p->fid = p2->fid; p->offset = p2->offset; p->length = p2->length;
   return p; }
-static inline unifycr_Extent_t *unifycr_Extent_assign_to_pe(unifycr_Extent_t *p, uint32_t v0, uint64_t v1, uint64_t v2)
+static inline unifyfs_Extent_t *unifyfs_Extent_assign_to_pe(unifyfs_Extent_t *p, uint32_t v0, uint64_t v1, uint64_t v2)
 { flatbuffers_uint32_assign_to_pe(&p->fid, v0); flatbuffers_uint64_assign_to_pe(&p->offset, v1); flatbuffers_uint64_assign_to_pe(&p->length, v2);
   return p; }
-static inline unifycr_Extent_t *unifycr_Extent_copy_to_pe(unifycr_Extent_t *p, const unifycr_Extent_t *p2)
+static inline unifyfs_Extent_t *unifyfs_Extent_copy_to_pe(unifyfs_Extent_t *p, const unifyfs_Extent_t *p2)
 { flatbuffers_uint32_copy_to_pe(&p->fid, &p2->fid); flatbuffers_uint64_copy_to_pe(&p->offset, &p2->offset); flatbuffers_uint64_copy_to_pe(&p->length, &p2->length);
   return p; }
-static inline unifycr_Extent_t *unifycr_Extent_assign_from_pe(unifycr_Extent_t *p, uint32_t v0, uint64_t v1, uint64_t v2)
+static inline unifyfs_Extent_t *unifyfs_Extent_assign_from_pe(unifyfs_Extent_t *p, uint32_t v0, uint64_t v1, uint64_t v2)
 { flatbuffers_uint32_assign_from_pe(&p->fid, v0); flatbuffers_uint64_assign_from_pe(&p->offset, v1); flatbuffers_uint64_assign_from_pe(&p->length, v2);
   return p; }
-static inline unifycr_Extent_t *unifycr_Extent_copy_from_pe(unifycr_Extent_t *p, const unifycr_Extent_t *p2)
+static inline unifyfs_Extent_t *unifyfs_Extent_copy_from_pe(unifyfs_Extent_t *p, const unifyfs_Extent_t *p2)
 { flatbuffers_uint32_copy_from_pe(&p->fid, &p2->fid); flatbuffers_uint64_copy_from_pe(&p->offset, &p2->offset); flatbuffers_uint64_copy_from_pe(&p->length, &p2->length);
   return p; }
-__flatbuffers_build_struct(flatbuffers_, unifycr_Extent, 24, 8, unifycr_Extent_identifier, unifycr_Extent_type_identifier)
+__flatbuffers_build_struct(flatbuffers_, unifyfs_Extent, 24, 8, unifyfs_Extent_identifier, unifyfs_Extent_type_identifier)
 
-static const flatbuffers_voffset_t __unifycr_ReadRequest_required[] = { 0 };
-typedef flatbuffers_ref_t unifycr_ReadRequest_ref_t;
-static unifycr_ReadRequest_ref_t unifycr_ReadRequest_clone(flatbuffers_builder_t *B, unifycr_ReadRequest_table_t t);
-__flatbuffers_build_table(flatbuffers_, unifycr_ReadRequest, 1)
+static const flatbuffers_voffset_t __unifyfs_ReadRequest_required[] = { 0 };
+typedef flatbuffers_ref_t unifyfs_ReadRequest_ref_t;
+static unifyfs_ReadRequest_ref_t unifyfs_ReadRequest_clone(flatbuffers_builder_t *B, unifyfs_ReadRequest_table_t t);
+__flatbuffers_build_table(flatbuffers_, unifyfs_ReadRequest, 1)
 
-#define __unifycr_ReadRequest_formal_args , unifycr_Extent_vec_ref_t v0
-#define __unifycr_ReadRequest_call_args , v0
-static inline unifycr_ReadRequest_ref_t unifycr_ReadRequest_create(flatbuffers_builder_t *B __unifycr_ReadRequest_formal_args);
-__flatbuffers_build_table_prolog(flatbuffers_, unifycr_ReadRequest, unifycr_ReadRequest_identifier, unifycr_ReadRequest_type_identifier)
+#define __unifyfs_ReadRequest_formal_args , unifyfs_Extent_vec_ref_t v0
+#define __unifyfs_ReadRequest_call_args , v0
+static inline unifyfs_ReadRequest_ref_t unifyfs_ReadRequest_create(flatbuffers_builder_t *B __unifyfs_ReadRequest_formal_args);
+__flatbuffers_build_table_prolog(flatbuffers_, unifyfs_ReadRequest, unifyfs_ReadRequest_identifier, unifyfs_ReadRequest_type_identifier)
 
-__flatbuffers_build_vector_field(0, flatbuffers_, unifycr_ReadRequest_extents, unifycr_Extent, unifycr_Extent_t, unifycr_ReadRequest)
+__flatbuffers_build_vector_field(0, flatbuffers_, unifyfs_ReadRequest_extents, unifyfs_Extent, unifyfs_Extent_t, unifyfs_ReadRequest)
 
-static inline unifycr_ReadRequest_ref_t unifycr_ReadRequest_create(flatbuffers_builder_t *B __unifycr_ReadRequest_formal_args)
+static inline unifyfs_ReadRequest_ref_t unifyfs_ReadRequest_create(flatbuffers_builder_t *B __unifyfs_ReadRequest_formal_args)
 {
-    if (unifycr_ReadRequest_start(B)
-        || unifycr_ReadRequest_extents_add(B, v0)) {
+    if (unifyfs_ReadRequest_start(B)
+        || unifyfs_ReadRequest_extents_add(B, v0)) {
         return 0;
     }
-    return unifycr_ReadRequest_end(B);
+    return unifyfs_ReadRequest_end(B);
 }
 
-static unifycr_ReadRequest_ref_t unifycr_ReadRequest_clone(flatbuffers_builder_t *B, unifycr_ReadRequest_table_t t)
+static unifyfs_ReadRequest_ref_t unifyfs_ReadRequest_clone(flatbuffers_builder_t *B, unifyfs_ReadRequest_table_t t)
 {
     __flatbuffers_memoize_begin(B, t);
-    if (unifycr_ReadRequest_start(B)
-        || unifycr_ReadRequest_extents_pick(B, t)) {
+    if (unifyfs_ReadRequest_start(B)
+        || unifyfs_ReadRequest_extents_pick(B, t)) {
         return 0;
     }
-    __flatbuffers_memoize_end(B, t, unifycr_ReadRequest_end(B));
+    __flatbuffers_memoize_end(B, t, unifyfs_ReadRequest_end(B));
 }
 
 #include "flatcc/flatcc_epilogue.h"

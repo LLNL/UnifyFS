@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 #include <errno.h>
@@ -20,16 +20,16 @@
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
 
-/* This function contains the tests for UNIFYCR_WRAP(creat) and
- * UNIFYCR_WRAP(close) found in client/src/unifycr-sysio.c.
+/* This function contains the tests for UNIFYFS_WRAP(creat) and
+ * UNIFYFS_WRAP(close) found in client/src/unifyfs-sysio.c.
  *
  * Notice the tests are ordered in a logical testing order. Changing the order
  * or adding new tests in between two others could negatively affect the
  * desired results. */
-int creat_close_test(char* unifycr_root)
+int creat_close_test(char* unifyfs_root)
 {
     /* Diagnostic message for reading and debugging output */
-    diag("Starting UNIFYCR_WRAP(creat/close) tests");
+    diag("Starting UNIFYFS_WRAP(creat/close) tests");
 
     char path[64];
     int mode = 0600;
@@ -37,7 +37,7 @@ int creat_close_test(char* unifycr_root)
     int rc = -1;
 
     /* Create a random file name at the mountpoint path to test on */
-    testutil_rand_path(path, sizeof(path), unifycr_root);
+    testutil_rand_path(path, sizeof(path), unifyfs_root);
 
     /* Verify closing a non-existent file fails with errno=EBADF */
     errno = 0;
@@ -81,7 +81,7 @@ int creat_close_test(char* unifycr_root)
      * checks if anything files are found in the mountpoint, meaning creat
      * wasn't wrapped properly. */
 
-    diag("Finished UNIFYCR_WRAP(creat/close) tests");
+    diag("Finished UNIFYFS_WRAP(creat/close) tests");
 
     return 0;
 }

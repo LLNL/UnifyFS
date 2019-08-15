@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -218,7 +218,7 @@ static int cmp_byte_compare(void* arg, const char* a, size_t alen,
 	return ret;
 }
 
-static int cmp_unifycr_compare(void* arg, const char* a, size_t alen,
+static int cmp_unifyfs_compare(void* arg, const char* a, size_t alen,
 			    const char* b, size_t blen) {
 	int ret;
 
@@ -329,9 +329,9 @@ int mdhim_leveldb_open(void **dbh, void **dbs, char *path, int flags, int key_ty
 		mdhimdb->cmp = leveldb_comparator_create(NULL, cmp_destroy, cmp_string_compare, cmp_name);
 		mdhimdb->compare = cmp_string_compare;
 		break;
-	case MDHIM_UNIFYCR_KEY:
-		mdhimdb->cmp = leveldb_comparator_create(NULL, cmp_destroy, cmp_unifycr_compare, cmp_name);
-		mdhimdb->compare = cmp_unifycr_compare;
+	case MDHIM_UNIFYFS_KEY:
+		mdhimdb->cmp = leveldb_comparator_create(NULL, cmp_destroy, cmp_unifyfs_compare, cmp_name);
+		mdhimdb->compare = cmp_unifyfs_compare;
 	default:
 		mdhimdb->cmp = leveldb_comparator_create(NULL, cmp_destroy, cmp_byte_compare, cmp_name);
 		mdhimdb->compare = cmp_byte_compare;
@@ -963,9 +963,9 @@ int leveldb_batch_ranges(void *dbh, char **key, int32_t *key_len,
         start_ndx = 2 * i;
         end_ndx = start_ndx + 1;
         /* printf("range %d: fid is %d, start_offset=%zu end_offset=%zu\n",
-         *        i, UNIFYCR_KEY_FID(key[start_ndx]),
-         *        UNIFYCR_KEY_OFF(key[start_ndx]),
-         *        UNIFYCR_KEY_OFF(key[end_ndx]));
+         *        i, UNIFYFS_KEY_FID(key[start_ndx]),
+         *        UNIFYFS_KEY_OFF(key[start_ndx]),
+         *        UNIFYFS_KEY_OFF(key[end_ndx]));
          */
         leveldb_process_range(iter, key[start_ndx], key[end_ndx],
                               key_len[start_ndx],
@@ -979,9 +979,9 @@ int leveldb_batch_ranges(void *dbh, char **key, int32_t *key_len,
     /* printf("out_records_cnt is %d\n", *out_records_cnt);
      * for (i = 0; i < *out_records_cnt; i++) {
      *     printf("out %d: fid is %d, offset=%zu addr=%zu\n",
-     *            i, UNIFYCR_KEY_FID((*out_keys)[i]),
-     *            UNIFYCR_KEY_OFF((*out_keys)[i]),
-     *            UNIFYCR_VAL_ADDR((*out_vals)[i]));
+     *            i, UNIFYFS_KEY_FID((*out_keys)[i]),
+     *            UNIFYFS_KEY_OFF((*out_keys)[i]),
+     *            UNIFYFS_VAL_ADDR((*out_vals)[i]));
      * }
      * fflush(stdout);
      */
@@ -1023,7 +1023,7 @@ int leveldb_process_range(leveldb_iterator_t *iter,
         ret_key = leveldb_iter_key(iter, &tmp_key_len);
         if (!ret_key)
             return MDHIM_DB_ERROR;
-        else if (UNIFYCR_KEY_FID(ret_key) != UNIFYCR_KEY_FID(start_key))
+        else if (UNIFYFS_KEY_FID(ret_key) != UNIFYFS_KEY_FID(start_key))
             return 0;
 
         // last key matched fid, but not offset
@@ -1033,7 +1033,7 @@ int leveldb_process_range(leveldb_iterator_t *iter,
         if (!ret_key)
             return MDHIM_DB_ERROR;
 
-        if (UNIFYCR_KEY_FID(start_key) != UNIFYCR_KEY_FID(ret_key)) {
+        if (UNIFYFS_KEY_FID(start_key) != UNIFYFS_KEY_FID(ret_key)) {
             // mismatch on fid, check previous K-V
             leveldb_iter_prev(iter);
             if (!leveldb_iter_valid(iter)) {
@@ -1043,7 +1043,7 @@ int leveldb_process_range(leveldb_iterator_t *iter,
             ret_key = leveldb_iter_key(iter, &tmp_key_len);
             if (!ret_key)
                 return MDHIM_DB_ERROR;
-            else if (UNIFYCR_KEY_FID(start_key) != UNIFYCR_KEY_FID(ret_key))
+            else if (UNIFYFS_KEY_FID(start_key) != UNIFYFS_KEY_FID(ret_key))
                 return 0;
 
             prev_flag = 1;
@@ -1054,13 +1054,13 @@ int leveldb_process_range(leveldb_iterator_t *iter,
     if (!ret_val)
         return MDHIM_DB_ERROR;
 
-    unsigned long start_off = UNIFYCR_KEY_OFF(start_key);
-    unsigned long end_off = UNIFYCR_KEY_OFF(end_key);
+    unsigned long start_off = UNIFYFS_KEY_OFF(start_key);
+    unsigned long end_off = UNIFYFS_KEY_OFF(end_key);
 
     if (prev_flag) {
         // ret_key is previous K-V with matching fid
-        unsigned long prev_st = UNIFYCR_KEY_OFF(ret_key);
-        unsigned long prev_end = prev_st + UNIFYCR_VAL_LEN(ret_val) - 1;
+        unsigned long prev_st = UNIFYFS_KEY_OFF(ret_key);
+        unsigned long prev_end = prev_st + UNIFYFS_VAL_LEN(ret_val) - 1;
         if (start_off > prev_end) {
             /*	prev_s......prev_e;  ......  start..end  */
             return 0;
@@ -1077,18 +1077,18 @@ int leveldb_process_range(leveldb_iterator_t *iter,
             tmp_end = end_off;
         }
 
-        assert((UNIFYCR_KEY_SZ == tmp_key_len) &&
-               (UNIFYCR_VAL_SZ == tmp_val_len));
-        char *ret_out_key = calloc(1, UNIFYCR_KEY_SZ);
-        char *ret_out_val = calloc(1, UNIFYCR_VAL_SZ);
+        assert((UNIFYFS_KEY_SZ == tmp_key_len) &&
+               (UNIFYFS_VAL_SZ == tmp_val_len));
+        char *ret_out_key = calloc(1, UNIFYFS_KEY_SZ);
+        char *ret_out_val = calloc(1, UNIFYFS_VAL_SZ);
 
-        memcpy(ret_out_key, ret_key, UNIFYCR_KEY_SZ);
-        UNIFYCR_KEY_OFF(ret_out_key) = start_off;
+        memcpy(ret_out_key, ret_key, UNIFYFS_KEY_SZ);
+        UNIFYFS_KEY_OFF(ret_out_key) = start_off;
 
-        memcpy(ret_out_val, ret_val, UNIFYCR_VAL_SZ);
-        UNIFYCR_VAL_ADDR(ret_out_val) = UNIFYCR_VAL_ADDR(ret_val)
+        memcpy(ret_out_val, ret_val, UNIFYFS_VAL_SZ);
+        UNIFYFS_VAL_ADDR(ret_out_val) = UNIFYFS_VAL_ADDR(ret_val)
                                         + (start_off - prev_st);
-        UNIFYCR_VAL_LEN(ret_out_val) = tmp_end - start_off + 1;
+        UNIFYFS_VAL_LEN(ret_out_val) = tmp_end - start_off + 1;
 
         add_kv(out_keys, out_keys_len,
                out_vals, out_vals_len,
@@ -1098,7 +1098,7 @@ int leveldb_process_range(leveldb_iterator_t *iter,
 
         return 0;
 
-    } else if (UNIFYCR_KEY_OFF(ret_key) == start_off) {
+    } else if (UNIFYFS_KEY_OFF(ret_key) == start_off) {
         // exact match on start offset
         return handle_next_half(iter, start_key, end_key,
                                 out_keys, out_keys_len,
@@ -1120,7 +1120,7 @@ int leveldb_process_range(leveldb_iterator_t *iter,
     ret_key = leveldb_iter_key(iter, &tmp_key_len);
     if (!ret_key)
         return MDHIM_DB_ERROR;
-    else if (UNIFYCR_KEY_FID(ret_key) != UNIFYCR_KEY_FID(start_key)) {
+    else if (UNIFYFS_KEY_FID(ret_key) != UNIFYFS_KEY_FID(start_key)) {
         leveldb_iter_next(iter);
         return handle_next_half(iter, start_key, end_key,
                                 out_keys, out_keys_len,
@@ -1132,8 +1132,8 @@ int leveldb_process_range(leveldb_iterator_t *iter,
     if (!ret_val)
         return MDHIM_DB_ERROR;
 
-    unsigned long prev_st = UNIFYCR_KEY_OFF(ret_key);
-    unsigned long prev_end = prev_st + UNIFYCR_VAL_LEN(ret_val) - 1;
+    unsigned long prev_st = UNIFYFS_KEY_OFF(ret_key);
+    unsigned long prev_end = prev_st + UNIFYFS_VAL_LEN(ret_val) - 1;
 
     if (start_off <= prev_end) {
         int found_end = 0;
@@ -1150,17 +1150,17 @@ int leveldb_process_range(leveldb_iterator_t *iter,
          *            start..................end
          */
 
-        assert((UNIFYCR_KEY_SZ == tmp_key_len) &&
-               (UNIFYCR_VAL_SZ == tmp_val_len));
-        char *ret_out_key = (char *) calloc(1, UNIFYCR_KEY_SZ);
-        char *ret_out_val = (char *) calloc(1, UNIFYCR_VAL_SZ);
+        assert((UNIFYFS_KEY_SZ == tmp_key_len) &&
+               (UNIFYFS_VAL_SZ == tmp_val_len));
+        char *ret_out_key = (char *) calloc(1, UNIFYFS_KEY_SZ);
+        char *ret_out_val = (char *) calloc(1, UNIFYFS_VAL_SZ);
 
-        memcpy(ret_out_key, ret_key, UNIFYCR_KEY_SZ);
-        UNIFYCR_KEY_OFF(ret_out_key) = start_off;
+        memcpy(ret_out_key, ret_key, UNIFYFS_KEY_SZ);
+        UNIFYFS_KEY_OFF(ret_out_key) = start_off;
 
-        memcpy(ret_out_val, ret_val, UNIFYCR_VAL_SZ);
-        UNIFYCR_VAL_LEN(ret_out_val) = tmp_end - start_off + 1;
-        UNIFYCR_VAL_ADDR(ret_out_val) = UNIFYCR_VAL_ADDR(ret_val) +
+        memcpy(ret_out_val, ret_val, UNIFYFS_VAL_SZ);
+        UNIFYFS_VAL_LEN(ret_out_val) = tmp_end - start_off + 1;
+        UNIFYFS_VAL_ADDR(ret_out_val) = UNIFYFS_VAL_ADDR(ret_val) +
                                         (start_off - prev_st);
 
         add_kv(out_keys, out_keys_len,
@@ -1174,7 +1174,7 @@ int leveldb_process_range(leveldb_iterator_t *iter,
         }
 
         // start at next to find rest of range
-        UNIFYCR_KEY_OFF(start_key) = UNIFYCR_KEY_OFF(next_ret_key);
+        UNIFYFS_KEY_OFF(start_key) = UNIFYFS_KEY_OFF(next_ret_key);
         leveldb_iter_next(iter);
     } else {
         /* start between prev and next, one of two cases:
@@ -1210,13 +1210,13 @@ int handle_next_half(leveldb_iterator_t *iter,
     if (!ret_val)
         return MDHIM_DB_ERROR;
 
-    assert((UNIFYCR_KEY_SZ == tmp_key_len) &&
-           (UNIFYCR_VAL_SZ == tmp_val_len));
+    assert((UNIFYFS_KEY_SZ == tmp_key_len) &&
+           (UNIFYFS_VAL_SZ == tmp_val_len));
 
-    unsigned long curr_off = UNIFYCR_KEY_OFF(ret_key);
-    unsigned long curr_end = curr_off + UNIFYCR_VAL_LEN(ret_val) - 1;
+    unsigned long curr_off = UNIFYFS_KEY_OFF(ret_key);
+    unsigned long curr_end = curr_off + UNIFYFS_VAL_LEN(ret_val) - 1;
 
-    unsigned long end_off = UNIFYCR_KEY_OFF(end_key);
+    unsigned long end_off = UNIFYFS_KEY_OFF(end_key);
 
     if (curr_off > end_off) {
         // start..end precedes current K-V offset
@@ -1226,17 +1226,17 @@ int handle_next_half(leveldb_iterator_t *iter,
     char *ret_out_key;
     char *ret_out_val;
 
-    ret_out_key = (char *) calloc(1, UNIFYCR_KEY_SZ);
-    ret_out_val = (char *) calloc(1, UNIFYCR_VAL_SZ);
-    memcpy(ret_out_key, ret_key, UNIFYCR_KEY_SZ);
-    memcpy(ret_out_val, ret_val, UNIFYCR_VAL_SZ);
+    ret_out_key = (char *) calloc(1, UNIFYFS_KEY_SZ);
+    ret_out_val = (char *) calloc(1, UNIFYFS_VAL_SZ);
+    memcpy(ret_out_key, ret_key, UNIFYFS_KEY_SZ);
+    memcpy(ret_out_val, ret_val, UNIFYFS_VAL_SZ);
 
     if (end_off <= curr_end) {
         // found end in current K-V, add slice
         /*  curr_s.........curr_e
            [start]....end          */
 
-        UNIFYCR_VAL_LEN(ret_out_val) = end_off - curr_off + 1;
+        UNIFYFS_VAL_LEN(ret_out_val) = end_off - curr_off + 1;
 
         add_kv(out_keys, out_keys_len,
                out_vals, out_vals_len,
@@ -1265,7 +1265,7 @@ int handle_next_half(leveldb_iterator_t *iter,
         ret_key = leveldb_iter_key(iter, (size_t *)&tmp_key_len);
         if (!ret_key)
             return MDHIM_DB_ERROR;
-        else if (UNIFYCR_KEY_FID(ret_key) != UNIFYCR_KEY_FID(start_key)) {
+        else if (UNIFYFS_KEY_FID(ret_key) != UNIFYFS_KEY_FID(start_key)) {
             // fid mismatch
             break;
         }
@@ -1274,25 +1274,25 @@ int handle_next_half(leveldb_iterator_t *iter,
         if (!ret_val)
             return MDHIM_DB_ERROR;
 
-        curr_off = UNIFYCR_KEY_OFF(ret_key);
-        curr_end = curr_off + UNIFYCR_VAL_LEN(ret_val) - 1;
+        curr_off = UNIFYFS_KEY_OFF(ret_key);
+        curr_end = curr_off + UNIFYFS_VAL_LEN(ret_val) - 1;
 
         if (curr_off > end_off) {
             // current K-V starts after end
             break;
         }
 
-        assert((UNIFYCR_KEY_SZ == tmp_key_len) &&
-               (UNIFYCR_VAL_SZ == tmp_val_len));
-        ret_out_key = (char *) calloc(1, UNIFYCR_KEY_SZ);
-        ret_out_val = (char *) calloc(1, UNIFYCR_VAL_SZ);
-        memcpy(ret_out_key, ret_key, UNIFYCR_KEY_SZ);
-        memcpy(ret_out_val, ret_val, UNIFYCR_VAL_SZ);
+        assert((UNIFYFS_KEY_SZ == tmp_key_len) &&
+               (UNIFYFS_VAL_SZ == tmp_val_len));
+        ret_out_key = (char *) calloc(1, UNIFYFS_KEY_SZ);
+        ret_out_val = (char *) calloc(1, UNIFYFS_VAL_SZ);
+        memcpy(ret_out_key, ret_key, UNIFYFS_KEY_SZ);
+        memcpy(ret_out_val, ret_val, UNIFYFS_VAL_SZ);
 
         if (curr_end >= end_off) {
             // found end in current K-V, add slice
             found_end = 1;
-            UNIFYCR_VAL_LEN(ret_out_val) = end_off - curr_off + 1;
+            UNIFYFS_VAL_LEN(ret_out_val) = end_off - curr_off + 1;
         }
         // else, range fully covers current K-V, add it
         add_kv(out_keys, out_keys_len,

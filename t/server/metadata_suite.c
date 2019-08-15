@@ -1,9 +1,9 @@
 #include <mpi.h>
 
-#include "unifycr_configurator.h"
-#include "unifycr_metadata.h"
-#include "unifycr_log.h"
-#include "unifycr_runstate.h"
+#include "unifyfs_configurator.h"
+#include "unifyfs_metadata.h"
+#include "unifyfs_log.h"
+#include "unifyfs_runstate.h"
 
 #include "t/lib/tap.h"
 
@@ -12,17 +12,17 @@
 int main(int argc, char* argv[])
 {
     /* need to initialize enougth of the server to use the metadata API */
-    unifycr_cfg_t server_cfg;
+    unifyfs_cfg_t server_cfg;
     int rc, provided, glb_rank, glb_size;
 
     /* get the configuration */
-    rc = unifycr_config_init(&server_cfg, argc, argv);
+    rc = unifyfs_config_init(&server_cfg, argc, argv);
     if (rc != 0) {
         exit(1);
     }
 
-    rc = unifycr_write_runstate(&server_cfg);
-    if (rc != (int)UNIFYCR_SUCCESS) {
+    rc = unifyfs_write_runstate(&server_cfg);
+    if (rc != (int)UNIFYFS_SUCCESS) {
         exit(1);
     }
 
@@ -45,7 +45,7 @@ int main(int argc, char* argv[])
     rc = meta_init_store(&server_cfg);
     if (rc != 0) {
         LOG(LOG_ERR, "%s",
-            unifycr_error_enum_description(UNIFYCR_ERROR_MDINIT));
+            unifyfs_error_enum_description(UNIFYFS_ERROR_MDINIT));
         exit(1);
     }
 
@@ -58,8 +58,8 @@ int main(int argc, char* argv[])
 
     // keep the order
 
-    unifycr_set_file_attribute_test();
-    unifycr_get_file_attribute_test();
+    unifyfs_set_file_attribute_test();
+    unifyfs_get_file_attribute_test();
 
 
     /*

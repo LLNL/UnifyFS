@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -64,7 +64,7 @@ extern "C"
 #define MDHIM_STRING_KEY 5
 //An arbitrary sized key
 #define MDHIM_BYTE_KEY 6
-#define MDHIM_UNIFYCR_KEY 7
+#define MDHIM_UNIFYFS_KEY 7
 
 //Maximum length of a key
 #define MAX_KEY_LEN 1048576

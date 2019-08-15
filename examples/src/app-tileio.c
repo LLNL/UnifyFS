@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -59,7 +59,7 @@
 #include <errno.h>
 #include <aio.h>
 #include <strings.h>
-#include <unifycr.h>
+#include <unifyfs.h>
 
 #define TEST_STR_LEN 1024
 
@@ -175,7 +175,7 @@ int main(int argc, char* argv[])
     memset(buf, 0, x_size * sz_per_elem);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    unifycr_mount("/unifycr", rank, ranknum, 0);
+    unifyfs_mount("/unifyfs", rank, ranknum, 0);
     MPI_Barrier(MPI_COMM_WORLD);
 
     int fd;
@@ -215,7 +215,7 @@ int main(int argc, char* argv[])
     writetime = writetime / 1000000;
 
     if (direction == 1) {
-        unifycr_unmount();
+        unifyfs_unmount();
         close(fd);
     }
 
@@ -280,7 +280,7 @@ int main(int argc, char* argv[])
         MPI_Barrier(MPI_COMM_WORLD);
         close(fd);
 
-        unifycr_unmount();
+        unifyfs_unmount();
 
         double rd_bw = (double)tot_sz / ranknum / 1048576 / readtime;
         double max_rd_time;

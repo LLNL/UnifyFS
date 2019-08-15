@@ -7,13 +7,13 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
-#ifndef UNIFYCR_TESTUTIL_RDWR_H
-#define UNIFYCR_TESTUTIL_RDWR_H
+#ifndef UNIFYFS_TESTUTIL_RDWR_H
+#define UNIFYFS_TESTUTIL_RDWR_H
 
 /* -------- Write Helper Methods -------- */
 
@@ -416,4 +416,4 @@ int check_read_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs)
     return ret;
 }
 
-#endif /* UNIFYCR_TESTUTIL_RDWR_H */
+#endif /* UNIFYFS_TESTUTIL_RDWR_H */

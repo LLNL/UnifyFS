@@ -1,5 +1,5 @@
 # Examples
 
-Our [Examples](https://unifycr.readthedocs.io/en/dev/examples.html)
-documentation has information on how to run the UnifyCR example programs in
+Our [Examples](https://unifyfs.readthedocs.io/en/dev/examples.html)
+documentation has information on how to run the UnifyFS example programs in
 `/src`.

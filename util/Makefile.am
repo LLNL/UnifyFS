@@ -1,1 +1,1 @@
-SUBDIRS = scripts unifycr
+SUBDIRS = scripts unifyfs

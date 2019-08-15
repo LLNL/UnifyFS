@@ -1,7 +1,7 @@
 #!/bin/sh
 
 echo
-echo ... UnifyCR autogen ...
+echo ... UnifyFS autogen ...
 echo
 
 ## Check all dependencies are present

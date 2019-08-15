@@ -1,9 +1,9 @@
 dnl 
-dnl This file is a part of UnifyCR. Please see LICENSE for the license
+dnl This file is a part of UnifyFS. Please see LICENSE for the license
 dnl information.
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([unifycr],
+AC_INIT([unifyfs],
         m4_esyscmd([git describe --always |
                    awk '/.*/{sub(/^v/,""); printf "%s",$1; exit}']),
         [unifycr@llnl.gov])
@@ -120,7 +120,7 @@ AC_ARG_WITH(pkgconfigdir,
             [pkgconfigdir='${libdir}/pkgconfig'])
 AC_SUBST(pkgconfigdir)
 
-## unifycr options
+## unifyfs options
 AC_ARG_ENABLE(cuserid, 
 [  --disable-cuserid       Disables attempted use of cuserid() at run time], 
 [if test "x$enableval" = "xno" ; then
@@ -179,21 +179,23 @@ if test "$have_C_mpi" != "yes" ; then
 fi
 
 # look for leveldb library, sets LEVELDB_CFLAGS/LDFLAGS/LIBS
-UNIFYCR_AC_LEVELDB
+UNIFYFS_AC_LEVELDB
 
 # look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
-UNIFYCR_AC_GOTCHA
+UNIFYFS_AC_GOTCHA
 
-UNIFYCR_AC_MARGO
-UNIFYCR_AC_FLATCC
+UNIFYFS_AC_MARGO
+UNIFYFS_AC_FLATCC
 
 # HDF found?
 AX_LIB_HDF5
 AM_CONDITIONAL([HAVE_HDF5], [test x$with_hdf5 = xyes])
 
-# libc functions wrapped by unifycr
+# libc functions wrapped by unifyfs
 
 CP_WRAPPERS+="-Wl,-wrap,access"
+CP_WRAPPERS+=",-wrap,chmod"
+CP_WRAPPERS+=",-wrap,fchmod"
 CP_WRAPPERS+=",-wrap,lio_listio"
 CP_WRAPPERS+=",-wrap,mkdir"
 CP_WRAPPERS+=",-wrap,rmdir"
@@ -287,7 +289,7 @@ CP_WRAPPERS+=",-wrap,ungetwc"
 # ,-u,__wrap___fxstat64,-u,pthread_mutex_lock,-u,pthread_mutex_unlock
 
 # We need to know the value of the $libdir and $bindir variables so that 
-# we can reference the correct path in the unifycr compiler wrappers.  
+# we can reference the correct path in the unifyfs compiler wrappers.
 # Unfortunately, those two variables are not normally evaluated by autoconf.  
 # They are evaluated at build time using Makefile variable substitutions.  
 # 
@@ -300,8 +302,8 @@ savePrefix=$prefix
 saveExecprefix=$exec_prefix
 test "x$prefix" = xNONE && prefix=$ac_default_prefix
 test "x$exec_prefix" = xNONE && exec_prefix=$prefix
-eval unifycr_lib_path=$libdir
-eval unifycr_bin_path=$bindir
+eval unifyfs_lib_path=$libdir
+eval unifyfs_bin_path=$bindir
 prefix=$savePrefix
 exec_prefix=$saveExecprefix
 
@@ -310,8 +312,8 @@ if test "x$runstatedir" = x; then
         AC_SUBST([runstatedir], ['${localstatedir}/run'])
 fi
 
-AC_SUBST(unifycr_lib_path)
-AC_SUBST(unifycr_bin_path)
+AC_SUBST(unifyfs_lib_path)
+AC_SUBST(unifyfs_bin_path)
 AC_SUBST(LDFLAGS)
 AC_SUBST(__CP_LOG_PATH)
 AC_SUBST(CP_WRAPPERS)
@@ -326,37 +328,37 @@ AC_CONFIG_FILES([Makefile
                  server/src/Makefile
                  client/Makefile
                  client/src/Makefile
-                 client/unifycr.pc
+                 client/unifyfs.pc
                  examples/Makefile
                  examples/src/Makefile
                  extras/Makefile
-                 extras/unifycr.conf
+                 extras/unifyfs.conf
                  t/Makefile
                  t/lib/Makefile
                  util/Makefile
                  util/scripts/Makefile
                  util/scripts/lsfcsm/Makefile
-                 util/unifycr/Makefile
-                 util/unifycr/src/Makefile])
+                 util/unifyfs/Makefile
+                 util/unifyfs/src/Makefile])
 
-AC_CONFIG_FILES([client/unifycr-config], [chmod +x client/unifycr-config])
-AC_CONFIG_FILES([util/scripts/lsfcsm/unifycr_lsfcsm_prolog], [chmod +x util/scripts/lsfcsm/unifycr_lsfcsm_prolog])
-AC_CONFIG_FILES([util/scripts/lsfcsm/unifycr_lsfcsm_epilog], [chmod +x util/scripts/lsfcsm/unifycr_lsfcsm_epilog])
+AC_CONFIG_FILES([client/unifyfs-config], [chmod +x client/unifyfs-config])
+AC_CONFIG_FILES([util/scripts/lsfcsm/unifyfs_lsfcsm_prolog], [chmod +x util/scripts/lsfcsm/unifyfs_lsfcsm_prolog])
+AC_CONFIG_FILES([util/scripts/lsfcsm/unifyfs_lsfcsm_epilog], [chmod +x util/scripts/lsfcsm/unifyfs_lsfcsm_epilog])
 
-UNIFYCR_VERSION=${PACKAGE_VERSION}
-AC_SUBST(UNIFYCR_VERSION)
-AC_SUBST([LIBUNIFYCR_LT_VERSION], [1:0:0])
+UNIFYFS_VERSION=${PACKAGE_VERSION}
+AC_SUBST(UNIFYFS_VERSION)
+AC_SUBST([LIBUNIFYFS_LT_VERSION], [1:0:0])
 
 # pkgconfig versioning
-LIBUNIFYCR_API_VERSION="1.0.0"
-AC_SUBST(LIBUNIFYCR_API_VERSION)
+LIBUNIFYFS_API_VERSION="1.0.0"
+AC_SUBST(LIBUNIFYFS_API_VERSION)
 
 AC_OUTPUT
 
 AC_MSG_RESULT([
 
     ==========================
-    UNIFYCR Checkpoint-Restart
+    UNIFYFS Checkpoint-Restart
     ==========================
     prefix      ${prefix}
     compiler    ${CC}
