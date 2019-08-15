@@ -7,4 +7,4 @@ test_description="Test Metadata API"
 # and UnifyFS runtime settings.
 #
 . $(dirname $0)/sharness.d/00-test-env.sh
-$JOB_RUN_COMMAND $UNIFYFS_BUILD_DIR/t/server/metadata.t
+$UNIFYFS_BUILD_DIR/t/server/metadata.t
