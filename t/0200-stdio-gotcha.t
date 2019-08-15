@@ -5,4 +5,4 @@
 #
 . $(dirname $0)/sharness.d/00-test-env.sh
 . $(dirname $0)/sharness.d/01-unifyfs-settings.sh
-$JOB_RUN_COMMAND $UNIFYFS_BUILD_DIR/t/std/stdio-gotcha.t
+$UNIFYFS_BUILD_DIR/t/std/stdio-gotcha.t
