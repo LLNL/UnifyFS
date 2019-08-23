@@ -135,13 +135,18 @@ else
              "containing bin/ and libexec/"
 fi
 
-# Check for necessary spack modules
-loaded_modules=$(module list 2>&1)
-modules="gotcha leveldb flatcc argobots mercury margo"
-for mod in $modules; do
-   [[ $(echo "$loaded_modules" | fgrep "$mod") ]] ||
-        { echo "$errmsg Please 'spack load $mod'"; exit 1; }
-done
+# Check for necessary Spack modules if Spack is detected
+# Since GitLab Runners don't like this, just warn users running this by hand but
+# don't fail out
+if [[ -n $(which spack 2>/dev/null) ]]; then
+    loaded_modules=$(module list 2>&1)
+    modules="gotcha leveldb flatcc argobots mercury margo"
+    for mod in $modules; do
+        if ! [[ $(echo "$loaded_modules" | fgrep "$mod") ]]; then
+            echo "$errmsg $mod not detected. Please 'spack load $mod'"
+        fi
+    done
+fi
 
 
 ########## Determine job launcher and source associated setup ##########

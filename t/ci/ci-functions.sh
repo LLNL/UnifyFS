@@ -305,7 +305,7 @@ build_test_command()
     if [[ $l_app_name = "read" ]]; then
         local l_app_filename="-f $(get_filename write-$3 "$2").app"
     else
-        local l_check="-k"
+        #local l_check="-k" # not reliable atm
         local l_app_filename="-f ${l_filename}.app"
     fi
 

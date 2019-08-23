@@ -37,8 +37,8 @@ nprocs=${CI_NPROCS:-$nnodes}
 ncores=${CI_NCORES:-20}
 
 # Total resource sets and how many per host
-nres_sets=${CI_NRES_SETS:-$nnodes}
 nrs_per_node=${CI_NRS_PER_NODE:-1}
+nres_sets=${CI_NRES_SETS:-$(($nnodes * $nrs_per_node))}
 
 if [[ $ncores -gt 20 ]]; then
     echo >&2 "$errmsg Number of cores-per-resource-set (\$CI_NCORES=$ncores)" \
