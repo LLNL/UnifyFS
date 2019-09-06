@@ -908,7 +908,7 @@ int rm_cmd_mread(int app_id, int client_id,
     size_t j, eoff, elen;
     for (j = 0; j < req_num; j++) {
         fid = unifyfs_Extent_fid(unifyfs_Extent_vec_at(extents, j));
-        if (fid != last_fid) {
+        if (j && (fid != last_fid)) {
             // create requests for all extents of last_fid
             num_keys = ndx;
             rc = create_gfid_chunk_reads(thrd_ctrl, last_fid, app_id,
