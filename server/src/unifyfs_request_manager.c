@@ -716,6 +716,11 @@ int rm_cmd_filesize(
     int num_vals = 0;
     keyvals = (unifyfs_keyval_t*) calloc(UNIFYFS_MAX_SPLIT_CNT,
                                          sizeof(unifyfs_keyval_t));
+    if (NULL == keyvals) {
+        LOGERR("failed to allocate keyvals");
+        return UNIFYFS_ERROR_NOMEM;
+    }
+
     int rc = unifyfs_get_file_extents(2, unifyfs_keys, key_lens,
                                       &num_vals, &keyvals);
     /* TODO: if there are file extents not accounted for we should
@@ -751,59 +756,20 @@ int rm_cmd_filesize(
     return rc;
 }
 
-/* read function for one requested extent,
- * called from rpc handler to fill shared data structures
- * with read requests to be handled by the delegator thread
- * returns before requests are handled
- */
-int rm_cmd_read(
-    int app_id,    /* app_id for requesting client */
-    int client_id, /* client_id for requesting client */
-    int gfid,      /* global file id of read request */
-    size_t offset, /* logical file offset of read request */
-    size_t length) /* number of bytes to read */
+int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl,
+                            int gfid, int app_id, int client_id,
+                            int num_keys, unifyfs_key_t** keys, int* keylens)
 {
-    /* get pointer to app structure for this app id */
-    app_config_t* app_config =
-        (app_config_t*)arraylist_get(app_config_list, app_id);
-
-    /* get thread id for this client */
-    int thrd_id = app_config->thrd_idxs[client_id];
-
-    /* look up thread control structure */
-    reqmgr_thrd_t* thrd_ctrl = rm_get_thread(thrd_id);
-
-    /* get debug rank for this client */
-    //int cli_rank = app_config->dbg_ranks[client_id];
-
-    /* get chunks corresponding to requested client read extent
-     *
-     * Generate a pair of keys for the read request, representing the start
-     * and end offset. MDHIM returns all key-value pairs that fall within
-     * the offset range.
-     *
-     * TODO: this is specific to the MDHIM in the source tree and not portable
-     *       to other KV-stores. This needs to be revisited to utilize some
-     *       other mechanism to retrieve all relevant key-value pairs from the
-     *       KV-store.
-     */
-    unifyfs_key_t key1, key2;
-
-    /* create key to describe first byte we'll read */
-    key1.fid    = gfid;
-    key1.offset = offset;
-
-    /* create key to describe last byte we'll read */
-    key2.fid    = gfid;
-    key2.offset = offset + length - 1;
-
-    unifyfs_key_t* unifyfs_keys[2] = {&key1, &key2};
-    int key_lens[2] = {sizeof(unifyfs_key_t), sizeof(unifyfs_key_t)};
-
-    int num_vals;
+    // TODO: might want to get this from a memory pool
     unifyfs_keyval_t* keyvals = calloc(UNIFYFS_MAX_SPLIT_CNT,
                                        sizeof(unifyfs_keyval_t));
-    int rc = unifyfs_get_file_extents(2, unifyfs_keys, key_lens,
+    if (NULL == keyvals) {
+        LOGERR("failed to allocate keyvals");
+        return UNIFYFS_ERROR_NOMEM;
+    }
+
+    int num_vals = 0;
+    int rc = unifyfs_get_file_extents(num_keys, keys, keylens,
                                       &num_vals, &keyvals);
     /* TODO: if there are file extents not accounted for we should
      * either return 0 for that data (holes) or EOF if reading past
@@ -839,6 +805,56 @@ int rm_cmd_read(
     return rc;
 }
 
+/* read function for one requested extent,
+ * called from rpc handler to fill shared data structures
+ * with read requests to be handled by the delegator thread
+ * returns before requests are handled
+ */
+int rm_cmd_read(
+    int app_id,    /* app_id for requesting client */
+    int client_id, /* client_id for requesting client */
+    int gfid,      /* global file id of read request */
+    size_t offset, /* logical file offset of read request */
+    size_t length) /* number of bytes to read */
+{
+    /* get pointer to app structure for this app id */
+    app_config_t* app_config =
+        (app_config_t*)arraylist_get(app_config_list, app_id);
+
+    /* get thread id for this client */
+    int thrd_id = app_config->thrd_idxs[client_id];
+
+    /* look up thread control structure */
+    reqmgr_thrd_t* thrd_ctrl = rm_get_thread(thrd_id);
+
+    /* get chunks corresponding to requested client read extent
+     *
+     * Generate a pair of keys for the read request, representing the start
+     * and end offset. MDHIM returns all key-value pairs that fall within
+     * the offset range.
+     *
+     * TODO: this is specific to the MDHIM in the source tree and not portable
+     *       to other KV-stores. This needs to be revisited to utilize some
+     *       other mechanism to retrieve all relevant key-value pairs from the
+     *       KV-store.
+     */
+    unifyfs_key_t key1, key2;
+
+    /* create key to describe first byte we'll read */
+    key1.fid    = gfid;
+    key1.offset = offset;
+
+    /* create key to describe last byte we'll read */
+    key2.fid    = gfid;
+    key2.offset = offset + length - 1;
+
+    unifyfs_key_t* unifyfs_keys[2] = {&key1, &key2};
+    int key_lens[2] = {sizeof(unifyfs_key_t), sizeof(unifyfs_key_t)};
+
+    return create_gfid_chunk_reads(thrd_ctrl, gfid, app_id, client_id,
+                                   2, unifyfs_keys, key_lens);
+}
+
 /* send the read requests to the remote delegators
  *
  * @param app_id: application id
@@ -871,44 +887,53 @@ int rm_cmd_mread(int app_id, int client_id,
     assert(extents_len == req_num);
 
     // allocate key storage
-    // TODO: might want to get this from a memory pool
     unifyfs_key_t** unifyfs_keys;
-    unifyfs_keyval_t* keyvals;
     int* key_lens;
     size_t key_cnt = req_num * 2;
     unifyfs_keys = alloc_key_array(key_cnt);
     key_lens = (int*) calloc(key_cnt, sizeof(int));
-    keyvals = (unifyfs_keyval_t*) calloc(UNIFYFS_MAX_SPLIT_CNT,
-                                         sizeof(unifyfs_keyval_t));
     if ((NULL == unifyfs_keys) ||
-        (NULL == key_lens) ||
-        (NULL == keyvals)) {
+        (NULL == key_lens)) {
         // this is a fatal error
         // TODO: we need better error handling
         LOGERR("Error allocating buffers");
         return (int)UNIFYFS_ERROR_NOMEM;
     }
 
-    /* get chunks corresponding to requested client read extents
-     *
-     * The loop generates a pair of keys for each read request, representing
-     * the start and end offsets. MDHIM returns all key-value pairs that fall
-     * within the offset range.
-     *
-     * TODO: this is specific to the MDHIM in the source tree and not portable
-     *       to other KV-stores. This needs to be revisited to utilize some
-     *       other mechanism to retrieve all relevant key-value pairs from the
-     *       KV-store.
-     */
-    int fid;
-    size_t j, ndx, eoff, elen;
+    /* get chunks corresponding to requested client read extents */
+    int rc, num_keys;
+    int fid = -1;
+    int last_fid = -1;
+    int ndx = 0;
+    size_t j, eoff, elen;
     for (j = 0; j < req_num; j++) {
-        ndx = 2 * j;
         fid = unifyfs_Extent_fid(unifyfs_Extent_vec_at(extents, j));
+        if (j && (fid != last_fid)) {
+            // create requests for all extents of last_fid
+            num_keys = ndx;
+            rc = create_gfid_chunk_reads(thrd_ctrl, last_fid, app_id,
+                                         client_id, num_keys,
+                                         unifyfs_keys, key_lens);
+            if (rc != UNIFYFS_SUCCESS) {
+                LOGERR("Error creating chunk reads for gfid=%d", last_fid);
+            }
+            // reset ndx for current fid
+            ndx = 0;
+        }
+
         eoff = unifyfs_Extent_offset(unifyfs_Extent_vec_at(extents, j));
         elen = unifyfs_Extent_length(unifyfs_Extent_vec_at(extents, j));
         LOGDBG("gfid:%d, offset:%zu, length:%zu", fid, eoff, elen);
 
+        /* Generate a pair of keys for each read request, representing
+         * the start and end offsets. MDHIM returns all key-value pairs that
+         * fall within the offset range.
+         *
+         * TODO: this is specific to the MDHIM in the source tree and not
+         *       portable to other KV-stores. This needs to be revisited to
+         *       utilize some other mechanism to retrieve all relevant KV
+         *       pairs from the KV-store.
+         */
         key_lens[ndx] = sizeof(unifyfs_key_t);
         key_lens[ndx + 1] = sizeof(unifyfs_key_t);
 
@@ -919,26 +944,23 @@ int rm_cmd_mread(int app_id, int client_id,
         /* create key to describe last byte we'll read */
         unifyfs_keys[ndx + 1]->fid = fid;
         unifyfs_keys[ndx + 1]->offset = eoff + elen - 1;
+
+        ndx += 2;
+        last_fid = fid;
     }
 
-    int num_vals;
-    int rc = unifyfs_get_file_extents(key_cnt, unifyfs_keys, key_lens,
-                                      &num_vals, &keyvals);
-    /* TODO: if there are file extents not accounted for we should
-     * either return 0 for that data (holes) or EOF if reading past
-     * the end of the file */
-    if (UNIFYFS_SUCCESS != rc || num_vals == 0) {
-        /* failed to find any key / value pairs */
-        rc = UNIFYFS_FAILURE;
-    } else {
-        rc = create_request_messages(thrd_ctrl, cli_rank,
-                                     num_vals, keyvals);
+    // create requests for all extents of last_fid
+    num_keys = ndx;
+    rc = create_gfid_chunk_reads(thrd_ctrl, last_fid, app_id,
+                                 client_id, num_keys,
+                                 unifyfs_keys, key_lens);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("Error creating chunk reads for gfid=%d", last_fid);
     }
 
     // cleanup
     free_key_array(unifyfs_keys);
     free(key_lens);
-    free(keyvals);
 
     return rc;
 }
