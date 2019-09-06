@@ -914,7 +914,7 @@ int rm_cmd_mread(int app_id, int client_id,
             rc = create_gfid_chunk_reads(thrd_ctrl, last_fid, app_id,
                                          client_id, num_keys,
                                          unifyfs_keys, key_lens);
-            if (rc != UNIFYCR_SUCCESS) {
+            if (rc != UNIFYFS_SUCCESS) {
                 LOGERR("Error creating chunk reads for gfid=%d", last_fid);
             }
             // reset ndx for current fid
@@ -954,7 +954,7 @@ int rm_cmd_mread(int app_id, int client_id,
     rc = create_gfid_chunk_reads(thrd_ctrl, last_fid, app_id,
                                  client_id, num_keys,
                                  unifyfs_keys, key_lens);
-    if (rc != UNIFYCR_SUCCESS) {
+    if (rc != UNIFYFS_SUCCESS) {
         LOGERR("Error creating chunk reads for gfid=%d", last_fid);
     }
 
