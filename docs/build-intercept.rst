@@ -163,9 +163,8 @@ Build the Dependencies without Spack
 """""""""""""""""""""""""""""""""""""
 
 For users who cannot use Spack, a `bootstrap.sh <https://github.com/LLNL/UnifyFS/blob/dev/bootstrap.sh>`_
-script has been provided in order to make manual installation of dependencies
-easier. Simply run this script in the desired directory for the dependencies to
-be installed.
+script has been provided in order to make manual build and installation of
+dependencies easier. Simply run the script in the top level directory of the source code.
 
 .. code-block:: Bash
 
@@ -173,7 +172,10 @@ be installed.
 
 References to the UnifyFS dependencies can be found :doc:`here <dependencies>`.
 
-Then to build UnifyFS:
+
+After bootstrap.sh is finished building the dependencies, it will print out the
+commands you need to run to build UnifyFS.  The commands look something like
+this:
 
 .. code-block:: Bash
 
