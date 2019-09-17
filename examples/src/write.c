@@ -190,6 +190,13 @@ int main(int argc, char* argv[])
     test_barrier(cfg);
     test_print_verbose_once(cfg, "DEBUG: finished sync");
 
+    if ((test_config.rank == 0) ||
+        (IO_PATTERN_NN == test_config.io_pattern)) {
+        /* laminate by removing write bits */
+        chmod(target_file, 0400);
+    }
+    test_print_verbose_once(cfg, "DEBUG: finished lamination");
+
     // post-write cleanup
     free(wr_buf);
     free(reqs);
