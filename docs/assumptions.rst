@@ -28,22 +28,27 @@ Application Behavior
 ---------------------------
 Consistency Model
 ---------------------------
-In the first version of UnifyFS, lamination will be explicitly initiated by a
-UnifyFS API call. In subsequent versions, we will support implicit initiation
-of file lamination. Here, UnifyFS will determine a file to be laminated based
-on conditions, e.g., ``fsync`` or ``ioctl`` calls, or a time out on ``close``
-operations. As part of the UnifyFS project, we will investigate these implicit
-lamination conditions to determine the best way to enable lamination of files
-without explicit UnifyFS API calls being made by the application.
+One key aspect of UnifyFS is the idea of "laminating" a file.  After a file is
+laminated, it becomes "set in stone" and its data is accessible across all the
+nodes.  Laminated files are permanently read-only, and cannot be modified in
+any way (but can be deleted).  If the application process group fails before a
+file has been laminated, UnifyFS may delete the file.
 
-In the first version of UnifyFS, eventually, a process declares the file to be
-laminated through a UnifyFS API call.
-After a file has been laminated, the contents of the file cannot be changed.
-The file becomes permanently read-only.
-After lamination, any process may freely read any part of the file.
-If the application process group fails before a file has been laminated,
-UnifyFS may delete the file.
-An application can delete a laminated file.
+The typical use case is to laminate your checkpoint files after they've been
+written.  To laminate a file, first call fsync() to sync all your writes to the
+server, then call chmod() to remove all the write bits.  Removing the write
+bits does the actual lamination.  A typical checkpoint will look like this:
+
+.. code-block:: C
+
+  fp = fopen("checkpoint1.chk")
+  write(fp, <checkpoint data>)
+  fsync(fp)
+  fclose(fp)
+  chmod("checkpoint1.chk", 0444)
+
+Future versions of UnifyFS may support different laminate semantics, such as
+laminate on close(), or laminate via an explicit API call.
 
 We define the laminated consistency model to enable certain optimizations
 while supporting the perceived requirements of application checkpoints.
