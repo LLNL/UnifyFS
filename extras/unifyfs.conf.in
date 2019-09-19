@@ -10,7 +10,6 @@
 [unifyfs]
 # consistency = "LAMINATED" ; NONE | LAMINATED | POSIX
 # daemonize = on            ; servers will become daemons
-debug = on                  ; enable debug output (default: off)
 # mountpoint = "/unifyfs"   ; mountpoint (i.e., prefix path)
 
 # SECTION: client settings
@@ -39,4 +38,3 @@ chunk_mem = 67108864 ; segment size for data chunks (default: 256 MiB)
 # data_dir = "/mnt/ssd" ; directory path for data spillover
 # meta_dir = "/mnt/ssd" ; directory path for metadata spillover
 size = 268435456        ; data spillover max size (default: 1 GiB)
-
