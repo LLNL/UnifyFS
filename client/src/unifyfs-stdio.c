@@ -1764,6 +1764,7 @@ void UNIFYFS_WRAP(clearerr)(FILE* stream)
 
 int UNIFYFS_WRAP(fileno)(FILE* stream)
 {
+    int ret;
     /* check whether we should intercept this stream */
     if (unifyfs_intercept_stream(stream)) {
         /* lookup stream */
@@ -1776,11 +1777,13 @@ int UNIFYFS_WRAP(fileno)(FILE* stream)
             return -1;
         }
 
-        /* return file descriptor associated with stream */
-        return fd;
+        /* return file descriptor associated with stream but don't conflict
+         * with active system fds that range from 0 - (fd_limit) */
+        ret = fd + unifyfs_fd_limit;
+        return ret;
     } else {
         MAP_OR_FAIL(fileno);
-        int ret = UNIFYFS_REAL(fileno)(stream);
+        ret = UNIFYFS_REAL(fileno)(stream);
         return ret;
     }
 }
