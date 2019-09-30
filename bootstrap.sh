@@ -104,11 +104,14 @@ cd ..
 cd "$ROOT"
 
 echo "*************************************************************************"
-echo "Dependencies are all built.  You can now build Unify with:"
+echo "Dependencies are all built.  You can now build and install Unify: "
 echo ""
 echo "  export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig"
 echo "  ./autogen.sh && ./configure --with-leveldb=$INSTALL_DIR" \
-	"--with-gotcha=$INSTALL_DIR --with-flatcc=$INSTALL_DIR"
+     "    --with-gotcha=$INSTALL_DIR --with-flatcc=$INSTALL_DIR" \
+     "    --prefix=$INSTALL_DIR"
+echo " ## NOTE: the previous multiline command must all be run as a single command" 
 echo "  make"
+echo "  make install"
 echo ""
 echo "*************************************************************************"
