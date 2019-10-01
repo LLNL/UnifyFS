@@ -79,8 +79,6 @@ void debug_log_key_val(const char* ctx,
 
 int meta_sanitize(void);
 int meta_init_store(unifyfs_cfg_t* cfg);
-void print_bget_indices(int app_id, int client_id,
-                        send_msg_t* index_set, int tot_num);
 
 int meta_init_indices(void);
 void meta_free_indices(void);

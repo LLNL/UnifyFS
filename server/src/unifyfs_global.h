@@ -63,72 +63,8 @@ extern size_t max_recs_per_slice;
 /* defines commands for messages sent to service manager threads */
 typedef enum {
     SVC_CMD_INVALID = 0,
-    SVC_CMD_RDREQ_MSG = 1, /* read requests (send_msg_t) */
     SVC_CMD_RDREQ_CHK,     /* read requests (chunk_read_req_t) */
-    SVC_CMD_EXIT,          /* service manager thread should exit */
 } service_cmd_e;
-
-typedef enum {
-    READ_REQUEST_TAG = 5001,
-    READ_RESPONSE_TAG = 6001,
-    CHUNK_REQUEST_TAG = 7001,
-    CHUNK_RESPONSE_TAG = 8001
-} service_tag_e;
-
-/* this defines a read request as sent from the request manager to the
- * service manager, it contains info about the physical location of
- * the data:
- *
- *   dest_delegator_rank - rank of delegator hosting data log file
- *   dest_app_id, dest_client_id - defines file on host delegator
- *   dest_offset - phyiscal offset of data in log file
- *   length - number of bytes to be read
- *
- * it also contains a return address to use in the read reply that
- * the service manager sends back to the request manager:
- *
- *   src_delegator_rank - rank of requesting delegator process
- *   src_thrd - thread id of request manager (used to compute MPI tag)
- *   src_app_id, src_cli_id
- *   src_fid - global file id
- *   src_offset - starting offset in logical file
- *   length - number of bytes
- *   src_dbg_rank - rank of application process making the request
- *
- * the arrival_time field is included but not set by the request
- * manager, it is used to tag the time the request reaches the
- * service manager for prioritizing read replies */
-typedef struct {
-    int dest_app_id;         /* app id of log file */
-    int dest_client_id;      /* client id of log file */
-    size_t dest_offset;      /* data offset within log file */
-    int dest_delegator_rank; /* delegator rank of service manager */
-    size_t length;           /* length of data to be read */
-    int src_delegator_rank;  /* delegator rank of request manager */
-    int src_cli_id;          /* client id of requesting client process */
-    int src_app_id;          /* app id of requesting client process */
-    int src_fid;             /* global file id */
-    size_t src_offset;       /* logical file offset */
-    int src_thrd;            /* thread id of request manager */
-    int src_dbg_rank;        /* MPI rank of client process */
-    int arrival_time;        /* records time reaches service mgr */
-} send_msg_t;
-
-/* defines header for read reply messages sent from service manager
- * back to request manager, data payload of length bytes immediately
- * follows the header */
-typedef struct {
-    size_t src_offset; /* file offset */
-    size_t length;     /* number of bytes */
-    int src_fid;       /* global file id */
-    int errcode;       /* indicates whether read was successful */
-} recv_msg_t;
-
-/* defines a fixed-length list of read requests */
-typedef struct {
-    int num; /* number of active read requests */
-    send_msg_t msg_meta[MAX_META_PER_SEND]; /* list of requests */
-} msg_meta_t;
 
 // NEW READ REQUEST STRUCTURES
 typedef enum {

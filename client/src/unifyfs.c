@@ -98,8 +98,6 @@ static char   shm_recv_name[GEN_STR_LEN] = {0};
 static size_t shm_recv_size = UNIFYFS_SHMEM_RECV_SIZE;
 void* shm_recv_buf;
 
-char cmd_buf[CMD_BUF_SIZE] = {0};
-
 int client_rank;
 int app_id;
 size_t unifyfs_key_slice_range;
@@ -1779,8 +1777,7 @@ static int unifyfs_init(int rank)
     char* cfgval;
 
     if (!unifyfs_initialized) {
-        /* unifyfs debug level default is zero */
-        unifyfs_log_level = 0;
+        /* unifyfs default log level is LOG_ERR */
         cfgval = client_cfg.log_verbosity;
         if (cfgval != NULL) {
             rc = configurator_int_val(cfgval, &l);
@@ -1802,6 +1799,7 @@ static int unifyfs_init(int rank)
             if (*(void**)(wrap_unifyfs_list[i].function_address_pointer) == 0) {
                 LOGERR("This function name failed to be wrapped: %s",
                        wrap_unifyfs_list[i].name);
+
             }
         }
 #endif

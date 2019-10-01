@@ -32,22 +32,6 @@
 
 #include "unifyfs_global.h"
 
-/* one entry per delegator for which we have active read requests,
- * records rank of delegator and request count */
-typedef struct {
-    int req_cnt; /* number of requests to this delegator */
-    int del_id;  /* rank of delegator */
-} per_del_stat_t;
-
-/* records list of delegator information (rank, req count) for
- * set of delegators we have active read requests for */
-typedef struct {
-    per_del_stat_t* req_stat; /* delegator rank and request count */
-    int del_cnt; /* number of delegators we have read requests for */
-} del_req_stat_t;
-
-// NEW READ REQUEST STRUCTURES
-
 typedef struct {
     readreq_status_e status;   /* aggregate request status */
     int req_ndx;               /* index in reqmgr read_reqs array */
@@ -86,20 +70,8 @@ typedef struct {
     int next_rdreq_ndx;
     server_read_req_t read_reqs[RM_MAX_ACTIVE_REQUESTS];
 
-    /* a list of read requests to be sent to each delegator,
-     * main thread adds items to this list, request manager
-     * processes them */
-    msg_meta_t* del_req_set;
-
-    /* statistics of read requests to be sent to each delegator */
-    del_req_stat_t* del_req_stat;
-
     /* buffer to build read request messages */
     char del_req_msg_buf[REQ_BUF_LEN];
-
-    /* memory for posting receives for incoming read reply messages
-     * from the service threads */
-    char del_recv_msg_buf[RECV_BUF_CNT][SENDRECV_BUF_LEN];
 
     /* flag set to indicate request manager thread should exit */
     int exit_flag;
@@ -167,12 +139,14 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
 
 /* MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
 
+#if 0 // DISABLE UNUSED RPCS
 int invoke_server_hello_rpc(int dst_srvr_rank);
 
 int invoke_server_request_rpc(int dst_srvr_rank,
                               int req_id,
                               int tag,
                               void* data_buf, size_t buf_sz);
+#endif // DISABLE UNUSED RPCS
 
 int invoke_chunk_read_request_rpc(int dst_srvr_rank,
                                   server_read_req_t* rdreq,

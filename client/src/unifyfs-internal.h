@@ -335,7 +335,6 @@ extern int client_sockfd;
 extern struct pollfd cmd_fd;
 extern void* shm_req_buf;
 extern void* shm_recv_buf;
-extern char cmd_buf[CMD_BUF_SIZE];
 extern unifyfs_fattr_buf_t unifyfs_fattrs;
 
 extern int app_id;

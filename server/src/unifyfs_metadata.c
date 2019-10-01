@@ -218,24 +218,6 @@ int meta_init_indices(void)
     return 0;
 }
 
-void print_bget_indices(int app_id, int cli_id,
-                        send_msg_t* msgs, int tot_num)
-{
-    int i;
-    for (i = 0; i < tot_num;  i++) {
-        LOGDBG("index:dbg_rank:%d, dest_offset:%zu, "
-               "dest_del_rank:%d, dest_cli_id:%d, dest_app_id:%d, "
-               "length:%zu, src_app_id:%d, src_cli_id:%d, src_offset:%zu, "
-               "src_del_rank:%d, src_fid:%d, num:%d",
-               msgs[i].src_dbg_rank, msgs[i].dest_offset,
-               msgs[i].dest_delegator_rank, msgs[i].dest_client_id,
-               msgs[i].dest_app_id, msgs[i].length,
-               msgs[i].src_app_id, msgs[i].src_cli_id,
-               msgs[i].src_offset, msgs[i].src_delegator_rank,
-               msgs[i].src_fid, tot_num);
-    }
-}
-
 void print_fsync_indices(unifyfs_key_t** keys,
                          unifyfs_val_t** vals,
                          size_t num_entries)
