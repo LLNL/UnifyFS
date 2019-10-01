@@ -41,9 +41,6 @@ int svcmgr_init(void);
 /* join service manager thread and cleanup its state */
 int svcmgr_fini(void);
 
-/* process service request message */
-int sm_decode_msg(char* msg_buf);
-
 /* decode and issue chunk reads contained in message buffer */
 int sm_issue_chunk_reads(int src_rank,
                          int src_app_id,

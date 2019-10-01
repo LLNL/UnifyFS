@@ -52,10 +52,6 @@ struct sockaddr_un server_address;
 int detached_sock_idx = -1;
 int cur_sock_idx = -1;
 
-char cmd_buf[MAX_NUM_CLIENTS][CMD_BUF_SIZE];
-char ack_buf[MAX_NUM_CLIENTS][CMD_BUF_SIZE];
-int ack_msg[3] = {0};
-
 /* initialize the listening socket on this delegator
  * @return success/error code */
 int sock_init_server(int srvr_id)
@@ -201,14 +197,7 @@ int sock_wait_cmd(int poll_timeout)
             } else { // (i != 0) client sockets
                 rc = 0;
                 if (poll_set[i].revents & POLLIN) {
-                    ssize_t bytes_read = read(poll_set[i].fd,
-                                              cmd_buf[i], CMD_BUF_SIZE);
-                    if (bytes_read == 0) {
-                        rc = (int)UNIFYFS_ERROR_SOCK_DISCONNECT;
-                    } else { // read a client command
-                        cur_sock_idx = i;
-                        return UNIFYFS_SUCCESS;
-                    }
+                    assert(!"This is dead code");
                 } else if (poll_set[i].revents & POLLHUP) {
                     rc = (int)UNIFYFS_ERROR_SOCK_DISCONNECT;
                 } else if (poll_set[i].revents & POLLERR) {
@@ -227,63 +216,5 @@ int sock_wait_cmd(int poll_timeout)
     }
 
     return UNIFYFS_SUCCESS;
-
 }
 
-#if 0 // DEPRECATED DUE TO MARGO
-/*
- * send command to the client to let the client digest the
- * data in the shared receive buffer
- * @param: sock_id: socket index in poll_set
- * @param: cmd: command type
- *
- * */
-int sock_notify_client(int client_idx, int cmd)
-{
-    LOGDBG("sock notifying fd: %d", client_sockfd);
-
-    memset(ack_buf[client_idx], 0, sizeof(ack_buf[client_idx]));
-    memcpy(ack_buf[client_idx], &cmd, sizeof(int));
-
-    ssize_t rc = write(client_sockfd, ack_buf[client_idx],
-                       sizeof(ack_buf[client_idx]));
-    if (rc < 0) {
-        return (int)UNIFYFS_ERROR_SOCK_OTHER;
-    }
-    return UNIFYFS_SUCCESS;
-}
-
-int sock_ack_client(int client_idx, int ret_sz)
-{
-    ssize_t rc = write(poll_set[client_idx].fd, ack_buf[client_idx], ret_sz);
-    if (rc < 0) {
-        return (int)UNIFYFS_ERROR_SOCK_OTHER;
-    }
-    return UNIFYFS_SUCCESS;
-}
-
-int sock_handle_error(int sock_error_no)
-{
-    return UNIFYFS_SUCCESS;
-}
-
-char* sock_get_cmd_buf(int client_idx)
-{
-    return (char*) cmd_buf[client_idx];
-}
-
-char* sock_get_ack_buf(int client_idx)
-{
-    return (char*) ack_buf[client_idx];
-}
-
-int sock_get_id(void)
-{
-    return cur_sock_idx;
-}
-
-int sock_get_error_id(void)
-{
-    return detached_sock_idx;
-}
-#endif // DEPRECATED DUE TO MARGO

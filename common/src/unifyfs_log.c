@@ -33,7 +33,7 @@
 #include "unifyfs_const.h"
 
 /* one of the loglevel values */
-unifyfs_log_level_t unifyfs_log_level = 5;
+unifyfs_log_level_t unifyfs_log_level = LOG_ERR;
 
 /* pointer to log file stream */
 FILE* unifyfs_log_stream; // = NULL
