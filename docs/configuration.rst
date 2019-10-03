@@ -14,10 +14,10 @@ certain settings have command line options. When defined via multiple methods,
 the command line options have the highest priority, followed by environment
 variables, and finally config file options from ``unifyfs.conf``.
 
-If you're testing or developing on Unify on a system where you don't have
-install access to /etc/, you can specify a different location for the
-unifyfs.conf file using the -f command-line option to unifyfsd (see below).
-There is a sample unifyfs.conf file package under the install directory
+The config file is installed in /etc by default. However, one can
+specify a custom location for the
+unifyfs.conf file with the -f command-line option to unifyfsd (see below).
+There is a sample unifyfs.conf file in the installation directory
 under etc/unifyfs/.  This file is also available in the "extras" directory
 in the source repository.
 
