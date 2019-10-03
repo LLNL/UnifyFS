@@ -14,6 +14,12 @@ certain settings have command line options. When defined via multiple methods,
 the command line options have the highest priority, followed by environment
 variables, and finally config file options from ``unifyfs.conf``.
 
+If you're testing or developing on Unify on a system where you don't have
+install access to /etc/, you can specify a different location for the
+unifyfs.conf file using the -f command-line option to unifyfsd (see below).
+There is a sample unifyfs.conf file package for this purpose in the UnifyFS
+source repository in the directory "extras".
+
 The unified method for providing configuration control is adapted from
 CONFIGURATOR_. Configuration settings are grouped within named sections, and
 each setting consists of a key-value pair with one of the following types:
