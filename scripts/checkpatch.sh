@@ -2,7 +2,7 @@
 #
 # This is a wrapper around checkpatch.pl which is a code style-checking
 # script borrowed from the Linux kernel. The wrapper calls checkpatch.pl
-# with arguments to make it UnifyCR style-friendly.
+# with arguments to make it UnifyFS style-friendly.
 #
 
 basedir=$(dirname "$0")
@@ -10,7 +10,7 @@ checkpatch_cmd=$basedir/linux_kernel_checkpatch/checkpatch.pl
 
 #
 # These are checkpatch.pl message types to ignore for cases where
-# UnifyCR deviates from the Linux kernel coding standards.
+# UnifyFS deviates from the Linux kernel coding standards.
 #
 # See 'scripts/linux_kernel_checkpatch/checkpatch.pl --list-types'
 # for all message types

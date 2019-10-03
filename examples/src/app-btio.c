@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -54,7 +54,7 @@
 #include <errno.h>
 #include <aio.h>
 #include <strings.h>
-#include <unifycr.h>
+#include <unifyfs.h>
 
 #define TEST_STR_LEN 1024
 #define SZ_PER_ELEM 40 /*size of each data point in BTIO*/
@@ -197,7 +197,7 @@ int main(int argc, char* argv[])
     memset(buf, 0, elems_per_tile * SZ_PER_ELEM);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    unifycr_mount("/unifycr", rank, ranknum, 0);
+    unifyfs_mount("/unifyfs", rank, ranknum, 0);
     MPI_Barrier(MPI_COMM_WORLD);
 
     int fd = open(fname, O_RDWR | O_CREAT | O_TRUNC, 0600);
@@ -247,7 +247,7 @@ int main(int argc, char* argv[])
 
     if (direction != 0) {/*only write without reading*/
         close(fd);
-        unifycr_unmount();
+        unifyfs_unmount();
         if (rank == 0) {
             printf("Aggregated Write BW is %lf, Min Write BW is %lf\n",
                    aggwrbw, min_wr_bw);
@@ -291,7 +291,7 @@ int main(int argc, char* argv[])
         close(fd);
         MPI_Barrier(MPI_COMM_WORLD);
 
-        unifycr_unmount();
+        unifyfs_unmount();
 
         free(aiocb_list);
         free(cb_list);

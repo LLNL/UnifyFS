@@ -1,80 +1,85 @@
-lib_LTLIBRARIES = libunifycr.la libunifycr_gotcha.la
+lib_LTLIBRARIES = libunifyfs.la libunifyfs_gotcha.la
 
-libunifycrdir = $(includedir)
-libunifycr_gotchadir = $(includedir)
+if HAVE_FORTRAN
+lib_LTLIBRARIES += libunifyfsf.la
+endif
+
+libunifyfsdir = $(includedir)
+libunifyfs_gotchadir = $(includedir)
 
 AM_CFLAGS = -Wall -Wno-strict-aliasing
 
-include_HEADERS = unifycr.h
+include_HEADERS = unifyfs.h
 
-libunifycr_la_SOURCES = \
-  unifycr.h \
-  unifycr-fixed.c \
-  unifycr-fixed.h \
-  unifycr-stack.c \
-  unifycr-stack.h \
-  unifycr-stdio.c \
-  unifycr-stdio.h \
-  unifycr-sysio.c \
-  unifycr-sysio.h \
-  unifycr-dirops.h \
-  unifycr-dirops.c \
-  unifycr.c \
-  unifycr.h \
-  unifycr-internal.h \
-  unifycr_clientcalls_rpc.h \
-  unifycr_client.c \
-  unifycr_client.h \
-  flatbuffers_common_builder.h \
-  flatbuffers_common_reader.h \
-  ucr_read_builder.h \
-  ucr_read_reader.h \
-  uthash.h \
-  utlist.h
+if HAVE_FORTRAN
+include_HEADERS += unifyfsf.h
+endif
 
-libunifycr_la_CPPFLAGS = \
+CLIENT_COMMON_CPPFLAGS = \
   -I$(top_builddir)/client \
   -I$(top_srcdir)/common/src
 
-libunifycr_la_CFLAGS = $(MPI_CFLAGS) $(MERCURY_CFLAGS) $(ARGOBOTS_CFLAGS) $(MARGO_CFLAGS) $(FLATCC_CFLAGS)
-libunifycr_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION) $(MPI_CLDFLAGS) $(MERCURY_LDFLAGS) $(MERCURY_LIBS) $(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) $(MARGO_LDFLAGS) $(MARGO_LIBS) $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
-libunifycr_la_LIBADD = $(top_builddir)/common/src/libunifycr_common.la \
-					   -lcrypto -lrt -lpthread
+CLIENT_COMMON_CFLAGS = \
+  $(MPI_CFLAGS) \
+  $(MERCURY_CFLAGS) \
+  $(ARGOBOTS_CFLAGS) \
+  $(MARGO_CFLAGS) \
+  $(FLATCC_CFLAGS)
 
-libunifycr_gotcha_la_SOURCES = \
-  unifycr.h \
-  unifycr-fixed.c \
-  unifycr-fixed.h \
-  unifycr-stack.c \
-  unifycr-stack.h \
-  unifycr-stdio.c \
-  unifycr-stdio.h \
-  unifycr-sysio.c \
-  unifycr-sysio.h \
-  unifycr-dirops.h \
-  unifycr-dirops.c \
-  unifycr.c \
-  unifycr.h \
-  gotcha_map_unifycr_list.h \
-  unifycr-internal.h \
-  unifycr_clientcalls_rpc.h \
-  unifycr_client.c \
-  unifycr_client.h \
-  flatbuffers_common_builder.h \
-  flatbuffers_common_reader.h \
-  ucr_read_builder.h \
-  ucr_read_reader.h \
+CLIENT_COMMON_LDFLAGS = \
+  -version-info $(LIBUNIFYFS_LT_VERSION) \
+  $(MPI_CLDFLAGS) \
+  $(MARGO_LDFLAGS) \
+  $(FLATCC_LDFLAGS)
+
+CLIENT_COMMON_LIBADD = \
+  $(top_builddir)/common/src/libunifyfs_common.la \
+  $(MARGO_LIBS) \
+  $(FLATCC_LIBS) \
+  -lcrypto -lrt -lpthread
+
+CLIENT_COMMON_SOURCES = \
+  margo_client.c \
+  margo_client.h \
+  unifyfs.c \
+  unifyfs.h \
+  unifyfs-dirops.h \
+  unifyfs-dirops.c \
+  unifyfs-fixed.c \
+  unifyfs-fixed.h \
+  unifyfs-internal.h \
+  unifyfs-stack.c \
+  unifyfs-stack.h \
+  unifyfs-stdio.c \
+  unifyfs-stdio.h \
+  unifyfs-sysio.c \
+  unifyfs-sysio.h \
   uthash.h \
   utlist.h
 
-libunifycr_gotcha_la_CPPFLAGS = \
-  -DUNIFYCR_GOTCHA \
-  -I$(top_builddir)/client \
-  -I$(top_srcdir)/common/src
+if USE_PMPI_WRAPPERS
+CLIENT_COMMON_SOURCES += \
+  pmpi_wrappers.c \
+  pmpi_wrappers.h
+endif
 
-libunifycr_gotcha_la_CFLAGS = $(GOTCHA_CFLAGS) $(MPI_CFLAGS) $(MERCURY_CFLAGS) $(ARGOBOTS_CFLAGS) $(MARGO_CFLAGS) $(FLATCC_CFLAGS)
-libunifycr_gotcha_la_LDFLAGS = -version-info $(LIBUNIFYCR_LT_VERSION) $(GOTCHA_LDFLAGS) $(MPI_CLDFLAGS) $(MERCURY_LDFLAGS) $(MERCURY_LIBS) $(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) $(MARGO_LDFLAGS) $(MARGO_LIBS) $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
-libunifycr_gotcha_la_LIBADD = $(top_builddir)/common/src/libunifycr_common.la \
-                              -lgotcha -lcrypto -lrt -lpthread
+libunifyfs_la_SOURCES  = $(CLIENT_COMMON_SOURCES)
+libunifyfs_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS)
+libunifyfs_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS)
+libunifyfs_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS)
+libunifyfs_la_LIBADD   = $(CLIENT_COMMON_LIBADD)
 
+libunifyfs_gotcha_la_SOURCES  = $(CLIENT_COMMON_SOURCES) gotcha_map_unifyfs_list.h
+libunifyfs_gotcha_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS) -DUNIFYFS_GOTCHA
+libunifyfs_gotcha_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS) $(GOTCHA_CFLAGS)
+libunifyfs_gotcha_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS) $(GOTCHA_LDFLAGS)
+libunifyfs_gotcha_la_LIBADD   = $(CLIENT_COMMON_LIBADD) -lgotcha
 
+if HAVE_FORTRAN
+
+libunifyfsf_la_SOURCES  = unifyfsf.c
+libunifyfsf_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS)
+libunifyfsf_la_CFLAGS   = $(AM_CFLAGS) $(CLIENT_COMMON_CFLAGS)
+libunifyfsf_la_LIBADD   = libunifyfs_gotcha.la
+
+endif

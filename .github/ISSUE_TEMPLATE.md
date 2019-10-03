@@ -3,7 +3,7 @@ Thank you for reporting an issue.
 
 *IMPORTANT* - Please search our issue tracker *before* making a new issue.
 If you cannot find a similar issue, then create a new issue.
-https://github.com/LLNL/UnifyCR/issues
+https://github.com/LLNL/UnifyFS/issues
 
 Please fill in as much of the template as possible.
 -->
@@ -15,7 +15,7 @@ Type                   | Version/Name
 Operating System       |
 OS Version             |
 Architecture           |
-UnifyCR Version        |
+UnifyFS Version        |
 
 ### Describe the problem you're observing
 

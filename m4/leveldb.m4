@@ -1,4 +1,4 @@
-AC_DEFUN([UNIFYCR_AC_LEVELDB], [
+AC_DEFUN([UNIFYFS_AC_LEVELDB], [
   # preserve state of flags
   LEVELDB_OLD_CFLAGS=$CFLAGS
   LEVELDB_OLD_LDFLAGS=$LDFLAGS
@@ -6,7 +6,7 @@ AC_DEFUN([UNIFYCR_AC_LEVELDB], [
   AC_ARG_WITH([leveldb], [AC_HELP_STRING([--with-leveldb=PATH],
     [path to installed libleveldb [default=/usr/local]])], [
     LEVELDB_CFLAGS="-I${withval}/include"
-    LEVELDB_LDFLAGS="-L${withval}/lib"
+    LEVELDB_LDFLAGS="-L${withval}/lib -L${withval}/lib64"
     CFLAGS="$CFLAGS ${LEVELDB_CFLAGS}"
     LDFLAGS="$LDFLAGS ${LEVELDB_LDFLAGS}"
   ], [])

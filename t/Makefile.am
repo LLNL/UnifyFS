@@ -9,9 +9,10 @@ TESTS = \
 	0200-stdio-gotcha.t \
 	0500-sysio-static.t \
 	0600-stdio-static.t \
-	9005-unifycr-unmount.t \
-	9010-stop-unifycrd.t \
-	9020-mountpoint-empty.t
+	9005-unifyfs-unmount.t \
+	9010-stop-unifyfsd.t \
+	9020-mountpoint-empty.t \
+	9100-metadata-api.t
 
 check_SCRIPTS = \
 	0001-setup.t \
@@ -19,9 +20,10 @@ check_SCRIPTS = \
 	0200-stdio-gotcha.t \
 	0500-sysio-static.t \
 	0600-stdio-static.t \
-	9005-unifycr-unmount.t \
-	9010-stop-unifycrd.t \
-	9020-mountpoint-empty.t
+	9005-unifyfs-unmount.t \
+	9010-stop-unifyfsd.t \
+	9020-mountpoint-empty.t \
+	9100-metadata-api.t
 
 EXTRA_DIST = \
 	$(check_SCRIPTS) \
@@ -39,23 +41,47 @@ libexec_PROGRAMS = \
 	std/stdio-gotcha.t \
 	sys/sysio-static.t \
 	std/stdio-static.t \
-	unifycr_unmount.t
+	server/metadata.t \
+	unifyfs_unmount.t
 
 test_ldadd = \
 	$(top_builddir)/t/lib/libtap.la \
 	$(top_builddir)/t/lib/libtestutil.la \
-	$(top_builddir)/client/src/libunifycr_gotcha.la \
+	$(top_builddir)/client/src/libunifyfs_gotcha.la \
         $(MPI_CLDFLAGS) $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 
 test_static_ldadd = \
 	$(top_builddir)/t/lib/libtap.la \
 	$(top_builddir)/t/lib/libtestutil.la \
-	$(top_builddir)/client/src/libunifycr.la
+	$(top_builddir)/client/src/libunifyfs.la
 
 test_static_ldflags = \
 	-static \
 	$(CP_WRAPPERS) $(AM_LDFLAGS) $(MPI_CLDFLAGS) $(FLATCC_LDFLAGS) \
         $(FLATCC_LIBS)
+
+test_metadata_ldadd = \
+	$(top_builddir)/t/lib/libtap.la \
+	$(top_builddir)/t/lib/libtestutil.la \
+	$(top_builddir)/common/src/libunifyfs_common.la \
+	$(top_builddir)/server/src/libunifyfsd.a \
+	$(top_builddir)/meta/src/libmdhim.a \
+	$(LEVELDB_LDFLAGS) $(LEVELDB_LIBS) \
+	$(MPI_CLDFLAGS) \
+	$(MERCURY_LDFLAGS) $(MERCURY_LIBS) \
+	$(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) \
+	$(MARGO_LDFLAGS) $(MARGO_LIBS) \
+	$(FLATCC_LDFLAGS) $(FLATCC_LIBS) \
+	-lpthread -lm -lstdc++ -lrt
+
+test_meta_cppflags = \
+	-I$(top_srcdir) \
+	-I$(top_srcdir)/server/src \
+	-I$(top_srcdir)/common/src \
+	-D_GNU_SOURCE \
+	$(AM_CPPFLAGS) \
+	$(MARGO_CFLAGS) \
+	$(MPI_CFLAGS)
 
 test_cppflags = \
 	-I$(top_srcdir) \
@@ -63,7 +89,7 @@ test_cppflags = \
 	-I$(top_srcdir)/common/src \
 	-D_GNU_SOURCE \
 	$(AM_CPPFLAGS) \
-        $(MPI_CFLAGS)
+	$(MPI_CFLAGS)
 
 sys_sysio_gotcha_t_SOURCES = sys/sysio_suite.h \
                              sys/sysio_suite.c \
@@ -101,7 +127,16 @@ std_stdio_static_t_CPPFLAGS = $(test_cppflags)
 std_stdio_static_t_LDADD = $(test_static_ldadd)
 std_stdio_static_t_LDFLAGS = $(test_static_ldflags)
 
-unifycr_unmount_t_SOURCES = unifycr_unmount.c
-unifycr_unmount_t_CPPFLAGS = $(test_cppflags)
-unifycr_unmount_t_LDADD = $(test_ldadd)
-unifycr_unmount_t_LDFLAGS = $(AM_LDFLAGS)
+server_metadata_t_SOURCES = \
+	server/metadata_suite.h \
+	server/metadata_suite.c \
+	server/unifyfs_meta_get_test.c
+
+server_metadata_t_CPPFLAGS = $(test_meta_cppflags)
+server_metadata_t_LDADD = $(test_metadata_ldadd)
+server_metadata_t_LDFLAGS = $(AM_LDFLAGS)
+
+unifyfs_unmount_t_SOURCES = unifyfs_unmount.c
+unifyfs_unmount_t_CPPFLAGS = $(test_cppflags)
+unifyfs_unmount_t_LDADD = $(test_ldadd)
+unifyfs_unmount_t_LDFLAGS = $(AM_LDFLAGS)

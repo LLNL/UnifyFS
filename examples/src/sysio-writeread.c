@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -50,8 +50,8 @@
 #include <sys/time.h>
 #include <aio.h>
 
-#ifndef NO_UNIFYCR
-# include <unifycr.h>
+#ifndef DISABLE_UNIFYFS
+# include <unifyfs.h>
 #endif
 
 #define TEST_STR_LEN 1024
@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
     size_t index, i, j, offset = 0;
     ssize_t rc;
     int ret;
-    int pat = 0, c, num_rank, rank, fd, use_unifycr = 0;
+    int pat = 0, c, num_rank, rank, fd, use_unifyfs = 0;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &num_rank);
@@ -106,14 +106,14 @@ int main(int argc, char* argv[])
         case 't': /*size of each write */
             tran_sz = atol(optarg);
             break;
-        case 'u': /* use unifycr */
-            use_unifycr = atoi(optarg);
+        case 'u': /* use unifyfs */
+            use_unifyfs = atoi(optarg);
             break;
         }
     }
 
-    if (use_unifycr) {
-        strcpy(mntpt, "/unifycr");
+    if (use_unifyfs) {
+        strcpy(mntpt, "/unifyfs");
     } else {
         strcpy(mntpt, "/tmp");
     }
@@ -137,21 +137,21 @@ int main(int argc, char* argv[])
     }
 
     size_t n_tran_per_blk = blk_sz / tran_sz;
+    double rank_mib = (double)(blk_sz * num_blk) / 1048576;
+    double total_mib = rank_mib * num_rank;
 
     char* buf = malloc(tran_sz);
-
     if (buf == NULL) {
         return -1;
     }
 
     int byte = (int)'0' + rank;
-
     memset(buf, byte, tran_sz);
 
-#ifndef NO_UNIFYCR
-    if (use_unifycr) {
-        ret = unifycr_mount(mntpt, rank, num_rank, 0);
-        if (UNIFYCR_SUCCESS != ret) {
+#ifndef DISABLE_UNIFYFS
+    if (use_unifyfs) {
+        ret = unifyfs_mount(mntpt, rank, num_rank, 0);
+        if (UNIFYFS_SUCCESS != ret) {
             MPI_Abort(MPI_COMM_WORLD, ret);
         }
         MPI_Barrier(MPI_COMM_WORLD);
@@ -165,15 +165,14 @@ int main(int argc, char* argv[])
     }
 
     int open_flags = O_CREAT | O_RDWR;
-
     fd = open(tmpfname, open_flags, 0644);
     if (fd < 0) {
         printf("open file failure\n");
         fflush(stdout);
         return -1;
     }
-    MPI_Barrier(MPI_COMM_WORLD);
 
+    MPI_Barrier(MPI_COMM_WORLD);
     gettimeofday(&write_start, NULL);
 
     for (i = 0; i < num_blk; i++) {
@@ -196,6 +195,7 @@ int main(int argc, char* argv[])
     fsync(fd);
 
     gettimeofday(&write_end, NULL);
+    free(buf);
 
     meta_time += 1000000 * (write_end.tv_sec - meta_start.tv_sec)
                  + write_end.tv_usec - meta_start.tv_usec;
@@ -205,9 +205,20 @@ int main(int argc, char* argv[])
                   + write_end.tv_usec - write_start.tv_usec;
     write_time = write_time / 1000000;
 
-    MPI_Barrier(MPI_COMM_WORLD);
+    double agg_write_bw, max_write_time;
+    double write_bw = rank_mib / write_time;
+    MPI_Reduce(&write_bw, &agg_write_bw, 1, MPI_DOUBLE, MPI_SUM,
+               0, MPI_COMM_WORLD);
+    MPI_Reduce(&write_time, &max_write_time, 1, MPI_DOUBLE, MPI_MAX,
+               0, MPI_COMM_WORLD);
+    double min_write_bw = total_mib / max_write_time;
 
-    free(buf);
+    if (rank == 0) {
+        printf("Aggregate Write BW is %.3lf MiB/s\n"
+               "  Minimum Write BW is %.3lf MiB/s\n\n",
+               agg_write_bw, min_write_bw);
+        fflush(stdout);
+    }
 
     /* read buffer */
     char* read_buf = calloc(num_blk, blk_sz);
@@ -255,67 +266,43 @@ int main(int argc, char* argv[])
         }
     }
 
+    MPI_Barrier(MPI_COMM_WORLD);
     gettimeofday(&read_start, NULL);
 
     ret = lio_listio(LIO_WAIT, cb_list, num_reqs, NULL);
-
     if (ret < 0) {
         perror("lio_listio failed");
     }
 
     gettimeofday(&read_end, NULL);
 
+    close(fd);
+    free(read_buf);
+
     read_time = (read_end.tv_sec - read_start.tv_sec) * 1000000
                 + read_end.tv_usec - read_start.tv_usec;
     read_time = read_time / 1000000;
 
-    close(fd);
-    free(read_buf);
-
-    MPI_Barrier(MPI_COMM_WORLD);
-
-#ifndef NO_UNIFYCR
-    if (use_unifycr) {
-        unifycr_unmount();
-    }
-#endif
-
-    double rank_mib = (double)(blk_sz * num_blk) / 1048576;
-
-    double total_mib = rank_mib * num_rank;
-
-    double write_bw = rank_mib / write_time;
-
+    double agg_read_bw, max_read_time;
     double read_bw = rank_mib / read_time;
-
-    double agg_write_bw, agg_read_bw;
-    double max_write_time, max_read_time;
-
-    MPI_Reduce(&write_bw, &agg_write_bw, 1, MPI_DOUBLE, MPI_SUM,
-               0, MPI_COMM_WORLD);
-
-    MPI_Reduce(&write_time, &max_write_time, 1, MPI_DOUBLE, MPI_MAX,
-               0, MPI_COMM_WORLD);
-
-    double min_write_bw = total_mib / max_write_time;
-
     MPI_Reduce(&read_bw, &agg_read_bw, 1, MPI_DOUBLE, MPI_SUM,
                0, MPI_COMM_WORLD);
-
     MPI_Reduce(&read_time, &max_read_time, 1, MPI_DOUBLE, MPI_MAX,
                0, MPI_COMM_WORLD);
-
     double min_read_bw = total_mib / max_read_time;
 
     if (rank == 0) {
-        printf("Aggregate Write BW is %.3lf MiB/s\n"
-               "  Minimum Write BW is %.3lf MiB/s\n\n",
-               agg_write_bw, min_write_bw);
         printf("Aggregate Read BW is %.3lf MiB/s\n"
                "  Minimum Read BW is %.3lf MiB/s\n\n",
                agg_read_bw, min_read_bw);
         fflush(stdout);
     }
+
+#ifndef DISABLE_UNIFYFS
+    if (use_unifyfs) {
+        unifyfs_unmount();
+    }
+#endif
 
     MPI_Finalize();
 

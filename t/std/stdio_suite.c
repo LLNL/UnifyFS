@@ -7,20 +7,20 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 #include <string.h>
 #include <mpi.h>
-#include <unifycr.h>
+#include <unifyfs.h>
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
 
 #include "stdio_suite.h"
 
-/* The test suite for stdio wrappers found in client/src/unifycr-stdio.c.
+/* The test suite for stdio wrappers found in client/src/unifyfs-stdio.c.
  *
  *
  * To add new tests to existing stdio tests:
@@ -28,9 +28,9 @@
  *    <stdio_function_name>.c file.
  *
  *
- * When a new wrapper in unifycr-stdio.c needs to be tested:
+ * When a new wrapper in unifyfs-stdio.c needs to be tested:
  * 1. Create a <stdio_function_name>.c file with a function called
- *    <stdio_function_name>_test(char* unifycr_root) that contains all the TAP
+ *    <stdio_function_name>_test(char* unifyfs_root) that contains all the TAP
  *    tests specific to that wrapper.
  * 2. Add the <stdio_function_name>_test to stdio_suite.h.
  * 3. Add the <stdio_function_name>.c file to the /t/Makefile.am under the
@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
 {
     int rank_num;
     int rank;
-    char* unifycr_root;
+    char* unifyfs_root;
     int rc;
 
     MPI_Init(&argc, &argv);
@@ -50,14 +50,14 @@ int main(int argc, char* argv[])
 
     plan(NO_PLAN);
 
-    unifycr_root = testutil_get_mount_point();
+    unifyfs_root = testutil_get_mount_point();
 
-    /* Verify unifycr_mount succeeds. */
-    rc = unifycr_mount(unifycr_root, rank, rank_num, 0);
-    ok(rc == 0, "unifycr_mount at %s (rc=%d)", unifycr_root, rc);
+    /* Verify unifyfs_mount succeeds. */
+    rc = unifyfs_mount(unifyfs_root, rank, rank_num, 0);
+    ok(rc == 0, "unifyfs_mount at %s (rc=%d)", unifyfs_root, rc);
 
     if (rc != 0) {
-        BAIL_OUT("unifycr_mount in stdio_suite failed");
+        BAIL_OUT("unifyfs_mount in stdio_suite failed");
     }
 
     /* Add tests for new functions below in the order desired for testing.
@@ -69,11 +69,11 @@ int main(int argc, char* argv[])
      * tests that ran first to break as that is likely to cause subsequent
      * failures to start passing. */
 
-    fopen_fclose_test(unifycr_root);
-
-    done_testing();
+    fopen_fclose_test(unifyfs_root);
 
     MPI_Finalize();
+
+    done_testing();
 
     return 0;
 }
