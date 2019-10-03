@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -25,8 +25,8 @@ void testutil_rand_string(char* buf, size_t len);
 void testutil_rand_path(char* buf, size_t len, const char* pfx);
 
 /*
- * Return a pointer to the path name of the UnifyCR mount point. Use the
- * value of the environment variable UNIFYCR_MOUNT_POINT if it exists,
+ * Return a pointer to the path name of the UnifyFS mount point. Use the
+ * value of the environment variable UNIFYFS_MOUNT_POINT if it exists,
  * otherwise use P_tmpdir which is defined in stdio.h and is typically
  * /tmp.
  */

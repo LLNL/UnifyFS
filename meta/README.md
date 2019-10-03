@@ -2,7 +2,7 @@ MDHIM - Multi-Dimensional Hashing Indexing Middleware
 
 Description
 ---------------
-This version of MDHIM package is customized to support UnifyCR. 
+This version of MDHIM package is customized to support UnifyFS. 
 In order to test these extended interfaces and implementations,
 two test files are provided in the directory tests/singletests
 (range_bget.c and range_test.c). The test scripts for these two

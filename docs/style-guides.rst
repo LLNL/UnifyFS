@@ -5,7 +5,7 @@ Style Guides
 Coding Conventions
 ==================
 
-UnifyCR follows the `Linux kernel coding style
+UnifyFS follows the `Linux kernel coding style
 <https://www.kernel.org/doc/html/latest/process/coding-style.html>`_ except
 that code is indented using four spaces per level instead of tabs. Please run
 ``make checkstyle`` to check your patch for style problems before submitting it
@@ -20,10 +20,10 @@ the project.
 .. code-block:: Bash
     :caption: To apply style to the source file foo.c:
 
-    astyle --options=scripts/unifycr.astyle foo.c
+    astyle --options=scripts/unifyfs.astyle foo.c
 
-The `unifycr.astyle file
-<https://github.com/LLNL/UnifyCR/blob/dev/scripts/unifycr.astyle>`_ specifies
+The `unifyfs.astyle file
+<https://github.com/LLNL/UnifyFS/blob/dev/scripts/unifyfs.astyle>`_ specifies
 the options used for this project. For a full list of available astyle options,
 see http://astyle.sourceforge.net/astyle.html.
 

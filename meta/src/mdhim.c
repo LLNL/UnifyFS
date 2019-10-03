@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -893,33 +893,6 @@ struct mdhim_brm_t *mdhimBDelete(struct mdhim_t *md, struct index_t *index,
 
 	//Return the head of the list
 	return brm_head;
-}
-
-int unlink_cb(const char *fpath,\
-		const struct stat *sb, int typeflag, struct FTW *ftwbuf)
-{
-    int rv = remove(fpath);
-
-    if (rv)
-        perror(fpath);
-
-    return rv;
-}
-
-int rmrf(char *path)
-{
-    return nftw(path, unlink_cb, 64, FTW_DEPTH | FTW_PHYS);
-}
-
-int mdhimSanitize(char *dbfilename, char *statfilename, char *manifestfilename) {
-	int rc = 0;
-
-	rc = rmrf(dbfilename);
-	rc = rmrf(statfilename);
-	rc = unlink(manifestfilename);
-
-	return rc;
-
 }
 
 

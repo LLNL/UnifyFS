@@ -1,41 +1,53 @@
-bin_PROGRAMS = unifycrd
+noinst_LIBRARIES = libunifyfsd.a
 
-unifycrd_SOURCES = arraylist.c \
-                   arraylist.h \
-                   unifycr_cmd_handler.c \
-                   unifycr_cmd_handler.h \
-                   unifycr_init.c \
-                   unifycr_init.h \
-                   unifycr_metadata.c \
-                   unifycr_metadata.h \
-                   unifycr_request_manager.c \
-                   unifycr_request_manager.h \
-                   unifycr_service_manager.c \
-                   unifycr_service_manager.h \
-                   unifycr_sock.c \
-                   unifycr_sock.h \
-                   unifycr_global.h \
-                   unifycr_setup.h \
-                   unifycr_server.h
+libunifyfsd_a_SOURCES = \
+    arraylist.c \
+    arraylist.h \
+    margo_server.c \
+    margo_server.h \
+    unifyfs_cmd_handler.c \
+    unifyfs_global.h \
+    unifyfs_metadata.c \
+    unifyfs_metadata.h \
+    unifyfs_request_manager.c \
+    unifyfs_request_manager.h \
+    unifyfs_service_manager.c \
+    unifyfs_service_manager.h \
+    unifyfs_sock.c \
+    unifyfs_sock.h
 
-unifycrd_LDFLAGS = -static
+bin_PROGRAMS = unifyfsd
 
-unifycrd_LDADD = $(top_builddir)/common/src/libunifycr_common.la \
-                 $(top_builddir)/meta/src/libmdhim.a \
-                 $(LEVELDB_LDFLAGS) $(LEVELDB_LIBS) \
-                 $(MPI_CLDFLAGS) \
-                 $(MERCURY_LDFLAGS) $(MERCURY_LIBS) \
-                 $(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) \
-                 $(MARGO_LDFLAGS) $(MARGO_LIBS) \
-                 $(FLATCC_LDFLAGS) $(FLATCC_LIBS) \
-                 -lpthread -lm -lstdc++ -lrt
+unifyfsd_SOURCES = unifyfs_init.c
 
-AM_CPPFLAGS = -I$(top_srcdir)/common/src \
-              -I$(top_srcdir)/client/src \
-              -I$(top_srcdir)/meta/src \
-              -I$(top_srcdir)/meta/src/uthash \
-              -I$(top_srcdir)/meta/src/Mlog2
+unifyfsd_LDFLAGS = -static \
+  $(LEVELDB_LDFLAGS) \
+  $(MARGO_LDFLAGS) \
+  $(FLATCC_LDFLAGS)
 
-AM_CFLAGS = -Wall $(MPI_CFLAGS) $(MERCURY_CFLAGS) $(ARGOBOTS_CFLAGS) $(MARGO_CFLAGS) $(FLATCC_CFLAGS)
+unifyfsd_LDADD = \
+    libunifyfsd.a \
+    $(top_builddir)/common/src/libunifyfs_common.la \
+    $(top_builddir)/meta/src/libmdhim.a \
+    $(LEVELDB_LIBS) \
+    $(MPI_CLDFLAGS) \
+    $(MARGO_LIBS) \
+    $(FLATCC_LIBS) \
+    -lpthread -lm -lstdc++ -lrt
+
+AM_CPPFLAGS = \
+  -I$(top_srcdir)/common/src \
+  -I$(top_srcdir)/client/src \
+  -I$(top_srcdir)/meta/src \
+  -I$(top_srcdir)/meta/src/uthash \
+  -I$(top_srcdir)/meta/src/Mlog2
+
+AM_CFLAGS = -Wall \
+  $(LEVELDB_CFLAGS) \
+  $(MPI_CFLAGS) \
+  $(MERCURY_CFLAGS) \
+  $(ARGOBOTS_CFLAGS) \
+  $(MARGO_CFLAGS) \
+  $(FLATCC_CFLAGS)
 
 CLEANFILES = $(bin_PROGRAMS)

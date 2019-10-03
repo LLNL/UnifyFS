@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
 	db_opts->manifest_path = manifest_path;
 	db_opts->db_name = db_name;
 	db_opts->db_type = LEVELDB;
-	db_opts->db_key_type = MDHIM_UNIFYCR_KEY;
+	db_opts->db_key_type = MDHIM_UNIFYFS_KEY;
 	db_opts->debug_level = MLOG_CRIT;
 	db_opts->max_recs_per_slice = rangesz;
 	db_opts->rserver_factor = serratio;	

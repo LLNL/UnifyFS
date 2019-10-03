@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -47,7 +47,7 @@
 #include "partitioner.h"
 #include "data_store.h"
 
-#include "unifycr_metadata.h"
+#include "unifyfs_metadata.h"
 
 /* Function pointer for comparator in C */
 typedef int (*mdhim_store_cmp_fn_t)(void* arg, const char* a, size_t alen,

@@ -1,7 +1,7 @@
 #!/bin/sh
 
 echo
-echo ... UnifyCR autogen ...
+echo ... UnifyFS autogen ...
 echo
 
 ## Check all dependencies are present
@@ -43,14 +43,14 @@ fi
 env libtoolize --version > /dev/null 2>&1
 if [ $? -eq 0 ]; then
   # libtoolize was found, so use it
-  TOOL=libtoolize
+  LIBTOOLIZE=libtoolize
 else
   # libtoolize wasn't found, so check for glibtoolize
   env glibtoolize --version > /dev/null 2>&1
   if [ $? -eq 0 ]; then
-    TOOL=glibtoolize
+    LIBTOOLIZE=glibtoolize
   else
-    MISSING="$MISSING libtoolize/glibtoolize"
+    MISSING="$MISSING libtoolize"
   fi
 fi
 
@@ -76,16 +76,25 @@ if [ "x$MISSING" != "x" ]; then
 fi
 
 ## Do the autogeneration
-echo Running ${ACLOCAL}...
-$ACLOCAL
-echo Running ${AUTOHEADER}...
-$AUTOHEADER
-echo Running ${TOOL}...
-$TOOL --automake --copy --force
-echo Running ${AUTOCONF}...
-$AUTOCONF
-echo Running ${AUTOMAKE}...
-$AUTOMAKE --add-missing --force-missing --copy --foreign
+env autoreconf --version > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+  echo Running ${LIBTOOLIZE}...
+  $LIBTOOLIZE --automake --copy --force
+  echo Running autoreconf...
+  autoreconf --force --install --verbose
+else
+  echo Running ${LIBTOOLIZE}...
+  $LIBTOOLIZE --automake --copy --force
+  echo Running ${ACLOCAL}...
+  $ACLOCAL
+  echo Running ${AUTOHEADER}...
+  $AUTOHEADER
+  echo Running ${AUTOCONF}...
+  $AUTOCONF
+  echo Running ${AUTOMAKE}...
+  $AUTOMAKE --add-missing --force-missing --copy --foreign
+fi
+
 
 # Instruct user on next steps
 echo

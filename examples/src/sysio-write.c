@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 #include <config.h>
 
@@ -26,7 +26,7 @@
 #include <libgen.h>
 #include <getopt.h>
 #include <mpi.h>
-#include <unifycr.h>
+#include <unifyfs.h>
 
 #include "testlib.h"
 
@@ -48,7 +48,7 @@ static int fd;              /* target file descriptor */
 static int synchronous;     /* sync metadata for each write? (default: no)*/
 
 static int lipsum;          /* generate contents to verify correctness */
-static int standard;        /* not mounting unifycr when set */
+static int standard;        /* not mounting unifyfs when set */
 
 /* time statistics */
 static struct timeval write_start, meta_start, write_end;
@@ -57,9 +57,9 @@ static int rank;
 static int total_ranks;
 
 static int debug;           /* pause for attaching debugger */
-static int unmount;         /* unmount unifycr after running the test */
+static int unmount;         /* unmount unifyfs after running the test */
 static char* buf;           /* I/O buffer */
-static char* mountpoint = "/unifycr";   /* unifycr mountpoint */
+static char* mountpoint = "/unifyfs";   /* unifyfs mountpoint */
 static char* filename = "testfile"; /* testfile name under mountpoint */
 static char targetfile[NAME_MAX];   /* target file name */
 
@@ -194,13 +194,13 @@ static const char* usage_str =
     "                                  (default: testfile)\n"
     " -h, --help                       help message\n"
     " -L, --lipsum                     generate contents to verify correctness\n"
-    " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-    "                                  (default: /unifycr)\n"
+    " -m, --mount=<mountpoint>         use <mountpoint> for unifyfs\n"
+    "                                  (default: /unifyfs)\n"
     " -P, --pwrite                     use pwrite(2) instead of write(2)\n"
     " -p, --pattern=<pattern>          should be 'n1'(n to 1) or 'nn' (n to n)\n"
     "                                  (default: n1)\n"
     " -S, --synchronous                sync metadata on each write\n"
-    " -s, --standard                   do not use unifycr but run standard I/O\n"
+    " -s, --standard                   do not use unifyfs but run standard I/O\n"
     " -u, --unmount                    unmount the filesystem after test\n"
     "\n";
 
@@ -312,9 +312,9 @@ int main(int argc, char** argv)
     }
 
     if (!standard) {
-        ret = unifycr_mount(mountpoint, rank, total_ranks, 0);
+        ret = unifyfs_mount(mountpoint, rank, total_ranks, 0);
         if (ret) {
-            test_print(rank, "unifycr_mount failed (return = %d)", ret);
+            test_print(rank, "unifyfs_mount failed (return = %d)", ret);
             exit(-1);
         }
     }
@@ -375,7 +375,7 @@ int main(int argc, char** argv)
     }
 
     if (!standard && unmount) {
-        unifycr_unmount();
+        unifyfs_unmount();
     }
 
     if (ret == 0) {

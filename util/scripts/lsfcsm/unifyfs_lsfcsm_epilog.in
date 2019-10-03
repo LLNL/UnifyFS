@@ -1,0 +1,20 @@
+#!/bin/bash
+
+bindir=@unifyfs_bin_path@
+unifyfsd=$bindir/unifyfsd
+
+exec &>> /var/log/unifyfs-lsfcsm.$CSM_PRIMARY_JOB_ID
+
+echo "Stopping UnifyFS daemon"
+
+if [[ -x $(type -p pkill) ]]; then
+    echo "running: pkill unifyfsd"
+    pkill unifyfsd
+elif [[ -x $(type -p pidof) ]]; then
+    pid=$(pidof -s $unifyfsd)
+    if [[ -n $pid ]]; then
+        echo "running: kill $pid"
+        kill $pid
+    fi
+fi
+
