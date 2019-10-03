@@ -1,0 +1,17 @@
+bin_PROGRAMS = unifyfs
+
+unifyfs_SOURCES = unifyfs.c \
+                  unifyfs-rm.c
+
+noinst_HEADERS = unifyfs.h
+
+unifyfs_LDADD = $(top_builddir)/common/src/libunifyfs_common.la
+
+AM_CPPFLAGS = -I$(top_srcdir)/common/src \
+              -DBINDIR=\"$(bindir)\" \
+              -DSBINDIR=\"$(sbindir)\"
+
+AM_CFLAGS = -Wall
+
+CLEANFILES = $(bin_PROGRAMS)
+

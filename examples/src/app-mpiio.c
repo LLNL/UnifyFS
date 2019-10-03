@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 #include <config.h>
 
@@ -26,34 +26,43 @@
 #include <libgen.h>
 #include <getopt.h>
 #include <mpi.h>
-#include <unifycr.h>
+#include <unifyfs.h>
 
 #include "testlib.h"
 
-static uint64_t blocksize = 1 << 20;        /* 1MB */
-static uint64_t nblocks = 128;              /* Each process writes 128MB */
-static uint64_t chunksize = 64 * (1 << 10); /* 64KB for each write(2) call */
+#ifndef KIB
+# define KIB (1 << 10)
+#endif
 
-static int type;            /* 0 for write (default), 1 for read */
-static int pattern;         /* N to 1 (N1, default) or N to N (NN) */
+#ifndef MIB
+# define MIB (1 << 20)
+#endif
+
+static size_t blocksize = MIB;      /* 1 MiB */
+static size_t nblocks   = 128;      /* Each process writes 128 MiB */
+static size_t chunksize = 64 * KIB; /* 64 KiB for each write() call */
+
+static int standard; /* do not use UnifyFS when set */
+static int type;     /* 0 for write (default), 1 for read */
+static int iomode = MPI_MODE_CREATE | MPI_MODE_RDWR;
+static int pattern = IO_PATTERN_N1;
+
 static MPI_File fh;         /* MPI file handle */
 static MPI_Status status;   /* MPI I/O status */
-static int iomode = MPI_MODE_CREATE | MPI_MODE_RDWR;
 
-static int standard;        /* not mounting unifycr when set */
 
 /* time statistics */
 static struct timeval iostart, ioend;
 
-#define BUFSIZE 128
-static char hostname[BUFSIZE];
+#define HOSTBUFSZ 128
+static char hostname[HOSTBUFSZ];
 static int rank;
 static int total_ranks;
 
 static int debug;                   /* pause for attaching debugger */
-static int unmount;                 /* unmount unifycr after test */
+static int unmount;                 /* unmount unifyfs after test */
 static char* buf;                   /* I/O buffer */
-static char* mountpoint = "/unifycr";   /* unifycr mountpoint */
+static char* mountpoint = "/unifyfs";   /* unifyfs mountpoint */
 static char* filename = "testfile"; /* testfile name under mountpoint */
 static char targetfile[NAME_MAX];   /* target file name */
 
@@ -69,15 +78,17 @@ static inline void mpi_handle_error(int err, char* str)
 
     MPI_Error_string(err, msg, &len);
     fprintf(stderr, "[%s:%d] %s: %s\n", hostname, rank, str, msg);
+    fflush(NULL);
 
     mpierror = 1;
 }
 
-#define MPI_CHECK(fn) do {                                      \
-            int err = (fn);                                     \
-            if (err != MPI_SUCCESS)                             \
-                mpi_handle_error(err, #fn);                     \
-        } while (0)
+#define MPI_CHECK(fn) \
+    do {                                   \
+        int err = (fn);                    \
+        if (err != MPI_SUCCESS)            \
+            mpi_handle_error(err, #fn);    \
+    } while (0)
 
 static int read_test_type(const char* str)
 {
@@ -166,17 +177,17 @@ static void report_result(void)
     double max_io_time = .0F;
     double min_io_bw = .0F;
     double io_time = .0F;
+    double per_rank_mib = (1.0 * blocksize * nblocks) / MIB;
 
     io_time = timediff_sec(&iostart, &ioend);
-    io_bw = 1.0 * blocksize * nblocks / io_time / (1 << 20);
+    io_bw = per_rank_mib / io_time;
 
     MPI_Reduce(&io_bw, &agg_io_bw,
                1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&io_time, &max_io_time,
                1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
-    min_io_bw = 1.0 * blocksize * nblocks * total_ranks /
-        max_io_time / (1 << 20);
+    min_io_bw = (per_rank_mib * total_ranks) / max_io_time;
 
     errno = 0;
 
@@ -184,17 +195,17 @@ static void report_result(void)
                     "\n"
                     "Number of processes:     %d\n"
                     "I/O type:                %s\n"
-                    "Each process performed:  %lf MB\n"
-                    "Total I/O size:          %lf MB\n"
+                    "Each process performed:  %zu MiB\n"
+                    "Total I/O size:          %zu MiB\n"
                     "I/O pattern:             %s\n"
                     "I/O request size:        %llu B\n"
-                    "Aggregate I/O bandwidth: %lf MB/s\n"
-                    "Min. I/O bandwidth:      %lf MB/s\n"
+                    "Aggregate I/O bandwidth: %lf MiB/s\n"
+                    "Min. I/O bandwidth:      %lf MiB/s\n"
                     "Total I/O time:          %lf sec.\n",
                     total_ranks,
                     type ? "read" : "write",
-                    1.0 * blocksize * nblocks / (1 << 20),
-                    1.0 * total_ranks * blocksize * nblocks / (1 << 20),
+                    blocksize * nblocks / MIB,
+                    total_ranks * blocksize * nblocks / MIB,
                     io_pattern_string(pattern),
                     chunksize,
                     agg_io_bw,
@@ -210,14 +221,13 @@ static struct option const long_opts[] = {
     { "filename", 1, 0, 'f' },
     { "help", 0, 0, 'h' },
     { "mount", 1, 0, 'm' },
-    { "pattern", 1, 0, 'p' },
     { "standard", 0, 0, 's' },
     { "type", 1, 0, 't' },
     { "unmount", 0, 0, 'u' },
     { 0, 0, 0, 0},
 };
 
-static char* short_opts = "b:n:c:df:hm:p:Pst:u";
+static char* short_opts = "b:n:c:df:hm:Pst:u";
 
 static const char* usage_str =
     "\n"
@@ -225,19 +235,18 @@ static const char* usage_str =
     "\n"
     "Available options:\n"
     " -b, --blocksize=<size in bytes>  logical block size for the target file\n"
-    "                                  (default 1048576, 1MB)\n"
+    "                                  (default 1 MiB)\n"
     " -n, --nblocks=<count>            count of blocks each process will write\n"
     "                                  (default 128)\n"
     " -c, --chunksize=<size in bytes>  I/O chunk size for each write operation\n"
-    "                                  (default 64436, 64KB)\n"
+    "                                  (default 64 KiB)\n"
     " -d, --debug                      pause before running test\n"
     "                                  (handy for attaching in debugger)\n"
     " -f, --filename=<filename>        target file name (default: testfile)\n"
     " -h, --help                       help message\n"
-    " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-    "                                  (default: /unifycr)\n"
-    " -p, --pattern=<pattern>          should be 'n1'(n to 1) or 'nn' (n to n)\n"
-    " -s, --standard                   do not use unifycr but run standard I/O\n"
+    " -m, --mount=<mountpoint>         use <mountpoint> for unifyfs\n"
+    "                                  (default: /unifyfs)\n"
+    " -s, --standard                   do not use unifyfs but run standard I/O\n"
     " -t, --type=<write|read>          I/O type\n"
     "                                  should be 'write' (default) or 'read'\n"
     " -u, --unmount                    unmount the filesystem after test\n"
@@ -263,7 +272,7 @@ int main(int argc, char* argv[])
     MPI_Comm_size(MPI_COMM_WORLD, &total_ranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    gethostname(hostname, BUFSIZE);
+    gethostname(hostname, HOSTBUFSZ);
 
     while ((ch = getopt_long(argc, argv,
                              short_opts, long_opts, &optidx)) >= 0) {
@@ -286,10 +295,6 @@ int main(int argc, char* argv[])
 
         case 'd':
             debug = 1;
-            break;
-
-        case 'p':
-            pattern = read_io_pattern(optarg);
             break;
 
         case 'm':
@@ -326,58 +331,54 @@ int main(int argc, char* argv[])
         exit(-1);
     }
 
-    if (chunksize % (1 << 10) > 0) {
+    if ((chunksize % KIB) > 0) {
         test_print_once(rank, "chunksize and blocksize should be divisible "
                         "by 1024.");
         exit(-1);
     }
 
-    if (static_linked(program) && standard) {
-        test_print_once(rank, "--standard, -s option only works when "
-                        "dynamically linked.");
-        exit(-1);
-    }
-
-    sprintf(targetfile, "%s/%s", mountpoint, filename);
-
-    if (debug) {
-        test_pause(rank, "Attempting to mount");
-    }
-
     if (!standard) {
-        ret = unifycr_mount(mountpoint, rank, total_ranks, 0);
+        if (debug) {
+            test_pause(rank, "Attempting to mount");
+        }
+        ret = unifyfs_mount(mountpoint, rank, total_ranks, 0);
         if (ret) {
-            test_print(rank, "unifycr_mount failed (return = %d)", ret);
+            test_print(rank, "unifyfs_mount failed (return = %d)", ret);
             exit(-1);
+        }
+        if (!standard) {
+            printf("[%d]: unifyfs mounted at %s\n", rank, mountpoint);
         }
     }
 
-    buf = calloc(1, chunksize);
-    if (!buf) {
-        test_print(rank, "calloc failed");
-        exit(-1);
-    }
-
+    sprintf(targetfile, "%s/%s", mountpoint, filename);
     if (pattern == IO_PATTERN_NN) {
-        sprintf(&targetfile[strlen(targetfile)], "-%d", rank);
+        sprintf((targetfile + strlen(targetfile)), "-%d", rank);
     }
-
-    if (!standard) {
-        printf("[%d]: unifycr mounted at %s\n", rank, mountpoint);
-    }
+    printf("[%d]: opening %s\n", rank, targetfile);
+    fflush(NULL);
 
     MPI_Barrier(MPI_COMM_WORLD);
-
-    printf("[%d]: opening %s\n", rank, targetfile);
 
     MPI_CHECK(MPI_File_open(MPI_COMM_WORLD,
                             targetfile,
                             iomode,
                             MPI_INFO_NULL, &fh));
 
+    if (mpierror) {
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
     if (debug) {
         test_pause(rank, "Attempting to perform I/O");
     }
+
+    buf = calloc(1, chunksize);
+    if (NULL == buf) {
+        test_print(rank, "calloc failed");
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+    int printable = (int)'0' + (rank % 10);
+    memset(buf, printable, chunksize);
 
     if (type == 0) {
         ret = do_write(&fh);
@@ -389,17 +390,15 @@ int main(int argc, char* argv[])
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (!standard && unmount) {
-        unifycr_unmount();
-    }
+    free(buf);
 
     if (ret == 0) {
         report_result();
-    } else {
-        MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    free(buf);
+    if (!standard && unmount) {
+        unifyfs_unmount();
+    }
 
     MPI_Finalize();
 

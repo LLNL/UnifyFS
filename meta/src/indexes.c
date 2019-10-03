@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -249,10 +249,10 @@ int update_stat(struct mdhim_t *md, struct index_t *index, void *key, uint32_t k
 		/* printf("is float key\n");
 		   fflush(stdout);
 		*/
-	} else if (index->key_type != MDHIM_UNIFYCR_KEY){
+	} else if (index->key_type != MDHIM_UNIFYFS_KEY){
 		val1 = (void *) malloc(sizeof(uint64_t));
 		val2 = (void *) malloc(sizeof(uint64_t));
-		/* printf("is not unifycr key\n");
+		/* printf("is not unifyfs key\n");
 		   fflush(stdout);
 		   */
 	}
@@ -260,7 +260,7 @@ int update_stat(struct mdhim_t *md, struct index_t *index, void *key, uint32_t k
 		val1 = NULL;
 		val2 = NULL;
 		/*
-		printf("is unifycr key\n");
+		printf("is unifyfs key\n");
 		fflush(stdout);
 		*/
 	}
@@ -286,7 +286,7 @@ int update_stat(struct mdhim_t *md, struct index_t *index, void *key, uint32_t k
 	} else if (index->key_type == MDHIM_BYTE_KEY) {
 		*(unsigned long  *)val1 = get_byte_num(key, key_len);
 		*(unsigned long  *)val2 = *(unsigned long *)val1;
-	} else if (index->key_type == MDHIM_UNIFYCR_KEY) {
+	} else if (index->key_type == MDHIM_UNIFYFS_KEY) {
 			val1 = get_meta_pair(key, key_len);
 			val2 = get_meta_pair(key, key_len);
 	}
@@ -311,8 +311,8 @@ int update_stat(struct mdhim_t *md, struct index_t *index, void *key, uint32_t k
 //	fflush(stdout);
 
 	gettimeofday(&cmpstart, NULL);
-	if (index->key_type == MDHIM_UNIFYCR_KEY && os ) {
-		if (unifycr_compare(os->min, val1) > 0) {
+	if (index->key_type == MDHIM_UNIFYFS_KEY && os ) {
+		if (unifyfs_compare(os->min, val1) > 0) {
 			/*
 			printf("freeing %x, va1 addr is %x\n", os->min, val1);
 			fflush(stdout);
@@ -324,7 +324,7 @@ int update_stat(struct mdhim_t *md, struct index_t *index, void *key, uint32_t k
 			free(val1);
 		}
 
-		if (unifycr_compare(os->max, val2) < 0) {
+		if (unifyfs_compare(os->max, val2) < 0) {
 			/*
 			printf("freeing %xb,bbb\n", os->max);
 			fflush(stdout);
@@ -375,7 +375,7 @@ int update_stat(struct mdhim_t *md, struct index_t *index, void *key, uint32_t k
 		}
 	}	
 
-	if (!float_type && os && index->key_type != MDHIM_UNIFYCR_KEY) {
+	if (!float_type && os && index->key_type != MDHIM_UNIFYFS_KEY) {
 		if (*(uint64_t *)os->min > *(uint64_t *)val1) {
 			/*
 			printf("freeing %x3\n", os->min);
@@ -694,7 +694,7 @@ struct index_t *create_local_index(struct mdhim_t *md, int db_type, int key_type
 	MPI_Barrier(md->mdhim_client_comm);
 
 	//Check that the key type makes sense
-	if (key_type < MDHIM_INT_KEY || key_type > MDHIM_UNIFYCR_KEY) {
+	if (key_type < MDHIM_INT_KEY || key_type > MDHIM_UNIFYFS_KEY) {
 		mlog(MDHIM_CLIENT_CRIT, "MDHIM - Invalid key type specified");
 		return NULL;
 	}
@@ -842,7 +842,7 @@ struct index_t *create_global_index(struct mdhim_t *md, int server_factor,
 
 	MPI_Barrier(md->mdhim_client_comm);
 	//Check that the key type makes sense
-	if (key_type < MDHIM_INT_KEY || key_type > MDHIM_UNIFYCR_KEY) {
+	if (key_type < MDHIM_INT_KEY || key_type > MDHIM_UNIFYFS_KEY) {
 		mlog(MDHIM_CLIENT_CRIT, "MDHIM - Invalid key type specified");
 		return NULL;
 	}
@@ -1299,7 +1299,7 @@ int pack_stats(struct index_t *index, void *buf, int size,
 			fstat->slice = stat->key;
 			fstat->num = stat->num;
 		
-			if (index->key_type == MDHIM_UNIFYCR_KEY) {
+			if (index->key_type == MDHIM_UNIFYFS_KEY) {
 /*				printf("bbbefore:min fid is %ld, min offset is %ld, \ 
 					max fid is %ld, max offset is %ld\n", \
 					*((ulong *)stat->min), *((ulong *)stat->min+1), \
@@ -1368,7 +1368,7 @@ int get_stat_flush_global(struct mdhim_t *md, struct index_t *index) {
 	
 	//Determine the size of the buffers to send based on the number and type of stats
 	if ((ret = is_float_key(index->key_type)) == 1 || \
-			index->key_type == MDHIM_UNIFYCR_KEY) {
+			index->key_type == MDHIM_UNIFYFS_KEY) {
 		float_type = 1;
 		stat_size = sizeof(struct mdhim_db_fstat);
 	} else {
@@ -1386,7 +1386,7 @@ int get_stat_flush_global(struct mdhim_t *md, struct index_t *index) {
 			num_items = 0;
 		}
                 ret = is_float_key(index->key_type);
-                if (ret == 1 || index->key_type == MDHIM_UNIFYCR_KEY)
+                if (ret == 1 || index->key_type == MDHIM_UNIFYFS_KEY)
                     sendsize = num_items * sizeof(struct mdhim_db_fstat);
                 else
                     sendsize = num_items * sizeof(struct mdhim_db_istat);
@@ -1511,7 +1511,7 @@ int get_stat_flush_global(struct mdhim_t *md, struct index_t *index) {
 		if (float_type) {
 			stat->min = (void *) malloc(sizeof(long double));
 			stat->max = (void *) malloc(sizeof(long double));
-			if (index->key_type == MDHIM_UNIFYCR_KEY) {
+			if (index->key_type == MDHIM_UNIFYFS_KEY) {
 				struct mdhim_db_fstat * tmp_stat;
 				tmp_stat = (struct mdhim_db_fstat *)tstat;
 				memcpy((char *)stat->min, (char *)&(tmp_stat->dmin), sizeof(ulong));

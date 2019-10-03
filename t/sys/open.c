@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 #include <sys/types.h>
@@ -21,16 +21,16 @@
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
 
-/* This function contains the tests for UNIFYCR_WRAP(open) found in
- * client/src/unifycr-sysio.c.
+/* This function contains the tests for UNIFYFS_WRAP(open) found in
+ * client/src/unifyfs-sysio.c.
  *
  * Notice the tests are ordered in a logical testing order. Changing the order
  * or adding new tests in between two others could negatively affect the
  * desired results. */
-int open_test(char* unifycr_root)
+int open_test(char* unifyfs_root)
 {
     /* Diagnostic message for reading and debugging output */
-    diag("Starting UNIFYCR_WRAP(open) tests");
+    diag("Starting UNIFYFS_WRAP(open) tests");
 
     char path[64];
     char dir_path[64];
@@ -40,8 +40,8 @@ int open_test(char* unifycr_root)
     int rc;
 
     /* Create a random file and dir name at the mountpoint path to test on */
-    testutil_rand_path(path, sizeof(path), unifycr_root);
-    testutil_rand_path(dir_path, sizeof(dir_path), unifycr_root);
+    testutil_rand_path(path, sizeof(path), unifyfs_root);
+    testutil_rand_path(dir_path, sizeof(dir_path), unifyfs_root);
 
     /* Verify opening a non-existent file without O_CREAT fails with
      * errno=ENOENT */
@@ -94,7 +94,7 @@ int open_test(char* unifycr_root)
      * properly. */
     rc = rmdir(dir_path);
 
-    diag("Finished UNIFYCR_WRAP(open) tests");
+    diag("Finished UNIFYFS_WRAP(open) tests");
 
     return 0;
 }

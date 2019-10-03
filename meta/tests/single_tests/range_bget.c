@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -152,7 +152,7 @@ int main(int argc, char **argv) {
 	db_opts->db_name = db_name;
 	db_opts->db_type = LEVELDB;
 
-	db_opts->db_key_type = MDHIM_UNIFYCR_KEY;
+	db_opts->db_key_type = MDHIM_UNIFYFS_KEY;
 	db_opts->debug_level = MLOG_CRIT;
 	db_opts->max_recs_per_slice = rangesz;
 	db_opts->rserver_factor = serratio;

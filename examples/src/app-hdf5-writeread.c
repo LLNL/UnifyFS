@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 /*
  * Copyright by The HDF Group.
@@ -29,7 +29,7 @@
  *  dataset.  It is used in the HDF5 Tutorial.
  */
 /*
- * The example is modified to test unifycr userspace file system.
+ * The example is modified to test unifyfs userspace file system.
  */
 #include <config.h>
 
@@ -41,7 +41,7 @@
 #include <getopt.h>
 #include <libgen.h>
 #include <mpi.h>
-#include <unifycr.h>
+#include <unifyfs.h>
 #include <hdf5.h>
 
 #include "testlib.h"
@@ -57,10 +57,10 @@ static int readonly;
 static int writeonly;
 
 static int debug;           /* pause for attaching debugger */
-static int standard;        /* not mounting unifycr when set */
-static int unmount;         /* unmount unifycr after running the test */
-static char *mountpoint = "/unifycr";   /* unifycr mountpoint */
-static char *filename = "test.h5";  /* testfile name under mountpoint */
+static int standard;        /* not mounting unifyfs when set */
+static int unmount;         /* unmount unifyfs after running the test */
+static char* mountpoint = "/unifyfs";   /* unifyfs mountpoint */
+static char* filename = "test.h5";  /* testfile name under mountpoint */
 static char targetfile[NAME_MAX];   /* target file name */
 
 static struct option const long_opts[] = {
@@ -75,9 +75,9 @@ static struct option const long_opts[] = {
     { 0, 0, 0, 0},
 };
 
-static char *short_opts = "df:hm:rsuw";
+static char* short_opts = "df:hm:rsuw";
 
-static const char *usage_str =
+static const char* usage_str =
 "\n"
 "Usage: %s [options...]\n"
 "\n"
@@ -87,17 +87,17 @@ static const char *usage_str =
 " -f, --filename=<filename>        target file name under mountpoint\n"
 "                                  (default: test.h5)\n"
 " -h, --help                       help message\n"
-" -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-"                                  (default: /unifycr)\n"
+" -m, --mount=<mountpoint>         use <mountpoint> for unifyfs\n"
+"                                  (default: /unifyfs)\n"
 " -r, --readonly                   only read the dataset\n"
 "                                  (default: write then read)\n"
-" -s, --standard                   do not use unifycr but run standard I/O\n"
+" -s, --standard                   do not use unifyfs but run standard I/O\n"
 " -u, --unmount                    unmount the filesystem after test\n"
 " -w, --writeonly                  only write the dataset\n"
 "                                  (default: write then read)\n"
 "\n";
 
-static char *program;
+static char* program;
 
 static void print_usage(void)
 {
@@ -105,7 +105,7 @@ static void print_usage(void)
     exit(0);
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     int ret = 0;
     int ch = 0;
@@ -171,9 +171,9 @@ int main(int argc, char **argv)
         test_pause(rank, "Attempting to mount");
 
     if (!standard) {
-        ret = unifycr_mount(mountpoint, rank, total_ranks, 0);
+        ret = unifyfs_mount(mountpoint, rank, total_ranks, 0);
         if (ret) {
-            test_print(rank, "unifycr_mount failed (return = %d)", ret);
+            test_print(rank, "unifyfs_mount failed (return = %d)", ret);
             exit(-1);
         }
     }
@@ -218,7 +218,7 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (!standard && unmount) {
-        unifycr_unmount();
+        unifyfs_unmount();
     }
 
     return 0;

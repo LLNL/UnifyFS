@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 #include <config.h>
 
@@ -28,20 +28,20 @@
 #include <libgen.h>
 #include <getopt.h>
 #include <mpi.h>
-#include <unifycr.h>
+#include <unifyfs.h>
 
 #include "testlib.h"
 
-static int standard;        /* not mounting unifycr when set */
+static int standard;        /* not mounting unifyfs when set */
 static int synchronous;     /* sync metadata for each op? (default: no)*/
 
 static int rank;
 static int total_ranks;
 
 static int debug;           /* pause for attaching debugger */
-static int unmount;         /* unmount unifycr after running the test */
+static int unmount;         /* unmount unifyfs after running the test */
 static uint64_t count = 10; /* number of directories each rank creates */
-static char* mountpoint = "/unifycr";  /* unifycr mountpoint */
+static char* mountpoint = "/unifyfs";  /* unifyfs mountpoint */
 static char* testdir = "testdir";  /* test directory under mountpoint */
 static char targetdir[NAME_MAX];   /* target file name */
 
@@ -205,12 +205,12 @@ static const char* usage_str =
     " -D, --dirname=<dirname>          test directory name under mountpoint\n"
     "                                  (default: testdir)\n"
     " -h, --help                       help message\n"
-    " -m, --mount=<mountpoint>         use <mountpoint> for unifycr\n"
-    "                                  (default: /unifycr)\n"
+    " -m, --mount=<mountpoint>         use <mountpoint> for unifyfs\n"
+    "                                  (default: /unifyfs)\n"
     " -n, --count=<NUM>                number of directories that each rank will\n"
     "                                  create (default: 10)\n"
     " -S, --synchronous                sync metadata on each write\n"
-    " -s, --standard                   do not use unifycr but run standard I/O\n"
+    " -s, --standard                   do not use unifyfs but run standard I/O\n"
     " -t, --singletest=<operation>     only test a single operation\n"
     "                                  (operations: mkdir, stat, readdir, rmdir)\n"
     " -u, --unmount                    unmount the filesystem after test\n"
@@ -291,9 +291,9 @@ int main(int argc, char** argv)
     }
 
     if (!standard) {
-        ret = unifycr_mount(mountpoint, rank, total_ranks, 0);
+        ret = unifyfs_mount(mountpoint, rank, total_ranks, 0);
         if (ret) {
-            test_print(rank, "unifycr_mount failed (return = %d)", ret);
+            test_print(rank, "unifyfs_mount failed (return = %d)", ret);
             exit(-1);
         }
     }
@@ -339,7 +339,7 @@ int main(int argc, char** argv)
 
 out_unmount:
     if (!standard && unmount) {
-        unifycr_unmount();
+        unifyfs_unmount();
     }
 out:
     MPI_Finalize();

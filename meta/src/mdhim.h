@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*
@@ -172,8 +172,6 @@ struct secondary_bulk_info *mdhimCreateSecondaryBulkInfo(struct index_t *seconda
 							 int **secondary_key_lens,
 							 int *num_keys, int info_type);
 void mdhimReleaseSecondaryBulkInfo(struct secondary_bulk_info *si);
-int mdhimSanitize(char *dbfilename, char *statfilename, char *manifestfilename);
-int rmrf(char *path);
 
 #ifdef __cplusplus
 }

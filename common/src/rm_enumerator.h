@@ -7,9 +7,9 @@
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * This is the license for UnifyCR.
- * For details, see https://github.com/LLNL/UnifyCR.
- * Please read https://github.com/LLNL/UnifyCR/LICENSE for full license text.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 /*  Copyright (c) 2018 - Michael J. Brim
@@ -19,8 +19,8 @@
  *  MIT License - See LICENSE.tedium
  */
 
-#ifndef _UNIFYCR_RM_ENUMERATOR_H_
-#define _UNIFYCR_RM_ENUMERATOR_H_
+#ifndef _UNIFYFS_RM_ENUMERATOR_H_
+#define _UNIFYFS_RM_ENUMERATOR_H_
 
 /**
  * @brief enumerator list expanded many times with varied ENUMITEM() definitions
@@ -28,7 +28,7 @@
  * @param item name
  * @param item short description
  */
-#define UNIFYCR_RM_ENUMERATOR                                           \
+#define UNIFYFS_RM_ENUMERATOR                                           \
     ENUMITEM(PBS, "Portable Batch System / TORQUE")                     \
     ENUMITEM(SLURM, "SchedMD SLURM")                                    \
     ENUMITEM(LSF, "IBM Spectrum LSF")                                   \
@@ -42,36 +42,36 @@ extern "C" {
  * @brief supported resource managers
  */
 typedef enum {
-    UNIFYCR_RM_INVALID = 0,
+    UNIFYFS_RM_INVALID = 0,
 #define ENUMITEM(name, desc)                    \
-        UNIFYCR_RM_ ## name,
-    UNIFYCR_RM_ENUMERATOR
+        UNIFYFS_RM_ ## name,
+    UNIFYFS_RM_ENUMERATOR
 #undef ENUMITEM
-    UNIFYCR_RM_ENUM_MAX
-} unifycr_rm_e;
+    UNIFYFS_RM_ENUM_MAX
+} unifyfs_rm_e;
 
 /**
  * @brief get resource manager C-string for given enum value
  */
-const char *unifycr_rm_enum_str(unifycr_rm_e e);
+const char *unifyfs_rm_enum_str(unifyfs_rm_e e);
 
 /**
  * @brief get resource manager description for given enum value
  */
-const char *unifycr_rm_enum_description(unifycr_rm_e e);
+const char *unifyfs_rm_enum_description(unifyfs_rm_e e);
 
 /**
  * @brief check validity of given resource manager enum value
  */
-int check_valid_unifycr_rm_enum(unifycr_rm_e e);
+int check_valid_unifyfs_rm_enum(unifyfs_rm_e e);
 
 /**
  * @brief get resource manager enum value for given C-string
  */
-unifycr_rm_e unifycr_rm_enum_from_str(const char *s);
+unifyfs_rm_e unifyfs_rm_enum_from_str(const char *s);
 
 #ifdef __cplusplus
 } /* extern C */
 #endif
 
-#endif /* UNIFYCR_RM_ENUMERATOR_H */
+#endif /* UNIFYFS_RM_ENUMERATOR_H */

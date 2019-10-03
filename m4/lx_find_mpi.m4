@@ -155,7 +155,7 @@ AC_DEFUN([LX_QUERY_MPI_COMPILER],
          # set a shell variable that the caller can test outside this macro
          have_$3_mpi='yes'
      else
-         Echo Unable to find suitable MPI Compiler. Try setting $1.
+         echo Unable to find suitable MPI Compiler. Try setting $1.
          have_$3_mpi='no'
      fi
 ])

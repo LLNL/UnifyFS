@@ -1,0 +1,132 @@
+stages:
+  - build
+  - test-unit
+  - test-integ
+
+cache:
+  paths:
+      - spack_ci/
+
+##### Templates #####
+
+.quartz-template: &quartz_template
+  tags:
+    - quartz
+    - shell
+  variables:
+    LLNL_SERVICE_USER: "unifysrv"
+  retry:
+    max: 1
+    when:
+      - unknown_failure
+      - stuck_or_timeout_failure
+
+.butte-template: &butte_template
+  tags:
+    - butte
+    - shell
+  variables:
+    LLNL_SERVICE_USER: "unifysrv"
+  retry:
+    max: 1
+    when:
+      - unknown_failure
+      - stuck_or_timeout_failure
+
+.build-template: &build_template
+  stage: build
+  script:
+    - ./autogen.sh
+    - mkdir -p unifyfs-build unifyfs-install && cd unifyfs-build
+    - ../configure --prefix=$CI_PROJECT_DIR/unifyfs-install --enable-fortran --disable-silent-rules
+    - make V=1
+    - make V=1 install
+  artifacts:
+    name: "${CI_JOB_NAME}-${CI_PIPELINE_ID}"
+    untracked: true
+    expire_in: 1 hour
+    paths:
+      - unifyfs-build/
+      - unifyfs-install/
+
+.unit-test-template: &unit_test_template
+  stage: test-unit
+  script:
+    - cd unifyfs-build/t && make check
+  after_script:
+    - rm -rf /tmp/unify* /tmp/tmp.* /tmp/mdhim* /tmp/na_sm
+
+.quartz-batch-variables:
+  variables: &quartz_batch_variables
+    LLNL_SLURM_SCHEDULER_PARAMETERS: "-N $NNODES -p pbatch -t $WALL_TIME"
+    LLNL_SERVICE_USER: "unifysrv"
+    CI_PROJDIR: "$CI_PROJECT_DIR"
+    UNIFYFS_INSTALL: "$CI_PROJECT_DIR/unifyfs-install"
+    CI_NPROCS: "$NPROCS"
+
+.butte-batch-variables:
+  variables: &butte_batch_variables
+    LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes $NNODES -q pbatch -W $WALL_TIME"
+    LLNL_SERVICE_USER: "unifysrv"
+    CI_PROJDIR: "$CI_PROJECT_DIR"
+    UNIFYFS_INSTALL: "$CI_PROJECT_DIR/unifyfs-install"
+    CI_NPROCS: "$NPROCS"
+
+##### Jobs #####
+
+before_script:
+  # HERE BE DRAGONS!: Since on HPC and running as user, Spack might already
+  # exist and can get complicated if we install it again.
+  #
+  # check for sourced spack || check for unsourced spack in $HOME/spack and
+  # source it || check for cached spack, clone if none, and source it
+  - which spack || ((cd $HOME/spack && git describe) && . $HOME/spack/share/spack/setup-env.sh) || (((cd spack_ci && git describe) || git clone https://github.com/CamStan/spack spack_ci) && . spack_ci/share/spack/setup-env.sh)
+  - SPACK_ARCH=$(spack arch)
+  - spack install leveldb && spack load leveldb arch=$SPACK_ARCH
+  - spack install gotcha@0.0.2 && spack load gotcha@0.0.2 arch=$SPACK_ARCH
+  - spack install flatcc && spack load flatcc arch=$SPACK_ARCH
+  - spack install margo^mercury+bmi~boostsys && spack load argobots arch=$SPACK_ARCH && spack load mercury arch=$SPACK_ARCH && spack load margo arch=$SPACK_ARCH
+
+build-quartz:
+  <<: *quartz_template
+  <<: *build_template
+
+build-butte:
+  <<: *butte_template
+  <<: *build_template
+
+unit-test-quartz:
+  <<: *quartz_template
+  <<: *unit_test_template
+  dependencies:
+    - build-quartz
+
+unit-test-butte:
+  <<: *butte_template
+  <<: *unit_test_template
+  dependencies:
+    - build-butte
+
+#integ-test-quartz:
+#  <<: *quartz_template
+#  stage: test-integ
+#  tags:
+#    - quartz
+#    - batch
+#  variables: *quartz_batch_variables
+#  script:
+#    - cd t/ci && prove -v RUN_CI_TESTS.sh
+#  dependencies:
+#    - build-quartz
+
+integ-test-butte:
+  <<: *butte_template
+  stage: test-integ
+  tags:
+    - butte
+    - batch
+  variables: *butte_batch_variables
+  script:
+    - cd t/ci && prove -v RUN_CI_TESTS.sh
+  dependencies:
+    - build-butte

@@ -1,0 +1,166 @@
+#!/usr/bin/perl -w
+use strict;
+
+# commands to build fakechroot list
+#   git clone https://github.com/fakechroot/fakechroot.git fakechroot.git
+#   cd fakechroot.git/src
+#   ls *.c > fakechroot_list.txt
+#
+# hand-wrote gnulibc list from
+# http://www.gnu.org/software/libc/manual/html_node/I_002fO-Overview.html#I_002fO-Overview
+#
+# hand-wrote cstdio list from
+# http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1124.pdf
+#
+# hand-wrote unifyfs unsupported list (wrapped calls that aren't supported)
+#
+# commands to build unifyfs list
+#   grep UNIFYFS_WRAP ../runtime/lib/*.c > unifyfs_list.txt
+
+
+my $fakechroot_list  = "fakechroot_list.txt";
+my $gnulibc_list     = "gnulibc_list.txt";
+my $cstdio_list      = "cstdio_list.txt";
+my $posix_list       = "posix_list.txt";
+my $unsupported_list = "unifyfs_unsupported_list.txt";
+my $unifyfs_list      = "unifyfs_list.txt";
+
+if (@ARGV != 1) {
+  print "Usage: unifyfs_check_fns <executable>\n";
+  exit 1;
+}
+my $exe = shift @ARGV;
+
+my %any_libc = ();
+my %unsupported = ();
+my %unifyfs = ();
+
+open(IN, $fakechroot_list) || die "failed to open $fakechroot_list\n";
+while (my $line = <IN>) {
+  # drop trailing newline
+  chomp $line;
+
+  # chop white space
+  $line =~ s/\s*//g;
+
+  # chop trailing .c
+  $line =~ s/\.c$//;
+
+  $any_libc{$line} = 1;
+}
+close(IN);
+
+open(IN, $gnulibc_list) || die "failed to open $gnulibc_list\n";
+while (my $line = <IN>) {
+  # drop trailing newline
+  chomp $line;
+
+  # chop white space
+  $line =~ s/\s*//g;
+
+  # skip if starts with # or is empty
+  if ($line =~ /^#/ or not $line) {
+      next;
+  }
+
+  $any_libc{$line} = 1;
+}
+close(IN);
+
+open(IN, $cstdio_list) || die "failed to open $cstdio_list\n";
+while (my $line = <IN>) {
+  # drop trailing newline
+  chomp $line;
+
+  # skip if starts with # or is empty
+  if ($line =~ /^#/ or not $line) {
+      next;
+  }
+
+  # (space) leading integer (space) function name
+  my $fn = undef;
+  if ($line =~ /^\s*\d+\s*(.*?)\s*$/) {
+    $fn = $1;
+  } else {
+    next;
+  }
+
+  # chop white space
+  $fn =~ s/\s*//g;
+#print "cstdio: $fn\n";
+
+  $any_libc{$fn} = 1;
+}
+close(IN);
+
+open(IN, $unsupported_list) || die "failed to open $unsupported_list\n";
+while (my $line = <IN>) {
+  # drop trailing newline
+  chomp $line;
+
+  # chop white space
+  $line =~ s/\s*//g;
+
+  # skip if starts with # or is empty
+  if ($line =~ /^#/ or not $line) {
+      next;
+  }
+#print "unsupported: $line\n";
+
+  $unsupported{$line} = 1;
+}
+close(IN);
+
+open(IN, $unifyfs_list) || die "failed to open $unifyfs_list\n";
+while (my $line = <IN>) {
+  # drop trailing newline
+  chomp $line;
+
+  # pick off item in parens in UNIFYFS_DELC(fn_name)
+  my $fn = undef;
+  if ($line =~ /UNIFYFS_WRAP\((.*?)\)/) {
+    $fn = $1;
+  } else {
+    next;
+  }
+
+  # chop white space
+  $fn =~ s/\s*//g;
+#print "wrapped: $fn\n";
+
+  $unifyfs{$fn} = 1;
+}
+close(IN);
+
+# get list of functions called by executable
+my $fns_str = `nm $exe`;
+my @fns_list = split("\n", $fns_str);
+foreach my $line (@fns_list) {
+  chomp $line;
+#  print "$line, ";
+
+  my ($hex, $code, $fn) = split(/\s+/, $line);
+#  print "$fn, ";
+
+  $fn =~ s/@.*$//;
+#  print "$fn\n";
+
+  my $used = 0;
+  my $supported = 0;
+  if (defined $any_libc{$fn}) {
+    $used = 1;
+    if (defined $unifyfs{$fn} and not $unsupported{$fn}) {
+      $supported = 1;
+    }
+  }
+
+  if ($used) {
+    print "$fn";
+    if (not $supported) {
+      print ", not supported";
+    }
+    print "\n";
+  }
+}
+
+exit 0;

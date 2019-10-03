@@ -3787,7 +3787,7 @@ sub process {
 
 			# Should start with a space.
 			#$to =~ s/^(\S)/ $1/;
-			# UNIFYCR: Should not start with a space.
+			# UNIFYFS: Should not start with a space.
 			$to =~ s/^\s+(\S)/$1/;
 			# Should not end with a space.
 			$to =~ s/\s+$//;
@@ -4316,7 +4316,7 @@ sub process {
 							}
 						}
 					} elsif ($ctx =~ /Wx[^WCE]|[^WCE]xW/) {
-						# UNIFYCR: trips on things like "extern FILE* dbg_stream;"
+						# UNIFYFS: trips on things like "extern FILE* dbg_stream;"
 						#
 						#if (ERROR("SPACING",
 						#	  "need consistent spacing around '$op' $at\n" . $hereptr)) {
@@ -5209,6 +5209,12 @@ sub process {
 				# Changed to not make an exception for single statement blocks
 				# with additional single statement blocks inside of them.
 				$allowed = 0;
+			}
+
+			# Allow while conditional that comes at end of a do-while loop
+			if ($cond =~ /^(\}\swhile)/) {
+				#print "APW: ALLOWED: cond<$cond>\n";
+				$allowed = 1;
 			}
 
 			# Allow any conditional directives
