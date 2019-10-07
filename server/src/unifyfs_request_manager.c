@@ -33,7 +33,6 @@
 #include <stdint.h>
 #include <string.h>
 #include <time.h>
-#include <mpi.h>
 
 // general support
 #include "unifyfs_global.h"
@@ -860,7 +859,7 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
 
         unifyfs_vals[i]->addr = meta_payload[i].mem_pos;
         unifyfs_vals[i]->len = meta_payload[i].length;
-        unifyfs_vals[i]->delegator_rank = glb_mpi_rank;
+        unifyfs_vals[i]->delegator_rank = glb_pmi_rank;
         unifyfs_vals[i]->app_id = app_id;
         unifyfs_vals[i]->rank = client_side_id;
 
@@ -1456,7 +1455,7 @@ int invoke_server_hello_rpc(int dst_srvr_rank)
 
     /* fill in input struct */
     snprintf(hello_msg, sizeof(hello_msg), "hello from %s", glb_host);
-    in.src_rank = (int32_t)glb_mpi_rank;
+    in.src_rank = (int32_t)glb_pmi_rank;
     in.message_str = strdup(hello_msg);
 
     LOGDBG("invoking the server-hello rpc function");
@@ -1494,7 +1493,7 @@ int invoke_server_request_rpc(int dst_srvr_rank, int req_id, int tag,
     hg_addr_t dst_srvr_addr;
     hg_size_t bulk_sz = buf_sz;
 
-    if (dst_srvr_rank == glb_mpi_rank) {
+    if (dst_srvr_rank == glb_pmi_rank) {
         // short-circuit for local requests
         return rc;
     }
@@ -1507,7 +1506,7 @@ int invoke_server_request_rpc(int dst_srvr_rank, int req_id, int tag,
     assert(hret == HG_SUCCESS);
 
     /* fill in input struct */
-    in.src_rank = (int32_t)glb_mpi_rank;
+    in.src_rank = (int32_t)glb_pmi_rank;
     in.req_id = (int32_t)req_id;
     in.req_tag = (int32_t)tag;
     in.bulk_size = bulk_sz;
@@ -1556,9 +1555,9 @@ int invoke_chunk_read_request_rpc(int dst_srvr_rank,
     hg_addr_t dst_srvr_addr;
     hg_size_t bulk_sz = buf_sz;
 
-    if (dst_srvr_rank == glb_mpi_rank) {
+    if (dst_srvr_rank == glb_pmi_rank) {
         // short-circuit for local requests
-        return sm_issue_chunk_reads(glb_mpi_rank,
+        return sm_issue_chunk_reads(glb_pmi_rank,
                                     rdreq->app_id,
                                     rdreq->client_id,
                                     rdreq->req_ndx,
@@ -1575,7 +1574,7 @@ int invoke_chunk_read_request_rpc(int dst_srvr_rank,
     assert(hret == HG_SUCCESS);
 
     /* fill in input struct */
-    in.src_rank = (int32_t)glb_mpi_rank;
+    in.src_rank = (int32_t)glb_pmi_rank;
     in.app_id = (int32_t)rdreq->app_id;
     in.client_id = (int32_t)rdreq->client_id;
     in.req_id = (int32_t)rdreq->req_ndx;

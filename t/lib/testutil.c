@@ -80,14 +80,14 @@ void testutil_rand_path(char* buf, size_t len, const char* pfx)
 
 /*
  * Return a pointer to the path name of the UnifyFS mount point. Use the
- * value of the environment variable UNIFYFS_MOUNT_POINT if it exists,
+ * value of the environment variable UNIFYFS_MOUNTPOINT if it exists,
  * otherwise use P_tmpdir which is defined in stdio.h and is typically
  * /tmp.
  */
 char* testutil_get_mount_point(void)
 {
     char* path;
-    char* env = getenv("UNIFYFS_MOUNT_POINT");
+    char* env = getenv("UNIFYFS_MOUNTPOINT");
 
     if (env != NULL) {
         path = env;

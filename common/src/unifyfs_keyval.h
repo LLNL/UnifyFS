@@ -26,7 +26,7 @@ const char* key_runstate;           // path to runstate file
 const char* key_unifyfsd_socket;    // server domain socket path
 const char* key_unifyfsd_margo_shm; // client-server margo address
 const char* key_unifyfsd_margo_svr; // server-server margo address
-const char* key_unifyfsd_mpi_rank;  // server-server MPI rank
+const char* key_unifyfsd_pmi_rank;  // server-server pmi rank
 
 // initialize key-value store
 int unifyfs_keyval_init(unifyfs_cfg_t* cfg,
@@ -52,6 +52,9 @@ int unifyfs_keyval_lookup_local(const char* key,
 int unifyfs_keyval_lookup_remote(int rank,
                                  const char* key,
                                  char** oval);
+
+// block until a particular key-value pair published by all servers
+int unifyfs_keyval_fence_remote(void);
 
 #ifdef __cplusplus
 } // extern "C"

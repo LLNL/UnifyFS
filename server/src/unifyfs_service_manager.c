@@ -29,7 +29,6 @@
 
 #include <aio.h>
 #include <time.h>
-#include <mpi.h>
 
 #include "unifyfs_global.h"
 #include "unifyfs_request_manager.h"
@@ -212,7 +211,7 @@ int sm_issue_chunk_reads(int src_rank,
         sm->burst_data_sz += size;
     }
 
-    if (src_rank != glb_mpi_rank) {
+    if (src_rank != glb_pmi_rank) {
         /* add chunk_reads to svcmgr response list */
         LOGDBG("adding to svcmgr chunk_reads");
         assert(NULL != sm);
@@ -304,19 +303,24 @@ int svcmgr_fini(void)
 static int send_chunk_read_responses(void)
 {
     int rc = (int)UNIFYFS_SUCCESS;
+    arraylist_t* chunk_reads = NULL;
     pthread_mutex_lock(&(sm->sync));
     int num_chunk_reads = arraylist_size(sm->chunk_reads);
     if (num_chunk_reads) {
         LOGDBG("processing %d chunk read responses", num_chunk_reads);
-        for (int i = 0; i < num_chunk_reads; i++) {
-            /* get data structure */
-            remote_chunk_reads_t* rcr = (remote_chunk_reads_t*)
-                arraylist_get(sm->chunk_reads, i);
-            rc = invoke_chunk_read_response_rpc(rcr);
-        }
-        arraylist_reset(sm->chunk_reads);
+        chunk_reads = sm->chunk_reads;
+        sm->chunk_reads = arraylist_create();
     }
     pthread_mutex_unlock(&(sm->sync));
+    for (int i = 0; i < num_chunk_reads; i++) {
+        /* get data structure */
+        remote_chunk_reads_t* rcr = (remote_chunk_reads_t*)
+            arraylist_get(chunk_reads, i);
+        rc = invoke_chunk_read_response_rpc(rcr);
+    }
+    if (NULL != chunk_reads) {
+        arraylist_free(chunk_reads);
+    }
     return rc;
 }
 
@@ -406,7 +410,7 @@ int invoke_chunk_read_response_rpc(remote_chunk_reads_t* rcr)
     assert(hret == HG_SUCCESS);
 
     /* fill in input struct */
-    in.src_rank = (int32_t)glb_mpi_rank;
+    in.src_rank = (int32_t)glb_pmi_rank;
     in.app_id = (int32_t)rcr->app_id;
     in.client_id = (int32_t)rcr->client_id;
     in.req_id = (int32_t)rcr->rdreq_id;
@@ -470,7 +474,7 @@ static void server_hello_rpc(hg_handle_t handle)
     }
 
     /* fill output structure to return to caller */
-    out.ret = (int32_t)glb_mpi_rank;
+    out.ret = (int32_t)glb_pmi_rank;
 
     /* send output back to caller */
     hret = margo_respond(handle, &out);

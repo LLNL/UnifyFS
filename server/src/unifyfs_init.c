@@ -30,7 +30,6 @@
 // system headers
 #include <signal.h>
 #include <sys/mman.h>
-#include <mpi.h>
 
 // common headers
 #include "unifyfs_configurator.h"
@@ -46,8 +45,11 @@
 // margo rpcs
 #include "margo_server.h"
 
-int glb_mpi_rank, glb_mpi_size;
+int glb_pmi_rank; /* = 0 */
+int glb_pmi_size = 1; // for standalone server tests
+
 char glb_host[UNIFYFS_MAX_HOSTNAME];
+size_t glb_host_ndx;        // index of localhost in glb_servers
 
 size_t glb_num_servers;     // size of glb_servers array
 server_info_t* glb_servers; // array of server_info_t
@@ -158,6 +160,32 @@ void exit_request(int sig)
     }
 }
 
+#if defined(UNIFYFSD_USE_MPI)
+static void init_MPI(void)
+{
+    int rc, provided;
+    rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+    if (rc != MPI_SUCCESS) {
+        exit(1);
+    }
+
+    rc = MPI_Comm_rank(MPI_COMM_WORLD, &glb_pmi_rank);
+    if (rc != MPI_SUCCESS) {
+        exit(1);
+    }
+
+    rc = MPI_Comm_size(MPI_COMM_WORLD, &glb_pmi_size);
+    if (rc != MPI_SUCCESS) {
+        exit(1);
+    }
+}
+
+static void fini_MPI(void)
+{
+    MPI_Finalize();
+}
+#endif // UNIFYFSD_USE_MPI
+
 static int allocate_servers(size_t n_servers)
 {
     glb_num_servers = n_servers;
@@ -207,22 +235,27 @@ static int process_servers_hostfile(const char* hostfile)
             fclose(fp);
             return (int)UNIFYFS_FAILURE;
         }
-        //glb_servers[i].hostname = strdup(hostbuf);
+
         // NOTE: following assumes one server per host
         if (0 == strcmp(glb_host, hostbuf)) {
-            //glb_svr_rank = (int)i;
-            LOGDBG("found myself at hostfile index=%zu, mpi_rank=%d",
-                   i, glb_mpi_rank);
+            glb_host_ndx = (int)i;
+            LOGDBG("found myself at hostfile index=%zu, pmi_rank=%d",
+                   glb_host_ndx, glb_pmi_rank);
         }
     }
     fclose(fp);
+
+    if (glb_pmi_size < cnt) {
+        glb_pmi_rank = (int)glb_host_ndx;
+        glb_pmi_size = (int)cnt;
+        LOGDBG("set pmi rank to host index %d", glb_pmi_rank);
+    }
 
     return (int)UNIFYFS_SUCCESS;
 }
 
 int main(int argc, char* argv[])
 {
-    int provided;
     int rc;
     int kv_rank, kv_nranks;
     bool daemon = true;
@@ -242,6 +275,15 @@ int main(int argc, char* argv[])
     }
     if (daemon) {
         daemonize();
+    }
+
+    /* unifyfs default log level is LOG_ERR */
+    if (server_cfg.log_verbosity != NULL) {
+        long l;
+        rc = configurator_int_val(server_cfg.log_verbosity, &l);
+        if (0 == rc) {
+            unifyfs_log_level = (int)l;
+        }
     }
 
     // setup clean termination by signal
@@ -264,25 +306,14 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
-    if (rc != MPI_SUCCESS) {
-        exit(1);
-    }
-
-    rc = MPI_Comm_rank(MPI_COMM_WORLD, &glb_mpi_rank);
-    if (rc != MPI_SUCCESS) {
-        exit(1);
-    }
-
-    rc = MPI_Comm_size(MPI_COMM_WORLD, &glb_mpi_size);
-    if (rc != MPI_SUCCESS) {
-        exit(1);
-    }
+#if defined(UNIFYFSD_USE_MPI)
+    init_MPI();
+#endif
 
     // start logging
     gethostname(glb_host, sizeof(glb_host));
-    snprintf(dbg_fname, sizeof(dbg_fname), "%s/%s.%s.%d",
-             server_cfg.log_dir, server_cfg.log_file, glb_host, glb_mpi_rank);
+    snprintf(dbg_fname, sizeof(dbg_fname), "%s/%s.%s",
+             server_cfg.log_dir, server_cfg.log_file, glb_host);
     rc = unifyfs_log_open(dbg_fname);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("%s", unifyfs_error_enum_description((unifyfs_error_e)rc));
@@ -296,24 +327,25 @@ int main(int argc, char* argv[])
         }
     }
 
-    kv_rank = glb_mpi_rank;
-    kv_nranks = glb_mpi_size;
+    kv_rank = glb_pmi_rank;
+    kv_nranks = glb_pmi_size;
     rc = unifyfs_keyval_init(&server_cfg, &kv_rank, &kv_nranks);
     if (rc != (int)UNIFYFS_SUCCESS) {
         exit(1);
     }
-    if (glb_mpi_rank != kv_rank) {
-        LOGDBG("mismatch on MPI (%d) vs kvstore (%d) rank",
-               glb_mpi_rank, kv_rank);
+    if (glb_pmi_rank != kv_rank) {
+        LOGDBG("mismatch on pmi (%d) vs kvstore (%d) rank",
+               glb_pmi_rank, kv_rank);
+        glb_pmi_rank = kv_rank;
     }
-    if (glb_mpi_size != kv_nranks) {
-        LOGDBG("mismatch on MPI (%d) vs kvstore (%d) num ranks",
-               glb_mpi_size, kv_nranks);
+    if (glb_pmi_size != kv_nranks) {
+        LOGDBG("mismatch on pmi (%d) vs kvstore (%d) num ranks",
+               glb_pmi_size, kv_nranks);
+        glb_pmi_size = kv_nranks;
     }
 
-    // TEMPORARY: remove once we fully eliminate use of MPI in sever
-    snprintf(rank_str, sizeof(rank_str), "%d", glb_mpi_rank);
-    rc = unifyfs_keyval_publish_remote(key_unifyfsd_mpi_rank, rank_str);
+    snprintf(rank_str, sizeof(rank_str), "%d", glb_pmi_rank);
+    rc = unifyfs_keyval_publish_remote(key_unifyfsd_pmi_rank, rank_str);
     if (rc != (int)UNIFYFS_SUCCESS) {
         exit(1);
     }
@@ -336,8 +368,6 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-
     LOGDBG("connecting rpc servers");
     rc = margo_connect_servers();
     if (rc != UNIFYFS_SUCCESS) {
@@ -348,11 +378,11 @@ int main(int argc, char* argv[])
 #if defined(UNIFYFS_USE_DOMAIN_SOCKET)
     int srvr_rank_idx = 0;
 #if defined(UNIFYFS_MULTIPLE_DELEGATORS)
-    rc = CountTasksPerNode(glb_mpi_rank, glb_mpi_size);
+    rc = CountTasksPerNode(glb_pmi_rank, glb_pmi_size);
     if (rc < 0) {
         exit(1);
     }
-    srvr_rank_idx = find_rank_idx(glb_mpi_rank);
+    srvr_rank_idx = find_rank_idx(glb_pmi_rank);
 #endif // UNIFYFS_MULTIPLE_DELEGATORS
     LOGDBG("creating server domain socket");
     rc = sock_init_server(srvr_rank_idx);
@@ -377,7 +407,6 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
     LOGDBG("finished service initialization");
 
     while (1) {
@@ -410,6 +439,7 @@ int main(int argc, char* argv[])
     return unifyfs_exit();
 }
 
+#if defined(UNIFYFSD_USE_MPI)
 #if defined(UNIFYFS_MULTIPLE_DELEGATORS)
 /* count the number of delegators per node, and
  * the rank of each delegator, the results are stored
@@ -580,6 +610,7 @@ static int compare_int(const void* a, const void* b)
 }
 
 #endif // UNIFYFS_MULTIPLE_DELEGATORS
+#endif // UNIFYFSD_USE_MPI
 
 
 static int unifyfs_exit(void)
@@ -666,8 +697,10 @@ static int unifyfs_exit(void)
     LOGDBG("stopping metadata service");
     meta_sanitize();
 
+#if defined(UNIFYFSD_USE_MPI)
     LOGDBG("finalizing MPI");
-    MPI_Finalize();
+    fini_MPI();
+#endif
 
     LOGDBG("all done!");
     unifyfs_log_close();

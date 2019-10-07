@@ -61,31 +61,85 @@ process_is_not_running()
     return 1
 }
 
+# Dump test state (for debugging)
+unifyfsd_dump_state()
+{
+    if ! test -d "$UNIFYFS_TEST_TMPDIR"; then
+        return 1
+    fi
+
+    dumpfile=$UNIFYFS_TEST_TMPDIR/unifyfsd.dump.$$
+    [ -f $dumpfile ] || touch $dumpfile
+
+    metadir=$UNIFYFS_TEST_META
+    if [ -d $metadir ]; then
+        echo "Listing meta directory $metadir :" >> $dumpfile
+        ls -lR $metadir >> $dumpfile
+        echo >> $dumpfile
+    fi
+
+    sharedir=$UNIFYFS_TEST_SHARE
+    if [ -d $sharedir ]; then
+        echo "Listing share directory $sharedir :" >> $dumpfile
+        ls -lR $sharedir >> $dumpfile
+        echo >> $dumpfile
+    fi
+
+    spilldir=$UNIFYFS_TEST_SPILL
+    if [ -d $spilldir ]; then
+        echo "Listing spill directory $spilldir :" >> $dumpfile
+        ls -lR $spilldir >> $dumpfile
+        echo >> $dumpfile
+    fi
+
+    statedir=$UNIFYFS_TEST_STATE
+    if [ -d $statedir ]; then
+        echo "Listing state directory $statedir :" >> $dumpfile
+        ls -lR $statedir >> $dumpfile
+        echo >> $dumpfile
+        echo "Dumping state directory $statedir file contents :" >> $dumpfile
+        for f in $statedir/* ; do
+            if [ -f $f ]; then
+                echo "========= $f ==========" >> $dumpfile
+                cat $f >> $dumpfile
+                echo "+++++++++++++++++++++++" >> $dumpfile
+                echo >> $dumpfile
+            fi
+        done
+    fi
+    # print out dumpfile contents to current test log
+    cat $dumpfile >&3
+    return 0
+}
+
+# Remove the test directory.
+unifyfsd_cleanup()
+{
+    unifyfsd_dump_state
+    # remove test directory if it exists
+    test -d "$UNIFYFS_TEST_TMPDIR" && /bin/rm -r $UNIFYFS_TEST_TMPDIR
+    return 0
+}
+
 # Create metadata directory if needed and start daemon.
 unifyfsd_start_daemon()
 {
-    # Make sure metadata directory exists
-    if test -z "$UNIFYFS_META_DB_PATH"; then
-        return 1
-    elif ! test -d "$UNIFYFS_META_DB_PATH" &&
-         ! mkdir $UNIFYFS_META_DB_PATH; then
+    # Make sure test directory exists
+    if ! test -d "$UNIFYFS_TEST_TMPDIR"; then
         return 1
     fi
 
     # Generate servers hostfile
-    # if test -z "$UNIFYFS_SHAREDFS_DIR"; then
-    #     return 1
-    # elif ! test -d "$UNIFYFS_SHAREDFS_DIR" &&
-    #      ! mkdir $UNIFYFS_SHAREDFS_DIR; then
-    #     return 1
-    # fi
-    # srvr_hosts=$UNIFYFS_SHAREDFS_DIR/unifyfsd.hosts
-    # if [ ! -f $srvr_hosts ]; then
-    #     touch $srvr_hosts
-    #     echo "1" >> $srvr_hosts
-    #     hostname >> $srvr_hosts
-    # fi
-    # export UNIFYFS_SERVER_HOSTFILE=$srvr_hosts
+    if test -z "$UNIFYFS_SHAREDFS_DIR"; then
+        return 1
+    fi
+    srvr_hosts=$UNIFYFS_SHAREDFS_DIR/unifyfsd.hosts
+    if [ ! -f $srvr_hosts ]; then
+        touch $srvr_hosts
+        echo "1" >> $srvr_hosts
+        hostname >> $srvr_hosts
+    fi
+    export UNIFYFS_SERVER_HOSTFILE=$srvr_hosts
 
     # run server daemon
     $UNIFYFSD
@@ -94,12 +148,14 @@ unifyfsd_start_daemon()
 # Kill UnifyFS daemon.
 unifyfsd_stop_daemon()
 {
-    while killall -q -s TERM unifyfsd 2>/dev/null; do :; done
+    killsig="TERM"
+    srvrpids="$(pgrep unifyfsd)"
+    while [ -n "$srvrpids" ]; do
+        killall -q -s $killsig unifyfsd 2>/dev/null
+        sleep 5
+        srvrpids="$(pgrep unifyfsd)"
+        killsig="KILL"
+    done
 }
 
-# Remove the metadata directory.
-unifyfsd_cleanup()
-{
-    test -d "$UNIFYFS_META_DB_PATH" && rm -rf $UNIFYFS_META_DB_PATH
-    # test -d "$UNIFYFS_SHAREDFS_DIR" && rm -rf $UNIFYFS_SHAREDFS_DIR
-}
+

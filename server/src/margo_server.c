@@ -257,42 +257,51 @@ int margo_connect_servers(void)
     size_t i;
     hg_return_t hret;
 
+    // block until a margo_svr key pair published by all servers
+    rc = unifyfs_keyval_fence_remote();
+    if ((int)UNIFYFS_SUCCESS != rc) {
+        LOGERR("keyval fence on margo_svr key failed");
+        ret = (int)UNIFYFS_FAILURE;
+        return ret;
+    }
+
     for (i = 0; i < glb_num_servers; i++) {
-        int remote_mpi_rank = -1;
-        char* mpi_rank_str = NULL;
+        int remote_pmi_rank = -1;
+        char* pmi_rank_str = NULL;
         char* margo_addr_str = NULL;
 
-        // NOTE: this really doesn't belong here, and will eventually go away
-        rc = unifyfs_keyval_lookup_remote(i, key_unifyfsd_mpi_rank,
-                                          &mpi_rank_str);
-        if ((int)UNIFYFS_SUCCESS == rc) {
-            remote_mpi_rank = atoi(mpi_rank_str);
-            free(mpi_rank_str);
-        } else {
-            LOGERR("server index=%zu - MPI rank lookup failed", i);
+        rc = unifyfs_keyval_lookup_remote(i, key_unifyfsd_pmi_rank,
+                                          &pmi_rank_str);
+        if ((int)UNIFYFS_SUCCESS != rc) {
+            LOGERR("server index=%zu - pmi rank lookup failed", i);
             ret = (int)UNIFYFS_FAILURE;
+            return ret;
         }
-        glb_servers[i].mpi_rank = remote_mpi_rank;
+        if (NULL != pmi_rank_str) {
+            remote_pmi_rank = atoi(pmi_rank_str);
+            free(pmi_rank_str);
+        }
+        glb_servers[i].pmi_rank = remote_pmi_rank;
 
         margo_addr_str = rpc_lookup_remote_server_addr(i);
-        glb_servers[i].margo_svr_addr_str = margo_addr_str;
-        if (NULL != margo_addr_str) {
-            LOGDBG("server index=%zu, mpi_rank=%d, margo_addr=%s",
-                   i, remote_mpi_rank, margo_addr_str);
-            if (!margo_lazy_connect) {
-                glb_servers[i].margo_svr_addr = HG_ADDR_NULL;
-                hret = margo_addr_lookup(unifyfsd_rpc_context->svr_mid,
-                                         glb_servers[i].margo_svr_addr_str,
-                                         &(glb_servers[i].margo_svr_addr));
-                if (hret != HG_SUCCESS) {
-                    LOGERR("server index=%zu - margo_addr_lookup(%s) failed",
-                           i, margo_addr_str);
-                    ret = (int)UNIFYFS_FAILURE;
-                }
-            }
-        } else {
-            LOGERR("server index=%zu - margo addr string lookup failed", i);
+        if (NULL == margo_addr_str) {
+            LOGERR("server index=%zu - margo server lookup failed", i);
             ret = (int)UNIFYFS_FAILURE;
+            return ret;
+        }
+        glb_servers[i].margo_svr_addr = HG_ADDR_NULL;
+        glb_servers[i].margo_svr_addr_str = margo_addr_str;
+        LOGDBG("server index=%zu, pmi_rank=%d, margo_addr=%s",
+               i, remote_pmi_rank, margo_addr_str);
+        if (!margo_lazy_connect) {
+            hret = margo_addr_lookup(unifyfsd_rpc_context->svr_mid,
+                                     glb_servers[i].margo_svr_addr_str,
+                                     &(glb_servers[i].margo_svr_addr));
+            if (hret != HG_SUCCESS) {
+                LOGERR("server index=%zu - margo_addr_lookup(%s) failed",
+                       i, margo_addr_str);
+                ret = (int)UNIFYFS_FAILURE;
+            }
         }
     }
 

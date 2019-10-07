@@ -99,9 +99,11 @@ int unifyfs_key_compare(unifyfs_key_t* a, unifyfs_key_t* b)
 int meta_init_store(unifyfs_cfg_t* cfg)
 {
     int rc, ratio;
+    MPI_Comm comm = MPI_COMM_WORLD;
     size_t path_len;
     long svr_ratio, range_sz;
-    MPI_Comm comm = MPI_COMM_WORLD;
+    struct stat ss;
+    char db_path[UNIFYFS_MAX_FILENAME] = {0};
 
     if (cfg == NULL) {
         return -1;
@@ -117,7 +119,16 @@ int meta_init_store(unifyfs_cfg_t* cfg)
     mdhim_options_set_debug_level(db_opts, MLOG_CRIT);
 
     /* UNIFYFS_META_DB_PATH: root directory for metadata */
-    mdhim_options_set_db_path(db_opts, cfg->meta_db_path);
+    snprintf(db_path, sizeof(db_path), "%s/mdhim", cfg->meta_db_path);
+    rc = stat(db_path, &ss);
+    if (rc != 0) {
+        rc = mkdir(db_path, 0770);
+        if (rc != 0) {
+            LOGERR("failed to create MDHIM metadata directory %s", db_path);
+            return -1;
+        }
+    }
+    mdhim_options_set_db_path(db_opts, strdup(db_path));
 
     /* number of metadata servers =
      *   number of unifyfs servers / UNIFYFS_META_SERVER_RATIO */
@@ -280,14 +291,16 @@ static int remove_mdhim_db_filetree(char* db_root_path)
 int meta_sanitize(void)
 {
     int rc;
-    char dbpath[UNIFYFS_MAX_FILENAME] = {0};
+    char db_path[UNIFYFS_MAX_FILENAME] = {0};
 
-    snprintf(dbpath, sizeof(dbpath), "%s", md->db_opts->db_path);
+    // capture db_path before closing MDHIM
+    snprintf(db_path, sizeof(db_path), "%s", md->db_opts->db_path);
 
     mdhimClose(md);
     md = NULL;
 
-    rc = remove_mdhim_db_filetree(dbpath);
+    // remove the metadata filetree
+    rc = remove_mdhim_db_filetree(db_path);
     if (rc) {
         LOGERR("failure during MDHIM file tree removal");
     }
