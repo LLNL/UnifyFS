@@ -52,11 +52,15 @@
 #include <margo.h>
 #include <pthread.h>
 
+#if defined(UNIFYFSD_USE_MPI)
+# include <mpi.h>
+#endif
+
 extern arraylist_t* app_config_list;
 extern arraylist_t* rm_thrd_list;
 
 extern char glb_host[UNIFYFS_MAX_HOSTNAME];
-extern int glb_mpi_rank, glb_mpi_size;
+extern int glb_pmi_rank, glb_pmi_size;
 
 extern size_t max_recs_per_slice;
 
@@ -178,7 +182,7 @@ typedef struct {
     //char* hostname;
     char* margo_svr_addr_str;
     hg_addr_t margo_svr_addr;
-    int mpi_rank;
+    int pmi_rank;
 } server_info_t;
 
 extern char glb_host[UNIFYFS_MAX_HOSTNAME];

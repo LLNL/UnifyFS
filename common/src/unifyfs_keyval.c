@@ -37,7 +37,7 @@ const char* key_runstate           = "unifyfs.runstate";
 const char* key_unifyfsd_socket    = "unifyfsd.socket";
 const char* key_unifyfsd_margo_shm = "unifyfsd.margo-shm";
 const char* key_unifyfsd_margo_svr = "unifyfsd.margo-svr";
-const char* key_unifyfsd_mpi_rank  = "unifyfsd.mpi-rank";
+const char* key_unifyfsd_pmi_rank  = "unifyfsd.pmi-rank";
 
 // key-value store state
 static int kv_initialized; // = 0
@@ -263,7 +263,14 @@ static int unifyfs_pmi2_publish(const char* key,
         LOGERR("PMI2_KVS_Put(%s) failed: %s", key, pmi2_errstr);
         return (int)UNIFYFS_FAILURE;
     }
-    rc = PMI2_KVS_Fence();
+    return (int)UNIFYFS_SUCCESS;
+}
+
+static int unifyfs_pmi2_fence(void)
+{
+    /* PMI2_KVS_Fence() is a collective barrier that ensures
+     * all previous KVS_Put()s are visible */
+    int rc = PMI2_KVS_Fence();
     if (rc != PMI2_SUCCESS) {
         unifyfs_pmi2_errstr(rc);
         LOGERR("PMI2_KVS_Fence() failed: %s", pmi2_errstr);
@@ -451,6 +458,20 @@ static int unifyfs_pmix_publish(const char* key,
     }
     /* cleanup */
     PMIX_INFO_FREE(info, ninfo);
+    return rc;
+}
+
+static int unifyfs_pmix_fence(void)
+{
+    // PMIx_Fence is a collective barrier across all processes in my namespace
+    int rc = PMIx_Fence(NULL, 0, NULL, 0);
+    if (rc != PMIX_SUCCESS) {
+        LOGERR("PMIx rank %d: PMIx_Fence failed: %s",
+               pmix_myproc.rank, PMIx_Error_string(rc));
+        rc = (int)UNIFYFS_FAILURE;
+    } else {
+        rc = (int)UNIFYFS_SUCCESS;
+    }
     return rc;
 }
 
@@ -753,6 +774,22 @@ static int unifyfs_fskv_publish_remote(const char* key,
     return (int)UNIFYFS_SUCCESS;
 }
 
+static int unifyfs_fskv_fence(void)
+{
+    if (!have_sharedfs_kvstore) {
+        return (int)UNIFYFS_FAILURE;
+    }
+
+    if (1 == kv_nranks) {
+        return (int)UNIFYFS_SUCCESS;
+    }
+
+    // TODO - use a file as a counting semaphore??
+    sleep(10);
+
+    return (int)UNIFYFS_SUCCESS;
+}
+
 //--------------------- K-V Store API ---------------------
 
 // Initialize key-value store
@@ -836,7 +873,7 @@ int unifyfs_keyval_fini(void)
 int unifyfs_keyval_lookup_local(const char* key,
                                 char** oval)
 {
-    int rc = UNIFYFS_FAILURE;
+    int rc;
 
     if ((NULL == key) || (NULL == oval)) {
         LOGERR("NULL parameter");
@@ -870,7 +907,7 @@ int unifyfs_keyval_lookup_remote(int rank,
                                  const char* key,
                                  char** oval)
 {
-    int rc = UNIFYFS_FAILURE;
+    int rc;
 
     if ((NULL == key) || (NULL == oval)) {
         LOGERR("NULL parameter");
@@ -902,6 +939,8 @@ int unifyfs_keyval_lookup_remote(int rank,
     rc = unifyfs_pmix_lookup(rank_key, oval);
 #elif defined(USE_PMI2)
     rc = unifyfs_pmi2_lookup(rank_key, oval);
+#else
+    rc = (int)UNIFYFS_FAILURE;
 #endif
     if (rc != (int)UNIFYFS_SUCCESS) {
         rc = unifyfs_fskv_lookup_remote(rank, key, oval);
@@ -916,7 +955,7 @@ int unifyfs_keyval_lookup_remote(int rank,
 int unifyfs_keyval_publish_local(const char* key,
                                  const char* val)
 {
-    int rc = UNIFYFS_FAILURE;
+    int rc;
 
     if (!kv_initialized) {
         return (int)UNIFYFS_FAILURE;
@@ -955,7 +994,7 @@ int unifyfs_keyval_publish_local(const char* key,
 int unifyfs_keyval_publish_remote(const char* key,
                                   const char* val)
 {
-    int rc = UNIFYFS_FAILURE;
+    int rc;
 
     if (!kv_initialized) {
         return (int)UNIFYFS_FAILURE;
@@ -980,10 +1019,12 @@ int unifyfs_keyval_publish_remote(const char* key,
     snprintf(rank_key, sizeof(rank_key), "%d.%s", kv_myrank, key);
 
     // publish it
- #if defined(USE_PMIX)
+#if defined(USE_PMIX)
     rc = unifyfs_pmix_publish(rank_key, val);
 #elif defined(USE_PMI2)
     rc = unifyfs_pmi2_publish(rank_key, val);
+#else
+    rc = (int)UNIFYFS_FAILURE;
 #endif
     if (rc != (int)UNIFYFS_SUCCESS) {
         rc = unifyfs_fskv_publish_remote(key, val);
@@ -994,5 +1035,19 @@ int unifyfs_keyval_publish_remote(const char* key,
     } else {
         kv_published = 1;
     }
+    return rc;
+}
+
+// block until a particular key-value pair published by all servers
+int unifyfs_keyval_fence_remote(void)
+{
+    int rc;
+#if defined(USE_PMIX)
+    rc = unifyfs_pmix_fence();
+#elif defined(USE_PMI2)
+    rc = unifyfs_pmi2_fence();
+#else
+    rc = unifyfs_fskv_fence();
+#endif
     return rc;
 }

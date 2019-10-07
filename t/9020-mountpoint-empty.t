@@ -11,8 +11,8 @@ test_description="Verify UnifyFS intercepted mount point is empty"
 
 . $(dirname $0)/sharness.sh
 
-test_expect_success "Intercepted mount point $UNIFYFS_MOUNT_POINT is empty" '
-    test_dir_is_empty $UNIFYFS_MOUNT_POINT
+test_expect_success "Intercepted mount point $UNIFYFS_MOUNTPOINT is empty" '
+    test_dir_is_empty $UNIFYFS_MOUNTPOINT
 '
 
 test_done

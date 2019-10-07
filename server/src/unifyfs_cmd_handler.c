@@ -30,7 +30,6 @@
 // system headers
 #include <fcntl.h>
 #include <sys/mman.h>
-#include <mpi.h>
 
 // server components
 #include "unifyfs_global.h"
@@ -142,8 +141,7 @@ static int open_log_file(app_config_t* app_config,
     /* open spill over file for reading */
     app_config->spill_log_fds[client_side_id] = open(path, O_RDONLY, 0666);
     if (app_config->spill_log_fds[client_side_id] < 0) {
-        printf("rank:%d, opening file %s failure\n", glb_mpi_rank, path);
-        fflush(stdout);
+        LOGERR("failed to open spill file %s", path);
         return (int)UNIFYFS_ERROR_FILE;
     }
 
@@ -160,8 +158,7 @@ static int open_log_file(app_config_t* app_config,
     app_config->spill_index_log_fds[client_side_id] =
         open(path, O_RDONLY, 0666);
     if (app_config->spill_index_log_fds[client_side_id] < 0) {
-        printf("rank:%d, opening index file %s failure\n", glb_mpi_rank, path);
-        fflush(stdout);
+        LOGERR("failed to open spill index file %s", path);
         return (int)UNIFYFS_ERROR_FILE;
     }
 

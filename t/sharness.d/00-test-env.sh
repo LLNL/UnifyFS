@@ -29,13 +29,12 @@ elif test -n "$(which srun 2>/dev/null)"; then
 elif test -n "$(which mpirun 2>/dev/null)"; then
     JOB_RUN_COMMAND="mpirun -wd $UNIFYFS_BUILD_DIR -np 1"
 fi
-
 if test -z "$JOB_RUN_COMMAND"; then
     echo >&2 "Failed to find a suitable parallel job launcher"
     echo >&2 "Do you need to install OpenMPI or SLURM?"
     return 1
 fi
-
+#echo >&2 "Using JOB_RUN_COMMAND: $JOB_RUN_COMMAND"
 export JOB_RUN_COMMAND
 
 #

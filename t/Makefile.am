@@ -12,7 +12,8 @@ TESTS = \
 	9005-unifyfs-unmount.t \
 	9010-stop-unifyfsd.t \
 	9020-mountpoint-empty.t \
-	9100-metadata-api.t
+	9100-metadata-api.t \
+	9999-cleanup.t
 
 check_SCRIPTS = \
 	0001-setup.t \
@@ -23,7 +24,8 @@ check_SCRIPTS = \
 	9005-unifyfs-unmount.t \
 	9010-stop-unifyfsd.t \
 	9020-mountpoint-empty.t \
-	9100-metadata-api.t
+	9100-metadata-api.t \
+	9999-cleanup.t
 
 EXTRA_DIST = \
 	$(check_SCRIPTS) \
