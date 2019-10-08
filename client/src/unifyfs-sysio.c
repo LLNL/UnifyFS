@@ -519,35 +519,40 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
  * POSIX wrappers: file descriptors
  * --------------------------------------- */
 
-/* read count bytes info buf from file starting at offset pos,
- * returns number of bytes actually read in retcount,
- * retcount will be less than count only if an error occurs
- * or end of file is reached */
-int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count,
-                    size_t* retcount)
+/*
+ * Read 'count' bytes info 'buf' from file starting at offset 'pos'.
+ *
+ * Returns number of bytes actually read, or -1 on error, in which
+ * case errno will be set.
+ */
+size_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
 {
     /* get the file id for this file descriptor */
     int fid = unifyfs_get_fid_from_fd(fd);
     if (fid < 0) {
-        return UNIFYFS_ERROR_BADF;
+        errno = EBADF;
+        return -1;
     }
 
     /* it's an error to read from a directory */
     if (unifyfs_fid_is_dir(fid)) {
         /* TODO: note that read/pread can return this, but not fread */
-        return UNIFYFS_ERROR_ISDIR;
+        errno = EISDIR;
+        return -1;
     }
 
     /* check that file descriptor is open for read */
     unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(fd);
     if (!filedesc->read) {
-        return UNIFYFS_ERROR_BADF;
+        errno = EBADF;
+        return -1;
     }
 
     /* TODO: is it safe to assume that off_t is bigger than size_t? */
     /* check that we don't overflow the file length */
     if (unifyfs_would_overflow_offt(pos, (off_t) count)) {
-        return UNIFYFS_ERROR_OVERFLOW;
+        errno = EOVERFLOW;
+        return -1;
     }
 
     /* TODO: check that file is open for reading */
@@ -566,17 +571,37 @@ int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count,
         }
     }
 
-    /* record number of bytes that we'll actually read */
-    *retcount = count;
-
     /* if we don't read any bytes, return success */
     if (count == 0) {
-        return UNIFYFS_SUCCESS;
+        return 0;
     }
 
-    /* read data from file */
-    int read_rc = unifyfs_fid_read(fid, pos, buf, count);
-    return read_rc;
+    read_req_t tmp_req;
+    tmp_req.fid     = fid;
+    tmp_req.offset  = (size_t) pos;
+    tmp_req.length  = count;
+    tmp_req.errcode = UNIFYFS_SUCCESS;
+    tmp_req.buf     = buf;
+
+    int ret = unifyfs_fd_logreadlist(&tmp_req, 1);
+
+    /*
+     * FIXME: when we can get the global file size correctly, the following
+     * should be rewritten. currently, we cannot detect EOF reliably.
+     */
+    if (ret != UNIFYFS_SUCCESS) {
+        if (tmp_req.errcode != UNIFYFS_SUCCESS) {
+            /* error reading data */
+            errno = EIO;
+            count = -1;
+        } else {
+            count = 0; /* possible EOF */
+        }
+    } else {
+        /* success, update position */
+        filedesc->pos += (off_t) count;
+    }
+    return count;
 }
 
 /* write count bytes from buf into file starting at offset pos,
@@ -1008,40 +1033,7 @@ ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
         }
 #endif
 
-        /* assume we'll succeed in read */
-        size_t retcount = count;
-
-        read_req_t tmp_req;
-        tmp_req.fid     = fid;
-        tmp_req.offset  = (size_t) filedesc->pos;
-        tmp_req.length  = count;
-        tmp_req.errcode = UNIFYFS_SUCCESS;
-        tmp_req.buf     = buf;
-
-        /*
-         * this returns error code, which is zero for successful cases.
-         */
-        int ret = unifyfs_fd_logreadlist(&tmp_req, 1);
-
-        /*
-         * FIXME: when we can get the global file size correctly, the following
-         * should be rewritten. currently, we cannot detect EOF reliably.
-         */
-        if (ret != UNIFYFS_SUCCESS) {
-            if (tmp_req.errcode != UNIFYFS_SUCCESS) {
-                /* error reading data */
-                errno = EIO;
-                retcount = -1;
-            } else {
-                retcount = 0; /* possible EOF */
-            }
-        } else {
-            /* success, update position */
-            filedesc->pos += (off_t) retcount;
-        }
-
-        /* return number of bytes read */
-        return (ssize_t) retcount;
+        return unifyfs_fd_read(fd, filedesc->pos, buf, count);
     } else {
         MAP_OR_FAIL(read);
         ssize_t ret = UNIFYFS_REAL(read)(fd, buf, count);
@@ -1052,10 +1044,9 @@ ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
 /* TODO: find right place to msync spillover mapping */
 ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
 {
-    ssize_t ret;
-
     LOGDBG("write was called for fd %d", fd);
 
+    size_t ret;
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
         /* get pointer to file descriptor structure */

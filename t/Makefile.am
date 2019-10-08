@@ -97,7 +97,9 @@ sys_sysio_gotcha_t_SOURCES = sys/sysio_suite.h \
                              sys/creat64.c \
                              sys/mkdir-rmdir.c \
                              sys/open.c \
-                             sys/open64.c
+                             sys/open64.c \
+                             sys/write-read.c
+
 sys_sysio_gotcha_t_CPPFLAGS = $(test_cppflags)
 sys_sysio_gotcha_t_LDADD = $(test_ldadd)
 sys_sysio_gotcha_t_LDFLAGS = $(AM_LDFLAGS)
@@ -108,21 +110,29 @@ sys_sysio_static_t_SOURCES = sys/sysio_suite.h \
                              sys/creat64.c \
                              sys/mkdir-rmdir.c \
                              sys/open.c \
-                             sys/open64.c
+                             sys/open64.c \
+                             sys/write-read.c
+
 sys_sysio_static_t_CPPFLAGS = $(test_cppflags)
 sys_sysio_static_t_LDADD = $(test_static_ldadd)
 sys_sysio_static_t_LDFLAGS = $(test_static_ldflags)
 
 std_stdio_gotcha_t_SOURCES = std/stdio_suite.h \
                              std/stdio_suite.c \
-                             std/fopen-fclose.c
+                             std/fopen-fclose.c \
+                             std/fwrite-fread.c \
+                             std/fflush.c
+
 std_stdio_gotcha_t_CPPFLAGS = $(test_cppflags)
 std_stdio_gotcha_t_LDADD = $(test_ldadd)
 std_stdio_gotcha_t_LDFLAGS = $(AM_LDFLAGS)
 
 std_stdio_static_t_SOURCES = std/stdio_suite.h \
                              std/stdio_suite.c \
-                             std/fopen-fclose.c
+                             std/fopen-fclose.c \
+                             std/fwrite-fread.c \
+                             std/fflush.c
+
 std_stdio_static_t_CPPFLAGS = $(test_cppflags)
 std_stdio_static_t_LDADD = $(test_static_ldadd)
 std_stdio_static_t_LDFLAGS = $(test_static_ldflags)
