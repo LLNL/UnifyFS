@@ -1033,33 +1033,6 @@ int unifyfs_fid_create_directory(const char* path)
     return UNIFYFS_SUCCESS;
 }
 
-/* read count bytes from file starting from pos and store into buf,
- * all bytes are assumed to exist, so checks on file size should be
- * done before calling this routine */
-int unifyfs_fid_read(int fid, off_t pos, void* buf, size_t count)
-{
-    int rc;
-
-    /* short-circuit a 0-byte read */
-    if (count == 0) {
-        return UNIFYFS_SUCCESS;
-    }
-
-    /* get meta for this file id */
-    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-
-    /* determine storage type to read file data */
-    if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-        /* file stored in fixed-size chunks */
-        rc = unifyfs_fid_store_fixed_read(fid, meta, pos, buf, count);
-    } else {
-        /* unknown storage type */
-        rc = (int)UNIFYFS_ERROR_IO;
-    }
-
-    return rc;
-}
-
 /* write count bytes from buf into file starting at offset pos,
  * all bytes are assumed to be allocated to file, so file should
  * be extended before calling this routine */
@@ -1288,8 +1261,9 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
      */
     if (gfattr.is_laminated &&
         ((flags & (O_CREAT | O_TRUNC | O_APPEND | O_WRONLY)) ||
-         (mode & 0222))) {
-            LOGDBG("Can't open with a writable flag on laminated file.");
+         ((mode & 0222) && (flags != O_RDONLY)))) {
+            LOGDBG("Can't open %s with a writable flag on laminated file.",
+                path);
             return EROFS;
     }
 

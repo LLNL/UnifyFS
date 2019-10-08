@@ -32,5 +32,7 @@
 
 /* Tests for UNIFYFS_WRAP(fopen) and UNIFYFS_WRAP(fclose) */
 int fopen_fclose_test(char* unifyfs_root);
+int fwrite_fread_test(char* unifyfs_root);
+int fflush_test(char* unifyfs_root);
 
 #endif /* STDIO_SUITE_H */

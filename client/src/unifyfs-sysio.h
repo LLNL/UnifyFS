@@ -103,12 +103,12 @@ UNIFYFS_DECL(close, int, (int fd));
 UNIFYFS_DECL(lio_listio, int, (int mode, struct aiocb* const aiocb_list[],
                                int nitems, struct sigevent* sevp));
 
-/* read count bytes info buf from file starting at offset pos,
- * returns number of bytes actually read in retcount,
- * retcount will be less than count only if an error occurs
- * or end of file is reached */
-int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count,
-                    size_t* retcount);
+/*
+ * Read 'count' bytes info 'buf' from file starting at offset 'pos'.
+ * Returns number of bytes actually read, or -1 on error, in which
+ * case errno will be set.
+ */
+size_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count);
 
 /* write count bytes from buf into file starting at offset pos,
  * allocates new bytes and updates file size as necessary,
