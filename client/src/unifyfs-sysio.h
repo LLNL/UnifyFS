@@ -60,7 +60,7 @@ UNIFYFS_DECL(remove, int, (const char* path));
 UNIFYFS_DECL(rename, int, (const char* oldpath, const char* newpath));
 UNIFYFS_DECL(truncate, int, (const char* path, off_t length));
 UNIFYFS_DECL(stat, int, (const char* path, struct stat* buf));
-//UNIFYFS_DECL(fstat, int, (int fd, struct stat* buf));
+UNIFYFS_DECL(fstat, int, (int fd, struct stat* buf));
 UNIFYFS_DECL(__xstat, int, (int vers, const char* path, struct stat* buf));
 UNIFYFS_DECL(__lxstat, int, (int vers, const char* path, struct stat* buf));
 UNIFYFS_DECL(__fxstat, int, (int vers, int fd, struct stat* buf));
@@ -108,7 +108,7 @@ UNIFYFS_DECL(lio_listio, int, (int mode, struct aiocb* const aiocb_list[],
  * Returns number of bytes actually read, or -1 on error, in which
  * case errno will be set.
  */
-size_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count);
+ssize_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count);
 
 /* write count bytes from buf into file starting at offset pos,
  * allocates new bytes and updates file size as necessary,

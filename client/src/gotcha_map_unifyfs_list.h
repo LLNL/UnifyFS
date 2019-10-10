@@ -13,6 +13,7 @@ UNIFYFS_DEF(truncate, int, (const char* path, off_t length));
 UNIFYFS_DEF(unlink, int, (const char* path));
 UNIFYFS_DEF(remove, int, (const char* path));
 UNIFYFS_DEF(stat, int, (const char* path, struct stat* buf));
+UNIFYFS_DEF(fstat, int, (int fd, struct stat* buf));
 UNIFYFS_DEF(__xstat, int, (int vers, const char* path, struct stat* buf));
 UNIFYFS_DEF(__lxstat, int, (int vers, const char* path, struct stat* buf));
 UNIFYFS_DEF(creat, int, (const char* path, mode_t mode));
@@ -117,6 +118,7 @@ struct gotcha_binding_t wrap_unifyfs_list[] = {
     { "unlink", UNIFYFS_WRAP(unlink), &UNIFYFS_REAL(unlink) },
     { "remove", UNIFYFS_WRAP(remove), &UNIFYFS_REAL(remove) },
     { "stat", UNIFYFS_WRAP(stat), &UNIFYFS_REAL(stat) },
+    { "fstat", UNIFYFS_WRAP(fstat), &UNIFYFS_REAL(fstat) },
     { "__xstat", UNIFYFS_WRAP(__xstat), &UNIFYFS_REAL(__xstat) },
     { "__lxstat", UNIFYFS_WRAP(__lxstat), &UNIFYFS_REAL(__lxstat) },
     { "creat", UNIFYFS_WRAP(creat), &UNIFYFS_REAL(creat) },

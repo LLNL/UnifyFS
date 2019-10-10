@@ -34,5 +34,6 @@
 int fopen_fclose_test(char* unifyfs_root);
 int fwrite_fread_test(char* unifyfs_root);
 int fflush_test(char* unifyfs_root);
+int size_test(char* unifyfs_root);
 
 #endif /* STDIO_SUITE_H */

@@ -204,6 +204,7 @@ CP_WRAPPERS+=",-wrap,remove"
 CP_WRAPPERS+=",-wrap,rename"
 CP_WRAPPERS+=",-wrap,truncate"
 CP_WRAPPERS+=",-wrap,stat"
+CP_WRAPPERS+=",-wrap,fstat"
 CP_WRAPPERS+=",-wrap,__lxstat"
 CP_WRAPPERS+=",-wrap,__xstat"
 

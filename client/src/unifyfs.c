@@ -609,6 +609,18 @@ unifyfs_filemeta_t* unifyfs_get_meta_from_fid(int fid)
     return NULL;
 }
 
+int unifyfs_fid_is_laminated(int fid)
+{
+    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    return meta->is_laminated;
+}
+
+int unifyfs_fd_is_laminated(int fd)
+{
+    int fid = unifyfs_get_fid_from_fd(fd);
+    return unifyfs_fid_is_laminated(fid);
+}
+
 /* ---------------------------------------
  * Operations on file storage
  * --------------------------------------- */
@@ -671,7 +683,7 @@ int unifyfs_generate_gfid(const char* path)
     return abs(ival[0]);
 }
 
-static int unifyfs_gfid_from_fid(const int fid)
+int unifyfs_gfid_from_fid(const int fid)
 {
     /* check that local file id is in range */
     if (fid < 0 || fid >= unifyfs_max_files) {
@@ -732,12 +744,43 @@ int unifyfs_fid_is_dir_empty(const char* path)
     return 1;
 }
 
-/* return current size of given file id */
-off_t unifyfs_fid_size(int fid)
+/* Return the global (laminated) size of the file */
+off_t unifyfs_fid_global_size(int fid)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    return meta->size;
+    return meta->global_size;
+}
+
+/* Return the log size of the file */
+off_t unifyfs_fid_local_size(int fid)
+{
+    /* get meta data for this file */
+    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    return meta->local_size;
+}
+
+/*
+ * Return the size of the file.  If the file is laminated, return the
+ * laminated size.  If the file is not laminated, return the local
+ * size.
+ */
+off_t unifyfs_fid_logical_size(int fid)
+{
+    /* get meta data for this file */
+    if (unifyfs_fid_is_laminated(fid)) {
+        return unifyfs_fid_global_size(fid);
+    } else {
+        return unifyfs_fid_local_size(fid);
+    }
+}
+
+/* Return the local (un-laminated) size of the file */
+off_t unifyfs_fid_log_size(int fid)
+{
+    /* get meta data for this file */
+    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    return meta->log_size;
 }
 
 /*
@@ -808,11 +851,12 @@ int unifyfs_set_global_file_meta(int fid, int gfid)
     if (meta->is_laminated) {
         /*
          * If is_laminated is set, we're either laminating for the first time,
-         * in which case meta->size will have already been calculated and
+         * in which case meta->global_size will have already been calculated and
          * filled in with the global file size, or, the file was already
-         * laminated.  In either case, we write meta->size to the server.
+         * laminated.  In either case, we write meta->global_size to the server.
          */
-        new_fmeta.size = meta->size;
+        new_fmeta.size = meta->global_size;
+        LOGDBG("setting new_fmeta to %d", new_fmeta.size);
     } else {
         new_fmeta.size = 0;
     }
@@ -875,27 +919,6 @@ int unifyfs_gfid_stat(int gfid, struct stat* buf)
     return UNIFYFS_SUCCESS;
 }
 
-/* fill in limited amount of stat information */
-int unifyfs_fid_stat(int fid, struct stat* buf)
-{
-    /* check that fid is defined */
-    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    if (meta == NULL) {
-        return UNIFYFS_ERROR_IO;
-    }
-
-    /* get global file id corresponding to local file id */
-    int gfid = unifyfs_gfid_from_fid(fid);
-
-    /* lookup stat info for global file id */
-    int ret = unifyfs_gfid_stat(gfid, buf);
-    if (ret != UNIFYFS_SUCCESS) {
-        return UNIFYFS_ERROR_IO;
-    }
-
-    return UNIFYFS_SUCCESS;
-}
-
 /* allocate a file id slot for a new file
  * return the fid or -1 on error */
 int unifyfs_fid_alloc()
@@ -946,9 +969,10 @@ int unifyfs_fid_create_file(const char* path)
 
     /* initialize meta data */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    meta->size    = 0;
-    meta->chunks  = 0;
+    meta->global_size = 0;
+    meta->local_size = 0;
     meta->log_size = 0;
+    meta->chunks  = 0;
     meta->storage = FILE_STORAGE_NULL;
     meta->needs_sync = 0;
     meta->flock_status = UNLOCKED;
@@ -1129,8 +1153,8 @@ int unifyfs_fid_extend(int fid, off_t length)
     /* TODO: move this statement elsewhere */
     /* increase file size up to length */
     if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-        if (length > meta->size) {
-            meta->size = length;
+        if (length > meta->local_size) {
+            meta->local_size = length;
         }
     }
 
@@ -1164,9 +1188,12 @@ int unifyfs_fid_truncate(int fid, off_t length)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    if (meta->is_laminated) {
+        return EINVAL;  /* Can't truncate a laminated file */
+    }
 
     /* get current size of file */
-    off_t size = meta->size;
+    off_t size = meta->local_size;
 
     /* drop data if length is less than current size,
      * allocate new space and zero fill it if bigger */
@@ -1192,7 +1219,7 @@ int unifyfs_fid_truncate(int fid, off_t length)
     }
 
     /* set the new size */
-    meta->size = length;
+    meta->local_size = length;
 
     return UNIFYFS_SUCCESS;
 }
@@ -1233,6 +1260,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
     int found_local = 0;
     off_t pos = 0;      /* set the pointer to the start of the file */
     unifyfs_file_attr_t gfattr = { 0, };
+    unifyfs_filemeta_t* meta = NULL;
 
     if (pathlen > UNIFYFS_MAX_FILENAME) {
         return (int) UNIFYFS_ERROR_NAMETOOLONG;
@@ -1290,7 +1318,6 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
          * create a local meta cache and also initialize the local storage
          * space.
          */
-        unifyfs_filemeta_t* meta = NULL;
 
         fid = unifyfs_fid_create_file(path);
         if (fid < 0) {
@@ -1309,7 +1336,8 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
 
         meta = unifyfs_get_meta_from_fid(fid);
 
-        meta->size = gfattr.size;
+        meta->global_size = gfattr.size;
+        meta->local_size = 0;
         gfattr.fid = fid;
         gfattr.gfid = gfid;
 
@@ -1333,8 +1361,12 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         }
 
         if (flags & O_APPEND) {
-            unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-            pos = meta->size;
+            meta = unifyfs_get_meta_from_fid(fid);
+            /*
+             * We only support O_APPEND on non-laminated (local) files, so
+             * use local_size here.
+             */
+            pos = meta->local_size;
         }
     } else {
         /* !found_local && !found_global

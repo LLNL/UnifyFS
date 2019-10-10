@@ -52,6 +52,8 @@
 extern int unifyfs_spilloverblock;
 extern int unifyfs_use_spillover;
 
+#define MAX(a, b) (a > b ? a : b)
+
 /* ---------------------------------------
  * POSIX wrappers: paths
  * --------------------------------------- */
@@ -333,71 +335,86 @@ int UNIFYFS_WRAP(remove)(const char* path)
     }
 }
 
+/* The main stat call for all the *stat() functions */
+static int __stat(const char* path, struct stat* buf)
+{
+    int gfid, fid;
+    unifyfs_file_attr_t fattr;
+    int ret;
+
+    gfid = unifyfs_generate_gfid(path);
+    fid = unifyfs_get_fid_from_path(path);
+
+    /* check that caller gave us a buffer to write to */
+    if (!buf) {
+        errno = EFAULT;
+        return -1;
+    }
+
+    /* lookup stat data for global file id */
+    ret = invoke_client_metaget_rpc(gfid, &fattr);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGDBG("metaget failed");
+        return ret;
+    }
+
+    memset(buf, 0, sizeof(*buf));
+
+    /* copy attributes to stat struct */
+    unifyfs_file_attr_to_stat(&fattr, buf);
+
+    /*
+     * For debugging purposes, we hijack st_rdev to store our local,
+     * non-laminated file size.  Note: st_rdev is only a 32-bit number,
+     * so don't depend on it if the file is really big (we use the
+     * lower 32-bits of the size).
+     *
+     * We also hijack st_dev to store our log_size for debugging.
+     */
+    buf->st_rdev = fid;
+    if (fid >= 0) { /* If we have a local file */
+        buf->st_rdev = unifyfs_fid_local_size(fid) & 0xFFFFFFFF;
+        buf->st_dev = unifyfs_fid_log_size(fid) & 0xFFFFFFFF;
+    }
+
+    if (!fattr.is_laminated) {
+        /*
+         * It was decided that all non-laminated files would report a global
+         * filesize of zero.
+         */
+        buf->st_size = 0;
+    }
+
+    return 0;
+}
+
 int UNIFYFS_WRAP(stat)(const char* path, struct stat* buf)
 {
     LOGDBG("stat was called for %s", path);
-
     if (unifyfs_intercept_path(path)) {
-        /* check that caller gave us a buffer to write to */
-        if (!buf) {
-            errno = EFAULT;
-            return -1;
-        }
-
-        /* get global file id for path */
-        int gfid = unifyfs_generate_gfid(path);
-
-        /* lookup stat info for global file id */
-        int ret = unifyfs_gfid_stat(gfid, buf);
-        if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(ret);
-            return -1;
-        }
-
-        /* success */
-        return 0;
+        return __stat(path, buf);
     } else {
         MAP_OR_FAIL(stat);
-        int ret = UNIFYFS_REAL(stat)(path, buf);
-        return ret;
+        return UNIFYFS_REAL(stat)(path, buf);
     }
 }
 
-#if 0
 int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
 {
+    int fid;
+    const char* path;
     LOGDBG("fstat was called for fd: %d", fd);
 
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
-        if (!buf) {
-            errno = EFAULT;
-            return -1;
-        }
-
-        /* get the file id for this file descriptor */
-        int fid = unifyfs_get_fid_from_fd(fd);
-        if (fid < 0) {
-            errno = EBADF;
-            return -1;
-        }
-
-        /* lookup stat info for this file id */
-        int ret = unifyfs_fid_stat(fid, buf);
-        if (ret < 0) {
-            errno = unifyfs_err_map_to_errno(ret);
-            return -1;
-        }
-
-        /* success */
-        return 0;
+        fid = unifyfs_get_fid_from_fd(fd);
+        path = unifyfs_path_from_fid(fid);
+        return __stat(path, buf);
     } else {
         MAP_OR_FAIL(fstat);
-        int ret = UNIFYFS_REAL(fstat)(fd, buf);
-        return ret;
+        return UNIFYFS_REAL(fstat)(fd, buf);
     }
 }
-#endif
 
 /*
  * NOTE on __xstat(2), __lxstat(2), and __fxstat(2)
@@ -417,24 +434,7 @@ int UNIFYFS_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
             errno = EINVAL;
             return -1;
         }
-
-        if (!buf) {
-            errno = EFAULT;
-            return -1;
-        }
-
-        /* get global file id for path */
-        int gfid = unifyfs_generate_gfid(path);
-
-        /* lookup stat info for global file id */
-        int ret = unifyfs_gfid_stat(gfid, buf);
-        if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(ret);
-            return -1;
-        }
-
-        /* success */
-        return 0;
+        return __stat(path, buf);
     } else {
         MAP_OR_FAIL(__xstat);
         int ret = UNIFYFS_REAL(__xstat)(vers, path, buf);
@@ -451,34 +451,18 @@ int UNIFYFS_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
             errno = EINVAL;
             return -1;
         }
-
-        if (!buf) {
-            errno = EFAULT;
-            return -1;
-        }
-
-        /* get global file id for path */
-        int gfid = unifyfs_generate_gfid(path);
-
-        /* lookup stat info for global file id */
-        int ret = unifyfs_gfid_stat(gfid, buf);
-        if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(ret);
-            return -1;
-        }
-
-        /* success */
-        return 0;
+        return __stat(path, buf);
     } else {
         MAP_OR_FAIL(__lxstat);
-        int ret = UNIFYFS_REAL(__lxstat)(vers, path, buf);
-        return ret;
+        return UNIFYFS_REAL(__lxstat)(vers, path, buf);
     }
 }
 
 int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
 {
     LOGDBG("fxstat was called for fd %d", fd);
+    int fid;
+    const char* path;
 
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
@@ -487,31 +471,12 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
             return -1;
         }
 
-        if (!buf) {
-            errno = EINVAL;
-            return -1;
-        }
-
-        /* get the file id for this file descriptor */
-        int fid = unifyfs_get_fid_from_fd(fd);
-        if (fid < 0) {
-            errno = EBADF;
-            return -1;
-        }
-
-        /* lookup stat info for this file id */
-        int ret = unifyfs_fid_stat(fid, buf);
-        if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(ret);
-            return -1;
-        }
-
-        /* success */
-        return 0;
+        fid = unifyfs_get_fid_from_fd(fd);
+        path = unifyfs_path_from_fid(fid);
+        return __stat(path, buf);
     } else {
         MAP_OR_FAIL(__fxstat);
-        int ret = UNIFYFS_REAL(__fxstat)(vers, fd, buf);
-        return ret;
+        return UNIFYFS_REAL(__fxstat)(vers, fd, buf);
     }
 }
 
@@ -525,7 +490,7 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
  * Returns number of bytes actually read, or -1 on error, in which
  * case errno will be set.
  */
-size_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
+ssize_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
 {
     /* get the file id for this file descriptor */
     int fid = unifyfs_get_fid_from_fd(fd);
@@ -559,7 +524,7 @@ size_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
 
     /* check that we don't try to read past the end of the file */
     off_t lastread = pos + (off_t) count;
-    off_t filesize = unifyfs_fid_size(fid);
+    off_t filesize = unifyfs_fid_logical_size(fid);
     if (filesize < lastread) {
         /* adjust count so we don't read past end of file */
         if (filesize > pos) {
@@ -604,9 +569,12 @@ size_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
     return count;
 }
 
-/* write count bytes from buf into file starting at offset pos,
- * allocates new bytes and updates file size as necessary,
- * fills any gaps with zeros */
+/*
+ * Write 'count' bytes from 'buf' into file starting at offset' pos'.
+ * Allocates new bytes and updates file size as necessary.  It is assumed
+ * that 'pos' is actually where you want to write, and so O_APPEND behavior
+ * is ignored.  Fills any gaps with zeros
+ */
 int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count)
 {
     /* get the file id for this file descriptor */
@@ -633,48 +601,28 @@ int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count)
         return UNIFYFS_ERROR_OVERFLOW;
     }
 
+    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+
     /* TODO: check that file is open for writing */
 
     /* get current file size before extending the file */
-    off_t filesize = unifyfs_fid_size(fid);
+    off_t logsize = unifyfs_fid_log_size(fid);
 
     /* compute new position based on storage type */
-    off_t newpos;
-    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-        /* extend file size and allocate chunks if needed */
-        newpos = pos + (off_t) count;
-        int extend_rc = unifyfs_fid_extend(fid, newpos);
-        if (extend_rc != UNIFYFS_SUCCESS) {
-            return extend_rc;
-        }
+    off_t newlogsize;
 
-        /* fill any new bytes between old size and pos with zero values */
-        if (filesize < pos) {
-            off_t gap_size = pos - filesize;
-            int zero_rc = unifyfs_fid_write_zero(fid, filesize, gap_size);
-            if (zero_rc != UNIFYFS_SUCCESS) {
-                return zero_rc;
-            }
-        }
-    } else if (meta->storage == FILE_STORAGE_LOGIO) {
-        newpos = filesize + (off_t)count;
-        int extend_rc = unifyfs_fid_extend(fid, newpos);
-        if (extend_rc != UNIFYFS_SUCCESS) {
-            return extend_rc;
-        }
-    } else {
-        return UNIFYFS_ERROR_IO;
+    newlogsize = logsize + count;
+    int extend_rc = unifyfs_fid_extend(fid, newlogsize);
+    if (extend_rc != UNIFYFS_SUCCESS) {
+        return extend_rc;
     }
 
     /* finally write specified data to file */
     int write_rc = unifyfs_fid_write(fid, pos, buf, count);
     if (write_rc == 0) {
         meta->needs_sync = 1;
-        if (meta->storage == FILE_STORAGE_LOGIO) {
-            meta->size = newpos;
-            meta->log_size = pos + count;
-        }
+        meta->local_size = MAX(meta->local_size, pos + count);
+        meta->log_size = newlogsize;
     }
     return write_rc;
 }
@@ -779,6 +727,7 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
                           || ((flags & O_RDWR) == O_RDWR);
         filedesc->write = ((flags & O_WRONLY) == O_WRONLY)
                           || ((flags & O_RDWR) == O_RDWR);
+        filedesc->append = ((flags & O_APPEND));
         LOGDBG("UNIFYFS_open generated fd %d for file %s", fd, path);
 
         /* don't conflict with active system fds that range from 0 - (fd_limit) */
@@ -895,7 +844,6 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
         /* TODO: support SEEK_DATA and SEEK_HOLE? */
 
         /* compute final file position */
-        LOGDBG("seeking from %ld", current_pos);
         switch (whence) {
         case SEEK_SET:
             /* seek to offset */
@@ -907,13 +855,12 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
             break;
         case SEEK_END:
             /* seek to EOF + offset */
-            current_pos = meta->size + offset;
+            current_pos = unifyfs_fid_logical_size(fid);
             break;
         default:
             errno = EINVAL;
             return (off_t)(-1);
         }
-        LOGDBG("seeking to %ld", current_pos);
 
         /* set and return final file position */
         filedesc->pos = current_pos;
@@ -1045,8 +992,9 @@ ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
 ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
 {
     LOGDBG("write was called for fd %d", fd);
-
     size_t ret;
+    off_t pos;
+
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
         /* get pointer to file descriptor structure */
@@ -1057,8 +1005,19 @@ ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
             return (ssize_t)(-1);
         }
 
+        if (filedesc->append) {
+            /*
+             * With O_APPEND we always write to the end, despite the current
+             * file position.
+             */
+            int fid = unifyfs_get_fid_from_fd(fd);
+            pos = unifyfs_fid_local_size(fid);
+        } else {
+            pos = filedesc->pos;
+        }
+
         /* write data to file */
-        int write_rc = unifyfs_fd_write(fd, filedesc->pos, buf, count);
+        int write_rc = unifyfs_fd_write(fd, pos, buf, count);
         if (write_rc != UNIFYFS_SUCCESS) {
             errno = unifyfs_err_map_to_errno(write_rc);
             return (ssize_t)(-1);
@@ -1066,7 +1025,7 @@ ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
         ret = count;
 
         /* update file position */
-        filedesc->pos += ret;
+        filedesc->pos = pos + count;
     } else {
         MAP_OR_FAIL(write);
         ret = UNIFYFS_REAL(write)(fd, buf, count);
@@ -2112,6 +2071,7 @@ int UNIFYFS_WRAP(fsync)(int fd)
         /* get the file id for this file descriptor */
         int fid = unifyfs_get_fid_from_fd(fd);
         if (fid < 0) {
+            LOGERR("Couldn't get fid from fd %d", fd);
             errno = EBADF;
             return -1;
         }
@@ -2132,12 +2092,9 @@ int UNIFYFS_WRAP(fsync)(int fd)
             }
         }
 
-        /* if using LOGIO, call fsync rpc */
-        if (meta->storage == FILE_STORAGE_LOGIO) {
-            /* invoke fsync rpc to register index metadata with server */
-            int gfid = get_gfid(fid);
-            invoke_client_fsync_rpc(gfid);
-        }
+        /* invoke fsync rpc to register index metadata with server */
+        int gfid = get_gfid(fid);
+        invoke_client_fsync_rpc(gfid);
 
         meta->needs_sync = 0;
         return 0;
@@ -2409,7 +2366,7 @@ static int __chmod(int fid, mode_t mode)
          * We're laminating. Calculate the file size so we can cache it
          * (both locally and on the server).
          */
-        ret = invoke_client_filesize_rpc(gfid, &meta->size);
+        ret = invoke_client_filesize_rpc(gfid, &meta->global_size);
         if (ret) {
             LOGERR("chmod: couldn't get the global file size on laminate");
             errno = EIO;

@@ -366,7 +366,7 @@ static int unifyfs_fopen(
     filedesc->fid   = fid;
     filedesc->pos   = pos;
     filedesc->read  = read  || plus;
-    filedesc->write = write || plus;
+    filedesc->write = write || plus || append;
 
     /* record our stream id value */
     s->sid = sid;
@@ -704,7 +704,7 @@ static int unifyfs_stream_write(
             errno = EBADF;
             return UNIFYFS_ERROR_BADF;
         }
-        current = unifyfs_fid_size(fid);
+        current = unifyfs_fid_logical_size(fid);
 
         /* like a seek, we discard push back bytes */
         s->ubuflen = 0;
@@ -902,10 +902,11 @@ static int unifyfs_fseek(FILE* stream, off_t offset, int whence)
             return -1;
         }
         current_pos += offset;
+
         break;
     case SEEK_END:
         /* seek to EOF + offset */
-        filesize = unifyfs_fid_size(fid);
+        filesize = unifyfs_fid_logical_size(fid);
         if (unifyfs_would_overflow_offt(filesize, offset)) {
             s->err = 1;
             errno  = EOVERFLOW;

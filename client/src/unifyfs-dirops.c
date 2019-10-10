@@ -131,13 +131,6 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
             errno = EIO;
             return NULL;
         }
-
-        /*
-         * FIXME: also, is it safe to oeverride this local data?
-         */
-        meta->size = sb.st_size;
-        meta->chunks = sb.st_blocks;
-        meta->log_size = 0; /* no need of local storage for dir operations */
     } else {
         fid = unifyfs_fid_create_file(name);
         if (fid < 0) {
@@ -147,10 +140,11 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
 
         meta = unifyfs_get_meta_from_fid(fid);
         meta->mode = (meta->mode & ~S_IFREG) | S_IFDIR; /* set as directory */
-        meta->size     = sb.st_size;
-        meta->chunks   = sb.st_blocks;
-        meta->log_size = 0;
     }
+
+    meta->global_size = sb.st_size;
+    meta->chunks = sb.st_blocks;
+    meta->local_size = 0; /* no need of local storage for dir operations */
 
     unifyfs_dirstream_t* dirp = unifyfs_dirstream_alloc(fid);
 
