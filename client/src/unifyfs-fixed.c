@@ -629,8 +629,8 @@ int unifyfs_fid_store_fixed_write(int fid, unifyfs_filemeta_t* meta, off_t pos,
         chunk_id = pos >> unifyfs_chunk_bits;
         chunk_offset = pos & unifyfs_chunk_mask;
     } else if (meta->storage == FILE_STORAGE_LOGIO) {
-        chunk_id = meta->size >> unifyfs_chunk_bits;
-        chunk_offset = meta->size & unifyfs_chunk_mask;
+        chunk_id = meta->log_size >> unifyfs_chunk_bits;
+        chunk_offset = meta->log_size & unifyfs_chunk_mask;
     } else {
         return UNIFYFS_ERROR_IO;
     }

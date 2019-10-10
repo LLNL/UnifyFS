@@ -204,6 +204,7 @@ typedef struct {
     off_t pos;   /* current file pointer */
     int   read;  /* whether file is opened for read */
     int   write; /* whether file is opened for write */
+    int   append; /* whether file is opened for append */
 } unifyfs_fd_t;
 
 enum unifyfs_stream_orientation {
@@ -267,8 +268,10 @@ typedef struct {
 } unifyfs_chunkmeta_t;
 
 typedef struct {
-    off_t size;                      /* current file size */
-    off_t log_size;                  /* real size of the file for logio*/
+    off_t global_size;               /* Global size of the file */
+    off_t local_size;                /* Local size of the file */
+    off_t log_size;                  /* Log size.  This is the sum of all the
+                                      * write counts. */
     pthread_spinlock_t fspinlock;    /* file lock variable */
     enum flock_enum flock_status;    /* file lock status */
 
@@ -469,8 +472,17 @@ unifyfs_fd_t* unifyfs_get_filedesc_from_fd(int fd);
  * otherwise return NULL */
 unifyfs_filemeta_t* unifyfs_get_meta_from_fid(int fid);
 
+/* Return 1 if fid is laminated, 0 if not */
+int unifyfs_fid_is_laminated(int fid);
+
+/* Return 1 if fd is laminated, 0 if not */
+int unifyfs_fd_is_laminated(int fd);
+
 /* Given a fid, return the path.  */
 const char* unifyfs_path_from_fid(int fid);
+
+/* Given a fid, return a gfid */
+int unifyfs_gfid_from_fid(const int fid);
 
 /* given an UNIFYFS error code, return corresponding errno code */
 int unifyfs_err_map_to_errno(int rc);
@@ -491,8 +503,20 @@ int unifyfs_fid_is_dir(int fid);
  * returns 0 for no */
 int unifyfs_fid_is_dir_empty(const char* path);
 
-/* return current size of given file id */
-off_t unifyfs_fid_size(int fid);
+/* Return current global size of given file id */
+off_t unifyfs_fid_global_size(int fid);
+
+/* Return current local size of given file id */
+off_t unifyfs_fid_local_size(int fid);
+
+/* Return current local size of given file id */
+off_t unifyfs_fid_log_size(int fid);
+
+/*
+ * Return current size of given file id.  If the file is laminated, return the
+ * global size.  Otherwise, return the local size.
+ */
+off_t unifyfs_fid_logical_size(int fid);
 
 /* fill in limited amount of stat information for global file id */
 int unifyfs_gfid_stat(int gfid, struct stat* buf);

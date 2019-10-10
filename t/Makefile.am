@@ -123,7 +123,8 @@ std_stdio_gotcha_t_SOURCES = std/stdio_suite.h \
                              std/stdio_suite.c \
                              std/fopen-fclose.c \
                              std/fwrite-fread.c \
-                             std/fflush.c
+                             std/fflush.c \
+                             std/size.c
 
 std_stdio_gotcha_t_CPPFLAGS = $(test_cppflags)
 std_stdio_gotcha_t_LDADD = $(test_ldadd)
@@ -133,7 +134,8 @@ std_stdio_static_t_SOURCES = std/stdio_suite.h \
                              std/stdio_suite.c \
                              std/fopen-fclose.c \
                              std/fwrite-fread.c \
-                             std/fflush.c
+                             std/fflush.c \
+                             std/size.c
 
 std_stdio_static_t_CPPFLAGS = $(test_cppflags)
 std_stdio_static_t_LDADD = $(test_static_ldadd)
