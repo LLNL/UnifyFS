@@ -401,47 +401,75 @@ int unifyfs_get_file_extents(int num_keys, unifyfs_key_t** keys,
      * key-value pairs within the range of the key tuple.
      * We need to re-evaluate this function to use different key-value stores.
      */
-
-    int i;
     int rc = UNIFYFS_SUCCESS;
-    int tot_num = 0;
 
-    unifyfs_key_t* tmp_key;
-    unifyfs_val_t* tmp_val;
-    unifyfs_keyval_t* kviter = *keyvals;
+    /* initialize output values */
+    *num_values = 0;
+    *keyvals = NULL;
 
     md->primary_index = unifyfs_indexes[0];
-    bgrm = mdhimBGet(md, md->primary_index, (void**)keys,
-                     key_lens, num_keys, MDHIM_RANGE_BGET);
 
-    while (bgrm) {
-        bgrmp = bgrm;
-        if (bgrmp->error < 0) {
-            // TODO: need better error handling
-            rc = (int)UNIFYFS_ERROR_MDHIM;
-            return rc;
+    /* execute range query */
+    struct mdhim_bgetrm_t* bkvlist = mdhimBGet(md, md->primary_index,
+        (void**)keys, key_lens, num_keys, MDHIM_RANGE_BGET);
+
+    /* iterate over each item in list, check for errors
+     * and sum up total number of key/value pairs we got back */
+    size_t tot_num = 0;
+    struct mdhim_bgetrm_t* ptr = bkvlist;
+    while (ptr) {
+        /* check that we don't have an error condition */
+        if (ptr->error < 0) {
+            /* hit an error */
+            LOGERR("MDHIM Range Query error");
+            return (int)UNIFYFS_ERROR_MDHIM;
         }
 
-        if (tot_num < MAX_META_PER_SEND) {
-            for (i = 0; i < bgrmp->num_keys; i++) {
-                tmp_key = (unifyfs_key_t*)bgrmp->keys[i];
-                tmp_val = (unifyfs_val_t*)bgrmp->values[i];
-                memcpy(&(kviter->key), tmp_key, sizeof(unifyfs_key_t));
-                memcpy(&(kviter->val), tmp_val, sizeof(unifyfs_val_t));
-                kviter++;
-                tot_num++;
-                if (MAX_META_PER_SEND == tot_num) {
-                    LOGERR("Error: maximum number of values!");
-                    rc = UNIFYFS_FAILURE;
-                    break;
-                }
-            }
-        }
-        bgrm = bgrmp->next;
-        mdhim_full_release_msg(bgrmp);
+        /* total up number of key/values returned */
+        tot_num += (size_t) ptr->num_keys;
+
+        /* get pointer to next item in the list */
+        ptr = ptr->next;
     }
 
+    /* allocate memory to copy key/value data */
+    unifyfs_keyval_t* kvs = (unifyfs_keyval_t*) calloc(
+        tot_num, sizeof(unifyfs_keyval_t));
+    if (NULL == kvs) {
+        LOGERR("failed to allocate keyvals");
+        return (int)UNIFYFS_ERROR_MDHIM;
+    }
+
+    /* iterate over list and copy each key/value into output array */
+    ptr = bkvlist;
+    unifyfs_keyval_t* kviter = kvs;
+    while (ptr) {
+        /* iterate over key/value in list element */
+        int i;
+        for (i = 0; i < ptr->num_keys; i++) {
+            /* get pointer to current key and value */
+            unifyfs_key_t* tmp_key = (unifyfs_key_t*)ptr->keys[i];
+            unifyfs_val_t* tmp_val = (unifyfs_val_t*)ptr->values[i];
+
+            /* copy contents over to output array */
+            memcpy(&(kviter->key), tmp_key, sizeof(unifyfs_key_t));
+            memcpy(&(kviter->val), tmp_val, sizeof(unifyfs_val_t));
+
+            /* bump up to next element in output array */
+            kviter++;
+        }
+
+        /* get pointer to next item in the list */
+        struct mdhim_bgetrm_t* next = ptr->next;
+
+        /* release resources for the curren item */
+        mdhim_full_release_msg(ptr);
+        ptr = next;
+    }
+
+    /* set output values */
     *num_values = tot_num;
+    *keyvals = kvs;
 
     return rc;
 }

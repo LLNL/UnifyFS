@@ -477,14 +477,16 @@ int rm_cmd_filesize(
     int gfid,      /* global file id of read request */
     size_t* outsize) /* output file size */
 {
+    /* initialize output file size to something deterministic,
+     * in case we drop out with an error */
+    *outsize = 0;
+
     /* set offset and length to request *all* key/value pairs
      * for this file */
     size_t offset = 0;
 
     /* want to pick the highest integer offset value a file
      * could have here */
-    // TODO: would like to unsed max for unsigned long, but
-    // that fails to return any keys for some reason
     size_t length = (SIZE_MAX >> 1) - 1;
 
     /* get the locations of all the read requests from the
@@ -499,27 +501,17 @@ int rm_cmd_filesize(
     key2.fid    = gfid;
     key2.offset = offset + length - 1;
 
-    unifyfs_keyval_t* keyvals;
+    /* set up input params to specify range lookup */
     unifyfs_key_t* unifyfs_keys[2] = {&key1, &key2};
     int key_lens[2] = {sizeof(unifyfs_key_t), sizeof(unifyfs_key_t)};
 
     /* look up all entries in this range */
     int num_vals = 0;
-    keyvals = (unifyfs_keyval_t*) calloc(UNIFYFS_MAX_SPLIT_CNT,
-                                         sizeof(unifyfs_keyval_t));
-    if (NULL == keyvals) {
-        LOGERR("failed to allocate keyvals");
-        return UNIFYFS_ERROR_NOMEM;
-    }
-
+    unifyfs_keyval_t* keyvals = NULL;
     int rc = unifyfs_get_file_extents(2, unifyfs_keys, key_lens,
                                       &num_vals, &keyvals);
-    /* TODO: if there are file extents not accounted for we should
-     * either return 0 for that date (holes) or EOF if reading past
-     * the end of the file */
     if (UNIFYFS_SUCCESS != rc) {
-        // we need to let the client know that there was an error
-        free(keyvals);
+        /* failed to look up extents, bail with error */
         return UNIFYFS_FAILURE;
     }
 
@@ -540,8 +532,11 @@ int rm_cmd_filesize(
         }
     }
 
-    // cleanup
-    free(keyvals);
+    /* free off key/value buffer returned from get_file_extents */
+    if (NULL != keyvals) {
+        free(keyvals);
+        keyvals = NULL;
+    }
 
     *outsize = filesize;
     return rc;
@@ -551,17 +546,24 @@ int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl,
                             int gfid, int app_id, int client_id,
                             int num_keys, unifyfs_key_t** keys, int* keylens)
 {
-    // TODO: might want to get this from a memory pool
-    unifyfs_keyval_t* keyvals = calloc(UNIFYFS_MAX_SPLIT_CNT,
-                                       sizeof(unifyfs_keyval_t));
-    if (NULL == keyvals) {
-        LOGERR("failed to allocate keyvals");
+    /* lookup all key/value pairs for given range */
+    int num_vals = 0;
+    unifyfs_keyval_t* keyvals = NULL;
+    int rc = unifyfs_get_file_extents(num_keys, keys, keylens,
+                                      &num_vals, &keyvals);
+
+    /* this is to maintain limits imposed in previous code
+     * that would throw fatal errors */
+    if (num_vals >= UNIFYFS_MAX_SPLIT_CNT ||
+        num_vals >= MAX_META_PER_SEND) {
+        LOGERR("too many key/values returned in range lookup");
+        if (NULL != keyvals) {
+            free(keyvals);
+            keyvals = NULL;
+        }
         return UNIFYFS_ERROR_NOMEM;
     }
 
-    int num_vals = 0;
-    int rc = unifyfs_get_file_extents(num_keys, keys, keylens,
-                                      &num_vals, &keyvals);
     /* TODO: if there are file extents not accounted for we should
      * either return 0 for that data (holes) or EOF if reading past
      * the end of the file */
@@ -574,13 +576,14 @@ int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl,
             qsort(keyvals, (size_t)num_vals, sizeof(unifyfs_keyval_t),
                   compare_kv_gfid_rank);
         }
+
         server_read_req_t* rdreq = reserve_read_req(thrd_ctrl);
         if (NULL == rdreq) {
             rc = UNIFYFS_FAILURE;
         } else {
-            rdreq->app_id = app_id;
-            rdreq->client_id = client_id;
-            rdreq->extent.gfid = gfid;
+            rdreq->app_id         = app_id;
+            rdreq->client_id      = client_id;
+            rdreq->extent.gfid    = gfid;
             rdreq->extent.errcode = EINPROGRESS;
             rc = create_chunk_requests(thrd_ctrl, rdreq,
                                        num_vals, keyvals);
@@ -590,8 +593,11 @@ int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl,
         }
     }
 
-    // cleanup
-    free(keyvals);
+    /* free off key/value buffer returned from get_file_extents */
+    if (NULL != keyvals) {
+        free(keyvals);
+        keyvals = NULL;
+    }
 
     return rc;
 }
