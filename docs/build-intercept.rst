@@ -29,11 +29,10 @@ Building with Spack
 ********************
 
 These instructions assume that you do not already have a module system installed
-such as LMod, Dotkit, or Environment Modules. If your system already has Dotkit
-or LMod installed then installing the environment-modules package with Spack
+such as LMod or Environment Modules. If your system already has
+LMod installed then installing the environment-modules package with Spack
 is unnecessary (so you can safely skip that step).
 
-If you use Dotkit then replace ``spack load`` with ``spack use``.
 First, install Spack if you don't already have it:
 
 .. code-block:: Bash
@@ -107,8 +106,6 @@ Build the Dependencies with Spack
 
 Once Spack is installed on your system (see :ref:`above <build-label>`), you
 can install just the dependencies for an easier manual installation of UnifyFS.
-
-If you use Dotkit then replace ``spack load`` with ``spack use``.
 
 .. code-block:: Bash
 
