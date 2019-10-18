@@ -483,7 +483,7 @@ static void unifyfs_filesize_rpc(hg_handle_t handle)
 
     /* read data for a single read request from client,
      * returns data to client through shared memory */
-    size_t filesize;
+    size_t filesize = 0;
     int ret = rm_cmd_filesize(in.app_id, in.local_rank_idx,
                               in.gfid, &filesize);
 
