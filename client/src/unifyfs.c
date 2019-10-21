@@ -1073,8 +1073,7 @@ int unifyfs_fid_write(int fid, off_t pos, const void* buf, size_t count)
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
 
     /* determine storage type to write file data */
-    if (meta->storage == FILE_STORAGE_FIXED_CHUNK ||
-        meta->storage == FILE_STORAGE_LOGIO) {
+    if (meta->storage == FILE_STORAGE_LOGIO) {
         /* file stored in fixed-size chunks */
         rc = unifyfs_fid_store_fixed_write(fid, meta, pos, buf, count);
     } else {
@@ -1141,21 +1140,12 @@ int unifyfs_fid_extend(int fid, off_t length)
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
 
     /* determine file storage type */
-    if (meta->storage == FILE_STORAGE_FIXED_CHUNK ||
-        meta->storage == FILE_STORAGE_LOGIO) {
+    if (meta->storage == FILE_STORAGE_LOGIO) {
         /* file stored in fixed-size chunks */
         rc = unifyfs_fid_store_fixed_extend(fid, meta, length);
     } else {
         /* unknown storage type */
         rc = (int)UNIFYFS_ERROR_IO;
-    }
-
-    /* TODO: move this statement elsewhere */
-    /* increase file size up to length */
-    if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-        if (length > meta->local_size) {
-            meta->local_size = length;
-        }
     }
 
     return rc;
@@ -1164,21 +1154,9 @@ int unifyfs_fid_extend(int fid, off_t length)
 /* if length is less than reserved space, give back space down to length */
 int unifyfs_fid_shrink(int fid, off_t length)
 {
-    int rc;
+    /* TODO: implement this function */
 
-    /* get meta data for this file */
-    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-
-    /* determine file storage type */
-    if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-        /* file stored in fixed-size chunks */
-        rc = unifyfs_fid_store_fixed_shrink(fid, meta, length);
-    } else {
-        /* unknown storage type */
-        rc = (int)UNIFYFS_ERROR_IO;
-    }
-
-    return rc;
+    return UNIFYFS_ERROR_IO;
 }
 
 /* truncate file id to given length, frees resources if length is

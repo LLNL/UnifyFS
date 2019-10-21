@@ -625,10 +625,7 @@ int unifyfs_fid_store_fixed_write(int fid, unifyfs_filemeta_t* meta, off_t pos,
     int chunk_id;
     off_t chunk_offset;
 
-    if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-        chunk_id = pos >> unifyfs_chunk_bits;
-        chunk_offset = pos & unifyfs_chunk_mask;
-    } else if (meta->storage == FILE_STORAGE_LOGIO) {
+    if (meta->storage == FILE_STORAGE_LOGIO) {
         chunk_id = meta->log_size >> unifyfs_chunk_bits;
         chunk_offset = meta->log_size & unifyfs_chunk_mask;
     } else {
@@ -639,9 +636,7 @@ int unifyfs_fid_store_fixed_write(int fid, unifyfs_filemeta_t* meta, off_t pos,
     size_t remaining = unifyfs_chunk_size - chunk_offset;
     if (count <= remaining) {
         /* all bytes for this write fit within the current chunk */
-        if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-            rc = unifyfs_chunk_write(meta, chunk_id, chunk_offset, buf, count);
-        } else if (meta->storage == FILE_STORAGE_LOGIO) {
+        if (meta->storage == FILE_STORAGE_LOGIO) {
             rc = unifyfs_logio_chunk_write(fid, pos, meta, chunk_id, chunk_offset,
                                            buf, count);
         } else {
@@ -650,10 +645,7 @@ int unifyfs_fid_store_fixed_write(int fid, unifyfs_filemeta_t* meta, off_t pos,
     } else {
         /* otherwise, fill up the remainder of the current chunk */
         char* ptr = (char*) buf;
-        if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-            rc = unifyfs_chunk_write(meta, chunk_id,
-                chunk_offset, (void*)ptr, remaining);
-        } else if (meta->storage == FILE_STORAGE_LOGIO) {
+        if (meta->storage == FILE_STORAGE_LOGIO) {
             rc = unifyfs_logio_chunk_write(fid, pos, meta, chunk_id,
                 chunk_offset, (void*)ptr, remaining);
         } else {
@@ -677,9 +669,7 @@ int unifyfs_fid_store_fixed_write(int fid, unifyfs_filemeta_t* meta, off_t pos,
             }
 
             /* write data */
-            if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-                rc = unifyfs_chunk_write(meta, chunk_id, 0, (void*)ptr, num);
-            } else if (meta->storage == FILE_STORAGE_LOGIO) {
+            if (meta->storage == FILE_STORAGE_LOGIO) {
                 rc = unifyfs_logio_chunk_write(fid, pos, meta, chunk_id, 0,
                                                (void*)ptr, num);
             } else {
