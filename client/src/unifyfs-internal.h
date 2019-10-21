@@ -252,10 +252,7 @@ enum flock_enum {
     SH_LOCKED
 };
 
-/* TODO: make this an enum */
-#define FILE_STORAGE_NULL        0
-#define FILE_STORAGE_FIXED_CHUNK 1
-#define FILE_STORAGE_LOGIO       2
+enum {FILE_STORAGE_NULL = 0, FILE_STORAGE_LOGIO};
 
 /* TODO: make this an enum */
 #define CHUNK_LOCATION_NULL      0
