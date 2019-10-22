@@ -125,11 +125,21 @@ int main(int argc, char* argv[])
 
     test_cfg test_config;
     test_cfg* cfg = &test_config;
+    test_timer time_create2laminate;
+    test_timer time_create;
     test_timer time_wr;
     test_timer time_sync;
+    test_timer time_close;
+    test_timer time_laminate;
+    test_timer time_stat;
 
+    timer_init(&time_create2laminate, "create2laminate");
+    timer_init(&time_create, "create");
     timer_init(&time_wr, "write");
     timer_init(&time_sync, "sync");
+    timer_init(&time_close, "close");
+    timer_init(&time_laminate, "laminate");
+    timer_init(&time_stat, "stat");
 
     rc = test_init(argc, argv, cfg);
     if (rc) {
@@ -146,13 +156,20 @@ int main(int argc, char* argv[])
         return -1;
     }
 
+    // timer to wrap all parts of write operation
+    timer_start_barrier(cfg, &time_create2laminate);
+
+    // create file
     target_file = test_target_filename(cfg);
     test_print_verbose_once(cfg, "DEBUG: creating target file %s",
                             target_file);
+    timer_start_barrier(cfg, &time_create);
     rc = test_create_file(cfg, target_file, O_RDWR);
     if (rc) {
         test_abort(cfg, rc);
     }
+    timer_stop_barrier(cfg, &time_create);
+    test_print_verbose_once(cfg, "DEBUG: finished create");
 
     // generate write requests
     test_print_verbose_once(cfg, "DEBUG: generating write requests");
@@ -167,8 +184,7 @@ int main(int argc, char* argv[])
 
     // do writes
     test_print_verbose_once(cfg, "DEBUG: starting write requests");
-    test_barrier(cfg);
-    timer_start(&time_wr);
+    timer_start_barrier(cfg, &time_wr);
     rc = issue_write_req_batch(cfg, num_reqs, reqs);
     if (rc) {
         test_abort(cfg, rc);
@@ -177,25 +193,17 @@ int main(int argc, char* argv[])
     if (rc) {
         test_abort(cfg, rc);
     }
-    timer_stop(&time_wr);
+    timer_stop_barrier(cfg, &time_wr);
     test_print_verbose_once(cfg, "DEBUG: finished write requests");
 
-    // sync/laminate
-    timer_start(&time_sync);
+    // sync
+    timer_start_barrier(cfg, &time_sync);
     rc = write_sync(cfg);
     if (rc) {
         test_abort(cfg, rc);
     }
-    timer_stop(&time_sync);
-    test_barrier(cfg);
+    timer_stop_barrier(cfg, &time_sync);
     test_print_verbose_once(cfg, "DEBUG: finished sync");
-
-    if ((test_config.rank == 0) ||
-        (IO_PATTERN_NN == test_config.io_pattern)) {
-        /* laminate by removing write bits */
-        chmod(target_file, 0400);
-    }
-    test_print_verbose_once(cfg, "DEBUG: finished lamination");
 
     // post-write cleanup
     free(wr_buf);
@@ -203,12 +211,28 @@ int main(int argc, char* argv[])
     reqs = NULL;
 
     // close file
+    timer_start_barrier(cfg, &time_close);
     rc = test_close_file(cfg);
     if (rc) {
         test_abort(cfg, rc);
     }
+    timer_stop_barrier(cfg, &time_close);
+    test_print_verbose_once(cfg, "DEBUG: finished close");
+
+    // laminate
+    timer_start_barrier(cfg, &time_laminate);
+    rc = write_laminate(cfg, target_file);
+    if (rc) {
+        test_abort(cfg, rc);
+    }
+    timer_stop_barrier(cfg, &time_laminate);
+    test_print_verbose_once(cfg, "DEBUG: finished laminate");
+
+    // timer to wrap all parts of write operation
+    timer_stop_barrier(cfg, &time_create2laminate);
 
     // file size check
+    timer_start_barrier(cfg, &time_stat);
     size_t rank_bytes = test_config.n_blocks * test_config.block_sz;
     size_t total_bytes = rank_bytes * test_config.n_ranks;
     size_t expected = total_bytes;
@@ -229,6 +253,8 @@ int main(int argc, char* argv[])
             }
         }
     }
+    timer_stop_barrier(cfg, &time_stat);
+    test_print_verbose_once(cfg, "DEBUG: finished stat");
 
     // calculate achieved bandwidth rates
     double max_write_time, max_sync_time;
@@ -249,8 +275,15 @@ int main(int argc, char* argv[])
                     "Number of processes:       %d\n"
                     "Each process wrote:        %.2lf MiB\n"
                     "Total data written:        %.2lf MiB\n"
+                    "File create time:          %.6lf sec\n"
                     "Maximum write time:        %.6lf sec\n"
+                    "Global write time:         %.6lf sec\n"
                     "Maximum sync time:         %.6lf sec\n"
+                    "Global sync time:          %.6lf sec\n"
+                    "File close time:           %.6lf sec\n"
+                    "File laminate time:        %.6lf sec\n"
+                    "Full write time:           %.6lf sec\n"
+                    "File stat time:            %.6lf sec\n"
                     "Aggregate write bandwidth: %.3lf MiB/s\n"
                     "Effective write bandwidth: %.3lf MiB/s\n",
                     io_pattern_str(test_config.io_pattern),
@@ -259,16 +292,28 @@ int main(int argc, char* argv[])
                     test_config.n_ranks,
                     bytes_to_mib(rank_bytes),
                     bytes_to_mib(total_bytes),
+                    time_create.elapsed_sec_all,
                     max_write_time,
+                    time_wr.elapsed_sec_all,
                     max_sync_time,
+                    time_sync.elapsed_sec_all,
+                    time_close.elapsed_sec_all,
+                    time_laminate.elapsed_sec_all,
+                    time_create2laminate.elapsed_sec_all,
+                    time_stat.elapsed_sec_all,
                     aggr_write_bw,
                     eff_write_bw);
 
     // cleanup
     free(target_file);
 
+    timer_fini(&time_create2laminate);
+    timer_fini(&time_create);
     timer_fini(&time_wr);
     timer_fini(&time_sync);
+    timer_fini(&time_close);
+    timer_fini(&time_laminate);
+    timer_fini(&time_stat);
 
     test_fini(cfg);
 

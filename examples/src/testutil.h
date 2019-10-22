@@ -329,8 +329,10 @@ void test_print_verbose_once(test_cfg* cfg, const char* fmt, ...)
 typedef struct {
     struct timeval start;
     struct timeval stop;
+    struct timeval stop_all;
     char* name;
     double elapsed_sec;
+    double elapsed_sec_all;
 } test_timer;
 
 static inline
@@ -382,6 +384,39 @@ void timer_stop(test_timer* timer)
     gettimeofday(&(timer->stop), NULL);
     timer->elapsed_sec = timediff_sec(&(timer->start),
                                       &(timer->stop));
+}
+
+static inline
+void timer_start_barrier(test_cfg* cfg, test_timer* timer)
+{
+    /* execute a barrier to ensure procs don't start
+     * next phase before all have reached this point */
+    if (cfg->use_mpi) {
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+
+    /* everyone has reached, start the timer,
+     * the start field is used in both local and global timers */
+    timer_start(timer);
+}
+
+static inline
+void timer_stop_barrier(test_cfg* cfg, test_timer* timer)
+{
+    /* stop the local timer and compute elapsed_secs */
+    timer_stop(timer);
+
+    /* execute a barrier to ensure procs have reached this point
+     * before stopping the global timer */
+    if (cfg->use_mpi) {
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+
+    /* everyone has reached, stop the global timer and
+     * compute elapsed global time */
+    gettimeofday(&(timer->stop_all), NULL);
+    timer->elapsed_sec_all = timediff_sec(&(timer->start),
+                                          &(timer->stop_all));
 }
 
 /* ---------- Option Parsing Utilities ---------- */
