@@ -68,7 +68,7 @@ unify_test_read() {
     # Evaluate output
     test_expect_success "$app_name $app_args: (line_count=${lcount}, rc=$rc)" '
         test $rc = 0 &&
-        test $lcount = 11
+        test $lcount = 14
     '
 }
 
@@ -85,7 +85,7 @@ unify_test_read_posix() {
     # Evaluate output
     test_expect_success POSIX "$app_name $1: (line_count=${lcount}, rc=$rc)" '
         test $rc = 0 &&
-        test $lcount = 11
+        test $lcount = 14
     '
 }
 

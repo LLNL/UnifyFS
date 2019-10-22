@@ -112,11 +112,17 @@ int main(int argc, char* argv[])
 
     test_cfg test_config;
     test_cfg* cfg = &test_config;
+    test_timer time_stat;
+    test_timer time_open;
     test_timer time_rd;
     test_timer time_check;
+    test_timer time_close;
 
+    timer_init(&time_stat, "stat");
+    timer_init(&time_open, "open");
     timer_init(&time_rd, "read");
     timer_init(&time_check, "check");
+    timer_init(&time_close, "close");
 
     rc = test_init(argc, argv, cfg);
     if (rc) {
@@ -138,6 +144,7 @@ int main(int argc, char* argv[])
                             target_file);
 
     // file size check
+    timer_start_barrier(cfg, &time_stat);
     size_t rank_bytes = test_config.n_blocks * test_config.block_sz;
     size_t total_bytes = rank_bytes * test_config.n_ranks;
     size_t expected = total_bytes;
@@ -158,12 +165,17 @@ int main(int argc, char* argv[])
             }
         }
     }
+    timer_stop_barrier(cfg, &time_stat);
+    test_print_verbose_once(cfg, "DEBUG: finished stat");
 
     // open file
+    timer_start_barrier(cfg, &time_open);
     rc = test_open_file(cfg, target_file, O_RDONLY);
     if (rc) {
         test_abort(cfg, rc);
     }
+    timer_stop_barrier(cfg, &time_open);
+    test_print_verbose_once(cfg, "DEBUG: finished open");
 
     // generate read requests
     test_print_verbose_once(cfg, "DEBUG: generating read requests");
@@ -178,8 +190,7 @@ int main(int argc, char* argv[])
 
     // do reads
     test_print_verbose_once(cfg, "DEBUG: starting read requests");
-    test_barrier(cfg);
-    timer_start(&time_rd);
+    timer_start_barrier(cfg, &time_rd);
     rc = issue_read_req_batch(cfg, num_reqs, reqs);
     if (rc) {
         test_abort(cfg, rc);
@@ -188,18 +199,17 @@ int main(int argc, char* argv[])
     if (rc) {
         test_abort(cfg, rc);
     }
-    timer_stop(&time_rd);
+    timer_stop_barrier(cfg, &time_rd);
     test_print_verbose_once(cfg, "DEBUG: finished read requests");
 
     // check file data
-    test_barrier(cfg);
     test_print_verbose_once(cfg, "DEBUG: starting data check");
-    timer_start(&time_check);
+    timer_start_barrier(cfg, &time_check);
     rc = check_read_req_batch(cfg, num_reqs, reqs);
     if (rc) {
         test_abort(cfg, rc);
     }
-    timer_stop(&time_check);
+    timer_stop_barrier(cfg, &time_check);
     test_print_verbose_once(cfg, "DEBUG: finished data check");
 
     // post-read cleanup
@@ -208,10 +218,13 @@ int main(int argc, char* argv[])
     reqs = NULL;
 
     // close file
+    timer_start_barrier(cfg, &time_close);
     rc = test_close_file(cfg);
     if (rc) {
         test_abort(cfg, rc);
     }
+    timer_stop_barrier(cfg, &time_close);
+    test_print_verbose_once(cfg, "DEBUG: finished close");
 
     // calculate achieved bandwidth rates
     double max_read_time, max_check_time;
@@ -232,8 +245,11 @@ int main(int argc, char* argv[])
                     "Number of processes:       %d\n"
                     "Each process wrote:        %.2lf MiB\n"
                     "Total data written:        %.2lf MiB\n"
+                    "File stat time:            %.6lf sec\n"
+                    "File open time:            %.6lf sec\n"
                     "Maximum read time:         %.6lf sec\n"
                     "Maximum check time:        %.6lf sec\n"
+                    "File close time:           %.6lf sec\n"
                     "Aggregate read bandwidth:  %.3lf MiB/s\n"
                     "Effective read bandwidth:  %.3lf MiB/s\n",
                     io_pattern_str(test_config.io_pattern),
@@ -242,16 +258,22 @@ int main(int argc, char* argv[])
                     test_config.n_ranks,
                     bytes_to_mib(rank_bytes),
                     bytes_to_mib(total_bytes),
+                    time_stat.elapsed_sec_all,
+                    time_open.elapsed_sec_all,
                     max_read_time,
                     max_check_time,
+                    time_close.elapsed_sec_all,
                     aggr_read_bw,
                     eff_read_bw);
 
     // cleanup
     free(target_file);
 
+    timer_fini(&time_stat);
+    timer_fini(&time_open);
     timer_fini(&time_rd);
     timer_fini(&time_check);
+    timer_fini(&time_close);
 
     test_fini(cfg);
 

@@ -177,13 +177,19 @@ int main(int argc, char* argv[])
 
     test_cfg test_config;
     test_cfg* cfg = &test_config;
+    test_timer time_create2laminate;
+    test_timer time_create;
     test_timer time_wr;
     test_timer time_rd;
     test_timer time_sync;
+    test_timer time_laminate;
 
+    timer_init(&time_create2laminate, "create2laminate");
+    timer_init(&time_create, "create");
     timer_init(&time_wr, "write");
     timer_init(&time_rd, "read");
     timer_init(&time_sync, "sync");
+    timer_init(&time_laminate, "laminate");
 
     rc = test_init(argc, argv, cfg);
     if (rc) {
@@ -200,13 +206,20 @@ int main(int argc, char* argv[])
         return -1;
     }
 
+    // timer to wrap all parts of write operation
+    timer_start_barrier(cfg, &time_create2laminate);
+
+    // create file
     target_file = test_target_filename(cfg);
     test_print_verbose_once(cfg, "DEBUG: creating target file %s",
                             target_file);
+    timer_start_barrier(cfg, &time_create);
     rc = test_create_file(cfg, target_file, O_RDWR);
     if (rc) {
         test_abort(cfg, rc);
     }
+    timer_stop_barrier(cfg, &time_create);
+    test_print_verbose_once(cfg, "DEBUG: finished create");
 
     // generate write requests
     test_print_verbose_once(cfg, "DEBUG: generating write requests");
@@ -221,8 +234,7 @@ int main(int argc, char* argv[])
 
     // do writes
     test_print_verbose_once(cfg, "DEBUG: starting write requests");
-    test_barrier(cfg);
-    timer_start(&time_wr);
+    timer_start_barrier(cfg, &time_wr);
     rc = issue_write_req_batch(cfg, num_reqs, reqs);
     if (rc) {
         test_abort(cfg, rc);
@@ -231,23 +243,35 @@ int main(int argc, char* argv[])
     if (rc) {
         test_abort(cfg, rc);
     }
-    timer_stop(&time_wr);
+    timer_stop_barrier(cfg, &time_wr);
     test_print_verbose_once(cfg, "DEBUG: finished write requests");
 
-    // sync/laminate
-    timer_start(&time_sync);
+    // sync
+    timer_start_barrier(cfg, &time_sync);
     rc = write_sync(cfg);
     if (rc) {
         test_abort(cfg, rc);
     }
-    timer_stop(&time_sync);
-    test_barrier(cfg);
+    timer_stop_barrier(cfg, &time_sync);
     test_print_verbose_once(cfg, "DEBUG: finished sync");
+
+    // close file
+
+    // laminate
+    timer_start_barrier(cfg, &time_laminate);
+    rc = write_laminate(cfg, target_file);
+    if (rc) {
+        test_abort(cfg, rc);
+    }
+    timer_stop_barrier(cfg, &time_laminate);
+    test_print_verbose_once(cfg, "DEBUG: finished laminate");
 
     // post-write cleanup
     free(wr_buf);
     free(reqs);
     reqs = NULL;
+
+    // open file
 
     // generate read requests
     test_print_verbose_once(cfg, "DEBUG: generating read requests");
@@ -262,8 +286,7 @@ int main(int argc, char* argv[])
 
     // do reads
     test_print_verbose_once(cfg, "DEBUG: starting read requests");
-    test_barrier(cfg);
-    timer_start(&time_rd);
+    timer_start_barrier(cfg, &time_rd);
     rc = issue_read_req_batch(cfg, num_reqs, reqs);
     if (rc) {
         test_abort(cfg, rc);
@@ -272,8 +295,7 @@ int main(int argc, char* argv[])
     if (rc) {
         test_abort(cfg, rc);
     }
-    timer_stop(&time_rd);
-    test_barrier(cfg);
+    timer_stop_barrier(cfg, &time_rd);
     test_print_verbose_once(cfg, "DEBUG: finished read requests");
 
     if (test_config.io_check) {
@@ -310,6 +332,8 @@ int main(int argc, char* argv[])
         eff_write_bw = bandwidth_mib(total_bytes, max_write_time);
         eff_read_bw = bandwidth_mib(total_bytes, max_read_time);
 
+        printf("File create time is %.3lf s\n",
+               time_create.elapsed_sec_all);
         printf("Aggregate Write BW is %.3lf MiB/s\n"
                "Effective Write BW is %.3lf MiB/s\n\n",
                aggr_write_bw, eff_write_bw);
@@ -319,15 +343,20 @@ int main(int argc, char* argv[])
         printf("Aggregate Read BW is %.3lf MiB/s\n"
                "Effective Read BW is %.3lf MiB/s\n\n",
                aggr_read_bw, eff_read_bw);
+        printf("File laminate time is %.3lf s\n",
+               time_laminate.elapsed_sec_all);
         fflush(stdout);
     }
 
     // cleanup
     free(target_file);
 
+    timer_fini(&time_create2laminate);
+    timer_fini(&time_create);
     timer_fini(&time_wr);
     timer_fini(&time_rd);
     timer_fini(&time_sync);
+    timer_fini(&time_laminate);
 
     test_fini(cfg);
 

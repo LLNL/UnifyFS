@@ -206,6 +206,24 @@ int write_sync(test_cfg* cfg)
     return 0;
 }
 
+static inline
+int write_laminate(test_cfg* cfg, const char* filepath)
+{
+    /* need one process to laminate each file,
+     * we use the same process that created the file */
+    int rc = 0;
+    if (cfg->rank == 0 || cfg->io_pattern == IO_PATTERN_NN) {
+        /* laminate by setting permissions to read-only */
+        int chmod_rc = chmod(filepath, 0444);
+        if (-1 == chmod_rc) {
+            /* lamination failed */
+            test_print(cfg, "chmod() lamination failed");
+            rc = -1;
+        }
+    }
+    return rc;
+}
+
 /* -------- Read Helper Methods -------- */
 
 static inline
