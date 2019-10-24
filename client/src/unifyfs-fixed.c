@@ -328,7 +328,7 @@ static int unifyfs_coalesce_index(
 
     /* adjust current index to subtract off those bytes */
     next_idx->file_pos += length;
-    next_idx->mem_pos  += length;
+    next_idx->log_pos  += length;
     next_idx->length   -= length;
 
     return UNIFYFS_SUCCESS;
@@ -393,7 +393,7 @@ static int unifyfs_split_index(
          */
 
         /* get starting position in log */
-        long log_pos = cur_idx->mem_pos;
+        long log_pos = cur_idx->log_pos;
 
         /* copy over all fields in current index */
         set[count] = *cur_idx;
@@ -432,7 +432,7 @@ static int unifyfs_split_index(
             set[count].fid      = cur_idx->fid;
             set[count].file_pos = slice_start;
             set[count].length   = length;
-            set[count].mem_pos  = log_pos;
+            set[count].log_pos  = log_pos;
 
             /* advance offset into log */
             log_pos += length;
@@ -459,7 +459,7 @@ static int unifyfs_split_index(
         set[count].fid      = cur_idx->fid;
         set[count].file_pos = slice_start;
         set[count].length   = length;
-        set[count].mem_pos  = log_pos;
+        set[count].log_pos  = log_pos;
         count++;
     }
 
@@ -539,7 +539,7 @@ static int unifyfs_logio_chunk_write(
     unifyfs_index_t cur_idx;
     cur_idx.fid      = ptr_meta_entry->gfid;
     cur_idx.file_pos = pos;
-    cur_idx.mem_pos  = log_offset;
+    cur_idx.log_pos  = log_offset;
     cur_idx.length   = count;
 
     /* lookup number of existing index entries */
