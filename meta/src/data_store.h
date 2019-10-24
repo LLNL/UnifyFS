@@ -37,6 +37,8 @@
 #ifndef      __STORE_H
 #define      __STORE_H
 
+#include <pthread.h>
+
 #include "uthash.h"
 #include "mdhim_options.h"
 

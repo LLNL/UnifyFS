@@ -16,10 +16,15 @@ AC_DEFUN([UNIFYFS_AC_GOTCHA], [
   AC_CHECK_LIB([gotcha], [gotcha_wrap],
     [AC_SUBST(GOTCHA_CFLAGS)
      AC_SUBST(GOTCHA_LDFLAGS)
+     gotcha = true
     ],
-    [AC_MSG_ERROR([couldn't find a suitable libgotcha, use --with-gotcha=PATH])],
+    [AC_MSG_WARN([couldn't find a suitable libgotcha, use --with-gotcha=PATH])
+     gotcha = false
+    ],
     []
   )
+
+  AM_CONDITIONAL([HAVE_GOTCHA], [test x$gotcha = xtrue])
 
   # restore flags
   CFLAGS=$GOTCHA_OLD_CFLAGS

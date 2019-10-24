@@ -33,8 +33,12 @@
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
-#include <sys/syscall.h>
+#if !defined(__APPLE__) || !defined(__OSX__)
+    #include <sys/syscall.h>
+#endif
 #include <sys/time.h>
+
+#include <pthread.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,12 +59,20 @@ extern struct tm* unifyfs_log_ltime;
 extern char unifyfs_log_timestamp[256];
 extern size_t unifyfs_log_source_base_len;
 
-#if defined(__NR_gettid)
-#define gettid() syscall(__NR_gettid)
-#elif defined(SYS_gettid)
-#define gettid() syscall(SYS_gettid)
-#else
-#error gettid syscall is not defined
+#if defined(__APPLE__) || defined(__OSX__)
+    static inline uint64_t gettid() {
+        uint64_t tid;
+        pthread_threadid_np(NULL, &tid);
+        return tid;
+    }
+#elif
+    #if defined(__NR_gettid)
+        #define gettid() syscall(__NR_gettid)
+    #elif defined(SYS_gettid)
+        #define gettid() syscall(SYS_gettid)
+    #else
+        #error gettid syscall is not defined
+    #endif
 #endif
 
 #define LOG(level, ...) \

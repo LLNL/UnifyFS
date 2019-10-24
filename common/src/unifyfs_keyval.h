@@ -22,11 +22,11 @@ extern "C" {
 #endif
 
 // keys we use
-const char* key_runstate;           // path to runstate file
-const char* key_unifyfsd_socket;    // server domain socket path
-const char* key_unifyfsd_margo_shm; // client-server margo address
-const char* key_unifyfsd_margo_svr; // server-server margo address
-const char* key_unifyfsd_pmi_rank;  // server-server pmi rank
+extern const char * const key_runstate;           // path to runstate file
+extern const char * const key_unifyfsd_socket;    // server domain socket path
+extern const char * const key_unifyfsd_margo_shm; // client-server margo address
+extern const char * const key_unifyfsd_margo_svr; // server-server margo address
+extern const char * const key_unifyfsd_pmi_rank;  // server-server pmi rank
 
 // initialize key-value store
 int unifyfs_keyval_init(unifyfs_cfg_t* cfg,

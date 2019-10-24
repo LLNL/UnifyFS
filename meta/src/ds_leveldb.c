@@ -38,7 +38,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <linux/limits.h>
+//#include <linux/limits.h>
+#include <limits.h>
 #include <sys/time.h>
 #include "ds_leveldb.h"
 

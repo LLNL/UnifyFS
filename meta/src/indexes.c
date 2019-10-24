@@ -36,7 +36,8 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <linux/limits.h>
+//#include <linux/limits.h>
+#include <limits.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>

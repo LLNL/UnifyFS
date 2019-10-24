@@ -40,6 +40,10 @@
  * Please also read this file LICENSE.CRUISE
  */
 
+#include <sys/stat.h>
+
+#include "config.h"
+
 #include "unifyfs-internal.h"
 #include "unifyfs-sysio.h"
 #include "margo_client.h"
@@ -425,6 +429,7 @@ int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
  * instead of using the absolute value 3.
  */
 
+#if defined(HAVE___XSTAT)
 int UNIFYFS_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
 {
     LOGDBG("xstat was called for %s", path);
@@ -441,7 +446,9 @@ int UNIFYFS_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
         return ret;
     }
 }
+#endif
 
+#if defined(HAVE___LXSTAT)
 int UNIFYFS_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
 {
     LOGDBG("lxstat was called for %s", path);
@@ -457,7 +464,9 @@ int UNIFYFS_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
         return UNIFYFS_REAL(__lxstat)(vers, path, buf);
     }
 }
+#endif
 
+#if defined(HAVE___FXSTAT)
 int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
 {
     LOGDBG("fxstat was called for fd %d", fd);
@@ -479,6 +488,7 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
         return UNIFYFS_REAL(__fxstat)(vers, fd, buf);
     }
 }
+#endif
 
 /* ---------------------------------------
  * POSIX wrappers: file descriptors
@@ -744,6 +754,7 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
     }
 }
 
+#if defined(HAVE_OPEN64)
 int UNIFYFS_WRAP(open64)(const char* path, int flags, ...)
 {
     /* if O_CREAT is set, we should also have some mode flags */
@@ -775,6 +786,7 @@ int UNIFYFS_WRAP(open64)(const char* path, int flags, ...)
 
     return ret;
 }
+#endif
 
 int UNIFYFS_WRAP(__open_2)(const char* path, int flags, ...)
 {
@@ -897,6 +909,7 @@ off64_t UNIFYFS_WRAP(lseek64)(int fd, off64_t offset, int whence)
     }
 }
 
+#if defined(HAVE_POSIX_FADVISE)
 int UNIFYFS_WRAP(posix_fadvise)(int fd, off_t offset, off_t len, int advice)
 {
     /* check whether we should intercept this file descriptor */
@@ -945,6 +958,7 @@ int UNIFYFS_WRAP(posix_fadvise)(int fd, off_t offset, off_t len, int advice)
         return ret;
     }
 }
+#endif
 
 ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
 {
@@ -1091,11 +1105,15 @@ ssize_t UNIFYFS_WRAP(writev)(int fd, const struct iovec* iov, int iovcnt)
     }
 }
 
+#if defined(HAVE_LIO_LISTIO)
 int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
                              int nitems, struct sigevent* sevp)
 {
     /* TODO - support for LIO_NOWAIT mode */
-
+#if defined(__APPLE__) || defined(__OSX__)
+    // We cant modify the error codes for the requests on OSX
+    return -1;
+#else
     read_req_t* reqs = calloc(nitems, sizeof(read_req_t));
     if (NULL == reqs) {
         errno = ENOMEM; // EAGAIN?
@@ -1184,7 +1202,9 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
         errno = EIO;
     }
     return ret;
+#endif
 }
+#endif
 
 /* order by file id then by file position */
 static int compare_index_entry(const void* a, const void* b)

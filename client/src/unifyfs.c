@@ -46,7 +46,17 @@
 
 #include <time.h>
 #include <mpi.h>
-#include <openssl/md5.h>
+
+#if defined(__APPLE__) || defined (__OSX__)
+    #include <CommonCrypto/CommonDigest.h>
+    #define MD5 CC_MD5
+    #define MD5_CTX CC_MD5_CTX
+    #define MD5_Init CC_MD5_Init
+    #define MD5_Update CC_MD5_Update
+    #define MD5_Final CC_MD5_Final
+#else
+    #include <openssl/md5.h>
+#endif
 
 #ifdef HAVE_LIBNUMA
 #include <numa.h>
@@ -980,7 +990,11 @@ int unifyfs_fid_create_file(const char* path)
     meta->mode = UNIFYFS_STAT_DEFAULT_FILE_MODE;
 
     /* PTHREAD_PROCESS_SHARED allows Process-Shared Synchronization*/
+#if defined(__APPLE__) || defined(__OSX__)
+    pthread_mutex_init(&meta->fspinlock, NULL);
+#else
     pthread_spin_init(&meta->fspinlock, PTHREAD_PROCESS_SHARED);
+#endif
 
     return fid;
 }

@@ -46,6 +46,8 @@
 #define LOCAL_INDEX 3
 #define REMOTE_INDEX 4
 
+#define ulong unsigned long
+
 struct mdhim_t; // avoid circular #include chain
 
 typedef struct rangesrv_info rangesrv_info;

@@ -33,7 +33,11 @@ unifyfsd_LDADD = \
     $(MPI_CLDFLAGS) \
     $(MARGO_LIBS) \
     $(FLATCC_LIBS) \
-    -lpthread -lm -lstdc++ -lrt
+    -lpthread -lm -lstdc++
+
+if !HAVE_MACOS
+  unifyfsd_LDADD += -lrt
+endif
 
 AM_CPPFLAGS = \
   -I$(top_srcdir)/common/src \

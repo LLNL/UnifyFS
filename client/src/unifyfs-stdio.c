@@ -1426,7 +1426,11 @@ int UNIFYFS_WRAP(fprintf)(FILE* stream, const char* format, ...)
 }
 
 /* need to declare this before calling it */
-static int __svfscanf(unifyfs_stream_t* fp, const char* fmt0, va_list ap);
+#if defined(__APPLE__) || defined(__OSX__)
+    //static int __svfscanf(unifyfs_stream_t* fp, const char* fmt0, __gnuc_va_list ap) __scanflike(2, 0);
+#else
+    static int __svfscanf(unifyfs_stream_t* fp, const char* fmt0, va_list ap);
+#endif
 
 int UNIFYFS_WRAP(vfscanf)(FILE* stream, const char* format, va_list ap)
 {
@@ -2564,6 +2568,7 @@ ok:
     return (p - buf);
 }
 
+#if !defined(__APPLE__) && !defined(__OSX__)
 /*
  * __svfscanf - non-MT-safe version of __vfscanf
  */
@@ -2947,7 +2952,7 @@ input_failure:
 match_failure:
     return (nassigned);
 }
-
+#endif
 /*
  * Fill in the given table from the scanset at the given format
  * (just after `[').  Return a pointer to the character past the

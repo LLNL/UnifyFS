@@ -12,8 +12,11 @@ UNIFYFS_LIB_PATH="@unifyfs_lib_path@"
 UNIFYFS_LD_FLAGS="@LDFLAGS@"
 
 PRE_LD_FLAGS="-L$UNIFYFS_LIB_PATH $UNIFYFS_LD_FLAGS -lz $CP_WRAPPERS"
-POST_LD_FLAGS="$UNIFYFS_LIB_PATH/libunifyfs.a -lcrypto -lm -lrt -lpthread"
+POST_LD_FLAGS="$UNIFYFS_LIB_PATH/libunifyfs.a -lm -lpthread"
 
+if !HAVE_MACOS
+  POST_LD_FLAGS += -lcrypto -lrt
+endif
 
 usage="\
 Usage: unifyfs-config [--pre-ld-flags] [--post-ld-flags]"

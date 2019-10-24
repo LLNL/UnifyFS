@@ -24,8 +24,6 @@ AC_PROG_CPP
 AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_PROG_MAKE_SET
-AC_PROG_RANLIB
-
 
 # fortran support
 AC_ARG_ENABLE([fortran],
@@ -66,8 +64,21 @@ AC_CHECK_HEADERS([fcntl.h limits.h stdlib.h string.h sys/socket.h sys/time.h])
 AC_CHECK_HEADERS([unistd.h arpa/inet.h inttypes.h netdb.h netinet/in.h])
 AC_CHECK_HEADERS([stddef.h stdint.h libgen.h strings.h syslog.h])
 AC_CHECK_HEADERS([inttypes.h wchar.h wctype.h])
-AC_CHECK_HEADER([openssl/md5.h], [], [AC_MSG_FAILURE([
-        *** openssl/md5.h missing, openssl-devel package required])])
+
+
+case $host in
+    *darwin* )
+        dnl newer versions of OSX do not ship headers for OpenSSL
+        dnl we can use CommonCrypto instead
+        AM_CONDITIONAL([HAVE_MACOS], [true])
+        AC_CHECK_HEADER([CommonCrypto/CommonDigest.h], [], [AC_MSG_FAILURE([
+        *** Cant find CommonCrypto api])])
+    ;;
+    *)
+        AC_CHECK_HEADER([openssl/md5.h], [], [AC_MSG_FAILURE([
+            *** openssl/md5.h missing, openssl-devel package required])])
+    ;;
+esac
 
 # Checks for library functions.
 AC_FUNC_MALLOC
@@ -143,6 +154,27 @@ AC_ARG_ENABLE(st-dev-workaround,
 fi]
 ,)
 
+# look for MPI and set flags
+LX_FIND_MPI
+if test "x$enable_fortran" = "xyes"; then
+AC_LANG_PUSH([Fortran])
+LX_FIND_MPI
+AC_LANG_POP
+fi
+
+if test "$have_C_mpi" != "yes" ; then
+    AC_MSG_ERROR(["Couldn't find MPI"])
+fi
+
+# look for leveldb library, sets LEVELDB_CFLAGS/LDFLAGS/LIBS
+UNIFYFS_AC_LEVELDB
+
+# look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
+UNIFYFS_AC_GOTCHA
+
+UNIFYFS_AC_MARGO
+UNIFYFS_AC_FLATCC
+
 # checks to see how we can print 64 bit values on this architecture
 gt_INTTYPES_PRI
 
@@ -166,27 +198,6 @@ AC_TRY_COMPILE(
 
 AC_CHECK_HEADERS(mntent.h sys/mount.h)
 
-# look for MPI and set flags
-LX_FIND_MPI
-if test "x$enable_fortran" = "xyes"; then
-AC_LANG_PUSH([Fortran])
-LX_FIND_MPI
-AC_LANG_POP
-fi
-
-if test "$have_C_mpi" != "yes" ; then
-    AC_MSG_ERROR(["Couldn't find MPI"])
-fi
-
-# look for leveldb library, sets LEVELDB_CFLAGS/LDFLAGS/LIBS
-UNIFYFS_AC_LEVELDB
-
-# look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
-UNIFYFS_AC_GOTCHA
-
-UNIFYFS_AC_MARGO
-UNIFYFS_AC_FLATCC
-
 # HDF found?
 AX_LIB_HDF5
 AM_CONDITIONAL([HAVE_HDF5], [test x$with_hdf5 = xyes])
@@ -196,7 +207,9 @@ AM_CONDITIONAL([HAVE_HDF5], [test x$with_hdf5 = xyes])
 CP_WRAPPERS+="-Wl,-wrap,access"
 CP_WRAPPERS+=",-wrap,chmod"
 CP_WRAPPERS+=",-wrap,fchmod"
-CP_WRAPPERS+=",-wrap,lio_listio"
+AC_CHECK_FUNCS(lio_listio,[
+    CP_WRAPPERS+=",-wrap,lio_listio"
+], [])
 CP_WRAPPERS+=",-wrap,mkdir"
 CP_WRAPPERS+=",-wrap,rmdir"
 CP_WRAPPERS+=",-wrap,unlink"
@@ -205,13 +218,24 @@ CP_WRAPPERS+=",-wrap,rename"
 CP_WRAPPERS+=",-wrap,truncate"
 CP_WRAPPERS+=",-wrap,stat"
 CP_WRAPPERS+=",-wrap,fstat"
-CP_WRAPPERS+=",-wrap,__lxstat"
-CP_WRAPPERS+=",-wrap,__xstat"
+
+AC_CHECK_FUNCS(__lxstat,[
+    CP_WRAPPERS+=",-wrap,__lxstat"
+],[])
+AC_CHECK_FUNCS(__xstat,[
+    CP_WRAPPERS+=",-wrap,__xstat"
+],[])
+
+AC_CHECK_FUNCS(__fxstat,[
+    CP_WRAPPERS+=",-wrap,__fxstat"
+],[])
 
 CP_WRAPPERS+=",-wrap,creat"
 CP_WRAPPERS+=",-wrap,creat64"
 CP_WRAPPERS+=",-wrap,open"
-CP_WRAPPERS+=",-wrap,open64"
+AC_CHECK_FUNCS(open64, [
+    CP_WRAPPERS+=",-wrap,open64"
+],[])
 CP_WRAPPERS+=",-wrap,__open_2"
 CP_WRAPPERS+=",-wrap,read"
 CP_WRAPPERS+=",-wrap,write"
@@ -221,7 +245,9 @@ CP_WRAPPERS+=",-wrap,pread"
 CP_WRAPPERS+=",-wrap,pread64"
 CP_WRAPPERS+=",-wrap,pwrite"
 CP_WRAPPERS+=",-wrap,pwrite64"
-CP_WRAPPERS+=",-wrap,posix_fadvise"
+AC_CHECK_FUNCS(posix_fadvise, [
+    CP_WRAPPERS+=",-wrap,posix_fadvise"
+],[])
 CP_WRAPPERS+=",-wrap,lseek"
 CP_WRAPPERS+=",-wrap,lseek64"
 CP_WRAPPERS+=",-wrap,ftruncate"
@@ -232,7 +258,6 @@ CP_WRAPPERS+=",-wrap,mmap"
 CP_WRAPPERS+=",-wrap,mmap64"
 CP_WRAPPERS+=",-wrap,munmap"
 CP_WRAPPERS+=",-wrap,msync"
-CP_WRAPPERS+=",-wrap,__fxstat"
 CP_WRAPPERS+=",-wrap,close"
 
 # FILE* functions

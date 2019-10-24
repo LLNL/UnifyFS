@@ -63,6 +63,10 @@ libunifyfs_common_la_LDFLAGS = \
   -version-info $(LIBUNIFYFS_LT_VERSION)
 
 libunifyfs_common_la_LIBADD = \
-  $(OPT_LIBS) -lm -lrt
+  $(OPT_LIBS) -lm
+
+if !HAVE_MACOS
+  libunifyfs_common_la_LIBADD += -lrt
+endif
 
 AM_CFLAGS = -Wall -Wno-strict-aliasing

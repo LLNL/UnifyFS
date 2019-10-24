@@ -265,11 +265,16 @@ typedef struct {
 } unifyfs_chunkmeta_t;
 
 typedef struct {
+
     off_t global_size;               /* Global size of the file */
     off_t local_size;                /* Local size of the file */
     off_t log_size;                  /* Log size.  This is the sum of all the
                                       * write counts. */
+#if defined(__APPLE__) || defined(__OSX__)
+    pthread_mutex_t fspinlock;    /* file lock variable */
+#else
     pthread_spinlock_t fspinlock;    /* file lock variable */
+#endif
     enum flock_enum flock_status;    /* file lock status */
 
     int storage;                     /* FILE_STORAGE type */
@@ -404,7 +409,7 @@ extern void* free_chunk_stack;
 extern void* free_spillchunk_stack;
 extern char* unifyfs_chunks;
 extern unifyfs_chunkmeta_t* unifyfs_chunkmetas;
-int unifyfs_spilloverblock;
+extern int unifyfs_spilloverblock;
 
 /* -------------------------------
  * Common functions

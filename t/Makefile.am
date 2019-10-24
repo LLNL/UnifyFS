@@ -74,7 +74,11 @@ test_metadata_ldadd = \
 	$(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) \
 	$(MARGO_LDFLAGS) $(MARGO_LIBS) \
 	$(FLATCC_LDFLAGS) $(FLATCC_LIBS) \
-	-lpthread -lm -lstdc++ -lrt
+	-lpthread -lm -lstdc++
+
+if !HAVE_MACOS
+  test_metadata_ldadd += -lrt
+endif
 
 test_meta_cppflags = \
 	-I$(top_srcdir) \
