@@ -601,17 +601,13 @@ int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count)
         return UNIFYFS_ERROR_OVERFLOW;
     }
 
-    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-
-    /* TODO: check that file is open for writing */
-
-    /* get current file size before extending the file */
+    /* get current log size before extending the log */
     off_t logsize = unifyfs_fid_log_size(fid);
 
-    /* compute new position based on storage type */
-    off_t newlogsize;
+    /* compute size log will be after we append data */
+    off_t newlogsize = logsize + count;
 
-    newlogsize = logsize + count;
+    /* allocate storage space to hold data for this write */
     int extend_rc = unifyfs_fid_extend(fid, newlogsize);
     if (extend_rc != UNIFYFS_SUCCESS) {
         return extend_rc;
@@ -620,6 +616,7 @@ int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count)
     /* finally write specified data to file */
     int write_rc = unifyfs_fid_write(fid, pos, buf, count);
     if (write_rc == 0) {
+        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
         meta->needs_sync = 1;
         meta->local_size = MAX(meta->local_size, pos + count);
         meta->log_size = newlogsize;
