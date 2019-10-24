@@ -97,10 +97,10 @@ void unifyfs_file_attr_to_stat(unifyfs_file_attr_t* fattr, struct stat* sb)
 }
 
 typedef struct {
-    off_t file_pos;
-    off_t mem_pos;
-    size_t length;
-    int fid;
+    off_t file_pos; /* starting logical offset of data in file */
+    off_t log_pos;  /* starting physical offset of data in log */
+    size_t length;  /* length of data */
+    int fid;        /* global file id */
 } unifyfs_index_t;
 
 /* Header for read request reply in client shared memory region.

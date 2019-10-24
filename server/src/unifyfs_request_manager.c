@@ -863,7 +863,7 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
         unifyfs_keys[i]->fid = meta_payload[i].fid;
         unifyfs_keys[i]->offset = meta_payload[i].file_pos;
 
-        unifyfs_vals[i]->addr = meta_payload[i].mem_pos;
+        unifyfs_vals[i]->addr = meta_payload[i].log_pos;
         unifyfs_vals[i]->len = meta_payload[i].length;
         unifyfs_vals[i]->delegator_rank = glb_pmi_rank;
         unifyfs_vals[i]->app_id = app_id;
