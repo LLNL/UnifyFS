@@ -43,22 +43,21 @@
 #include "indexes.h"
 #include "mdhim.h"
 
-
 unifyfs_key_t** unifyfs_keys;
 unifyfs_val_t** unifyfs_vals;
 
 fattr_key_t** fattr_keys;
 fattr_val_t** fattr_vals;
 
-char* manifest_path;
-
-struct mdhim_brm_t* brm, *brmp;
-struct mdhim_bgetrm_t* bgrm, *bgrmp;
-
 struct mdhim_t* md;
-int md_size;
 
+/* we use two MDHIM indexes:
+ *   0) for file extents
+ *   1) for file attributes */
+#define IDX_FILE_EXTENTS (0)
+#define IDX_FILE_ATTR    (1)
 struct index_t* unifyfs_indexes[2];
+
 size_t max_recs_per_slice;
 
 void debug_log_key_val(const char* ctx,
@@ -152,15 +151,12 @@ int meta_init_store(unifyfs_cfg_t* cfg)
 
     md = mdhimInit(&comm, db_opts);
 
-    /*this index is created for storing index metadata*/
-    unifyfs_indexes[0] = md->primary_index;
+    /* index for storing file extent metadata */
+    unifyfs_indexes[IDX_FILE_EXTENTS] = md->primary_index;
 
-    /*this index is created for storing file attribute metadata*/
-    unifyfs_indexes[1] = create_global_index(md, ratio, 1,
-                                             LEVELDB, MDHIM_INT_KEY,
-                                             "file_attr");
-
-    MPI_Comm_size(md->mdhim_comm, &md_size);
+    /* index for storing file attribute metadata */
+    unifyfs_indexes[IDX_FILE_ATTR] = create_global_index(md,
+        ratio, 1, LEVELDB, MDHIM_INT_KEY, "file_attr");
 
     rc = meta_init_indices();
     if (rc != 0) {
@@ -257,6 +253,7 @@ void meta_free_indices(void)
         free(unifyfs_keys);
         free(unifyfs_vals);
     }
+
     if (NULL != fattr_keys) {
         for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
             if (NULL != fattr_keys[i]) {
@@ -318,18 +315,24 @@ int unifyfs_set_file_attribute(unifyfs_file_attr_t* fattr_ptr)
 {
     int rc = UNIFYFS_SUCCESS;
 
-    int gfid = fattr_ptr->gfid;
+    /* select index for file attributes */
+    md->primary_index = unifyfs_indexes[IDX_FILE_ATTR];
 
-    md->primary_index = unifyfs_indexes[1];
-    brm = mdhimPut(md, &gfid, sizeof(int),
-                   fattr_ptr, sizeof(unifyfs_file_attr_t),
-                   NULL, NULL);
+    /* insert file attribute for given global file id */
+    int gfid = fattr_ptr->gfid;
+    struct mdhim_brm_t* brm = mdhimPut(md,
+        &gfid, sizeof(int),
+        fattr_ptr, sizeof(unifyfs_file_attr_t),
+        NULL, NULL);
+
     if (!brm || brm->error) {
-        // return UNIFYFS_ERROR_MDHIM on error
+        LOGERR("Error inserting file attribute into MDHIM");
         rc = (int)UNIFYFS_ERROR_MDHIM;
     }
 
-    mdhim_full_release_msg(brm);
+    if (brm) {
+        mdhim_full_release_msg(brm);
+    }
 
     return rc;
 }
@@ -343,46 +346,66 @@ int unifyfs_set_file_attributes(int num_entries,
 {
     int rc = UNIFYFS_SUCCESS;
 
-    md->primary_index = unifyfs_indexes[1];
-    brm = mdhimBPut(md, (void**)keys, key_lens, (void**)fattr_ptr,
-                    val_lens, num_entries, NULL, NULL);
-    brmp = brm;
-    if (!brmp || brmp->error) {
+    /* select index for file attributes */
+    md->primary_index = unifyfs_indexes[IDX_FILE_ATTR];
+
+    /* put list of key/value pairs */
+    struct mdhim_brm_t* brm = mdhimBPut(md,
+        (void**)keys, key_lens,
+        (void**)fattr_ptr, val_lens,
+        num_entries, NULL, NULL);
+
+    /* check for errors and free resources */
+    if (!brm) {
+        LOGERR("Error inserting file attributes into MDHIM");
         rc = (int)UNIFYFS_ERROR_MDHIM;
-        LOGERR("Error inserting keys/values into MDHIM");
-    }
+    } else {
+        /* step through linked list of messages,
+         * scan for any error and free messages */
+        struct mdhim_brm_t* brmp = brm;
+        while (brmp) {
+            /* check current item for error */
+            if (brmp->error < 0) {
+                LOGERR("Error inserting file attributes into MDHIM");
+                rc = (int)UNIFYFS_ERROR_MDHIM;
+            }
 
-    while (brmp) {
-        if (brmp->error < 0) {
-            rc = (int)UNIFYFS_ERROR_MDHIM;
-            break;
+            /* record pointer to current item,
+             * advance loop pointer to next item in list,
+             * free resources for current item */
+            brm  = brmp;
+            brmp = brmp->next;
+            mdhim_full_release_msg(brm);
         }
-
-        brm = brmp;
-        brmp = brmp->next;
-        mdhim_full_release_msg(brm);
     }
 
     return rc;
 }
 
-/*
- *
- */
-int unifyfs_get_file_attribute(int gfid,
-                               unifyfs_file_attr_t* attr_val_ptr)
+/* given a global file id, lookup and return file attributes */
+int unifyfs_get_file_attribute(
+    int gfid,
+    unifyfs_file_attr_t* attr)
 {
     int rc = UNIFYFS_SUCCESS;
-    unifyfs_file_attr_t* tmp_ptr_attr;
 
-    md->primary_index = unifyfs_indexes[1];
-    bgrm = mdhimGet(md, md->primary_index, &gfid,
-                    sizeof(int), MDHIM_GET_EQ);
+    /* select index holding file attributes,
+     * execute lookup for given file id */
+    md->primary_index = unifyfs_indexes[IDX_FILE_ATTR];
+    struct mdhim_bgetrm_t* bgrm = mdhimGet(md, md->primary_index,
+        &gfid, sizeof(int), MDHIM_GET_EQ);
+
     if (!bgrm || bgrm->error) {
+        /* failed to find info for this file id */
         rc = (int)UNIFYFS_ERROR_MDHIM;
     } else {
-        tmp_ptr_attr = (unifyfs_file_attr_t*)bgrm->values[0];
-        memcpy(attr_val_ptr, tmp_ptr_attr, sizeof(unifyfs_file_attr_t));
+        /* copy file attribute from value into output parameter */
+        unifyfs_file_attr_t* ptr = (unifyfs_file_attr_t*)bgrm->values[0];
+        memcpy(attr, ptr, sizeof(unifyfs_file_attr_t));
+    }
+
+    /* free resources returned from lookup */
+    if (bgrm) {
         mdhim_full_release_msg(bgrm);
     }
 
@@ -407,7 +430,8 @@ int unifyfs_get_file_extents(int num_keys, unifyfs_key_t** keys,
     *num_values = 0;
     *keyvals = NULL;
 
-    md->primary_index = unifyfs_indexes[0];
+    /* select index for file extents */
+    md->primary_index = unifyfs_indexes[IDX_FILE_EXTENTS];
 
     /* execute range query */
     struct mdhim_bgetrm_t* bkvlist = mdhimBGet(md, md->primary_index,
@@ -483,26 +507,37 @@ int unifyfs_set_file_extents(int num_entries,
 {
     int rc = UNIFYFS_SUCCESS;
 
-    md->primary_index = unifyfs_indexes[0];
+    /* select index for file extents */
+    md->primary_index = unifyfs_indexes[IDX_FILE_EXTENTS];
 
-    brm = mdhimBPut(md, (void**)(keys), key_lens,
-                    (void**)(vals), val_lens, num_entries,
-                    NULL, NULL);
-    brmp = brm;
-    if (!brmp || brmp->error) {
+    /* put list of key/value pairs */
+    struct mdhim_brm_t* brm = mdhimBPut(md,
+        (void**)(keys), key_lens,
+        (void**)(vals), val_lens,
+        num_entries, NULL, NULL);
+
+    /* check for errors and free resources */
+    if (!brm) {
+        LOGERR("Error inserting file extents into MDHIM");
         rc = (int)UNIFYFS_ERROR_MDHIM;
-        LOGERR("Error inserting keys/values into MDHIM");
-    }
+    } else {
+        /* step through linked list of messages,
+         * scan for any error and free messages */
+        struct mdhim_brm_t* brmp = brm;
+        while (brmp) {
+            /* check current item for error */
+            if (brmp->error < 0) {
+                LOGERR("Error inserting file extents into MDHIM");
+                rc = (int)UNIFYFS_ERROR_MDHIM;
+            }
 
-    while (brmp) {
-        if (brmp->error < 0) {
-            rc = (int)UNIFYFS_ERROR_MDHIM;
-            break;
+            /* record pointer to current item,
+             * advance loop pointer to next item in list,
+             * free resources for current item */
+            brm  = brmp;
+            brmp = brmp->next;
+            mdhim_full_release_msg(brm);
         }
-
-        brm = brmp;
-        brmp = brmp->next;
-        mdhim_full_release_msg(brm);
     }
 
     return rc;
