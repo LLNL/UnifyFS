@@ -265,71 +265,104 @@ static int unifyfs_chunk_read(
 }
 
 /* given an index, split it into multiple indices whose range is equal or
- * smaller than slice_range size @param cur_idx: the index to split
+ * smaller than slice_range size
+ * @param cur_idx: the index to split
  * @param slice_range: the slice size of the key-value store
  * @return index_set: the set of split indices */
 int unifyfs_split_index(unifyfs_index_t* cur_idx, index_set_t* index_set,
                         long slice_range)
 {
+    /* first byte offset this write will write to */
+    long idx_start = cur_idx->file_pos;
 
-    long cur_idx_start = cur_idx->file_pos;
-    long cur_idx_end = cur_idx->file_pos + cur_idx->length - 1;
+    /* last byte offset this write will write to */
+    long idx_end = cur_idx->file_pos + cur_idx->length - 1;
 
-    long cur_slice_start = cur_idx->file_pos / slice_range * slice_range;
-    long cur_slice_end = cur_slice_start + slice_range - 1;
+    /* starting byte offset of slice that first write offset falls in */
+    long slice_start = (idx_start / slice_range) * slice_range;
 
+    /* last byte offset in slice that first write offset falls in */
+    long slice_end = slice_start + slice_range - 1;
 
-    index_set->count = 0;
+    /* get pointer to first output index structure */
+    unifyfs_index_t* set = index_set->idxes;
 
-    long cur_mem_pos = cur_idx->mem_pos;
-    if (cur_idx_end <= cur_slice_end) {
-        /*
-        cur_slice_start                                  cur_slice_end
-                         cur_idx_start      cur_idx_end
+    /* initialize count of output index entries */
+    int count = 0;
 
-        */
-        index_set->idxes[index_set->count] = *cur_idx;
-        index_set->count++;
-
+    /* define new index entries in index_set by splitting write index
+     * at slice boundaries */
+    if (idx_end <= slice_end) {
+        /* index falls fully within one slice
+         *
+         * slice_start           slice_end
+         *      idx_start   idx_end
+         */
+        set[count] = *cur_idx;
+        count++;
     } else {
-        /*
-        cur_slice_start                     cur_slice_endnext_slice_start                   next_slice_end
-                         cur_idx_start                                      cur_idx_end
+        /* ending offset of index is beyond last offset in first slice,
+         * so this index spans across multiple slices
+         *
+         * slice_start  slice_end  next_slice_start   next_slice_end
+         *      idx_start                          idx_end
+         */
 
-        */
-        index_set->idxes[index_set->count] = *cur_idx;
-        index_set->idxes[index_set->count].length =
-            cur_slice_end - cur_idx_start + 1;
+        /* get starting position in log */
+        long log_pos = cur_idx->mem_pos;
 
-        cur_mem_pos += index_set->idxes[index_set->count].length;
+        /* copy over all fields in current index */
+        set[count] = *cur_idx;
 
-        cur_slice_start = cur_slice_end + 1;
-        cur_slice_end = cur_slice_start + slice_range - 1;
-        index_set->count++;
+        /* update length field to adjust for boundary of first slice */
+        long length = slice_end - idx_start + 1;
+        set[count].length = length;
 
-        while (1) {
-            if (cur_idx_end <= cur_slice_end) {
-                break;
-            }
+        /* advance offset into log */
+        log_pos += length;
 
-            index_set->idxes[index_set->count].fid = cur_idx->fid;
-            index_set->idxes[index_set->count].file_pos = cur_slice_start;
-            index_set->idxes[index_set->count].length = slice_range;
-            index_set->idxes[index_set->count].mem_pos = cur_mem_pos;
-            cur_mem_pos += index_set->idxes[index_set->count].length;
+        /* increment our output index count */
+        count++;
 
-            cur_slice_start = cur_slice_end + 1;
-            cur_slice_end = cur_slice_start + slice_range - 1;
-            index_set->count++;
+        /* advance slice boundary offsets to next slice */
+        slice_start = slice_end + 1;
+        slice_end   = slice_start + slice_range - 1;
 
+        /* loop until we find the slice that contains
+         * ending offset of write */
+        while (idx_end > slice_end) {
+            /* ending offset of write is beyond end of this slice,
+             * so write spans the full length of this slice */
+            length = slice_range;
+
+            /* define index for this slice */
+            set[count].fid      = cur_idx->fid;
+            set[count].file_pos = slice_start;
+            set[count].length   = length;
+            set[count].mem_pos  = log_pos;
+
+            /* advance offset into log */
+            log_pos += length;
+
+            /* increment our output index count */
+            count++;
+
+            /* advance slice boundary offsets to next slice */
+            slice_start = slice_end + 1;
+            slice_end   = slice_start + slice_range - 1;
         }
 
-        index_set->idxes[index_set->count].fid = cur_idx->fid;
-        index_set->idxes[index_set->count].file_pos = cur_slice_start;
-        index_set->idxes[index_set->count].length = cur_idx_end - cur_slice_start + 1;
-        index_set->idxes[index_set->count].mem_pos = cur_mem_pos;
-        index_set->count++;
+        /* this slice contains the remainder of write */
+        length = idx_end - slice_start + 1;
+        set[count].fid      = cur_idx->fid;
+        set[count].file_pos = slice_start;
+        set[count].length   = length;
+        set[count].mem_pos  = log_pos;
+        count++;
     }
+
+    /* record number of entires in output index set */
+    index_set->count = count;
 
     return 0;
 }
