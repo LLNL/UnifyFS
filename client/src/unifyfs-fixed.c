@@ -349,7 +349,7 @@ static int unifyfs_logio_chunk_write(
     unifyfs_chunkmeta_t* chunk_meta = filemeta_get_chunkmeta(meta, chunk_id);
 
     if (chunk_meta->location != CHUNK_LOCATION_MEMFS &&
-            chunk_meta->location != CHUNK_LOCATION_SPILLOVER) {
+        chunk_meta->location != CHUNK_LOCATION_SPILLOVER) {
         /* unknown chunk type */
         LOGERR("unknown chunk type");
         return UNIFYFS_ERROR_IO;
@@ -363,6 +363,9 @@ static int unifyfs_logio_chunk_write(
             meta, chunk_id, chunk_offset);
         memcpy(chunk_buf, buf, count);
 
+        /* record byte offset position within log, which is the number
+         * of bytes between the memory location we write to and the
+         * starting memory location of the shared memory data chunk region */
         log_offset = chunk_buf - unifyfs_chunks;
     } else if (chunk_meta->location == CHUNK_LOCATION_SPILLOVER) {
         /* spill over to a file, so write to file descriptor */
@@ -373,9 +376,13 @@ static int unifyfs_logio_chunk_write(
             LOGERR("pwrite failed: errno=%d (%s)", errno, strerror(errno));
         }
 
+        /* record byte offset position within log, for spill over
+         * locations we take the offset within the spill file
+         * added to the total size of all shared memory data chunks */
         log_offset = spill_offset + unifyfs_max_chunks * (1 << unifyfs_chunk_bits);
     }
 
+    /* TODO: pass in gfid for this file or call function to look it up? */
     /* find the corresponding file attr entry and update attr*/
     unifyfs_file_attr_t tmp_meta_entry;
     tmp_meta_entry.fid = fid;
@@ -385,9 +392,6 @@ static int unifyfs_logio_chunk_write(
                                         *unifyfs_fattrs.ptr_num_entries,
                                         sizeof(unifyfs_file_attr_t),
                                         compare_fattr);
-    if (ptr_meta_entry !=  NULL) {
-        ptr_meta_entry->size = pos + count;
-    }
 
     /* define an new index entry for this write operation */
     unifyfs_index_t cur_idx;
@@ -397,8 +401,7 @@ static int unifyfs_logio_chunk_write(
     cur_idx.length   = count;
 
     /* split the write requests larger than unifyfs_key_slice_range into
-     * the ones smaller than unifyfs_key_slice_range
-     * */
+     * the ones smaller than unifyfs_key_slice_range */
     index_set_t tmp_index_set;
     memset(&tmp_index_set, 0, sizeof(tmp_index_set));
     unifyfs_split_index(&cur_idx, &tmp_index_set,
@@ -468,7 +471,7 @@ static int unifyfs_logio_chunk_write(
     } else {
         /* TODO: no room to write additional index metadata entries,
          * swap out existing metadata buffer to disk*/
-        printf("exhausted metadata");
+        LOGERR("exhausted metadata");
     }
 
     /* assume read was successful if we get to here */
