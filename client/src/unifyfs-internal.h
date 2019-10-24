@@ -315,11 +315,6 @@ typedef struct {
 } unifyfs_fattr_buf_t;
 
 typedef struct {
-    unifyfs_index_t idxes[UNIFYFS_MAX_SPLIT_CNT];
-    int count;
-} index_set_t;
-
-typedef struct {
     read_req_t read_reqs[UNIFYFS_MAX_READ_CNT];
     int count;
 } read_req_set_t;
