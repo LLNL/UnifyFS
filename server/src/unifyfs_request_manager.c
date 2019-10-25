@@ -944,7 +944,7 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
 
         /* MDHIM needs to know the byte size of each key and value */
         fattr_key_lens[i] = sizeof(fattr_key_t);
-        fattr_val_lens[i] = sizeof(fattr_val_t);
+        fattr_val_lens[i] = sizeof(unifyfs_file_attr_t);
     }
 
     /* batch insert file attribute key/values into MDHIM */
