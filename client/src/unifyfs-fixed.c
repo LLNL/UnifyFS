@@ -42,6 +42,7 @@
 
 #include "unifyfs-fixed.h"
 #include "unifyfs_log.h"
+#include "margo_client.h"
 
 static inline
 unifyfs_chunkmeta_t* filemeta_get_chunkmeta(const unifyfs_filemeta_t* meta,
@@ -375,6 +376,12 @@ static int unifyfs_split_index(
          */
         set[count] = *cur_idx;
         count++;
+
+        /* update write index to account for index we just added */
+        long length = cur_idx->length;
+        cur_idx->file_pos += length;
+        cur_idx->log_pos  += length;
+        cur_idx->length   -= length;
     } else {
         /* ending offset of index is beyond last offset in first slice,
          * so this index spans across multiple slices
@@ -383,34 +390,33 @@ static int unifyfs_split_index(
          *      idx_start                          idx_end
          */
 
-        /* get starting position in log */
-        long log_pos = cur_idx->log_pos;
-
-        /* copy over all fields in current index */
-        set[count] = *cur_idx;
-
-        /* update length field to adjust for boundary of first slice */
+        /* compute number of bytes until end of first slice */
         long length = slice_end - idx_start + 1;
-        set[count].length = length;
 
-        /* advance offset into log */
-        log_pos += length;
-
-        /* increment our output index count */
+        /* copy over all fields in current index,
+         * update length field to adjust for boundary of first slice */
+        set[count].fid      = cur_idx->fid;
+        set[count].file_pos = cur_idx->file_pos;
+        set[count].length   = length;
+        set[count].log_pos  = cur_idx->log_pos;
         count++;
+
+        /* update write index to account for index we just added */
+        cur_idx->file_pos += length;
+        cur_idx->log_pos  += length;
+        cur_idx->length   -= length;
 
         /* check that we have room to write more index values */
         if (count >= maxcount) {
             /* no room to write more index values,
              * and we have at least one more,
-             * record number we wrote and return with error */
+             * record number we wrote and return with success */
             *used_count = count;
-            return UNIFYFS_FAILURE;
+            return UNIFYFS_SUCCESS;
         }
 
         /* advance slice boundary offsets to next slice */
-        slice_start = slice_end + 1;
-        slice_end   = slice_start + slice_range - 1;
+        slice_end += slice_range;
 
         /* loop until we find the slice that contains
          * ending offset of write */
@@ -421,37 +427,41 @@ static int unifyfs_split_index(
 
             /* define index for this slice */
             set[count].fid      = cur_idx->fid;
-            set[count].file_pos = slice_start;
+            set[count].file_pos = cur_idx->file_pos;
             set[count].length   = length;
-            set[count].log_pos  = log_pos;
-
-            /* advance offset into log */
-            log_pos += length;
-
-            /* increment our output index count */
+            set[count].log_pos  = cur_idx->log_pos;
             count++;
+
+            /* update write index to account for index we just added */
+            cur_idx->file_pos += length;
+            cur_idx->log_pos  += length;
+            cur_idx->length   -= length;
 
             /* check that we have room to write more index values */
             if (count >= maxcount) {
                 /* no room to write more index values,
                  * and we have at least one more,
-                 * record number we wrote and return with error */
+                 * record number we wrote and return with success */
                 *used_count = count;
-                return UNIFYFS_FAILURE;
+                return UNIFYFS_SUCCESS;
             }
 
             /* advance slice boundary offsets to next slice */
-            slice_start = slice_end + 1;
-            slice_end   = slice_start + slice_range - 1;
+            slice_end += slice_range;
         }
 
         /* this slice contains the remainder of write */
-        length = idx_end - slice_start + 1;
+        length = cur_idx->length;
         set[count].fid      = cur_idx->fid;
-        set[count].file_pos = slice_start;
+        set[count].file_pos = cur_idx->file_pos;
         set[count].length   = length;
-        set[count].log_pos  = log_pos;
+        set[count].log_pos  = cur_idx->log_pos;
         count++;
+
+        /* update write index to account for index we just added */
+        cur_idx->file_pos += length;
+        cur_idx->log_pos  += length;
+        cur_idx->length   -= length;
     }
 
     /* record number of entires we added */
@@ -567,39 +577,46 @@ static int unifyfs_logio_chunk_write(
     }
 
     /* add new index entries if needed */
-    if (cur_idx.length > 0) {
+    while (cur_idx.length > 0) {
         /* remaining entries we can fit in the shared memory region */
         off_t remaining_entries = unifyfs_max_index_entries - num_entries;
-        if (remaining_entries > 0) {
-            /* split any remaining write index at boundaries of
-             * unifyfs_key_slice_range */
-            off_t used_entries = 0;
-            int split_rc = unifyfs_split_index(&cur_idx,
-                unifyfs_key_slice_range, &idxs[num_entries],
-                remaining_entries, &used_entries);
-            if (split_rc != UNIFYFS_SUCCESS) {
-                /* in this case, we have copied data to the log,
-                 * but we failed to generate index entries,
-                 * we're returning with an error and leaving the data
-                 * in the log */
-                LOGERR("exhausted space when splitting write index");
+
+        /* if we have filled the key/value buffer, flush it to server */
+        if (0 == remaining_entries) {
+            /* index buffer is full, flush it */
+            int ret = invoke_client_fsync_rpc(cur_idx.fid);
+            if (ret != UNIFYFS_SUCCESS) {
+                /* something went wrong when trying to flush key/values */
+                LOGERR("failed to flush key/value index to server");
                 return UNIFYFS_ERROR_IO;
             }
 
-            /* account for entries we just added */
-            num_entries += used_entries;
-        } else {
+            /* flushed, refresh number of entries and number remaining */
+            num_entries = *(unifyfs_indices.ptr_num_entries);
+            remaining_entries = unifyfs_max_index_entries - num_entries;
+        }
+
+        /* split any remaining write index at boundaries of
+         * unifyfs_key_slice_range */
+        off_t used_entries = 0;
+        int split_rc = unifyfs_split_index(&cur_idx,
+            unifyfs_key_slice_range, &idxs[num_entries],
+            remaining_entries, &used_entries);
+        if (split_rc != UNIFYFS_SUCCESS) {
             /* in this case, we have copied data to the log,
              * but we failed to generate index entries,
              * we're returning with an error and leaving the data
              * in the log */
-            LOGERR("exhausted space when splitting write index");
+            LOGERR("failed to split write index");
             return UNIFYFS_ERROR_IO;
         }
-    }
 
-    /* update number of entries in index array */
-    (*unifyfs_indices.ptr_num_entries) = num_entries;
+        /* account for entries we just added */
+        num_entries += used_entries;
+
+        /* update number of entries in index array */
+        (*unifyfs_indices.ptr_num_entries) = num_entries;
+    }
 
     /* assume write was successful if we get to here */
     return UNIFYFS_SUCCESS;
