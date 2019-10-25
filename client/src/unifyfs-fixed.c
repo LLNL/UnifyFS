@@ -460,7 +460,7 @@ static int unifyfs_split_index(
     return UNIFYFS_SUCCESS;
 }
 
-/* read data from specified chunk id, chunk offset, and count into user buffer,
+/* write count bytes from user buffer into specified chunk id at chunk offset,
  * count should fit within chunk starting from specified offset */
 static int unifyfs_logio_chunk_write(
     int fid,                  /* local file id */
@@ -601,11 +601,11 @@ static int unifyfs_logio_chunk_write(
     /* update number of entries in index array */
     (*unifyfs_indices.ptr_num_entries) = num_entries;
 
-    /* assume read was successful if we get to here */
+    /* assume write was successful if we get to here */
     return UNIFYFS_SUCCESS;
 }
 
-/* read data from specified chunk id, chunk offset, and count into user buffer,
+/* write count bytes from user buffer into specified chunk id at chunk offset,
  * count should fit within chunk starting from specified offset */
 static int unifyfs_chunk_write(
     unifyfs_filemeta_t* meta, /* pointer to file meta data */
@@ -641,7 +641,7 @@ static int unifyfs_chunk_write(
         return UNIFYFS_ERROR_IO;
     }
 
-    /* assume read was successful if we get to here */
+    /* assume write was successful if we get to here */
     return UNIFYFS_SUCCESS;
 }
 
