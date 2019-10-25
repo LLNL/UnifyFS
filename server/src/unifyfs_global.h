@@ -171,11 +171,6 @@ typedef struct {
 
 typedef int fattr_key_t;
 
-typedef struct {
-    char fname[UNIFYFS_MAX_FILENAME];
-    struct stat file_attr;
-} fattr_val_t;
-
 int invert_sock_ids[MAX_NUM_CLIENTS];
 
 typedef struct {

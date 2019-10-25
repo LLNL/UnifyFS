@@ -43,12 +43,6 @@
 #include "indexes.h"
 #include "mdhim.h"
 
-unifyfs_key_t** unifyfs_keys;
-unifyfs_val_t** unifyfs_vals;
-
-fattr_key_t** fattr_keys;
-fattr_val_t** fattr_vals;
-
 struct mdhim_t* md;
 
 /* we use two MDHIM indexes:
@@ -158,70 +152,6 @@ int meta_init_store(unifyfs_cfg_t* cfg)
     unifyfs_indexes[IDX_FILE_ATTR] = create_global_index(md,
         ratio, 1, LEVELDB, MDHIM_INT_KEY, "file_attr");
 
-    rc = meta_init_indices();
-    if (rc != 0) {
-        return -1;
-    }
-
-    return 0;
-}
-
-/* initialize the key and value list used to put/get key-value pairs
- * TODO: split once the number of metadata exceeds MAX_META_PER_SEND */
-int meta_init_indices(void)
-{
-    int i;
-
-    /* init index metadata */
-    unifyfs_keys = (unifyfs_key_t**)
-        calloc(MAX_META_PER_SEND, sizeof(unifyfs_key_t*));
-    if (unifyfs_keys == NULL) {
-        return (int)UNIFYFS_ERROR_NOMEM;
-    }
-
-    unifyfs_vals = (unifyfs_val_t**)
-        calloc(MAX_META_PER_SEND, sizeof(unifyfs_val_t*));
-    if (unifyfs_vals == NULL) {
-        return (int)UNIFYFS_ERROR_NOMEM;
-    }
-
-    for (i = 0; i < MAX_META_PER_SEND; i++) {
-        unifyfs_keys[i] = (unifyfs_key_t*) calloc(1, sizeof(unifyfs_key_t));
-        if (unifyfs_keys[i] == NULL) {
-            return (int)UNIFYFS_ERROR_NOMEM;
-        }
-
-        unifyfs_vals[i] = (unifyfs_val_t*) calloc(1, sizeof(unifyfs_val_t));
-        if (unifyfs_vals[i] == NULL) {
-            return (int)UNIFYFS_ERROR_NOMEM;
-        }
-    }
-
-    /* init attribute metadata */
-    fattr_keys = (fattr_key_t**)
-        calloc(MAX_FILE_CNT_PER_NODE, sizeof(fattr_key_t*));
-    if (fattr_keys == NULL) {
-        return (int)UNIFYFS_ERROR_NOMEM;
-    }
-
-    fattr_vals = (fattr_val_t**)
-        calloc(MAX_FILE_CNT_PER_NODE, sizeof(fattr_val_t*));
-    if (fattr_vals == NULL) {
-        return (int)UNIFYFS_ERROR_NOMEM;
-    }
-
-    for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
-        fattr_keys[i] = (fattr_key_t*) calloc(1, sizeof(fattr_key_t));
-        if (fattr_keys[i] == NULL) {
-            return (int)UNIFYFS_ERROR_NOMEM;
-        }
-
-        fattr_vals[i] = (fattr_val_t*) calloc(1, sizeof(fattr_val_t));
-        if (fattr_vals[i] == NULL) {
-            return (int)UNIFYFS_ERROR_NOMEM;
-        }
-    }
-
     return 0;
 }
 
@@ -235,36 +165,6 @@ void print_fsync_indices(unifyfs_key_t** keys,
                keys[i]->fid, keys[i]->offset,
                vals[i]->addr, vals[i]->len,
                vals[i]->delegator_rank);
-    }
-}
-
-void meta_free_indices(void)
-{
-    int i;
-    if (NULL != unifyfs_keys) {
-        for (i = 0; i < MAX_META_PER_SEND; i++) {
-            if (NULL != unifyfs_keys[i]) {
-                free(unifyfs_keys[i]);
-            }
-            if (NULL != unifyfs_vals[i]) {
-                free(unifyfs_vals[i]);
-            }
-        }
-        free(unifyfs_keys);
-        free(unifyfs_vals);
-    }
-
-    if (NULL != fattr_keys) {
-        for (i = 0; i < MAX_FILE_CNT_PER_NODE; i++) {
-            if (NULL != fattr_keys[i]) {
-                free(fattr_keys[i]);
-            }
-            if (NULL != fattr_vals[i]) {
-                free(fattr_vals[i]);
-            }
-        }
-        free(fattr_keys);
-        free(fattr_vals);
     }
 }
 
@@ -301,8 +201,6 @@ int meta_sanitize(void)
     if (rc) {
         LOGERR("failure during MDHIM file tree removal");
     }
-
-    meta_free_indices();
 
     return UNIFYFS_SUCCESS;
 }
