@@ -365,15 +365,6 @@ static int unifyfs_split_index(
     /* initialize count of output index entries */
     off_t count = 0;
 
-    /* no room to write index values */
-    if (count >= maxcount) {
-        /* no room to write more index values,
-         * and we have at least one more,
-         * record number we wrote and return with error */
-        *used_count = 0;
-        return UNIFYFS_FAILURE;
-    }
-
     /* define new index entries in index_set by splitting write index
      * at slice boundaries */
     if (idx_end <= slice_end) {
@@ -559,9 +550,6 @@ static int unifyfs_logio_chunk_write(
     /* lookup number of existing index entries */
     off_t num_entries = *(unifyfs_indices.ptr_num_entries);
 
-    /* remaining entries we can fit in the shared memory region */
-    off_t remaining_entries = unifyfs_max_index_entries - num_entries;
-
     /* get pointer to index array */
     unifyfs_index_t* idxs = unifyfs_indices.index_entry;
 
@@ -578,13 +566,29 @@ static int unifyfs_logio_chunk_write(
             unifyfs_key_slice_range);
     }
 
-    /* split any remaining write index at boundaries of
-     * unifyfs_key_slice_range */
+    /* add new index entries if needed */
     if (cur_idx.length > 0) {
-        off_t used_entries = 0;
-        int split_rc = unifyfs_split_index(&cur_idx, unifyfs_key_slice_range,
-            &idxs[num_entries], remaining_entries, &used_entries);
-        if (split_rc != UNIFYFS_SUCCESS) {
+        /* remaining entries we can fit in the shared memory region */
+        off_t remaining_entries = unifyfs_max_index_entries - num_entries;
+        if (remaining_entries > 0) {
+            /* split any remaining write index at boundaries of
+             * unifyfs_key_slice_range */
+            off_t used_entries = 0;
+            int split_rc = unifyfs_split_index(&cur_idx,
+                unifyfs_key_slice_range, &idxs[num_entries],
+                remaining_entries, &used_entries);
+            if (split_rc != UNIFYFS_SUCCESS) {
+                /* in this case, we have copied data to the log,
+                 * but we failed to generate index entries,
+                 * we're returning with an error and leaving the data
+                 * in the log */
+                LOGERR("exhausted space when splitting write index");
+                return UNIFYFS_ERROR_IO;
+            }
+
+            /* account for entries we just added */
+            num_entries += used_entries;
+        } else {
             /* in this case, we have copied data to the log,
              * but we failed to generate index entries,
              * we're returning with an error and leaving the data
@@ -592,9 +596,6 @@ static int unifyfs_logio_chunk_write(
             LOGERR("exhausted space when splitting write index");
             return UNIFYFS_ERROR_IO;
         }
-
-        /* account for entries we just added */
-        num_entries += used_entries;
     }
 
     /* update number of entries in index array */
