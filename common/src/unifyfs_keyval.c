@@ -33,11 +33,11 @@
 #include <sys/stat.h>
 
 // UnifyFS keys
-const char* key_runstate           = "unifyfs.runstate";
-const char* key_unifyfsd_socket    = "unifyfsd.socket";
-const char* key_unifyfsd_margo_shm = "unifyfsd.margo-shm";
-const char* key_unifyfsd_margo_svr = "unifyfsd.margo-svr";
-const char* key_unifyfsd_pmi_rank  = "unifyfsd.pmi-rank";
+const char* const key_runstate           = "unifyfs.runstate";
+const char* const key_unifyfsd_socket    = "unifyfsd.socket";
+const char* const key_unifyfsd_margo_shm = "unifyfsd.margo-shm";
+const char* const key_unifyfsd_margo_svr = "unifyfsd.margo-svr";
+const char* const key_unifyfsd_pmi_rank  = "unifyfsd.pmi-rank";
 
 // key-value store state
 static int kv_initialized; // = 0

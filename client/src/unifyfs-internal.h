@@ -404,7 +404,7 @@ extern void* free_chunk_stack;
 extern void* free_spillchunk_stack;
 extern char* unifyfs_chunks;
 extern unifyfs_chunkmeta_t* unifyfs_chunkmetas;
-int unifyfs_spilloverblock;
+extern int unifyfs_spilloverblock;
 
 /* -------------------------------
  * Common functions
