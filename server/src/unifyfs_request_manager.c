@@ -816,121 +816,149 @@ int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl)
  */
 int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
 {
-    int ret = 0;
+    size_t i;
 
-    unifyfs_key_t** unifyfs_keys;
-    unifyfs_val_t** unifyfs_vals;
-    int* unifyfs_key_lens = NULL;
-    int* unifyfs_val_lens = NULL;
+    /* assume we'll succeed */
+    int ret = (int)UNIFYFS_SUCCESS;
 
-    fattr_key_t** fattr_keys = NULL;
+    /* pointers to memory we'll dynamically allocate for file extents */
+    unifyfs_key_t** unifyfs_keys = NULL;
+    unifyfs_val_t** unifyfs_vals = NULL;
+    int* unifyfs_key_lens        = NULL;
+    int* unifyfs_val_lens        = NULL;
+
+    /* pointers to memory we'll dynamically allocate for file attributes */
+    fattr_key_t** fattr_keys         = NULL;
     unifyfs_file_attr_t** fattr_vals = NULL;
-    int* fattr_key_lens = NULL;
-    int* fattr_val_lens = NULL;
-    size_t i, attr_num_entries, extent_num_entries;
+    int* fattr_key_lens              = NULL;
+    int* fattr_val_lens              = NULL;
 
+    /* get memory page size on this machine */
+    int page_sz = getpagesize();
+
+    /* get app config struct for this client */
     app_config_t* app_config = (app_config_t*)
         arraylist_get(app_config_list, app_id);
 
-    extent_num_entries = *(size_t*)
-        (app_config->shm_superblocks[client_side_id]
-         + app_config->meta_offset);
+    /* get pointer to superblock for this client and app */
+    char* superblk = app_config->shm_superblocks[client_side_id];
 
-    /*
-     * indices are stored in the superblock shared memory
-     * created by the client
-     */
-    int page_sz = getpagesize();
-    unifyfs_index_t* meta_payload = (unifyfs_index_t*)
-        (app_config->shm_superblocks[client_side_id]
-         + app_config->meta_offset + page_sz);
+    /* get pointer to start of key/value region in superblock */
+    char* meta = superblk + app_config->meta_offset;
 
-    // allocate storage for values
-    // TODO: possibly get this from memory pool
-    unifyfs_keys = alloc_key_array(extent_num_entries);
-    unifyfs_vals = alloc_value_array(extent_num_entries);
+    /* get pointer to start of file attribute region in superblock */
+    char* fmeta = superblk + app_config->fmeta_offset;
+
+    /* get number of file extent index values client has for us,
+     * stored as a size_t value in meta region of shared memory */
+    size_t extent_num_entries = *(size_t*)(meta);
+
+    /* indices are stored in the superblock shared memory
+     * created by the client, these are stored as index_t
+     * structs starting one page size offset into meta region */
+    char* ptr_extents = meta + page_sz;
+    unifyfs_index_t* meta_payload = (unifyfs_index_t*)(ptr_extents);
+
+    /* allocate storage for file extent key/values */
+    /* TODO: possibly get this from memory pool */
+    unifyfs_keys     = alloc_key_array(extent_num_entries);
+    unifyfs_vals     = alloc_value_array(extent_num_entries);
     unifyfs_key_lens = calloc(extent_num_entries, sizeof(int));
     unifyfs_val_lens = calloc(extent_num_entries, sizeof(int));
     if ((NULL == unifyfs_keys) ||
         (NULL == unifyfs_vals) ||
         (NULL == unifyfs_key_lens) ||
         (NULL == unifyfs_val_lens)) {
-        return (int)UNIFYFS_ERROR_NOMEM;
+        LOGERR("failed to allocate memory for file extents");
+        ret = (int)UNIFYFS_ERROR_NOMEM;
+        goto rm_cmd_fsync_exit;
     }
 
-    // file extents
+    /* create file extent key/values for insertion into MDHIM */
     for (i = 0; i < extent_num_entries; i++) {
-        unifyfs_keys[i]->fid = meta_payload[i].fid;
-        unifyfs_keys[i]->offset = meta_payload[i].file_pos;
+        /* for a key, we store the global file id and logical file offset */
+        unifyfs_key_t* key = unifyfs_keys[i];
+        key->fid    = meta_payload[i].fid;
+        key->offset = meta_payload[i].file_pos;
 
-        unifyfs_vals[i]->addr = meta_payload[i].log_pos;
-        unifyfs_vals[i]->len = meta_payload[i].length;
-        unifyfs_vals[i]->delegator_rank = glb_pmi_rank;
-        unifyfs_vals[i]->app_id = app_id;
-        unifyfs_vals[i]->rank = client_side_id;
+        /* for the value, we store the log position, the length,
+         * the host server (delegator rank), the mount point id (app id),
+         * and the client id (rank) */
+        unifyfs_val_t* val = unifyfs_vals[i];
+        val->addr           = meta_payload[i].log_pos;
+        val->len            = meta_payload[i].length;
+        val->delegator_rank = glb_pmi_rank;
+        val->app_id         = app_id;
+        val->rank           = client_side_id;
 
         LOGDBG("extent - fid:%d, offset:%zu, length:%zu, app:%d, clid:%d",
-               unifyfs_keys[i]->fid, unifyfs_keys[i]->offset,
-               unifyfs_vals[i]->len, unifyfs_vals[i]->app_id,
-               unifyfs_vals[i]->rank);
+               key->fid, key->offset,
+               val->len, val->app_id, val->rank);
 
+        /* MDHIM needs to know the byte size of each key and value */
         unifyfs_key_lens[i] = sizeof(unifyfs_key_t);
         unifyfs_val_lens[i] = sizeof(unifyfs_val_t);
     }
 
+    /* batch insert file extent key/values into MDHIM */
     ret = unifyfs_set_file_extents((int)extent_num_entries,
                                    unifyfs_keys, unifyfs_key_lens,
                                    unifyfs_vals, unifyfs_val_lens);
     if (ret != UNIFYFS_SUCCESS) {
-        // TODO: need proper error handling
+        /* TODO: need proper error handling */
         LOGERR("unifyfs_set_file_extents() failed");
         goto rm_cmd_fsync_exit;
     }
 
-    // file attributes
-    attr_num_entries = *(size_t*)
-        (app_config->shm_superblocks[client_side_id]
-         + app_config->fmeta_offset);
+    /* get number of file attribute values client has for us,
+     * stored as a size_t value in fmeta region of shared memory */
+    size_t attr_num_entries = *(size_t*)(fmeta);
 
-    /*
-     * file attributes are stored in the superblock shared memory
-     * created by the client
-     */
-    unifyfs_file_attr_t* attr_payload = (unifyfs_file_attr_t*)
-        (app_config->shm_superblocks[client_side_id]
-         + app_config->fmeta_offset + page_sz);
+    /* file attributes are stored in the superblock shared memory
+     * created by the client */
+    char* ptr_fattr = fmeta + page_sz;
+    unifyfs_file_attr_t* attr_payload = (unifyfs_file_attr_t*)(ptr_fattr);
 
-    // allocate storage for values
-    // TODO: possibly get this from memory pool
-    fattr_keys = alloc_attr_key_array(attr_num_entries);
-    fattr_vals = calloc(attr_num_entries, sizeof(unifyfs_file_attr_t*));
+    /* allocate storage for file attribute key/values */
+    /* TODO: possibly get this from memory pool */
+    fattr_keys     = alloc_attr_key_array(attr_num_entries);
+    fattr_vals     = calloc(attr_num_entries, sizeof(unifyfs_file_attr_t*));
     fattr_key_lens = calloc(attr_num_entries, sizeof(int));
     fattr_val_lens = calloc(attr_num_entries, sizeof(int));
     if ((NULL == fattr_keys) ||
         (NULL == fattr_vals) ||
         (NULL == fattr_key_lens) ||
         (NULL == fattr_val_lens)) {
+        LOGERR("failed to allocate memory for file attributes");
         ret = (int)UNIFYFS_ERROR_NOMEM;
         goto rm_cmd_fsync_exit;
     }
 
+    /* create file attribute key/values for insertion into MDHIM */
     for (i = 0; i < attr_num_entries; i++) {
+        /* for a key, we use the global file id */
         *fattr_keys[i] = attr_payload[i].gfid;
+
+        /* for the value, we'll store a file_attr structure */
         fattr_vals[i] = &(attr_payload[i]);
+
+        /* MDHIM needs to know the byte size of each key and value */
         fattr_key_lens[i] = sizeof(fattr_key_t);
         fattr_val_lens[i] = sizeof(fattr_val_t);
     }
 
+    /* batch insert file attribute key/values into MDHIM */
     ret = unifyfs_set_file_attributes((int)attr_num_entries,
                                       fattr_keys, fattr_key_lens,
                                       fattr_vals, fattr_val_lens);
     if (ret != UNIFYFS_SUCCESS) {
-        // TODO: need proper error handling
+        /* TODO: need proper error handling */
+        LOGERR("unifyfs_set_file_attributes() failed");
         goto rm_cmd_fsync_exit;
     }
 
 rm_cmd_fsync_exit:
-    // clean up memory
+    /* clean up memory */
 
     if (NULL != unifyfs_keys) {
         free_key_array(unifyfs_keys);
