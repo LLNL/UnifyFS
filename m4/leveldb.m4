@@ -3,13 +3,15 @@ AC_DEFUN([UNIFYFS_AC_LEVELDB], [
   LEVELDB_OLD_CFLAGS=$CFLAGS
   LEVELDB_OLD_LDFLAGS=$LDFLAGS
 
-  AC_ARG_WITH([leveldb], [AC_HELP_STRING([--with-leveldb=PATH],
-    [path to installed libleveldb [default=/usr/local]])], [
-    LEVELDB_CFLAGS="-I${withval}/include"
-    LEVELDB_LDFLAGS="-L${withval}/lib -L${withval}/lib64"
+  AC_ARG_VAR([LEVELDB_ROOT], [Set the path to the LevelDB installation Directory])
+
+  AS_IF([test -n "$LEVELDB_ROOT"],[
+    AC_MSG_NOTICE([LEVELDB_ROOT is set, checking for LevelDB in $LEVELDB_ROOT])
+    LEVELDB_CFLAGS="-I${LEVELDB_ROOT}/include"
+    LEVELDB_LDFLAGS="-L${LEVELDB_ROOT}/lib -L${LEVELDB_ROOT}/lib64"
     CFLAGS="$CFLAGS ${LEVELDB_CFLAGS}"
     LDFLAGS="$LDFLAGS ${LEVELDB_LDFLAGS}"
-  ], [])
+  ],[])
 
   AC_CHECK_LIB([leveldb], [leveldb_open],
     [LEVELDB_LIBS="-lleveldb"
@@ -17,7 +19,7 @@ AC_DEFUN([UNIFYFS_AC_LEVELDB], [
      AC_SUBST(LEVELDB_LDFLAGS)
      AC_SUBST(LEVELDB_LIBS)
     ],
-    [AC_MSG_ERROR([couldn't find a suitable libleveldb, use --with-leveldb=PATH])],
+    [AC_MSG_ERROR([couldn't find a suitable libleveldb, use LEVELDB_ROOT to set the path to the flatcc installation directory.])],
     []
   )
 

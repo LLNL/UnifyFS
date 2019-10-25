@@ -1,21 +1,51 @@
 libexec_PROGRAMS = \
-  cr-posix cr-gotcha cr-static \
-  read-posix read-gotcha read-static \
-  write-posix write-gotcha write-static \
-  writeread-posix writeread-gotcha writeread-static \
-  sysio-write-gotcha sysio-write-static \
-  sysio-read-gotcha sysio-read-static \
-  sysio-writeread-gotcha sysio-writeread-static sysio-writeread-posix \
-  sysio-writeread2-gotcha sysio-writeread2-static \
-  sysio-dir-gotcha sysio-dir-static \
-  sysio-stat-gotcha sysio-stat-static \
-  sysio-cp-gotcha sysio-cp-static \
-  app-mpiio-gotcha app-mpiio-static \
-  app-btio-gotcha app-btio-static \
-  app-tileio-gotcha app-tileio-static \
-  transfer-gotcha transfer-static \
-  size-gotcha size-static \
-  chmod-gotcha chmod-static
+  cr-posix \
+  read-posix \
+  write-posix \
+  writeread-posix \
+  sysio-writeread-posix
+
+if HAVE_LD_WRAP
+  libexec_PROGRAMS += \
+  cr-static \
+  read-static \
+  write-static \
+  writeread-static \
+  sysio-write-static \
+  sysio-read-static \
+  sysio-writeread-static \
+  sysio-writeread2-static \
+  sysio-dir-static \
+  sysio-stat-static \
+  sysio-cp-static \
+  app-mpiio-static \
+  app-btio-static \
+  app-tileio-static \
+  transfer-static \
+  size-static \
+  chmod-static
+endif
+
+if HAVE_GOTCHA
+  libexec_PROGRAMS += \
+    cr-gotcha \
+    read-gotcha \
+    write-gotcha \
+    writeread-gotcha \
+    sysio-write-gotcha \
+    sysio-read-gotcha \
+    sysio-writeread-gotcha \
+    sysio-writeread2-gotcha \
+    sysio-dir-gotcha \
+    sysio-stat-gotcha \
+    sysio-cp-gotcha \
+    app-mpiio-gotcha \
+    app-btio-gotcha \
+    app-tileio-gotcha \
+    transfer-gotcha \
+    size-gotcha \
+    chmod-gotcha
+endif
 
 if HAVE_FORTRAN
 libexec_PROGRAMS += \
