@@ -511,11 +511,25 @@ static int unifyfs_logio_chunk_write(
          * compute offset within spill over file */
         off_t spill_offset = unifyfs_compute_spill_offset(meta, chunk_id, chunk_offset);
 
-        /* write data into file at appropriate offset */
+        /* write data into file at appropriate offset,
+         * loop to keep trying short writes */
         //MAP_OR_FAIL(pwrite);
-        ssize_t rc = __real_pwrite(unifyfs_spilloverblock, buf, count, spill_offset);
-        if (rc < 0)  {
-            LOGERR("pwrite failed: errno=%d (%s)", errno, strerror(errno));
+        size_t nwritten = 0;
+        while (nwritten < count) {
+            /* attempt to write */
+            void* bufpos = (void*)((char*)buf + nwritten);
+            size_t remaining = count - nwritten;
+            off_t filepos = spill_offset + (off_t)nwritten;
+            errno = 0;
+            ssize_t rc = __real_pwrite(unifyfs_spilloverblock,
+                bufpos, remaining, filepos);
+            if (rc < 0)  {
+                LOGERR("pwrite failed: errno=%d (%s)", errno, strerror(errno));
+                return UNIFYFS_ERROR_IO;
+            }
+
+            /* wrote without an error, total up bytes written so far */
+            nwritten += (size_t)rc;
         }
 
         /* record byte offset position within log, for spill over
