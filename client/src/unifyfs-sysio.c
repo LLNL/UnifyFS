@@ -425,6 +425,7 @@ int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
  * instead of using the absolute value 3.
  */
 
+#ifdef HAVE___XSTAT
 int UNIFYFS_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
 {
     LOGDBG("xstat was called for %s", path);
@@ -441,7 +442,9 @@ int UNIFYFS_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
         return ret;
     }
 }
+#endif
 
+#ifdef HAVE___LXSTAT
 int UNIFYFS_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
 {
     LOGDBG("lxstat was called for %s", path);
@@ -457,7 +460,9 @@ int UNIFYFS_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
         return UNIFYFS_REAL(__lxstat)(vers, path, buf);
     }
 }
+#endif
 
+#ifdef HAVE___FXSTAT
 int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
 {
     LOGDBG("fxstat was called for fd %d", fd);
@@ -479,6 +484,7 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
         return UNIFYFS_REAL(__fxstat)(vers, fd, buf);
     }
 }
+#endif
 
 /* ---------------------------------------
  * POSIX wrappers: file descriptors
@@ -744,6 +750,7 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
     }
 }
 
+#ifdef HAVE_OPEN64
 int UNIFYFS_WRAP(open64)(const char* path, int flags, ...)
 {
     /* if O_CREAT is set, we should also have some mode flags */
@@ -775,6 +782,7 @@ int UNIFYFS_WRAP(open64)(const char* path, int flags, ...)
 
     return ret;
 }
+#endif
 
 int UNIFYFS_WRAP(__open_2)(const char* path, int flags, ...)
 {
@@ -897,6 +905,7 @@ off64_t UNIFYFS_WRAP(lseek64)(int fd, off64_t offset, int whence)
     }
 }
 
+#ifdef HAVE_POSIX_FADVISE
 int UNIFYFS_WRAP(posix_fadvise)(int fd, off_t offset, off_t len, int advice)
 {
     /* check whether we should intercept this file descriptor */
@@ -945,6 +954,7 @@ int UNIFYFS_WRAP(posix_fadvise)(int fd, off_t offset, off_t len, int advice)
         return ret;
     }
 }
+#endif
 
 ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
 {
@@ -1091,6 +1101,7 @@ ssize_t UNIFYFS_WRAP(writev)(int fd, const struct iovec* iov, int iovcnt)
     }
 }
 
+#ifdef HAVE_LIO_LISTIO
 int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
                              int nitems, struct sigevent* sevp)
 {
@@ -1185,6 +1196,7 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
     }
     return ret;
 }
+#endif
 
 /* order by file id then by file position */
 static int compare_index_entry(const void* a, const void* b)

@@ -1,11 +1,14 @@
-lib_LTLIBRARIES = libunifyfs.la libunifyfs_gotcha.la
+lib_LTLIBRARIES = libunifyfs.la
+libunifyfsdir = $(includedir)
+
+if HAVE_GOTCHA
+lib_LTLIBRARIES += libunifyfs_gotcha.la
+libunifyfs_gotchadir = $(includedir)
+endif
 
 if HAVE_FORTRAN
 lib_LTLIBRARIES += libunifyfsf.la
 endif
-
-libunifyfsdir = $(includedir)
-libunifyfs_gotchadir = $(includedir)
 
 AM_CFLAGS = -Wall -Wno-strict-aliasing
 
@@ -69,11 +72,15 @@ libunifyfs_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS)
 libunifyfs_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS)
 libunifyfs_la_LIBADD   = $(CLIENT_COMMON_LIBADD)
 
+if HAVE_GOTCHA
+
 libunifyfs_gotcha_la_SOURCES  = $(CLIENT_COMMON_SOURCES) gotcha_map_unifyfs_list.h
 libunifyfs_gotcha_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS) -DUNIFYFS_GOTCHA
 libunifyfs_gotcha_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS) $(GOTCHA_CFLAGS)
 libunifyfs_gotcha_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS) $(GOTCHA_LDFLAGS)
 libunifyfs_gotcha_la_LIBADD   = $(CLIENT_COMMON_LIBADD) -lgotcha
+
+endif
 
 if HAVE_FORTRAN
 

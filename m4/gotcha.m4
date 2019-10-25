@@ -14,10 +14,14 @@ AC_DEFUN([UNIFYFS_AC_GOTCHA], [
   ], [])
 
   AC_CHECK_LIB([gotcha], [gotcha_wrap],
-    [AC_SUBST(GOTCHA_CFLAGS)
-     AC_SUBST(GOTCHA_LDFLAGS)
+    [
+      AC_SUBST(GOTCHA_CFLAGS)
+      AC_SUBST(GOTCHA_LDFLAGS)
+      AM_CONDITIONAL([HAVE_GOTCHA], [true])
+    ],[
+      AC_MSG_WARN([couldn't find a suitable libgotcha, use --with-gotcha=PATH])
+      AM_CONDITIONAL([HAVE_GOTCHA], [false])
     ],
-    [AC_MSG_ERROR([couldn't find a suitable libgotcha, use --with-gotcha=PATH])],
     []
   )
 
