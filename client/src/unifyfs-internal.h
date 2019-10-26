@@ -310,11 +310,6 @@ typedef struct {
 } unifyfs_index_buf_t;
 
 typedef struct {
-    size_t* ptr_num_entries;
-    unifyfs_file_attr_t* meta_entry;
-} unifyfs_fattr_buf_t;
-
-typedef struct {
     read_req_t read_reqs[UNIFYFS_MAX_READ_CNT];
     int count;
 } read_req_set_t;
@@ -330,7 +325,6 @@ extern int client_sockfd;
 extern struct pollfd cmd_fd;
 extern void* shm_req_buf;
 extern void* shm_recv_buf;
-extern unifyfs_fattr_buf_t unifyfs_fattrs;
 
 extern int app_id;
 extern size_t unifyfs_key_slice_range;

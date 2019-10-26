@@ -214,10 +214,6 @@ static void unifyfs_mount_rpc(hg_handle_t handle)
         tmp_config->meta_offset = in.meta_offset;
         tmp_config->meta_size   = in.meta_size;
 
-        /* record offset and size of file meta data entries */
-        tmp_config->fmeta_offset = in.fmeta_offset;
-        tmp_config->fmeta_size   = in.fmeta_size;
-
         /* record offset and size of file data */
         tmp_config->data_offset = in.data_offset;
         tmp_config->data_size   = in.data_size;

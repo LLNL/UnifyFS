@@ -30,8 +30,6 @@ MERCURY_GEN_PROC(unifyfs_mount_in_t,
                  ((hg_size_t)(superblock_sz))
                  ((hg_size_t)(meta_offset))
                  ((hg_size_t)(meta_size))
-                 ((hg_size_t)(fmeta_offset))
-                 ((hg_size_t)(fmeta_size))
                  ((hg_size_t)(data_offset))
                  ((hg_size_t)(data_size))
                  ((hg_const_string_t)(external_spill_dir)))
