@@ -74,7 +74,6 @@
     UNIFYFS_CFG_CLI(log, file, STRING, unifyfsd.log, "log file name", NULL, 'l', "specify log file name") \
     UNIFYFS_CFG_CLI(log, dir, STRING, LOGDIR, "log file directory", configurator_directory_check, 'L', "specify full path to directory to contain log file") \
     UNIFYFS_CFG(logfs, index_buf_size, INT, UNIFYFS_INDEX_BUF_SIZE, "log file system index buffer size", NULL) \
-    UNIFYFS_CFG(logfs, attr_buf_size, INT, UNIFYFS_FATTR_BUF_SIZE, "log file system file attributes buffer size", NULL) \
     UNIFYFS_CFG(margo, tcp, BOOL, on, "use TCP for server-server margo RPCs", NULL) \
     UNIFYFS_CFG(meta, db_name, STRING, META_DEFAULT_DB_NAME, "metadata database name", NULL) \
     UNIFYFS_CFG(meta, db_path, STRING, RUNDIR, "metadata database path", configurator_directory_check) \
