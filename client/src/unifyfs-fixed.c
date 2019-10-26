@@ -40,6 +40,7 @@
  * Please also read this file LICENSE.CRUISE
  */
 
+#include "unifyfs-internal.h"
 #include "unifyfs-fixed.h"
 #include "unifyfs_log.h"
 #include "margo_client.h"
@@ -539,20 +540,12 @@ static int unifyfs_logio_chunk_write(
         log_offset = spill_offset + unifyfs_max_chunks * (1 << unifyfs_chunk_bits);
     }
 
-    /* TODO: pass in gfid for this file or call function to look it up? */
-    /* find the corresponding file attr entry and update attr*/
-    unifyfs_file_attr_t tmp_meta_entry;
-    tmp_meta_entry.fid = fid;
-    unifyfs_file_attr_t* ptr_meta_entry
-        = (unifyfs_file_attr_t*)bsearch(&tmp_meta_entry,
-                                        unifyfs_fattrs.meta_entry,
-                                        *unifyfs_fattrs.ptr_num_entries,
-                                        sizeof(unifyfs_file_attr_t),
-                                        compare_fattr);
+    /* get global file id for this file */
+    int gfid = unifyfs_gfid_from_fid(fid);
 
     /* define an new index entry for this write operation */
     unifyfs_index_t cur_idx;
-    cur_idx.fid      = ptr_meta_entry->gfid;
+    cur_idx.fid      = gfid;
     cur_idx.file_pos = pos;
     cur_idx.log_pos  = log_offset;
     cur_idx.length   = count;

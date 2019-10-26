@@ -1793,21 +1793,12 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
      * */
 
     /* convert local fid to global fid */
-    unifyfs_file_attr_t tmp_meta_entry;
-    unifyfs_file_attr_t* ptr_meta_entry;
     for (i = 0; i < count; i++) {
-        /* look for global meta data for this local file id */
-        tmp_meta_entry.fid = read_reqs[i].fid;
-        ptr_meta_entry =
-            (unifyfs_file_attr_t*) bsearch(&tmp_meta_entry,
-                                           unifyfs_fattrs.meta_entry,
-                                           *unifyfs_fattrs.ptr_num_entries,
-                                           sizeof(unifyfs_file_attr_t),
-                                           compare_fattr);
-
-        /* replace local file id with global file id in request */
-        if (ptr_meta_entry != NULL) {
-            read_reqs[i].fid = ptr_meta_entry->gfid;
+        /* get global file id for each request */
+        int gfid = unifyfs_gfid_from_fid(read_reqs[i].fid);
+        if (gfid != -1) {
+            /* replace local file id with global file id in request */
+            read_reqs[i].fid = gfid;
         } else {
             /* failed to find gfid for this request */
             return UNIFYFS_ERROR_BADF;
@@ -1863,7 +1854,7 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
         free(buffer);
     } else {
         /* got a single read request */
-        int gfid = ptr_meta_entry->gfid;
+        int gfid = read_req_set.read_reqs[0].fid;
         size_t offset = read_req_set.read_reqs[0].offset;
         size_t length = read_req_set.read_reqs[0].length;
         LOGDBG("read: offset:%zu, len:%zu", offset, length);
@@ -2048,31 +2039,6 @@ int UNIFYFS_WRAP(ftruncate)(int fd, off_t length)
     }
 }
 
-/* get the gfid for use in fsync wrapper
- * TODO: maybe move this somewhere else */
-uint32_t get_gfid(int fid)
-{
-    unifyfs_file_attr_t target;
-    target.fid = fid;
-
-    const void* entries = unifyfs_fattrs.meta_entry;
-    size_t num  = *unifyfs_fattrs.ptr_num_entries;
-    size_t size = sizeof(unifyfs_file_attr_t);
-
-    unifyfs_file_attr_t* entry =
-        (unifyfs_file_attr_t*) bsearch(&target, entries, num, size,
-                                       compare_fattr);
-
-    uint32_t gfid;
-    if (entry != NULL) {
-        gfid = (uint32_t)entry->gfid;
-    } else {
-        return -1;
-    }
-
-    return gfid;
-}
-
 int UNIFYFS_WRAP(fsync)(int fd)
 {
     /* check whether we should intercept this file descriptor */
@@ -2102,7 +2068,7 @@ int UNIFYFS_WRAP(fsync)(int fd)
         }
 
         /* invoke fsync rpc to register index metadata with server */
-        int gfid = get_gfid(fid);
+        int gfid = unifyfs_gfid_from_fid(fid);
         int ret = invoke_client_fsync_rpc(gfid);
         if (ret != UNIFYFS_SUCCESS) {
             /* sync failed for some reason, set errno and return error */

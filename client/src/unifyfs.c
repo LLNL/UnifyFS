@@ -687,7 +687,7 @@ int unifyfs_gfid_from_fid(const int fid)
 {
     /* check that local file id is in range */
     if (fid < 0 || fid >= unifyfs_max_files) {
-        return -EINVAL;
+        return -1;
     }
 
     /* lookup file name structure for this local file id */
@@ -699,7 +699,7 @@ int unifyfs_gfid_from_fid(const int fid)
         return gfid;
     }
 
-    return -EINVAL;
+    return -1;
 }
 
 /* Given a fid, return the path.  */
@@ -2205,22 +2205,6 @@ static int unifyfs_init_socket(int proc_id, int l_num_procs_per_node,
     return 0;
 }
 #endif // UNIFYFS_USE_DOMAIN_SOCKET
-
-int compare_fattr(const void* a, const void* b)
-{
-    const unifyfs_file_attr_t* ptr_a = a;
-    const unifyfs_file_attr_t* ptr_b = b;
-
-    if (ptr_a->fid > ptr_b->fid) {
-        return 1;
-    }
-
-    if (ptr_a->fid < ptr_b->fid) {
-        return -1;
-    }
-
-    return 0;
-}
 
 static int compare_int(const void* a, const void* b)
 {
