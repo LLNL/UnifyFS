@@ -783,48 +783,6 @@ off_t unifyfs_fid_log_size(int fid)
     return meta->log_size;
 }
 
-/*
- * insert file attribute to attributed shared memory buffer,
- * keep entries ordered by file id
- */
-static int ins_file_meta(unifyfs_fattr_buf_t* ptr_f_meta_log,
-                         unifyfs_file_attr_t* ins_fattr)
-{
-    /* get pointer to start of stat structures in shared memory buffer */
-    unifyfs_file_attr_t* meta_entry = ptr_f_meta_log->meta_entry;
-
-    /* get number of active entries currently in the buffer */
-    int meta_cnt = *(ptr_f_meta_log->ptr_num_entries);
-
-    /* TODO: Improve the search time */
-    /* search backwards until we find an entry whose
-     * file id is less than the current file id */
-    int i;
-    for (i = meta_cnt - 1; i >= 0; i--) {
-        if (meta_entry[i].fid <= ins_fattr->fid) {
-            /* sort in acsending order */
-            break;
-        }
-    }
-
-    /* compute position to store stat info for this file */
-    int ins_pos = i + 1;
-
-    /* we need to move some entries up a slot to make room
-     * for this one */
-    for (i = meta_cnt - 1; i >= ins_pos; i--) {
-        meta_entry[i + 1] = meta_entry[i];
-    }
-
-    /* insert stat data for this file into buffer */
-    meta_entry[ins_pos] = *ins_fattr;
-
-    /* increment our count of active entries */
-    (*ptr_f_meta_log->ptr_num_entries)++;
-
-    return 0;
-}
-
 unifyfs_filemeta_t* meta;
 int unifyfs_set_global_file_meta(int fid, int gfid)
 {
@@ -868,8 +826,6 @@ int unifyfs_set_global_file_meta(int fid, int gfid)
     if (ret < 0) {
         return ret;
     }
-
-    ins_file_meta(&unifyfs_fattrs, &new_fmeta);
 
     return 0;
 }
@@ -1318,8 +1274,6 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         meta->local_size = 0;
         gfattr.fid = fid;
         gfattr.gfid = gfid;
-
-        ins_file_meta(&unifyfs_fattrs, &gfattr);
     } else if (found_local && found_global) {
         /* file exists and is valid.  */
         if ((flags & O_CREAT) && (flags & O_EXCL)) {
