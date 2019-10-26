@@ -218,22 +218,6 @@ unifyfs_key_t** alloc_key_array(int elems)
     return (unifyfs_key_t**)mem_block;
 }
 
-fattr_key_t** alloc_attr_key_array(int elems)
-{
-    int size = elems * (sizeof(fattr_key_t*) + sizeof(fattr_key_t));
-
-    void* mem_block = calloc(size, sizeof(char));
-
-    fattr_key_t** array_ptr = mem_block;
-    fattr_key_t* key_ptr = (fattr_key_t*)(array_ptr + elems);
-
-    for (int i = 0; i < elems; i++) {
-        array_ptr[i] = &key_ptr[i];
-    }
-
-    return (fattr_key_t**)mem_block;
-}
-
 unifyfs_val_t** alloc_value_array(int elems)
 {
     int size = elems * (sizeof(unifyfs_val_t*) + sizeof(unifyfs_val_t));
@@ -256,11 +240,6 @@ void free_key_array(unifyfs_key_t** array)
 }
 
 void free_value_array(unifyfs_val_t** array)
-{
-    free(array);
-}
-
-void free_attr_key_array(fattr_key_t** array)
 {
     free(array);
 }
@@ -806,7 +785,7 @@ int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl)
 }
 
 /*
- * synchronize all the indices and file attributes
+ * synchronize all the indices
  * to the key-value store
  *
  * @param app_id: the application id
@@ -827,12 +806,6 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
     int* unifyfs_key_lens        = NULL;
     int* unifyfs_val_lens        = NULL;
 
-    /* pointers to memory we'll dynamically allocate for file attributes */
-    fattr_key_t** fattr_keys         = NULL;
-    unifyfs_file_attr_t** fattr_vals = NULL;
-    int* fattr_key_lens              = NULL;
-    int* fattr_val_lens              = NULL;
-
     /* get memory page size on this machine */
     int page_sz = getpagesize();
 
@@ -845,9 +818,6 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
 
     /* get pointer to start of key/value region in superblock */
     char* meta = superblk + app_config->meta_offset;
-
-    /* get pointer to start of file attribute region in superblock */
-    char* fmeta = superblk + app_config->fmeta_offset;
 
     /* get number of file extent index values client has for us,
      * stored as a size_t value in meta region of shared memory */
@@ -910,53 +880,6 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
         goto rm_cmd_fsync_exit;
     }
 
-    /* get number of file attribute values client has for us,
-     * stored as a size_t value in fmeta region of shared memory */
-    size_t attr_num_entries = *(size_t*)(fmeta);
-
-    /* file attributes are stored in the superblock shared memory
-     * created by the client */
-    char* ptr_fattr = fmeta + page_sz;
-    unifyfs_file_attr_t* attr_payload = (unifyfs_file_attr_t*)(ptr_fattr);
-
-    /* allocate storage for file attribute key/values */
-    /* TODO: possibly get this from memory pool */
-    fattr_keys     = alloc_attr_key_array(attr_num_entries);
-    fattr_vals     = calloc(attr_num_entries, sizeof(unifyfs_file_attr_t*));
-    fattr_key_lens = calloc(attr_num_entries, sizeof(int));
-    fattr_val_lens = calloc(attr_num_entries, sizeof(int));
-    if ((NULL == fattr_keys) ||
-        (NULL == fattr_vals) ||
-        (NULL == fattr_key_lens) ||
-        (NULL == fattr_val_lens)) {
-        LOGERR("failed to allocate memory for file attributes");
-        ret = (int)UNIFYFS_ERROR_NOMEM;
-        goto rm_cmd_fsync_exit;
-    }
-
-    /* create file attribute key/values for insertion into MDHIM */
-    for (i = 0; i < attr_num_entries; i++) {
-        /* for a key, we use the global file id */
-        *fattr_keys[i] = attr_payload[i].gfid;
-
-        /* for the value, we'll store a file_attr structure */
-        fattr_vals[i] = &(attr_payload[i]);
-
-        /* MDHIM needs to know the byte size of each key and value */
-        fattr_key_lens[i] = sizeof(fattr_key_t);
-        fattr_val_lens[i] = sizeof(unifyfs_file_attr_t);
-    }
-
-    /* batch insert file attribute key/values into MDHIM */
-    ret = unifyfs_set_file_attributes((int)attr_num_entries,
-                                      fattr_keys, fattr_key_lens,
-                                      fattr_vals, fattr_val_lens);
-    if (ret != UNIFYFS_SUCCESS) {
-        /* TODO: need proper error handling */
-        LOGERR("unifyfs_set_file_attributes() failed");
-        goto rm_cmd_fsync_exit;
-    }
-
 rm_cmd_fsync_exit:
     /* clean up memory */
 
@@ -974,22 +897,6 @@ rm_cmd_fsync_exit:
 
     if (NULL != unifyfs_val_lens) {
         free(unifyfs_val_lens);
-    }
-
-    if (NULL != fattr_keys) {
-        free_attr_key_array(fattr_keys);
-    }
-
-    if (NULL != fattr_vals) {
-        free(fattr_vals);
-    }
-
-    if (NULL != fattr_key_lens) {
-        free(fattr_key_lens);
-    }
-
-    if (NULL != fattr_val_lens) {
-        free(fattr_val_lens);
     }
 
     return ret;
