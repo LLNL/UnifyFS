@@ -131,8 +131,6 @@ typedef struct {
     size_t superblock_sz; /* size of memory region used to store data */
     size_t meta_offset;   /* superblock offset to index metadata */
     size_t meta_size;     /* size of index metadata region in bytes */
-    size_t fmeta_offset;  /* superblock offset to file attribute metadata */
-    size_t fmeta_size;    /* size of file attribute metadata region in bytes */
     size_t data_offset;   /* superblock offset to data log */
     size_t data_size;     /* size of data log in bytes */
     size_t req_buf_sz;    /* buffer size for client to issue read requests */

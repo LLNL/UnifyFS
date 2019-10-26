@@ -71,7 +71,6 @@ static int unifyfs_fpos_enabled   = 1;  /* whether we can use fgetpos/fsetpos */
 unifyfs_cfg_t client_cfg;
 
 unifyfs_index_buf_t unifyfs_indices;
-unifyfs_fattr_buf_t unifyfs_fattrs;
 static size_t unifyfs_index_buf_size;    /* size of metadata log */
 static size_t unifyfs_fattr_buf_size;
 unsigned long unifyfs_max_index_entries; /* max metadata log entries */
@@ -1436,12 +1435,6 @@ int unifyfs_fid_unlink(int fid)
  *  - array of index metadata to track physical offset
  *    of logical file data, of length unifyfs_max_index_entries,
  *    entries added during write operations
- *
- *  - count of number of active file metadata entries
- *  - array of file metadata to track stat info for each
- *    file, of length unifyfs_max_fattr_entries, filed
- *    in by client and read by server to record file meta
- *    data
  */
 
 /* compute memory size of superblock in bytes,
@@ -1494,10 +1487,6 @@ static size_t unifyfs_superblock_size(void)
     /* index region size */
     sb_size += unifyfs_page_size;
     sb_size += unifyfs_max_index_entries * sizeof(unifyfs_index_t);
-
-    /* attribute region size */
-    sb_size += unifyfs_page_size;
-    sb_size += unifyfs_max_fattr_entries * sizeof(unifyfs_file_attr_t);
 
     /* return number of bytes */
     return sb_size;
@@ -1576,14 +1565,6 @@ static void* unifyfs_init_pointers(void* superblock)
     unifyfs_indices.index_entry = (unifyfs_index_t*)ptr;
     ptr += unifyfs_max_index_entries * sizeof(unifyfs_index_t);
 
-    /* pointer to number of file metadata entries */
-    unifyfs_fattrs.ptr_num_entries = (size_t*)ptr;
-
-    /* pointer to array of file metadata entries */
-    ptr += unifyfs_page_size;
-    unifyfs_fattrs.meta_entry = (unifyfs_file_attr_t*)ptr;
-    ptr += unifyfs_max_fattr_entries * sizeof(unifyfs_file_attr_t);
-
     /* compute size of memory we're using and check that
      * it matches what we allocated */
     size_t ptr_size = (size_t)(ptr - (char*)superblock);
@@ -1633,9 +1614,6 @@ static int unifyfs_init_structures()
 
     /* initialize count of key/value entries */
     *(unifyfs_indices.ptr_num_entries) = 0;
-
-    /* initialize count of file stat structures */
-    *(unifyfs_fattrs.ptr_num_entries) = 0;
 
     LOGDBG("Meta-stacks initialized!");
 
@@ -2000,11 +1978,6 @@ void fill_client_mount_info(unifyfs_mount_in_t* in)
     size_t meta_size   = unifyfs_max_index_entries
                          * sizeof(unifyfs_index_t);
 
-    size_t fmeta_offset = (char*)unifyfs_fattrs.ptr_num_entries -
-                          (char*)shm_super_buf;
-    size_t fmeta_size   = unifyfs_max_fattr_entries
-                          * sizeof(unifyfs_file_attr_t);
-
     size_t data_offset = (char*)unifyfs_chunks - (char*)shm_super_buf;
     size_t data_size   = (size_t)unifyfs_max_chunks * unifyfs_chunk_size;
 
@@ -2017,8 +1990,6 @@ void fill_client_mount_info(unifyfs_mount_in_t* in)
     in->superblock_sz      = shm_super_size;
     in->meta_offset        = meta_offset;
     in->meta_size          = meta_size;
-    in->fmeta_offset       = fmeta_offset;
-    in->fmeta_size         = fmeta_size;
     in->data_offset        = data_offset;
     in->data_size          = data_size;
     in->external_spill_dir = strdup(external_data_dir);
