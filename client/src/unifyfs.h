@@ -73,7 +73,6 @@ typedef struct {
 int unifyfs_mount(const char prefix[], int rank, size_t size,
                   int l_app_id);
 int unifyfs_unmount(void);
-int compare_fattr(const void* a, const void* b);
 
 /**
  * @brief transfer a single file between unifyfs and other file system. either
