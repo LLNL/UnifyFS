@@ -74,7 +74,6 @@ unifyfs_index_buf_t unifyfs_indices;
 static size_t unifyfs_index_buf_size;    /* size of metadata log */
 static size_t unifyfs_fattr_buf_size;
 unsigned long unifyfs_max_index_entries; /* max metadata log entries */
-unsigned int unifyfs_max_fattr_entries;
 int unifyfs_spillmetablock;
 
 int global_rank_cnt;  /* count of world ranks */
@@ -1812,20 +1811,6 @@ static int unifyfs_init(int rank)
         }
         unifyfs_max_index_entries =
             unifyfs_index_buf_size / sizeof(unifyfs_index_t);
-
-        /* define size of buffer used to cache stat structures
-         * for files we create before passing this info
-         * to the server */
-        unifyfs_fattr_buf_size = UNIFYFS_FATTR_BUF_SIZE;
-        cfgval = client_cfg.logfs_attr_buf_size;
-        if (cfgval != NULL) {
-            rc = configurator_int_val(cfgval, &l);
-            if (rc == 0) {
-                unifyfs_fattr_buf_size = (size_t)l;
-            }
-        }
-        unifyfs_max_fattr_entries =
-            unifyfs_fattr_buf_size / sizeof(unifyfs_file_attr_t);
 
         /* if we're using NUMA, process some configuration settings */
 #ifdef HAVE_LIBNUMA
