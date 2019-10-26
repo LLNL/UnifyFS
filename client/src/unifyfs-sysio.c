@@ -2103,7 +2103,15 @@ int UNIFYFS_WRAP(fsync)(int fd)
 
         /* invoke fsync rpc to register index metadata with server */
         int gfid = get_gfid(fid);
-        invoke_client_fsync_rpc(gfid);
+        int ret = invoke_client_fsync_rpc(gfid);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* sync failed for some reason, set errno and return error */
+            errno = unifyfs_err_map_to_errno(ret);
+            return -1;
+        }
+
+        /* server has processed entries in index buffer, reset it */
+        *(unifyfs_indices.ptr_num_entries) = 0;
 
         meta->needs_sync = 0;
         return 0;

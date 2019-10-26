@@ -591,8 +591,10 @@ static int unifyfs_logio_chunk_write(
                 return UNIFYFS_ERROR_IO;
             }
 
-            /* flushed, refresh number of entries and number remaining */
-            num_entries = *(unifyfs_indices.ptr_num_entries);
+            /* flushed, clear buffer and refresh number of entries
+             * and number remaining */
+            num_entries = 0;
+            *(unifyfs_indices.ptr_num_entries) = num_entries;
             remaining_entries = unifyfs_max_index_entries - num_entries;
         }
 
