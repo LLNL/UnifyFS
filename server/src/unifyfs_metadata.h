@@ -40,13 +40,13 @@
  */
 typedef struct {
     /** global file id */
-    int fid;
+    int gfid;
     /** logical file offset */
     size_t offset;
 } unifyfs_key_t;
 
 #define UNIFYFS_KEY_SZ (sizeof(unifyfs_key_t))
-#define UNIFYFS_KEY_FID(keyp) (((unifyfs_key_t*)keyp)->fid)
+#define UNIFYFS_KEY_FID(keyp) (((unifyfs_key_t*)keyp)->gfid)
 #define UNIFYFS_KEY_OFF(keyp) (((unifyfs_key_t*)keyp)->offset)
 
 typedef struct {

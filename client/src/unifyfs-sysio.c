@@ -1189,8 +1189,8 @@ static int compare_index_entry(const void* a, const void* b)
     const unifyfs_index_t* ptr_a = a;
     const unifyfs_index_t* ptr_b = b;
 
-    if (ptr_a->fid != ptr_b->fid) {
-        if (ptr_a->fid < ptr_b->fid) {
+    if (ptr_a->gfid != ptr_b->gfid) {
+        if (ptr_a->gfid < ptr_b->gfid) {
             return -1;
         } else {
             return 1;

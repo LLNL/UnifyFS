@@ -275,7 +275,7 @@ static int unifyfs_coalesce_index(
     long slice_size)           /* byte size of slice of key-value store */
 {
     /* check whether last index and next index refer to same file */
-    if (prev_idx->fid != next_idx->fid) {
+    if (prev_idx->gfid != next_idx->gfid) {
         /* two index values are for different files, can't combine */
         return UNIFYFS_SUCCESS;
     }
@@ -396,7 +396,7 @@ static int unifyfs_split_index(
 
         /* copy over all fields in current index,
          * update length field to adjust for boundary of first slice */
-        set[count].fid      = cur_idx->fid;
+        set[count].gfid     = cur_idx->gfid;
         set[count].file_pos = cur_idx->file_pos;
         set[count].length   = length;
         set[count].log_pos  = cur_idx->log_pos;
@@ -427,7 +427,7 @@ static int unifyfs_split_index(
             length = slice_range;
 
             /* define index for this slice */
-            set[count].fid      = cur_idx->fid;
+            set[count].gfid     = cur_idx->gfid;
             set[count].file_pos = cur_idx->file_pos;
             set[count].length   = length;
             set[count].log_pos  = cur_idx->log_pos;
@@ -453,7 +453,7 @@ static int unifyfs_split_index(
 
         /* this slice contains the remainder of write */
         length = cur_idx->length;
-        set[count].fid      = cur_idx->fid;
+        set[count].gfid     = cur_idx->gfid;
         set[count].file_pos = cur_idx->file_pos;
         set[count].length   = length;
         set[count].log_pos  = cur_idx->log_pos;
@@ -545,7 +545,7 @@ static int unifyfs_logio_chunk_write(
 
     /* define an new index entry for this write operation */
     unifyfs_index_t cur_idx;
-    cur_idx.fid      = gfid;
+    cur_idx.gfid     = gfid;
     cur_idx.file_pos = pos;
     cur_idx.log_pos  = log_offset;
     cur_idx.length   = count;
@@ -577,7 +577,7 @@ static int unifyfs_logio_chunk_write(
         /* if we have filled the key/value buffer, flush it to server */
         if (0 == remaining_entries) {
             /* index buffer is full, flush it */
-            int ret = invoke_client_fsync_rpc(cur_idx.fid);
+            int ret = invoke_client_fsync_rpc(cur_idx.gfid);
             if (ret != UNIFYFS_SUCCESS) {
                 /* something went wrong when trying to flush key/values */
                 LOGERR("failed to flush key/value index to server");

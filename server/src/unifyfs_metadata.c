@@ -59,21 +59,21 @@ void debug_log_key_val(const char* ctx,
                        unifyfs_val_t* val)
 {
     if ((key != NULL) && (val != NULL)) {
-        LOGDBG("@%s - key(fid=%d, offset=%lu), "
+        LOGDBG("@%s - key(gfid=%d, offset=%lu), "
                "val(del=%d, len=%lu, addr=%lu, app=%d, rank=%d)",
-               ctx, key->fid, key->offset,
+               ctx, key->gfid, key->offset,
                val->delegator_rank, val->len, val->addr,
                val->app_id, val->rank);
     } else if (key != NULL) {
-        LOGDBG("@%s - key(fid=%d, offset=%lu)",
-               ctx, key->fid, key->offset);
+        LOGDBG("@%s - key(gfid=%d, offset=%lu)",
+               ctx, key->gfid, key->offset);
     }
 }
 
 int unifyfs_key_compare(unifyfs_key_t* a, unifyfs_key_t* b)
 {
     assert((NULL != a) && (NULL != b));
-    if (a->fid == b->fid) {
+    if (a->gfid == b->gfid) {
         if (a->offset == b->offset) {
             return 0;
         } else if (a->offset < b->offset) {
@@ -81,7 +81,7 @@ int unifyfs_key_compare(unifyfs_key_t* a, unifyfs_key_t* b)
         } else {
             return 1;
         }
-    } else if (a->fid < b->fid) {
+    } else if (a->gfid < b->gfid) {
         return -1;
     } else {
         return 1;
@@ -161,8 +161,8 @@ void print_fsync_indices(unifyfs_key_t** keys,
 {
     size_t i;
     for (i = 0; i < num_entries; i++) {
-        LOGDBG("fid:%d, offset:%lu, addr:%lu, len:%lu, del_id:%d",
-               keys[i]->fid, keys[i]->offset,
+        LOGDBG("gfid:%d, offset:%lu, addr:%lu, len:%lu, del_id:%d",
+               keys[i]->gfid, keys[i]->offset,
                vals[i]->addr, vals[i]->len,
                vals[i]->delegator_rank);
     }

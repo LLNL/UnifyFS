@@ -183,8 +183,8 @@ static int compare_kv_gfid_rank(const void* a, const void* b)
     const unifyfs_keyval_t* kv_a = a;
     const unifyfs_keyval_t* kv_b = b;
 
-    int gfid_a = kv_a->key.fid;
-    int gfid_b = kv_b->key.fid;
+    int gfid_a = kv_a->key.gfid;
+    int gfid_b = kv_b->key.gfid;
     if (gfid_a == gfid_b) {
         int rank_a = kv_a->val.delegator_rank;
         int rank_b = kv_b->val.delegator_rank;
@@ -473,11 +473,11 @@ int rm_cmd_filesize(
     unifyfs_key_t key1, key2;
 
     /* create key to describe first byte we'll read */
-    key1.fid    = gfid;
+    key1.gfid   = gfid;
     key1.offset = offset;
 
     /* create key to describe last byte we'll read */
-    key2.fid    = gfid;
+    key2.gfid   = gfid;
     key2.offset = offset + length - 1;
 
     /* set up input params to specify range lookup */
@@ -617,11 +617,11 @@ int rm_cmd_read(
     unifyfs_key_t key1, key2;
 
     /* create key to describe first byte we'll read */
-    key1.fid    = gfid;
+    key1.gfid   = gfid;
     key1.offset = offset;
 
     /* create key to describe last byte we'll read */
-    key2.fid    = gfid;
+    key2.gfid   = gfid;
     key2.offset = offset + length - 1;
 
     unifyfs_key_t* unifyfs_keys[2] = {&key1, &key2};
@@ -678,28 +678,28 @@ int rm_cmd_mread(int app_id, int client_id,
 
     /* get chunks corresponding to requested client read extents */
     int rc, num_keys;
-    int fid = -1;
-    int last_fid = -1;
+    int gfid = -1;
+    int last_gfid = -1;
     int ndx = 0;
     size_t j, eoff, elen;
     for (j = 0; j < req_num; j++) {
-        fid = unifyfs_Extent_fid(unifyfs_Extent_vec_at(extents, j));
-        if (j && (fid != last_fid)) {
-            // create requests for all extents of last_fid
+        gfid = unifyfs_Extent_fid(unifyfs_Extent_vec_at(extents, j));
+        if (j && (gfid != last_gfid)) {
+            // create requests for all extents of last_gfid
             num_keys = ndx;
-            rc = create_gfid_chunk_reads(thrd_ctrl, last_fid, app_id,
+            rc = create_gfid_chunk_reads(thrd_ctrl, last_gfid, app_id,
                                          client_id, num_keys,
                                          unifyfs_keys, key_lens);
             if (rc != UNIFYFS_SUCCESS) {
-                LOGERR("Error creating chunk reads for gfid=%d", last_fid);
+                LOGERR("Error creating chunk reads for gfid=%d", last_gfid);
             }
-            // reset ndx for current fid
+            // reset ndx for current gfid
             ndx = 0;
         }
 
         eoff = unifyfs_Extent_offset(unifyfs_Extent_vec_at(extents, j));
         elen = unifyfs_Extent_length(unifyfs_Extent_vec_at(extents, j));
-        LOGDBG("gfid:%d, offset:%zu, length:%zu", fid, eoff, elen);
+        LOGDBG("gfid:%d, offset:%zu, length:%zu", gfid, eoff, elen);
 
         /* Generate a pair of keys for each read request, representing
          * the start and end offsets. MDHIM returns all key-value pairs that
@@ -714,24 +714,24 @@ int rm_cmd_mread(int app_id, int client_id,
         key_lens[ndx + 1] = sizeof(unifyfs_key_t);
 
         /* create key to describe first byte we'll read */
-        unifyfs_keys[ndx]->fid = fid;
+        unifyfs_keys[ndx]->gfid   = gfid;
         unifyfs_keys[ndx]->offset = eoff;
 
         /* create key to describe last byte we'll read */
-        unifyfs_keys[ndx + 1]->fid = fid;
+        unifyfs_keys[ndx + 1]->gfid   = gfid;
         unifyfs_keys[ndx + 1]->offset = eoff + elen - 1;
 
         ndx += 2;
-        last_fid = fid;
+        last_gfid = gfid;
     }
 
-    // create requests for all extents of last_fid
+    // create requests for all extents of last_gfid
     num_keys = ndx;
-    rc = create_gfid_chunk_reads(thrd_ctrl, last_fid, app_id,
+    rc = create_gfid_chunk_reads(thrd_ctrl, last_gfid, app_id,
                                  client_id, num_keys,
                                  unifyfs_keys, key_lens);
     if (rc != UNIFYFS_SUCCESS) {
-        LOGERR("Error creating chunk reads for gfid=%d", last_fid);
+        LOGERR("Error creating chunk reads for gfid=%d", last_gfid);
     }
 
     // cleanup
@@ -848,7 +848,7 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
     for (i = 0; i < extent_num_entries; i++) {
         /* for a key, we store the global file id and logical file offset */
         unifyfs_key_t* key = unifyfs_keys[i];
-        key->fid    = meta_payload[i].fid;
+        key->gfid   = meta_payload[i].gfid;
         key->offset = meta_payload[i].file_pos;
 
         /* for the value, we store the log position, the length,
@@ -861,8 +861,8 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
         val->app_id         = app_id;
         val->rank           = client_side_id;
 
-        LOGDBG("extent - fid:%d, offset:%zu, length:%zu, app:%d, clid:%d",
-               key->fid, key->offset,
+        LOGDBG("extent - gfid:%d, offset:%zu, length:%zu, app:%d, clid:%d",
+               key->gfid, key->offset,
                val->len, val->app_id, val->rank);
 
         /* MDHIM needs to know the byte size of each key and value */

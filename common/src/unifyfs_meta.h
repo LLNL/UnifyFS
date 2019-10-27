@@ -100,7 +100,7 @@ typedef struct {
     off_t file_pos; /* starting logical offset of data in file */
     off_t log_pos;  /* starting physical offset of data in log */
     size_t length;  /* length of data */
-    int fid;        /* global file id */
+    int gfid;       /* global file id */
 } unifyfs_index_t;
 
 /* Header for read request reply in client shared memory region.
