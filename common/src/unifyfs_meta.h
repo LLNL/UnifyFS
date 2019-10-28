@@ -42,7 +42,6 @@ typedef enum {
 } cmd_lst_t;
 
 typedef struct {
-    int fid;
     int gfid;
     char filename[UNIFYFS_MAX_FILENAME];
 

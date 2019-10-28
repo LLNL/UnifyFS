@@ -17,7 +17,6 @@ int unifyfs_set_file_attribute_test(void)
     unifyfs_file_attr_t fattr = {0};
 
     fattr.gfid = TEST_META_GFID_VALUE;
-    fattr.fid = TEST_META_FID_VALUE;
     snprintf(fattr.filename, sizeof(fattr.filename), TEST_META_FILE);
     fflush(NULL);
 
@@ -35,10 +34,9 @@ int unifyfs_get_file_attribute_test(void)
     rc = unifyfs_get_file_attribute(TEST_META_GFID_VALUE, &fattr);
     ok(UNIFYFS_SUCCESS == rc &&
         TEST_META_GFID_VALUE == fattr.gfid &&
-        TEST_META_FID_VALUE == fattr.fid &&
         (0 == strcmp(fattr.filename, TEST_META_FILE)),
-        "Retrieve file attributes (rc = %d, gfid = 0x%02X, fid = 0x%02X)",
-        rc, fattr.gfid, fattr.fid
+        "Retrieve file attributes (rc = %d, gfid = 0x%02X)",
+        rc, fattr.gfid
     );
     return 0;
 }
