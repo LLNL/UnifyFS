@@ -274,6 +274,7 @@ typedef struct {
 
     int storage;                     /* FILE_STORAGE type */
 
+    int gfid;                        /* global file id for this file */
     int needs_sync;                  /* have unsynced writes */
 
     off_t chunks;                   /* number of chunks allocated to file */
