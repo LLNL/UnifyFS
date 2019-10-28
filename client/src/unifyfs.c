@@ -774,20 +774,50 @@ off_t unifyfs_fid_log_size(int fid)
     return meta->log_size;
 }
 
-int unifyfs_set_global_file_meta(int fid, int gfid)
+int unifyfs_set_global_file_meta(int gfid, unifyfs_file_attr_t* gfattr)
 {
-    /* lookup local metadata for file */
-    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    /* check that we have an input buffer */
+    if (!gfattr) {
+        return UNIFYFS_FAILURE;
+    }
 
+    /* submit file attributes to global key/value store */
+    int ret = invoke_client_metaset_rpc(gfattr);
+    return ret;
+}
+
+int unifyfs_get_global_file_meta(int gfid, unifyfs_file_attr_t* gfattr)
+{
+    /* check that we have an output buffer to write to */
+    if (!gfattr) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* attempt to lookup file attributes in key/value store */
+    unifyfs_file_attr_t fmeta;
+    int ret = invoke_client_metaget_rpc(gfid, &fmeta);
+    if (ret == UNIFYFS_SUCCESS) {
+        /* found it, copy attributes to output struct */
+        *gfattr = fmeta;
+    }
+
+    return ret;
+}
+
+int unifyfs_set_global_file_meta_from_fid(int fid)
+{
     /* initialize an empty file attributes structure */
     unifyfs_file_attr_t fattr = {0};
+
+    /* lookup local metadata for file */
+    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
 
     /* copy our file name */
     const char* path = unifyfs_path_from_fid(fid);
     sprintf(fattr.filename, "%s", path);
 
     /* set global file id */
-    fattr.gfid = gfid;
+    fattr.gfid = meta->gfid;
 
     /* use current time for atime/mtime/ctime */
     struct timespec tp = {0};
@@ -820,29 +850,7 @@ int unifyfs_set_global_file_meta(int fid, int gfid)
     fattr.gid = getgid();
 
     /* submit file attributes to global key/value store */
-    int ret = invoke_client_metaset_rpc(&fattr);
-    if (ret < 0) {
-        return ret;
-    }
-
-    return UNIFYFS_SUCCESS;
-}
-
-int unifyfs_get_global_file_meta(int gfid, unifyfs_file_attr_t* gfattr)
-{
-    /* check that we have an output buffer to write to */
-    if (!gfattr) {
-        return UNIFYFS_FAILURE;
-    }
-
-    /* attempt to lookup file attributes in key/value store */
-    unifyfs_file_attr_t fmeta;
-    int ret = invoke_client_metaget_rpc(gfid, &fmeta);
-    if (ret == UNIFYFS_SUCCESS) {
-        /* found it, copy attributes to output struct */
-        *gfattr = fmeta;
-    }
-
+    int ret = unifyfs_set_global_file_meta(meta->gfid, &fattr);
     return ret;
 }
 
@@ -1010,8 +1018,8 @@ int unifyfs_fid_create_directory(const char* path)
     meta->mode = (meta->mode & ~S_IFREG) | S_IFDIR;
 
     /* insert global meta data for directory */
-    int ret = unifyfs_set_global_file_meta(fid, gfid);
-    if (ret) {
+    int ret = unifyfs_set_global_file_meta_from_fid(fid);
+    if (ret != UNIFYFS_SUCCESS) {
         LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
                path, fid);
         return (int) UNIFYFS_ERROR_IO;
@@ -1336,8 +1344,8 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         }
 
         /* insert file attribute for file in key-value store */
-        ret = unifyfs_set_global_file_meta(fid, gfid);
-        if (ret) {
+        ret = unifyfs_set_global_file_meta_from_fid(fid);
+        if (ret != UNIFYFS_SUCCESS) {
             LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
                    path, fid);
             return (int) UNIFYFS_ERROR_IO;
