@@ -2350,7 +2350,7 @@ static int __chmod(int fid, mode_t mode)
     meta->mode = meta->mode & ~0777;
     meta->mode = meta->mode | mode;
 
-    ret = unifyfs_set_global_file_meta(fid, gfid);
+    ret = unifyfs_set_global_file_meta_from_fid(fid);
     if (ret) {
         LOGERR("chmod: can't set global meta entry for %s (fid:%d)",
                path, fid);
