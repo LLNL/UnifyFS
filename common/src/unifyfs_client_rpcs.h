@@ -59,7 +59,6 @@ MERCURY_GEN_STRUCT_PROC(sys_timespec_t,
  * record key/value entry for this file */
 MERCURY_GEN_PROC(unifyfs_metaset_in_t,
                  ((hg_const_string_t)(filename))
-                 ((int32_t)(fid))
                  ((int32_t)(gfid))
                  ((uint32_t)(mode))
                  ((uint32_t)(uid))
@@ -81,7 +80,6 @@ MERCURY_GEN_PROC(unifyfs_metaget_in_t,
 MERCURY_GEN_PROC(unifyfs_metaget_out_t,
                  ((int32_t)(ret))
                  ((hg_const_string_t)(filename))
-                 ((int32_t)(fid))
                  ((int32_t)(gfid))
                  ((uint32_t)(mode))
                  ((uint32_t)(uid))

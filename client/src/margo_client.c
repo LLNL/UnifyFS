@@ -256,7 +256,6 @@ int invoke_client_metaset_rpc(unifyfs_file_attr_t* f_meta)
     assert(hret == HG_SUCCESS);
 
     /* fill in input struct */
-    in.fid      = f_meta->fid;
     in.gfid     = f_meta->gfid;
     in.filename = f_meta->filename;
     in.mode     = f_meta->mode;

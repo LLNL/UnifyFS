@@ -786,8 +786,7 @@ int unifyfs_set_global_file_meta(int fid, int gfid)
     const char* path = unifyfs_path_from_fid(fid);
     sprintf(fattr.filename, "%s", path);
 
-    /* get local and global file ids */
-    fattr.fid  = fid;
+    /* set global file id */
     fattr.gfid = gfid;
 
     /* use current time for atime/mtime/ctime */
@@ -842,7 +841,6 @@ int unifyfs_get_global_file_meta(int fid, int gfid, unifyfs_file_attr_t* gfattr)
     if (ret == UNIFYFS_SUCCESS) {
         /* found it, copy attributes to output struct */
         *gfattr = fmeta;
-         gfattr->fid = fid;
     }
 
     return ret;
