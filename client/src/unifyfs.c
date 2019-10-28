@@ -828,11 +828,11 @@ int unifyfs_set_global_file_meta(int fid, int gfid)
     return UNIFYFS_SUCCESS;
 }
 
-int unifyfs_get_global_file_meta(int fid, int gfid, unifyfs_file_attr_t* gfattr)
+int unifyfs_get_global_file_meta(int gfid, unifyfs_file_attr_t* gfattr)
 {
     /* check that we have an output buffer to write to */
     if (!gfattr) {
-        return -EINVAL;
+        return UNIFYFS_FAILURE;
     }
 
     /* attempt to lookup file attributes in key/value store */
@@ -963,7 +963,7 @@ int unifyfs_fid_create_directory(const char* path)
     /* test whether we have metadata for file in global key/value store */
     int found_global = 0;
     unifyfs_file_attr_t gfattr = { 0, };
-    if (unifyfs_get_global_file_meta(fid, gfid, &gfattr) == UNIFYFS_SUCCESS) {
+    if (unifyfs_get_global_file_meta(gfid, &gfattr) == UNIFYFS_SUCCESS) {
         found_global = 1;
     }
 
@@ -1223,7 +1223,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
     /* test whether we have metadata for file in global key/value store */
     int found_global = 0;
     unifyfs_file_attr_t gfattr = { 0, };
-    if (unifyfs_get_global_file_meta(fid, gfid, &gfattr) == UNIFYFS_SUCCESS) {
+    if (unifyfs_get_global_file_meta(gfid, &gfattr) == UNIFYFS_SUCCESS) {
         found_global = 1;
     }
 

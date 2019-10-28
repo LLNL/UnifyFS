@@ -568,7 +568,7 @@ int unifyfs_generate_gfid(const char* path);
 
 int unifyfs_set_global_file_meta(int fid, int gfid);
 
-int unifyfs_get_global_file_meta(int fid, int gfid,
+int unifyfs_get_global_file_meta(int gfid,
                                  unifyfs_file_attr_t* gfattr);
 
 // These require types/structures defined above

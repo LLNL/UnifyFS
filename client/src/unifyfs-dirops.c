@@ -103,7 +103,7 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
     int gfid = unifyfs_generate_gfid(name);
 
     unifyfs_file_attr_t gfattr = { 0, };
-    int ret = unifyfs_get_global_file_meta(fid, gfid, &gfattr);
+    int ret = unifyfs_get_global_file_meta(gfid, &gfattr);
     if (ret != UNIFYFS_SUCCESS) {
         errno = ENOENT;
         return NULL;
