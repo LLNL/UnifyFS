@@ -10,14 +10,14 @@
 #include "unifyfs_client_rpcs.h"
 
 typedef struct ClientRpcIds {
-    hg_id_t filesize_id;
-    hg_id_t read_id;
-    hg_id_t mread_id;
     hg_id_t mount_id;
     hg_id_t unmount_id;
-    hg_id_t metaget_id;
     hg_id_t metaset_id;
+    hg_id_t metaget_id;
+    hg_id_t filesize_id;
     hg_id_t fsync_id;
+    hg_id_t read_id;
+    hg_id_t mread_id;
 } client_rpcs_t;
 
 typedef struct ClientRpcContext {
@@ -41,20 +41,14 @@ int invoke_client_unmount_rpc(void);
 
 int invoke_client_metaset_rpc(unifyfs_file_attr_t* f_meta);
 
-int invoke_client_metaget_rpc(int gfid,
-                              unifyfs_file_attr_t* f_meta);
+int invoke_client_metaget_rpc(int gfid, unifyfs_file_attr_t* f_meta);
+
+int invoke_client_filesize_rpc(int gfid, size_t* filesize);
 
 int invoke_client_fsync_rpc(int gfid);
 
-int invoke_client_filesize_rpc(int gfid,
-                               size_t* filesize);
+int invoke_client_read_rpc(int gfid, size_t offset, size_t length);
 
-int invoke_client_read_rpc(int gfid,
-                           size_t offset,
-                           size_t length);
-
-int invoke_client_mread_rpc(int read_count,
-                            size_t size,
-                            void* buffer);
+int invoke_client_mread_rpc(int read_count, size_t size, void* buffer);
 
 #endif // MARGO_CLIENT_H
