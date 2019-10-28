@@ -7,56 +7,52 @@
 #include "margo_client.h"
 
 /* global rpc context */
-client_rpc_context_t* client_rpc_context; // = NULL
+static client_rpc_context_t* client_rpc_context; // = NULL
 
 /* register client RPCs */
-static void register_client_rpcs(void)
+static void register_client_rpcs(client_rpc_context_t* ctx)
 {
-    margo_instance_id mid = client_rpc_context->mid;
+    /* shorter name for our margo instance id */
+    margo_instance_id mid = ctx->mid;
 
-    client_rpc_context->rpcs.read_id =
-        MARGO_REGISTER(mid, "unifyfs_read_rpc",
-                       unifyfs_read_in_t,
-                       unifyfs_read_out_t,
-                       NULL);
-
-    client_rpc_context->rpcs.mread_id =
-        MARGO_REGISTER(mid, "unifyfs_mread_rpc",
-                       unifyfs_mread_in_t,
-                       unifyfs_mread_out_t,
-                       NULL);
-
-    client_rpc_context->rpcs.mount_id   =
-        MARGO_REGISTER(mid, "unifyfs_mount_rpc",
+    ctx->rpcs.mount_id = MARGO_REGISTER(mid, "unifyfs_mount_rpc",
                        unifyfs_mount_in_t,
                        unifyfs_mount_out_t,
                        NULL);
 
-    client_rpc_context->rpcs.unmount_id   =
-        MARGO_REGISTER(mid, "unifyfs_unmount_rpc",
+    ctx->rpcs.unmount_id = MARGO_REGISTER(mid, "unifyfs_unmount_rpc",
                        unifyfs_unmount_in_t,
                        unifyfs_unmount_out_t,
                        NULL);
 
-    client_rpc_context->rpcs.metaget_id =
-        MARGO_REGISTER(mid, "unifyfs_metaget_rpc",
-                       unifyfs_metaget_in_t, unifyfs_metaget_out_t,
+    ctx->rpcs.metaset_id = MARGO_REGISTER(mid, "unifyfs_metaset_rpc",
+                       unifyfs_metaset_in_t,
+                       unifyfs_metaset_out_t,
                        NULL);
 
-    client_rpc_context->rpcs.metaset_id =
-        MARGO_REGISTER(mid, "unifyfs_metaset_rpc",
-                       unifyfs_metaset_in_t, unifyfs_metaset_out_t,
+    ctx->rpcs.metaget_id = MARGO_REGISTER(mid, "unifyfs_metaget_rpc",
+                       unifyfs_metaget_in_t,
+                       unifyfs_metaget_out_t,
                        NULL);
 
-    client_rpc_context->rpcs.fsync_id =
-        MARGO_REGISTER(mid, "unifyfs_fsync_rpc",
-                       unifyfs_fsync_in_t, unifyfs_fsync_out_t,
-                       NULL);
-
-    client_rpc_context->rpcs.filesize_id =
-        MARGO_REGISTER(mid, "unifyfs_filesize_rpc",
+    ctx->rpcs.filesize_id = MARGO_REGISTER(mid, "unifyfs_filesize_rpc",
                        unifyfs_filesize_in_t,
                        unifyfs_filesize_out_t,
+                       NULL);
+
+    ctx->rpcs.fsync_id = MARGO_REGISTER(mid, "unifyfs_fsync_rpc",
+                       unifyfs_fsync_in_t,
+                       unifyfs_fsync_out_t,
+                       NULL);
+
+    ctx->rpcs.read_id = MARGO_REGISTER(mid, "unifyfs_read_rpc",
+                       unifyfs_read_in_t,
+                       unifyfs_read_out_t,
+                       NULL);
+
+    ctx->rpcs.mread_id = MARGO_REGISTER(mid, "unifyfs_mread_rpc",
+                       unifyfs_mread_in_t,
+                       unifyfs_mread_out_t,
                        NULL);
 }
 
@@ -65,7 +61,8 @@ int unifyfs_client_rpc_init(void)
 {
     hg_return_t hret;
 
-    /* lookup margo server address string */
+    /* lookup margo server address string,
+     * should be something like: "na+sm://7170/0" */
     char* svr_addr_string = rpc_lookup_local_server_addr();
     if (svr_addr_string == NULL) {
         LOGERR("Failed to find local margo RPC server address");
@@ -73,7 +70,8 @@ int unifyfs_client_rpc_init(void)
     }
 
     /* duplicate server address string,
-     * then parse address to pick out protocol portion */
+     * then parse address to pick out protocol portion
+     * which is the piece before the colon like: "na+sm" */
     char* proto = strdup(svr_addr_string);
     char* colon = strchr(proto, ':');
     if (NULL != colon) {
@@ -82,59 +80,70 @@ int unifyfs_client_rpc_init(void)
     LOGDBG("svr_addr:'%s' proto:'%s'", svr_addr_string, proto);
 
     /* allocate memory for rpc context struct */
-    client_rpc_context_t* rpc_ctx = calloc(1, sizeof(client_rpc_context_t));
-    if (NULL == rpc_ctx) {
+    client_rpc_context_t* ctx = calloc(1, sizeof(client_rpc_context_t));
+    if (NULL == ctx) {
         LOGERR("Failed to allocate client RPC context");
         free(proto);
+        free(svr_addr_string);
         return UNIFYFS_FAILURE;
     }
 
     /* initialize margo */
-    rpc_ctx->mid = margo_init(proto, MARGO_SERVER_MODE, 1, 1);
-    assert(rpc_ctx->mid);
+    ctx->mid = margo_init(proto, MARGO_SERVER_MODE, 1, 1);
+    assert(ctx->mid);
 
-    /* done with the protocol string, free it */
-    free(proto);
-
-    margo_diag_start(rpc_ctx->mid);
+    /* TODO: want to keep this enabled all the time */
+    /* what's this do? */
+    margo_diag_start(ctx->mid);
 
     /* get server margo address */
-    rpc_ctx->svr_addr = HG_ADDR_NULL;
-    margo_addr_lookup(rpc_ctx->mid, svr_addr_string,
-                      &(rpc_ctx->svr_addr));
+    ctx->svr_addr = HG_ADDR_NULL;
+    margo_addr_lookup(ctx->mid, svr_addr_string, &(ctx->svr_addr));
+
+    /* done with the protocol and address strings, free them */
+    free(proto);
     free(svr_addr_string);
-    if (rpc_ctx->svr_addr == HG_ADDR_NULL) {
+
+    /* check that we got a valid margo address for the server */
+    if (ctx->svr_addr == HG_ADDR_NULL) {
         LOGERR("Failed to resolve margo server RPC address");
-        free(rpc_ctx);
+        margo_finalize(ctx->mid);
+        free(ctx);
         return UNIFYFS_FAILURE;
     }
 
-    /* get client margo address */
-    hret = margo_addr_self(rpc_ctx->mid, &(rpc_ctx->client_addr));
+    /* get our own margo address */
+    hret = margo_addr_self(ctx->mid, &(ctx->client_addr));
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_self()");
-        margo_finalize(rpc_ctx->mid);
-        free(rpc_ctx);
+        LOGERR("Failed to acquire our margo address");
+        margo_addr_free(ctx->mid, ctx->svr_addr);
+        margo_finalize(ctx->mid);
+        free(ctx);
         return UNIFYFS_FAILURE;
     }
 
+    /* convert our margo address to a string */
     char addr_self_string[128];
     hg_size_t addr_self_string_sz = sizeof(addr_self_string);
-    hret = margo_addr_to_string(rpc_ctx->mid, addr_self_string,
-                                &addr_self_string_sz, rpc_ctx->client_addr);
+    hret = margo_addr_to_string(ctx->mid,
+        addr_self_string, &addr_self_string_sz, ctx->client_addr);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_to_string()");
-        margo_finalize(rpc_ctx->mid);
-        free(rpc_ctx);
+        LOGERR("Failed to convert our margo address to string");
+        margo_addr_free(ctx->mid, ctx->client_addr);
+        margo_addr_free(ctx->mid, ctx->svr_addr);
+        margo_finalize(ctx->mid);
+        free(ctx);
         return UNIFYFS_FAILURE;
     }
 
     /* make a copy of our own margo address string */
-    rpc_ctx->client_addr_str = strdup(addr_self_string);
+    ctx->client_addr_str = strdup(addr_self_string);
 
-    client_rpc_context = rpc_ctx;
+    /* look up and record id values for each rpc */
+    register_client_rpcs(ctx);
 
-    register_client_rpcs();
+    /* cache context in global variable */
+    client_rpc_context = ctx;
 
     return UNIFYFS_SUCCESS;
 }
@@ -163,31 +172,45 @@ int unifyfs_client_rpc_finalize(void)
         free(ctx->client_addr_str);
         free(ctx);
     }
+
     return UNIFYFS_SUCCESS;
+}
+
+/* create and return a margo handle for given rpc id */
+static hg_handle_t create_handle(hg_id_t id)
+{
+    /* define a temporary to refer to global context */
+    client_rpc_context_t* ctx = client_rpc_context;
+
+    /* create handle for specified rpc */
+    hg_handle_t handle;
+    hg_return_t hret = margo_create(ctx->mid, ctx->svr_addr, id, &handle);
+    assert(hret == HG_SUCCESS);
+
+    return handle;
 }
 
 /* invokes the mount rpc function by calling unifyfs_sync_to_del */
 int invoke_client_mount_rpc(void)
 {
+    /* check that we have initialized margo */
     if (NULL == client_rpc_context) {
         return UNIFYFS_FAILURE;
     }
 
     /* get handle to rpc function */
-    hg_handle_t handle;
-    hg_return_t hret = margo_create(client_rpc_context->mid,
-                                    client_rpc_context->svr_addr,
-                                    client_rpc_context->rpcs.mount_id, &handle);
-    assert(hret == HG_SUCCESS);
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.mount_id);
 
     /* fill in input struct */
     unifyfs_mount_in_t in;
     fill_client_mount_info(&in);
+
+    /* pass our margo address to the server */
     in.client_addr_str = strdup(client_rpc_context->client_addr_str);
 
     /* call rpc function */
     LOGDBG("invoking the mount rpc function in client");
-    hret = margo_forward(handle, &in);
+    hg_return_t hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 
     /* free memory on input struct */
@@ -201,9 +224,11 @@ int invoke_client_mount_rpc(void)
     int32_t ret = out.ret;
     LOGDBG("Got response ret=%" PRIi32, ret);
 
+    /* get slice size for write index key/value store */
     unifyfs_key_slice_range = out.max_recs_per_slice;
     LOGDBG("set unifyfs_key_slice_range=%zu", unifyfs_key_slice_range);
 
+    /* free resources */
     margo_free_output(handle, &out);
     margo_destroy(handle);
     return (int)ret;
@@ -212,17 +237,13 @@ int invoke_client_mount_rpc(void)
 /* function invokes the unmount rpc */
 int invoke_client_unmount_rpc(void)
 {
+    /* check that we have initialized margo */
     if (NULL == client_rpc_context) {
         return UNIFYFS_FAILURE;
     }
 
     /* get handle to rpc function */
-    hg_handle_t handle;
-    hg_return_t hret = margo_create(client_rpc_context->mid,
-                                    client_rpc_context->svr_addr,
-                                    client_rpc_context->rpcs.unmount_id,
-                                    &handle);
-    assert(hret == HG_SUCCESS);
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.unmount_id);
 
     /* fill in input struct */
     unifyfs_unmount_in_t in;
@@ -231,7 +252,7 @@ int invoke_client_unmount_rpc(void)
 
     /* call rpc function */
     LOGDBG("invoking the unmount rpc function in client");
-    hret = margo_forward(handle, &in);
+    hg_return_t hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 
     /* decode response */
@@ -250,17 +271,13 @@ int invoke_client_unmount_rpc(void)
 /* invokes the client metaset rpc function */
 int invoke_client_metaset_rpc(unifyfs_file_attr_t* f_meta)
 {
+    /* check that we have initialized margo */
     if (NULL == client_rpc_context) {
         return UNIFYFS_FAILURE;
     }
 
     /* get handle to rpc function */
-    hg_handle_t handle;
-    hg_return_t hret = margo_create(client_rpc_context->mid,
-                                    client_rpc_context->svr_addr,
-                                    client_rpc_context->rpcs.metaset_id,
-                                    &handle);
-    assert(hret == HG_SUCCESS);
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.metaset_id);
 
     /* fill in input struct */
     unifyfs_metaset_in_t in;
@@ -277,7 +294,7 @@ int invoke_client_metaset_rpc(unifyfs_file_attr_t* f_meta)
 
     /* call rpc function */
     LOGDBG("invoking the metaset rpc function in client");
-    hret = margo_forward(handle, &in);
+    hg_return_t hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 
     /* decode response */
@@ -294,20 +311,15 @@ int invoke_client_metaset_rpc(unifyfs_file_attr_t* f_meta)
 }
 
 /* invokes the client metaget rpc function */
-int invoke_client_metaget_rpc(int gfid,
-                              unifyfs_file_attr_t* file_meta)
+int invoke_client_metaget_rpc(int gfid, unifyfs_file_attr_t* file_meta)
 {
+    /* check that we have initialized margo */
     if (NULL == client_rpc_context) {
         return UNIFYFS_FAILURE;
     }
 
     /* get handle to rpc function */
-    hg_handle_t handle;
-    hg_return_t hret = margo_create(client_rpc_context->mid,
-                                    client_rpc_context->svr_addr,
-                                    client_rpc_context->rpcs.metaget_id,
-                                    &handle);
-    assert(hret == HG_SUCCESS);
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.metaget_id);
 
     /* fill in input struct */
     unifyfs_metaget_in_t in;
@@ -315,7 +327,7 @@ int invoke_client_metaget_rpc(int gfid,
 
     /* call rpc function */
     LOGDBG("invoking the metaget rpc function in client");
-    hret = margo_forward(handle, &in);
+    hg_return_t hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 
     /* decode response */
@@ -346,60 +358,16 @@ int invoke_client_metaget_rpc(int gfid,
     return (int)ret;
 }
 
-/* invokes the client fsync rpc function */
-int invoke_client_fsync_rpc(int gfid)
-{
-    if (NULL == client_rpc_context) {
-        return UNIFYFS_FAILURE;
-    }
-
-    /* get handle to rpc function */
-    hg_handle_t handle;
-    hg_return_t hret = margo_create(client_rpc_context->mid,
-                                    client_rpc_context->svr_addr,
-                                    client_rpc_context->rpcs.fsync_id,
-                                    &handle);
-    assert(hret == HG_SUCCESS);
-
-    /* fill in input struct */
-    unifyfs_fsync_in_t in;
-    in.app_id         = (int32_t)app_id;
-    in.local_rank_idx = (int32_t)local_rank_idx;
-    in.gfid           = (int32_t)gfid;
-
-    /* call rpc function */
-    LOGDBG("invoking the fsync rpc function in client");
-    hret = margo_forward(handle, &in);
-    assert(hret == HG_SUCCESS);
-
-    /* decode response */
-    unifyfs_fsync_out_t out;
-    hret = margo_get_output(handle, &out);
-    assert(hret == HG_SUCCESS);
-    int32_t ret = out.ret;
-    LOGDBG("Got response ret=%" PRIi32, ret);
-
-    /* free resources */
-    margo_free_output(handle, &out);
-    margo_destroy(handle);
-    return (int)ret;
-}
-
 /* invokes the client filesize rpc function */
-int invoke_client_filesize_rpc(int gfid,
-                               size_t* outsize)
+int invoke_client_filesize_rpc(int gfid, size_t* outsize)
 {
+    /* check that we have initialized margo */
     if (NULL == client_rpc_context) {
         return UNIFYFS_FAILURE;
     }
 
     /* get handle to rpc function */
-    hg_handle_t handle;
-    hg_return_t hret = margo_create(client_rpc_context->mid,
-                                    client_rpc_context->svr_addr,
-                                    client_rpc_context->rpcs.filesize_id,
-                                    &handle);
-    assert(hret == HG_SUCCESS);
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.filesize_id);
 
     /* fill in input struct */
     unifyfs_filesize_in_t in;
@@ -409,7 +377,7 @@ int invoke_client_filesize_rpc(int gfid,
 
     /* call rpc function */
     LOGDBG("invoking the filesize rpc function in client");
-    hret = margo_forward(handle, &in);
+    hg_return_t hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 
     /* decode response */
@@ -417,7 +385,7 @@ int invoke_client_filesize_rpc(int gfid,
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
     int32_t ret = out.ret;
-    LOGDBG("Got response ret=%" PRIu32, ret);
+    LOGDBG("Got response ret=%" PRIi32, ret);
 
     /* save output from function */
     *outsize = (size_t) out.filesize;
@@ -428,22 +396,51 @@ int invoke_client_filesize_rpc(int gfid,
     return (int)ret;
 }
 
-/* invokes the client read rpc function */
-int invoke_client_read_rpc(int gfid,
-                           size_t offset,
-                           size_t length)
+/* invokes the client fsync rpc function */
+int invoke_client_fsync_rpc(int gfid)
 {
+    /* check that we have initialized margo */
     if (NULL == client_rpc_context) {
         return UNIFYFS_FAILURE;
     }
 
     /* get handle to rpc function */
-    hg_handle_t handle;
-    hg_return_t hret = margo_create(client_rpc_context->mid,
-                                    client_rpc_context->svr_addr,
-                                    client_rpc_context->rpcs.read_id,
-                                    &handle);
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.fsync_id);
+
+    /* fill in input struct */
+    unifyfs_fsync_in_t in;
+    in.app_id         = (int32_t)app_id;
+    in.local_rank_idx = (int32_t)local_rank_idx;
+    in.gfid           = (int32_t)gfid;
+
+    /* call rpc function */
+    LOGDBG("invoking the fsync rpc function in client");
+    hg_return_t hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
+
+    /* decode response */
+    unifyfs_fsync_out_t out;
+    hret = margo_get_output(handle, &out);
+    assert(hret == HG_SUCCESS);
+    int32_t ret = out.ret;
+    LOGDBG("Got response ret=%" PRIu32, ret);
+
+    /* free resources */
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+    return (int)ret;
+}
+
+/* invokes the client read rpc function */
+int invoke_client_read_rpc(int gfid, size_t offset, size_t length)
+{
+    /* check that we have initialized margo */
+    if (NULL == client_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* get handle to rpc function */
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.read_id);
 
     /* fill in input struct */
     unifyfs_read_in_t in;
@@ -455,7 +452,7 @@ int invoke_client_read_rpc(int gfid,
 
     /* call rpc function */
     LOGDBG("invoking the read rpc function in client");
-    hret = margo_forward(handle, &in);
+    hg_return_t hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 
     /* decode response */
@@ -472,25 +469,20 @@ int invoke_client_read_rpc(int gfid,
 }
 
 /* invokes the client mread rpc function */
-int invoke_client_mread_rpc(int read_count,
-                            size_t size,
-                            void* buffer)
+int invoke_client_mread_rpc(int read_count, size_t size, void* buffer)
 {
+    /* check that we have initialized margo */
     if (NULL == client_rpc_context) {
         return UNIFYFS_FAILURE;
     }
 
     /* get handle to rpc function */
-    hg_handle_t handle;
-    hg_return_t hret = margo_create(client_rpc_context->mid,
-                                    client_rpc_context->svr_addr,
-                                    client_rpc_context->rpcs.mread_id,
-                                    &handle);
-    assert(hret == HG_SUCCESS);
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.mread_id);
 
     unifyfs_mread_in_t in;
-    hret = margo_bulk_create(client_rpc_context->mid, 1, &buffer, &size,
-                             HG_BULK_READ_ONLY, &in.bulk_handle);
+    hg_return_t hret = margo_bulk_create(
+        client_rpc_context->mid, 1, &buffer, &size,
+        HG_BULK_READ_ONLY, &in.bulk_handle);
     assert(hret == HG_SUCCESS);
 
     /* fill in input struct */
