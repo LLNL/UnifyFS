@@ -104,11 +104,12 @@ cd ..
 cd "$ROOT"
 
 echo "*************************************************************************"
-echo "Dependencies are all built.  You can now build Unify with:"
+echo "Dependencies are all built.  You can now build UnifyFS with:"
 echo ""
-echo "  export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig"
-echo "  ./autogen.sh && ./configure --with-leveldb=$INSTALL_DIR" \
-	"--with-gotcha=$INSTALL_DIR --with-flatcc=$INSTALL_DIR"
+echo -n "  export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig && "
+echo "export LEVELDB_ROOT=$INSTALL_DIR && export FLATCC_ROOT=$INSTALL_DIR"
+echo -n "  ./autogen.sh && ./configure --with-gotcha=$INSTALL_DIR"
+echo " --prefix=$INSTALL_DIR"
 echo "  make"
 echo ""
 echo "*************************************************************************"

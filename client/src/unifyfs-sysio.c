@@ -364,17 +364,17 @@ static int __stat(const char* path, struct stat* buf)
     unifyfs_file_attr_to_stat(&fattr, buf);
 
     /*
-     * For debugging purposes, we hijack st_rdev to store our local,
-     * non-laminated file size.  Note: st_rdev is only a 32-bit number,
-     * so don't depend on it if the file is really big (we use the
-     * lower 32-bits of the size).
+     * For debugging and testing purposes, we hijack st_rdev to store our
+     * local size and log size.  We also assume the stat struct is
+     * the 64-bit variant.  The values are stored as:
      *
-     * We also hijack st_dev to store our log_size for debugging.
+     * st_rdev = log_size << 32 | local_size;
+     *
      */
     buf->st_rdev = fid;
     if (fid >= 0) { /* If we have a local file */
-        buf->st_rdev = unifyfs_fid_local_size(fid) & 0xFFFFFFFF;
-        buf->st_dev = unifyfs_fid_log_size(fid) & 0xFFFFFFFF;
+        buf->st_rdev = (unifyfs_fid_log_size(fid) << 32) |
+            (unifyfs_fid_local_size(fid) & 0xFFFFFFFF);
     }
 
     if (!fattr.is_laminated) {

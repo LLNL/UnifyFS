@@ -41,11 +41,11 @@ void get_size(char* path, size_t* global, size_t* local, size_t* log)
     }
 
     if (local) {
-        *local = sb.st_rdev;
+        *local = sb.st_rdev & 0xFFFFFFFF;
     }
 
     if (log) {
-        *log = sb.st_dev;
+        *log = (sb.st_rdev >> 32) & 0xFFFFFFFF;
     }
 }
 
