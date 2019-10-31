@@ -548,7 +548,7 @@ ssize_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
     }
 
     read_req_t tmp_req;
-    tmp_req.fid     = fid;
+    tmp_req.gfid    = unifyfs_gfid_from_fid(fid);
     tmp_req.offset  = (size_t) pos;
     tmp_req.length  = count;
     tmp_req.errcode = UNIFYFS_SUCCESS;
@@ -1138,7 +1138,7 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
                 if (fid < 0) {
                     AIOCB_ERROR_CODE(cbp) = EINVAL;
                 } else {
-                    reqs[reqcnt].fid     = fid;
+                    reqs[reqcnt].gfid    = unifyfs_gfid_from_fid(fid);
                     reqs[reqcnt].offset  = (size_t)(cbp->aio_offset);
                     reqs[reqcnt].length  = cbp->aio_nbytes;
                     reqs[reqcnt].errcode = EINPROGRESS;
@@ -1224,8 +1224,8 @@ static int compare_read_req(const void* a, const void* b)
     const read_req_t* ptr_a = a;
     const read_req_t* ptr_b = b;
 
-    if (ptr_a->fid != ptr_b->fid) {
-        if (ptr_a->fid < ptr_b->fid) {
+    if (ptr_a->gfid != ptr_b->gfid) {
+        if (ptr_a->gfid < ptr_b->gfid) {
             return -1;
         } else {
             return 1;
@@ -1370,7 +1370,7 @@ static int unifyfs_split_read_requests(read_req_t* req,
             }
 
             /* full slice is contained in read request */
-            out_set->read_reqs[count].fid     = req->fid;
+            out_set->read_reqs[count].gfid    = req->gfid;
             out_set->read_reqs[count].offset  = slice_start;
             out_set->read_reqs[count].length  = slice_range;
             out_set->read_reqs[count].errcode = UNIFYFS_SUCCESS;
@@ -1378,7 +1378,7 @@ static int unifyfs_split_read_requests(read_req_t* req,
         } while (1);
 
         /* account for bytes in final slice */
-        out_set->read_reqs[count].fid     = req->fid;
+        out_set->read_reqs[count].gfid    = req->gfid;
         out_set->read_reqs[count].offset  = slice_start;
         out_set->read_reqs[count].length  = req_end - slice_start + 1;
         out_set->read_reqs[count].errcode = UNIFYFS_SUCCESS;
@@ -1439,7 +1439,7 @@ static int unifyfs_coalesce_read_reqs(read_req_t* read_req, int count,
             read_req_t* tmp_req = &(tmp_set.read_reqs[0]);
 
             /* look to merge these items if they are contiguous */
-            if (out_req->fid == tmp_req->fid &&
+            if (out_req->gfid == tmp_req->gfid &&
                 out_req->offset + out_req->length == tmp_req->offset) {
                 /* refers to contiguous range in the same file,
                  * coalesce if also in the same slice */
@@ -1720,13 +1720,13 @@ static int process_read_data(read_req_t* read_reqs, int count, int* done)
 
         /* define request object */
         read_req_t req;
-        req.fid     = msg->gfid;
+        req.gfid    = msg->gfid;
         req.offset  = msg->offset;
         req.length  = msg->length;
         req.errcode = msg->errcode;
 
         LOGDBG("read reply: gfid=%d offset=%zu size=%zu",
-               req.fid, req.offset, req.length);
+               req.gfid, req.offset, req.length);
 
         /* get pointer to data */
         req.buf = shmptr;
@@ -1792,19 +1792,6 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
      * sends and transfer in bulks
      * */
 
-    /* convert local fid to global fid */
-    for (i = 0; i < count; i++) {
-        /* get global file id for each request */
-        int gfid = unifyfs_gfid_from_fid(read_reqs[i].fid);
-        if (gfid != -1) {
-            /* replace local file id with global file id in request */
-            read_reqs[i].fid = gfid;
-        } else {
-            /* failed to find gfid for this request */
-            return UNIFYFS_ERROR_BADF;
-        }
-    }
-
     /* order read request by increasing file id, then increasing offset */
     qsort(read_reqs, count, sizeof(read_req_t), compare_read_req);
 
@@ -1830,7 +1817,7 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
         /* fill in values for each request entry */
         for (i = 0; i < read_req_set.count; i++) {
             unifyfs_Extent_vec_push_create(&builder,
-                                           read_req_set.read_reqs[i].fid,
+                                           read_req_set.read_reqs[i].gfid,
                                            read_req_set.read_reqs[i].offset,
                                            read_req_set.read_reqs[i].length);
         }
@@ -1854,7 +1841,7 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
         free(buffer);
     } else {
         /* got a single read request */
-        int gfid = read_req_set.read_reqs[0].fid;
+        int gfid = read_req_set.read_reqs[0].gfid;
         size_t offset = read_req_set.read_reqs[0].offset;
         size_t length = read_req_set.read_reqs[0].length;
         LOGDBG("read: offset:%zu, len:%zu", offset, length);
@@ -1923,7 +1910,7 @@ ssize_t UNIFYFS_WRAP(pread)(int fd, void* buf, size_t count, off_t offset)
         size_t retcount = count;
 
         read_req_t tmp_req;
-        tmp_req.fid     = fid;
+        tmp_req.gfid    = unifyfs_gfid_from_fid(fid);
         tmp_req.offset  = offset;
         tmp_req.length  = count;
         tmp_req.errcode = UNIFYFS_SUCCESS;

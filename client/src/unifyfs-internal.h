@@ -298,7 +298,7 @@ typedef struct {
 
 /*unifyfs structures*/
 typedef struct {
-    int fid;
+    int gfid;
     int errcode;
     size_t offset;
     size_t length;
