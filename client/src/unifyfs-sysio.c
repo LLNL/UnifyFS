@@ -2300,14 +2300,13 @@ int UNIFYFS_WRAP(close)(int fd)
 /* Helper function used by fchmod() and chmod() */
 static int __chmod(int fid, mode_t mode)
 {
-    int gfid;
-    unifyfs_filemeta_t* meta;
-    const char* path;
     int ret;
 
-    path =  unifyfs_path_from_fid(fid);
+    /* get path for printing debug messages */
+    const char* path = unifyfs_path_from_fid(fid);
 
-    meta = unifyfs_get_meta_from_fid(fid);
+    /* lookup metadata for this file */
+    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     if (!meta) {
         LOGDBG("chmod: %s no metadata info", path);
         errno = ENOENT;
@@ -2321,7 +2320,12 @@ static int __chmod(int fid, mode_t mode)
         return -1;
     }
 
-    gfid = unifyfs_generate_gfid(path);
+    /* found file, and it's not yet laminated,
+     * get the global file id */
+    int gfid = unifyfs_gfid_from_fid(fid);
+
+    /* TODO: need to fetch global metadata in case
+     * another process has changed it */
 
     /*
      * If the chmod clears all the existing write bits, then it's a laminate.
@@ -2342,6 +2346,8 @@ static int __chmod(int fid, mode_t mode)
             errno = EIO;
             return -1;
         }
+
+        /* record locally that this file is now laminated */
         meta->is_laminated = 1;
     }
 
@@ -2349,6 +2355,8 @@ static int __chmod(int fid, mode_t mode)
     meta->mode = meta->mode & ~0777;
     meta->mode = meta->mode | mode;
 
+    /* update the global meta data to reflect new permissions,
+     * size, and laminated flag */
     ret = unifyfs_set_global_file_meta_from_fid(fid);
     if (ret) {
         LOGERR("chmod: can't set global meta entry for %s (fid:%d)",
@@ -2356,15 +2364,14 @@ static int __chmod(int fid, mode_t mode)
         errno = EIO;
         return -1;
     }
+
     return 0;
 }
 
 int UNIFYFS_WRAP(fchmod)(int fd, mode_t mode)
 {
     /* check whether we should intercept this file descriptor */
-    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
-
         /* TODO: what to do if underlying file has been deleted? */
 
         /* check that fd is actually in use */
@@ -2373,9 +2380,9 @@ int UNIFYFS_WRAP(fchmod)(int fd, mode_t mode)
             errno = EBADF;
             return -1;
         }
+
         LOGDBG("fchmod: setting fd %d to %o", fd, mode);
         return __chmod(fid, mode);
-
     } else {
         MAP_OR_FAIL(fchmod);
         int ret = UNIFYFS_REAL(fchmod)(fd, mode);
@@ -2383,16 +2390,12 @@ int UNIFYFS_WRAP(fchmod)(int fd, mode_t mode)
     }
 }
 
-
 int UNIFYFS_WRAP(chmod)(const char* path, mode_t mode)
 {
-    int fid, gfid;
-    int ret;
-    unifyfs_filemeta_t* meta;
     /* determine whether we should intercept this path */
     if (unifyfs_intercept_path(path)) {
         /* check if path exists */
-        fid = unifyfs_get_fid_from_path(path);
+        int fid = unifyfs_get_fid_from_path(path);
         if (fid < 0) {
             LOGDBG("chmod: unifyfs_get_id_from path failed, returning -1, %s",
                    path);
