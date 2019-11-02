@@ -1312,158 +1312,141 @@ static int unifyfs_locate_req(read_req_t* read_reqs, int count,
     }
 }
 
-/*
- * given an read request, split it into multiple indices whose range
+/* given a read request, split it into multiple requests whose range
  * is equal or smaller than slice_range size
- * @param cur_read_req: the read request to split
- * @param slice_range: the slice size of the key-value store
- * @return out_set: the set of split read requests
- * */
-static int unifyfs_split_read_requests(read_req_t* req,
-                                       read_req_set_t* out_set,
-                                       size_t slice_range)
+ *
+ * @param  req:         read request to be split
+ * @param  slice_range: slice size of the key-value store
+ * @return out_set:     output set of split read requests
+ * @param  maxcount:    number of entries in output array
+ * @return used_count:  number of entries added to output array */
+static int unifyfs_split_read_request(
+    read_req_t* in_req,  /* read request to split */
+    long slice_range,    /* number of bytes in each slice */
+    read_req_t* out_set, /* output array to store new requests in */
+    off_t maxcount,      /* max number of items in output array */
+    off_t* used_count)   /* number of entries we added in split */
 {
-    /* compute offset of first and last byte in request */
+    /* check that we have at least one spot in buffer */
+    if (maxcount == 0) {
+        *used_count = 0;
+        return UNIFYFS_FAILURE;
+    }
+
+    /* make a copy of the input request so we can modify it */
+    read_req_t tmp_req = *in_req;
+    read_req_t* req = &tmp_req;
+
+    /* first byte offset this request will read from */
     size_t req_start = req->offset;
-    size_t req_end   = req->offset + req->length - 1;
+
+    /* last byte offset this request will read from */
+    size_t req_end = req->offset + req->length - 1;
 
     /* compute offset of first and last byte of slice
      * that contains first byte of request */
+
+    /* starting byte offset of slice that first read offset falls in */
     size_t slice_start = (req->offset / slice_range) * slice_range;
-    size_t slice_end   = slice_start + slice_range - 1;
+
+    /* last byte offset of slice that first read offset falls in */
+    size_t slice_end = slice_start + slice_range - 1;
 
     /* initialize request count in output set */
-    memset(out_set, 0, sizeof(read_req_set_t));
     int count = 0;
 
+    /* define new read requests in out_set by splitting request
+     * at slice boundaries */
     if (req_end <= slice_end) {
         /* slice fully contains request
          *
-         * slice_start                         slice_end
-         *                req_start     req_end
-         *
+         * slice_start           slice_end
+         *      req_start   req_end
          */
-        out_set->read_reqs[count] = *req;
+        out_set[count] = *req;
         count++;
     } else {
-        /* read request spans multiple slices
+        /* ending offset of request is beyond last offset in first slice,
+         * so this request spans across multiple slices
          *
-         * slice_start       slice_end  next_slice_start      next_slice_end
-         *           req_start                          req_end
+         * slice_start  slice_end  next_slice_start      next_slice_end
+         *      req_start                          req_end
          *
          */
 
-        /* account for leading bytes in read request in first slice */
-        out_set->read_reqs[count] = *req;
-        out_set->read_reqs[count].length = slice_end - req_start + 1;
+        /* compute number of bytes until end of first slice */
+        long length = slice_end - req_start + 1;
+
+        out_set[count].gfid    = req->gfid;
+        out_set[count].offset  = req->offset;
+        out_set[count].length  = length;
+        out_set[count].errcode = req->errcode;
         count++;
 
-        /* account for all middle slices */
-        do {
-            /* advance to next slice */
-            slice_start = slice_end + 1;
-            slice_end   = slice_start + slice_range - 1;
+        /* update write index to account for index we just added */
+        req->offset += length;
+        req->length -= length;
 
-            if (req_end <= slice_end) {
-                /* found the slice that contains end byte in read request */
-                break;
-            }
+        /* check that we have room to write more requests */
+        if (count >= maxcount) {
+            /* no room to write more requests,
+             * and we have at least one more,
+             * record number we wrote and return with error */
+            *used_count = count;
+            return UNIFYFS_FAILURE;
+        }
+
+        /* advance slice boundary offsets to next slice */
+        slice_end += slice_range;
+
+        /* loop until we find the slice that contains
+         * ending offset of read */
+        while (req_end > slice_end) {
+            /* ending offset of read is beyond end of this slice,
+             * so read spans the full length of this slice */
+            length = slice_range;
 
             /* full slice is contained in read request */
-            out_set->read_reqs[count].gfid    = req->gfid;
-            out_set->read_reqs[count].offset  = slice_start;
-            out_set->read_reqs[count].length  = slice_range;
-            out_set->read_reqs[count].errcode = UNIFYFS_SUCCESS;
+            out_set[count].gfid    = req->gfid;
+            out_set[count].offset  = req->offset;
+            out_set[count].length  = length;
+            out_set[count].errcode = req->errcode;
             count++;
-        } while (1);
 
-        /* account for bytes in final slice */
-        out_set->read_reqs[count].gfid    = req->gfid;
-        out_set->read_reqs[count].offset  = slice_start;
-        out_set->read_reqs[count].length  = req_end - slice_start + 1;
-        out_set->read_reqs[count].errcode = UNIFYFS_SUCCESS;
-        count++;
-    }
+            /* update read request to account for index we just added */
+            req->offset += length;
+            req->length -= length;
 
-    /* set size of output set */
-    out_set->count = count;
-
-    return 0;
-}
-
-/*
- * coalesce read requests referring to contiguous data within a given
- * file id, and split read requests whose size is larger than
- * unifyfs_key_slice_range into more requests that are smaller
- *
- * Note: a series of read requests that have overlapping spans
- * will prevent merging of contiguous ranges, this should still
- * function, but performance may be lost
- *
- * @param read_req: a list of read requests
- * @param count: number of read requests
- * @param tmp_set: a temporary read requests buffer
- * to hold the intermediate result
- * @param unifyfs_key_slice_range: slice size of distributed
- * key-value store
- * @return out_set: the coalesced read requests
- *
- * */
-static int unifyfs_coalesce_read_reqs(read_req_t* read_req, int count,
-                                      size_t slice_range,
-                                      read_req_set_t* out_set)
-{
-    read_req_set_t tmp_set;
-
-    /* initialize output and temporary sets */
-    out_set->count = 0;
-    memset(&tmp_set, 0, sizeof(tmp_set));
-
-    int i;
-    int out_idx = 0;
-    for (i = 0; i < count; i++) {
-        /* index into temp set */
-        int tmp_idx = 0;
-
-        /* split this read request into parts based on slice range
-         * store resulting requests in tmp_set */
-        unifyfs_split_read_requests(&read_req[i], &tmp_set, slice_range);
-
-        /* look to merge last item in output set with first item
-         * in split requests */
-        if (out_idx > 0) {
-            /* get pointer to last item in out_set */
-            read_req_t* out_req = &(out_set->read_reqs[out_idx - 1]);
-
-            /* get pointer to first item in tmp_set */
-            read_req_t* tmp_req = &(tmp_set.read_reqs[0]);
-
-            /* look to merge these items if they are contiguous */
-            if (out_req->gfid == tmp_req->gfid &&
-                out_req->offset + out_req->length == tmp_req->offset) {
-                /* refers to contiguous range in the same file,
-                 * coalesce if also in the same slice */
-                uint64_t cur_slice = out_req->offset / slice_range;
-                uint64_t tmp_slice = tmp_req->offset / slice_range;
-                if (cur_slice == tmp_slice) {
-                    /* just increase length to merge */
-                    out_req->length += tmp_req->length;
-
-                    /* bump offset into tmp set array */
-                    tmp_idx++;
-                }
+            /* check that we have room to write more requests */
+            if (count >= maxcount) {
+                /* no room to write more requests,
+                 * and we have at least one more,
+                 * record number we wrote and return with error */
+                *used_count = count;
+                return UNIFYFS_FAILURE;
             }
+
+            /* advance slice boundary offsets to next slice */
+            slice_end += slice_range;
         }
 
-        /* tack on remaining items from tmp set into output set */
-        for (; tmp_idx < tmp_set.count; tmp_idx++) {
-            out_set->read_reqs[out_idx] = tmp_set.read_reqs[tmp_idx];
-            out_set->count++;
-            out_idx++;
-        }
+        /* this slice contains the remainder of read */
+        length = req->length;
+        out_set[count].gfid    = req->gfid;
+        out_set[count].offset  = req->offset;
+        out_set[count].length  = length;
+        out_set[count].errcode = req->errcode;
+        count++;
+
+        /* update read request to account for index we just added */
+        req->offset += length;
+        req->length -= length;
     }
 
-    return 0;
+    /* record number of entries we added */
+    *used_count = count;
+
+    return UNIFYFS_SUCCESS;
 }
 
 /*
@@ -1758,33 +1741,9 @@ static int process_read_data(read_req_t* read_reqs, int count, int* done)
  * */
 int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
 {
-    int i;
-    int tot_sz = 0;
+    int read_rc;
+
     int rc = UNIFYFS_SUCCESS;
-    int num = 0;
-    int* ptr_size = NULL;
-    int* ptr_num = NULL;
-
-#if 0 /* TODO: when meta has correct file size, we can use this code */
-    /* Adjust length for fitting the EOF. */
-    for (i = 0; i < count; i++) {
-        /* get pointer to read request */
-        read_req_t* req = &read_reqs[i];
-
-        /* get metadata for this file */
-        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(req->fid);
-        if (meta == NULL) {
-            return UNIFYFS_ERROR_BADF;
-        }
-
-        /* compute last byte of read request */
-        size_t last_offset = req->offset + req->length;
-        if (last_offset > meta->size) {
-            /* shorten the request to read just up to end */
-            req->length = meta->size - req->offset;
-        }
-    }
-#endif
 
     /*
      * Todo: When the number of read requests exceed the
@@ -1795,17 +1754,36 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
     /* order read request by increasing file id, then increasing offset */
     qsort(read_reqs, count, sizeof(read_req_t), compare_read_req);
 
-    /* coalesce the contiguous read requests */
-    read_req_set_t read_req_set;
-    unifyfs_coalesce_read_reqs(read_reqs, count,
-                               unifyfs_key_slice_range,
-                               &read_req_set);
+    /* TODO: move this split code to server and then pass original
+     * read requests from client to server */
+    /* split read requests at file offset boundaries used internally
+     * in the server key/value store */
+    int i;
+    off_t req_count = 0;
+    read_req_t read_set[UNIFYFS_MAX_READ_CNT];
+    for (i = 0; i < count; i++) {
+        /* remaining entries we have in our read requests array */
+        off_t remaining = UNIFYFS_MAX_READ_CNT - req_count;
+
+        /* split current request at key/value offsets */
+        off_t used = 0;
+        read_rc = unifyfs_split_read_request(&read_reqs[i],
+            unifyfs_key_slice_range, &read_set[req_count], remaining, &used);
+
+        /* bail out with error if we failed to process read requests */
+        if (read_rc != UNIFYFS_SUCCESS) {
+            LOGERR("Failed to split read requests");
+            return read_rc;
+        }
+
+        /* account of request slots we used up */
+        req_count += used;
+    }
 
     /* prepare our shared memory buffer for delegator */
     delegator_signal();
 
-    int read_rc;
-    if (read_req_set.count > 1) {
+    if (req_count > 1) {
         /* got multiple read requests,
          * build up a flat buffer to include them all */
         flatcc_builder_t builder;
@@ -1815,11 +1793,11 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
         unifyfs_Extent_vec_start(&builder);
 
         /* fill in values for each request entry */
-        for (i = 0; i < read_req_set.count; i++) {
+        for (i = 0; i < req_count; i++) {
             unifyfs_Extent_vec_push_create(&builder,
-                                           read_req_set.read_reqs[i].gfid,
-                                           read_req_set.read_reqs[i].offset,
-                                           read_req_set.read_reqs[i].length);
+                                           read_set[i].gfid,
+                                           read_set[i].offset,
+                                           read_set[i].length);
         }
 
         /* complete the array */
@@ -1832,24 +1810,25 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
         void* buffer = flatcc_builder_finalize_buffer(&builder, &size);
         assert(buffer);
         LOGDBG("mread: n_reqs:%d, flatcc buffer (%p) sz:%zu",
-               read_req_set.count, buffer, size);
+               req_count, buffer, size);
 
         /* invoke read rpc here */
-        read_rc = invoke_client_mread_rpc(read_req_set.count, size, buffer);
+        read_rc = invoke_client_mread_rpc(req_count, size, buffer);
 
         flatcc_builder_clear(&builder);
         free(buffer);
     } else {
         /* got a single read request */
-        int gfid = read_req_set.read_reqs[0].gfid;
-        size_t offset = read_req_set.read_reqs[0].offset;
-        size_t length = read_req_set.read_reqs[0].length;
+        int gfid      = read_set[0].gfid;
+        size_t offset = read_set[0].offset;
+        size_t length = read_set[0].length;
         LOGDBG("read: offset:%zu, len:%zu", offset, length);
         read_rc = invoke_client_read_rpc(gfid, offset, length);
     }
 
     /* bail out with error if we failed to even start the read */
     if (read_rc != UNIFYFS_SUCCESS) {
+        LOGERR("Failed to issue read RPC to server");
         return read_rc;
     }
 

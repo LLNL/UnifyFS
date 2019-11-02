@@ -310,11 +310,6 @@ typedef struct {
     unifyfs_index_t* index_entry;
 } unifyfs_index_buf_t;
 
-typedef struct {
-    read_req_t read_reqs[UNIFYFS_MAX_READ_CNT];
-    int count;
-} read_req_set_t;
-
 extern unifyfs_index_buf_t unifyfs_indices;
 extern unsigned long unifyfs_max_index_entries;
 extern long unifyfs_spillover_max_chunks;
