@@ -245,7 +245,7 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
         /* truncate the file */
         int rc = unifyfs_fid_truncate(fid, length);
         if (rc != UNIFYFS_SUCCESS) {
-            LOGDBG("unifyfs_fid_truncate failed for %s in UNIFYFS", path);
+            LOGDBG("unifyfs_fid_truncate failed for %s in UNIFYFS,fid %d, length %zu", path,fid,length);
             errno = EIO;
             return -1;
         }
@@ -998,7 +998,7 @@ ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
 /* TODO: find right place to msync spillover mapping */
 ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
 {
-    LOGDBG("write was called for fd %d", fd);
+    LOGDBG("write was called for fd %d , count %zu", fd,count);
     size_t ret;
     off_t pos;
 
@@ -1749,8 +1749,7 @@ static int process_read_data(read_req_t* read_reqs, int count, int* done)
 }
 
 /*
- * get data for a list of read requests from the
- * delegator
+ * get data from the delegator, for a list of read requests
  * @param read_reqs: a list of read requests
  * @param count: number of read requests
  * @return error code
@@ -1844,7 +1843,7 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
         int gfid = read_req_set.read_reqs[0].gfid;
         size_t offset = read_req_set.read_reqs[0].offset;
         size_t length = read_req_set.read_reqs[0].length;
-        LOGDBG("read: offset:%zu, len:%zu", offset, length);
+        LOGDBG("read: offset:%zu, len:%zu, gfid:%d", offset, length, gfid);
         read_rc = invoke_client_read_rpc(gfid, offset, length);
     }
 
