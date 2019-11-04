@@ -26,6 +26,8 @@ before_install:
   - |
     test -f $HOME/spack/etc/spack/packages.yaml || cat > $HOME/spack/etc/spack/packages.yaml << '  EOF'
     packages:
+      all:
+        target: [x86_64]
       autoconf:
         buildable: False
         paths:
@@ -49,14 +51,13 @@ before_install:
     EOF
 
 install:
-  - $HOME/spack/bin/spack install environment-modules
+  - $HOME/spack/bin/spack bootstrap
   - . $HOME/spack/share/spack/setup-env.sh
   - spack install leveldb
   - spack install gotcha@0.0.2
   - spack install flatcc
   - spack install margo^mercury+bmi~boostsys
   # prepare build environment
-  - spack load environment-modules
   - source <(spack module tcl loads leveldb gotcha@0.0.2 flatcc mercury argobots margo)
   - eval $(./scripts/git_log_test_env.sh)
   - export TEST_CHECKPATCH_SKIP_FILES
