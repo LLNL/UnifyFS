@@ -500,11 +500,8 @@ off_t unifyfs_fid_log_size(int fid);
  */
 off_t unifyfs_fid_logical_size(int fid);
 
-/* fill in limited amount of stat information for global file id */
-int unifyfs_gfid_stat(int gfid, struct stat* buf);
-
-/* fill in limited amount of stat information */
-int unifyfs_fid_stat(int fid, struct stat* buf);
+/* Update local metadata for file from global metadata */
+int unifyfs_fid_update_file_meta(int fid, unifyfs_file_attr_t* gfattr);
 
 /* allocate a file id slot for a new file
  * return the fid or -1 on error */

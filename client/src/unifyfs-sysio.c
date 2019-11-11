@@ -338,50 +338,48 @@ int UNIFYFS_WRAP(remove)(const char* path)
 /* The main stat call for all the *stat() functions */
 static int __stat(const char* path, struct stat* buf)
 {
-    int gfid, fid;
+    int gfid, fid, ret;
     unifyfs_file_attr_t fattr;
-    int ret;
-
-    gfid = unifyfs_generate_gfid(path);
-    fid = unifyfs_get_fid_from_path(path);
 
     /* check that caller gave us a buffer to write to */
     if (!buf) {
         errno = EFAULT;
         return -1;
     }
+    memset(buf, 0, sizeof(*buf));
 
     /* lookup stat data for global file id */
-    ret = invoke_client_metaget_rpc(gfid, &fattr);
+    gfid = unifyfs_generate_gfid(path);
+    ret = unifyfs_get_global_file_meta(gfid, &fattr);
     if (ret != UNIFYFS_SUCCESS) {
         LOGDBG("metaget failed");
-        return ret;
+        errno = ENOENT;
+        return -1;
     }
 
-    memset(buf, 0, sizeof(*buf));
+    /* update local file metadata (if applicable) */
+    fid = unifyfs_get_fid_from_path(path);
+    unifyfs_fid_update_file_meta(fid, &fattr);
 
     /* copy attributes to stat struct */
     unifyfs_file_attr_to_stat(&fattr, buf);
 
-    /*
-     * For debugging and testing purposes, we hijack st_rdev to store our
-     * local size and log size.  We also assume the stat struct is
-     * the 64-bit variant.  The values are stored as:
-     *
-     * st_rdev = log_size << 32 | local_size;
-     *
-     */
-    buf->st_rdev = fid;
     if (fid >= 0) { /* If we have a local file */
-        buf->st_rdev = (unifyfs_fid_log_size(fid) << 32) |
-            (unifyfs_fid_local_size(fid) & 0xFFFFFFFF);
+        /*
+         * For debugging and testing purposes, we hijack st_rdev to store our
+         * local size and log size.  We also assume the stat struct is
+         * the 64-bit variant.  The values are stored as:
+         *
+         * st_rdev = log_size << 32 | local_size;
+         *
+         */
+        buf->st_rdev  = (unifyfs_fid_log_size(fid) << 32);
+        buf->st_rdev |= (unifyfs_fid_local_size(fid) & 0xFFFFFFFF);
     }
 
+    /* global filesize is zero for non-laminated files */
     if (!fattr.is_laminated) {
-        /*
-         * It was decided that all non-laminated files would report a global
-         * filesize of zero.
-         */
+        LOGDBG("file is NOT laminated")
         buf->st_size = 0;
     }
 
@@ -544,6 +542,7 @@ ssize_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
 
     /* if we don't read any bytes, return success */
     if (count == 0) {
+        LOGDBG("returning EOF");
         return 0;
     }
 

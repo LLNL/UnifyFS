@@ -15,6 +15,8 @@
 #ifndef UNIFYFS_TESTUTIL_RDWR_H
 #define UNIFYFS_TESTUTIL_RDWR_H
 
+#include "testutil.h"
+
 /* -------- Write Helper Methods -------- */
 
 static inline
@@ -217,8 +219,21 @@ int write_laminate(test_cfg* cfg, const char* filepath)
         int chmod_rc = chmod(filepath, 0444);
         if (-1 == chmod_rc) {
             /* lamination failed */
-            test_print(cfg, "chmod() lamination failed");
+            test_print(cfg, "chmod() during lamination failed");
             rc = -1;
+        }
+    }
+    if (cfg->io_pattern == IO_PATTERN_N1) {
+        test_barrier(cfg);
+        if (cfg->rank != 0) {
+            /* call stat() to update global metadata */
+            struct stat st;
+            int stat_rc = stat(filepath, &st);
+            if (-1 == stat_rc) {
+                /* lamination failed */
+                test_print(cfg, "stat() update during lamination failed");
+                rc = -1;
+            }
         }
     }
     return rc;
