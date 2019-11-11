@@ -740,7 +740,10 @@ off_t unifyfs_fid_global_size(int fid)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    return meta->global_size;
+    if (NULL != meta) {
+        return meta->global_size;
+    }
+    return (off_t)-1;
 }
 
 /* Return the log size of the file */
@@ -748,7 +751,10 @@ off_t unifyfs_fid_local_size(int fid)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    return meta->local_size;
+    if (NULL != meta) {
+        return meta->local_size;
+    }
+    return (off_t)-1;
 }
 
 /*
@@ -771,13 +777,41 @@ off_t unifyfs_fid_log_size(int fid)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    return meta->log_size;
+    if (NULL != meta) {
+        return meta->log_size;
+    }
+    return (off_t)-1;
+}
+
+/* Update local metadata for file from global metadata */
+int unifyfs_fid_update_file_meta(int fid, unifyfs_file_attr_t* gfattr)
+{
+    if (NULL == gfattr) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* lookup local metadata for file */
+    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    if (NULL != meta) {
+        /* update lamination state */
+        meta->is_laminated = gfattr->is_laminated;
+        if (meta->is_laminated) {
+            /* update file size */
+            meta->global_size = (off_t)gfattr->size;
+            meta->local_size = meta->global_size;
+            LOGDBG("laminated file size is %zu bytes",
+                   (size_t)meta->global_size);
+        }
+        return UNIFYFS_SUCCESS;
+    }
+    /* else, bad fid */
+    return UNIFYFS_FAILURE;
 }
 
 int unifyfs_set_global_file_meta(int gfid, unifyfs_file_attr_t* gfattr)
 {
     /* check that we have an input buffer */
-    if (!gfattr) {
+    if (NULL == gfattr) {
         return UNIFYFS_FAILURE;
     }
 
@@ -789,7 +823,7 @@ int unifyfs_set_global_file_meta(int gfid, unifyfs_file_attr_t* gfattr)
 int unifyfs_get_global_file_meta(int gfid, unifyfs_file_attr_t* gfattr)
 {
     /* check that we have an output buffer to write to */
-    if (!gfattr) {
+    if (NULL == gfattr) {
         return UNIFYFS_FAILURE;
     }
 
@@ -800,7 +834,6 @@ int unifyfs_get_global_file_meta(int gfid, unifyfs_file_attr_t* gfattr)
         /* found it, copy attributes to output struct */
         *gfattr = fmeta;
     }
-
     return ret;
 }
 
@@ -852,35 +885,6 @@ int unifyfs_set_global_file_meta_from_fid(int fid)
     /* submit file attributes to global key/value store */
     int ret = unifyfs_set_global_file_meta(meta->gfid, &fattr);
     return ret;
-}
-
-/* fill in limited amount of stat information for global file id */
-int unifyfs_gfid_stat(int gfid, struct stat* buf)
-{
-    /* check that we have an output buffer to write to */
-    if (!buf) {
-        return UNIFYFS_ERROR_INVAL;
-    }
-
-    /* zero out user's stat buffer */
-    memset(buf, 0, sizeof(struct stat));
-
-    /* lookup stat data for global file id */
-    unifyfs_file_attr_t fattr;
-    int ret = invoke_client_metaget_rpc(gfid, &fattr);
-    if (ret != UNIFYFS_SUCCESS) {
-        return ret;
-    }
-
-    /* It was decided that non-laminated files return a file size of 0 */
-    if (!fattr.is_laminated) {
-        fattr.size = 0;
-    }
-
-    /* copy stat structure */
-    unifyfs_file_attr_to_stat(&fattr, buf);
-
-    return UNIFYFS_SUCCESS;
 }
 
 /* allocate a file id slot for a new file
@@ -975,15 +979,15 @@ int unifyfs_fid_create_directory(const char* path)
         found_global = 1;
     }
 
-    /* check whether we already have info for this item
-     * locally and globally */
-    if (found_local && found_global) {
-        /* this directory already exists */
+    /* can't create if it already exists */
+    if (found_global) {
         return (int) UNIFYFS_ERROR_EXIST;
     }
 
-    if (found_local && !found_global) {
-        /* FIXME: so, we have detected the cache inconsistency here.
+    if (found_local) {
+        /* exists locally, but not globally
+         *
+         * FIXME: so, we have detected the cache inconsistency here.
          * we cannot simply unlink or remove the entry because then we also
          * need to check whether any subdirectories or files exist.
          *
@@ -998,12 +1002,6 @@ int unifyfs_fid_create_directory(const char* path)
          * a consistency model this fs intance assumes.
          */
         return (int) UNIFYFS_ERROR_IO;
-    }
-
-    if (!found_local && found_global) {
-        /* populate the local cache, then return EEXIST */
-
-        return (int) UNIFYFS_ERROR_EXIST;
     }
 
     /* now, we need to create a new directory. */
@@ -1173,26 +1171,6 @@ int unifyfs_fid_truncate(int fid, off_t length)
     return UNIFYFS_SUCCESS;
 }
 
-/*
- * hash a path to gfid
- * @param path: file path
- * return: error code, gfid
- * */
-static int unifyfs_get_global_fid(const char* path, int* gfid)
-{
-    MD5_CTX ctx;
-
-    unsigned char md[16];
-    memset(md, 0, 16);
-
-    MD5_Init(&ctx);
-    MD5_Update(&ctx, path, strlen(path));
-    MD5_Final(md, &ctx);
-
-    *gfid = *((int*)md);
-    return UNIFYFS_SUCCESS;
-}
-
 /* opens a new file id with specified path, access flags, and permissions,
  * fills outfid with file id and outpos with position for current file pointer,
  * returns UNIFYFS error code
@@ -1242,8 +1220,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
     if (gfattr.is_laminated &&
         ((flags & (O_CREAT | O_TRUNC | O_APPEND | O_WRONLY)) ||
          ((mode & 0222) && (flags != O_RDONLY)))) {
-            LOGDBG("Can't open %s with a writable flag on laminated file.",
-                path);
+            LOGDBG("Can't open laminated file %s with a writable flag.", path);
             return EROFS;
     }
 
@@ -1255,10 +1232,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
     if (found_local && !found_global) {
         LOGDBG("file found locally, but seems to be deleted globally. "
                "invalidating the local cache.");
-            return EROFS;
-
         unifyfs_fid_unlink(fid);
-
         return (int) UNIFYFS_ERROR_NOENT;
     }
 
@@ -1288,8 +1262,11 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         }
 
         /* initialize global size of file from global metadata */
-        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-        meta->global_size = gfattr.size;
+        ret = unifyfs_fid_update_file_meta(fid, &gfattr);
+        if (ret != UNIFYFS_SUCCESS) {
+            LOGERR("failed to update file metadata from global");
+            /* this is not a fatal error, continue */
+        }
     } else if (found_local && found_global) {
         /* file exists and is valid.  */
         if ((flags & O_CREAT) && (flags & O_EXCL)) {
@@ -1302,6 +1279,13 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
 
         if (!(flags & O_DIRECTORY) && unifyfs_fid_is_dir(fid)) {
             return (int)UNIFYFS_ERROR_NOTDIR;
+        }
+
+        /* update local metadata from global metadata */
+        ret = unifyfs_fid_update_file_meta(fid, &gfattr);
+        if (ret != UNIFYFS_SUCCESS) {
+            LOGERR("failed to update file metadata from global");
+            /* this is not a fatal error, continue */
         }
 
         if ((flags & O_TRUNC) && (flags & (O_RDWR | O_WRONLY))) {
