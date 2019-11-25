@@ -359,7 +359,9 @@ static int __stat(const char* path, struct stat* buf)
 
     /* update local file metadata (if applicable) */
     fid = unifyfs_get_fid_from_path(path);
-    unifyfs_fid_update_file_meta(fid, &fattr);
+    if (fid != -1) {
+        unifyfs_fid_update_file_meta(fid, &fattr);
+    }
 
     /* copy attributes to stat struct */
     unifyfs_file_attr_to_stat(&fattr, buf);
