@@ -1262,11 +1262,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         }
 
         /* initialize global size of file from global metadata */
-        ret = unifyfs_fid_update_file_meta(fid, &gfattr);
-        if (ret != UNIFYFS_SUCCESS) {
-            LOGERR("failed to update file metadata from global");
-            /* this is not a fatal error, continue */
-        }
+        unifyfs_fid_update_file_meta(fid, &gfattr);
     } else if (found_local && found_global) {
         /* file exists and is valid.  */
         if ((flags & O_CREAT) && (flags & O_EXCL)) {
@@ -1282,11 +1278,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         }
 
         /* update local metadata from global metadata */
-        ret = unifyfs_fid_update_file_meta(fid, &gfattr);
-        if (ret != UNIFYFS_SUCCESS) {
-            LOGERR("failed to update file metadata from global");
-            /* this is not a fatal error, continue */
-        }
+        unifyfs_fid_update_file_meta(fid, &gfattr);
 
         if ((flags & O_TRUNC) && (flags & (O_RDWR | O_WRONLY))) {
             unifyfs_fid_truncate(fid, 0);
