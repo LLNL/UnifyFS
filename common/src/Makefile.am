@@ -59,6 +59,8 @@ libunifyfs_common_la_CPPFLAGS = \
   $(MARGO_CFLAGS) \
   $(FLATCC_CFLAGS)
 
+libunifyfs_common_la_CPPFLAGS += -DSYSCONFDIR="$(sysconfdir)"
+
 libunifyfs_common_la_LDFLAGS = \
   -version-info $(LIBUNIFYFS_LT_VERSION)
 
