@@ -1,6 +1,9 @@
 # unifyfs.conf
 
-# NOTE: settings with default values are commented out
+# NOTE:
+#  - settings with default values are commented out
+#  - string values should not be quoted, e.g., /var/tmp is correct but
+#    "/var/tmp" is not.
 #
 # COMMENT STYLE:
 #  '#' start of line comment character
@@ -8,9 +11,9 @@
 
 # SECTION: top-level configuration
 [unifyfs]
-# consistency = "LAMINATED" ; NONE | LAMINATED | POSIX
-# daemonize = on            ; servers will become daemons
-# mountpoint = "/unifyfs"   ; mountpoint (i.e., prefix path)
+# consistency = LAMINATED ; NONE | LAMINATED | POSIX
+# daemonize = on          ; servers will become daemons
+# mountpoint = /unifyfs   ; mountpoint (i.e., prefix path)
 
 # SECTION: client settings
 [client]
@@ -24,8 +27,8 @@ verbosity = 5         ; logging verbosity level [0-5] (default: 0)
 
 # SECTION: metadata settings
 [meta]
-# db_name = "unifyfs_metadb" ; metadata datbase name
-db_path = "/var/tmp"         ; metadata database directory path (default: /tmp)
+# db_name = unifyfs_metadb ; metadata datbase name
+db_path = /var/tmp         ; metadata database directory path (default: /tmp)
 
 # SECTION: shared memory segment settings
 [shmem]
@@ -34,7 +37,7 @@ chunk_mem = 67108864 ; segment size for data chunks (default: 256 MiB)
 
 # SECTION: spillover local to each node
 [spillover]
-# enabled = on          ; enable spillover to local storage
-# data_dir = "/mnt/ssd" ; directory path for data spillover
-# meta_dir = "/mnt/ssd" ; directory path for metadata spillover
-size = 268435456        ; data spillover max size (default: 1 GiB)
+# enabled = on        ; enable spillover to local storage
+# data_dir = /mnt/ssd ; directory path for data spillover
+# meta_dir = /mnt/ssd ; directory path for metadata spillover
+size = 268435456      ; data spillover max size (default: 1 GiB)
