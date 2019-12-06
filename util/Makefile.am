@@ -1,1 +1,1 @@
-SUBDIRS = scripts unifyfs
+SUBDIRS = scripts unifyfs unifyfs-shell

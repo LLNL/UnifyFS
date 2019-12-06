@@ -363,7 +363,9 @@ AC_CONFIG_FILES([Makefile
                  util/scripts/Makefile
                  util/scripts/lsfcsm/Makefile
                  util/unifyfs/Makefile
-                 util/unifyfs/src/Makefile])
+                 util/unifyfs/src/Makefile
+                 util/unifyfs-shell/Makefile
+                 util/unifyfs-shell/src/Makefile])
 
 AC_CONFIG_FILES([client/unifyfs-config], [chmod +x client/unifyfs-config])
 AC_CONFIG_FILES([util/scripts/lsfcsm/unifyfs_lsfcsm_prolog], [chmod +x util/scripts/lsfcsm/unifyfs_lsfcsm_prolog])
