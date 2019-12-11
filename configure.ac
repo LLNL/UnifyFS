@@ -176,11 +176,11 @@ AC_TRY_COMPILE(
     AC_MSG_RESULT(no)
 )
 
-AC_MSG_CHECKING(if linker suppots -wrap)
+AC_MSG_CHECKING(if linker supports -wrap)
 OLD_LDFLAGS=$LDFLAGS
 LDFLAGS=$LDFLAGS
 LDFLAGS+="-Wl,-wrap,malloc"
-AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>]],[[int *test = malloc(sizeof(int));]])],
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>]],[[void* __wrap_malloc(size_t size);]],[[int *test = malloc(sizeof(int));]])],
 [
     AC_MSG_RESULT([yes])
     AM_CONDITIONAL([HAVE_LD_WRAP],[true])
