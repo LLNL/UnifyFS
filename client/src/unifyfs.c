@@ -2786,12 +2786,15 @@ int unifyfs_transfer_file(const char* src, const char* dst, int parallel)
     int ret = 0;
     int dir = 0;
     struct stat sb_src = { 0, };
+    mode_t source_file_mode_write_removed;
     struct stat sb_dst = { 0, };
     int unify_src = 0;
     int unify_dst = 0;
     char dst_path[PATH_MAX] = { 0, };
     char* pos = dst_path;
     char* src_path = strdup(src);
+
+    int local_return_val;
 
     if (!src_path) {
         return -ENOMEM;
@@ -2828,9 +2831,27 @@ int unifyfs_transfer_file(const char* src, const char* dst, int parallel)
     }
 
     if (parallel) {
-        return do_transfer_file_parallel(src_path, dst_path, &sb_src, dir);
+        local_return_val =
+	    do_transfer_file_parallel(src_path, dst_path, &sb_src, dir);
     } else {
-        return do_transfer_file_serial(src_path, dst_path, &sb_src, dir);
+        local_return_val =
+	    do_transfer_file_serial(src_path, dst_path, &sb_src, dir);
     }
+
+    // We know here that one (but not both) of the constituent files
+    // is in the unify FS.  We just have to decide if the *destination* file is.
+    // If it is, then now that we've transferred it, we'll set it to be readable
+    // so that it will be laminated and will be readable by other processes.
+    if (unify_dst) {
+      // pull the source file's mode bits, remove all the write bits but leave
+      // the rest intact and store that new mode.  Now that the file has been
+      // copied into the unify file system, chmod the file to the new
+      // permission.  When unify senses all the write bits are removed it will
+      // laminate the file.
+        source_file_mode_write_removed =
+	    (sb_src.st_mode) & ~(0222);
+        chmod(dst_path, source_file_mode_write_removed);
+    }
+    return local_return_val;
 }
 
