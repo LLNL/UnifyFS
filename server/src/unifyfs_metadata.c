@@ -441,3 +441,45 @@ int unifyfs_set_file_extents(int num_entries,
     return rc;
 }
 
+/* delete the listed keys from the file extents */
+int unifyfs_delete_file_extents(
+    int num_entries,      /* number of items in keys list */
+    unifyfs_key_t** keys, /* list of keys to be deleted */
+    int* key_lens)        /* list of byte sizes for keys list items */
+{
+    /* assume we'll succeed */
+    int rc = UNIFYFS_SUCCESS;
+
+    /* select index for file extents */
+    md->primary_index = unifyfs_indexes[IDX_FILE_EXTENTS];
+
+    /* delete list of key/value pairs */
+    struct mdhim_brm_t* brm = mdhimBDelete(md, md->primary_index,
+        (void**)(keys), key_lens, num_entries);
+
+    /* check for errors and free resources */
+    if (!brm) {
+        LOGERR("Error deleting file extents from MDHIM");
+        rc = (int)UNIFYFS_ERROR_MDHIM;
+    } else {
+        /* step through linked list of messages,
+         * scan for any error and free messages */
+        struct mdhim_brm_t* brmp = brm;
+        while (brmp) {
+            /* check current item for error */
+            if (brmp->error < 0) {
+                LOGERR("Error deleting file extents from MDHIM");
+                rc = (int)UNIFYFS_ERROR_MDHIM;
+            }
+
+            /* record pointer to current item,
+             * advance loop pointer to next item in list,
+             * free resources for current item */
+            brm  = brmp;
+            brmp = brmp->next;
+            mdhim_full_release_msg(brm);
+        }
+    }
+
+    return rc;
+}

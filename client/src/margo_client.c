@@ -40,6 +40,11 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
                        unifyfs_filesize_out_t,
                        NULL);
 
+    ctx->rpcs.truncate_id = MARGO_REGISTER(mid, "unifyfs_truncate_rpc",
+                       unifyfs_truncate_in_t,
+                       unifyfs_truncate_out_t,
+                       NULL);
+
     ctx->rpcs.fsync_id = MARGO_REGISTER(mid, "unifyfs_fsync_rpc",
                        unifyfs_fsync_in_t,
                        unifyfs_fsync_out_t,
@@ -389,6 +394,42 @@ int invoke_client_filesize_rpc(int gfid, size_t* outsize)
 
     /* save output from function */
     *outsize = (size_t) out.filesize;
+
+    /* free resources */
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+    return (int)ret;
+}
+
+/* invokes the client truncate rpc function */
+int invoke_client_truncate_rpc(int gfid, size_t filesize)
+{
+    /* check that we have initialized margo */
+    if (NULL == client_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* get handle to rpc function */
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.truncate_id);
+
+    /* fill in input struct */
+    unifyfs_truncate_in_t in;
+    in.app_id         = (int32_t)app_id;
+    in.local_rank_idx = (int32_t)local_rank_idx;
+    in.gfid           = (int32_t)gfid;
+    in.filesize       = (hg_size_t)filesize;
+
+    /* call rpc function */
+    LOGDBG("invoking the truncate rpc function in client");
+    hg_return_t hret = margo_forward(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* decode response */
+    unifyfs_filesize_out_t out;
+    hret = margo_get_output(handle, &out);
+    assert(hret == HG_SUCCESS);
+    int32_t ret = out.ret;
+    LOGDBG("Got response ret=%" PRIi32, ret);
 
     /* free resources */
     margo_free_output(handle, &out);

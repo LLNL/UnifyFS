@@ -79,22 +79,25 @@ int write_read_hole_test(char* unifyfs_root)
     /* create a file that contains:
      * [0, 1MB)   - data = "1"
      * [1MB, 2MB) - hole = "0" implied
-     * [2MB, 3MB) - data = "1" */
+     * [2MB, 3MB) - data = "1"
+     * [3MB, 4MB) - hole = "0" implied */
 
     /* Write to the file */
     fd = open(path, O_WRONLY | O_CREAT, 0222);
     ok(fd != -1, "%s:%d open(%s) (fd=%d): %s",
         __FILE__, __LINE__, path, fd, strerror(errno));
 
+    /* write "1" to [0MB, 1MB) */
     rc = write(fd, buf, bufsize);
     ok(rc == bufsize, "%s:%d write() (rc=%d): %s",
         __FILE__, __LINE__, rc, strerror(errno));
 
-    /* Test writing to a different offset */
+    /* skip over [1MB, 2MB) for implied "0" */
     rc = lseek(fd, 2*bufsize, SEEK_SET);
     ok(rc == 2*bufsize, "%s:%d lseek() (rc=%d): %s",
         __FILE__, __LINE__, rc, strerror(errno));
 
+    /* write "1" to [2MB, 3MB) */
     rc = write(fd, buf, bufsize);
     ok(rc == bufsize, "%s:%d write() (rc=%d): %s",
         __FILE__, __LINE__, rc, strerror(errno));
@@ -113,6 +116,21 @@ int write_read_hole_test(char* unifyfs_root)
     ok(rc == 0, "%s:%d fsync() (rc=%d): %s",
         __FILE__, __LINE__, rc, strerror(errno));
 
+    /* Check global and local size on our un-laminated file */
+    get_size(path, &global, &local, &log);
+    ok(global == 3*bufsize, "%s:%d global size is %d: %s",
+        __FILE__, __LINE__, global, strerror(errno));
+    ok(local == 3*bufsize, "%s:%d local size is %d: %s",
+        __FILE__, __LINE__, local, strerror(errno));
+    ok(log == 2*bufsize, "%s:%d log size is %d: %s",
+        __FILE__, __LINE__, log, strerror(errno));
+
+    /* truncate file at 4MB, extends file so that
+     * [3MB, 4MB) is implied "0" */
+    rc = ftruncate(fd, 4*bufsize);
+    ok(rc == 0, "%s:%d ftruncate() (rc=%d): %s",
+        __FILE__, __LINE__, rc, strerror(errno));
+
     /* Laminate */
     rc = chmod(path, 0444);
     ok(rc == 0, "%s:%d chmod(0444) (rc=%d): %s",
@@ -120,9 +138,9 @@ int write_read_hole_test(char* unifyfs_root)
 
     /* Check global and local size on our un-laminated file */
     get_size(path, &global, &local, &log);
-    ok(global == 3*bufsize, "%s:%d global size is %d: %s",
+    ok(global == 4*bufsize, "%s:%d global size is %d: %s",
         __FILE__, __LINE__, global, strerror(errno));
-    ok(local == 3*bufsize, "%s:%d local size is %d: %s",
+    ok(local == 4*bufsize, "%s:%d local size is %d: %s",
         __FILE__, __LINE__, local, strerror(errno));
     ok(log == 2*bufsize, "%s:%d log size is %d: %s",
         __FILE__, __LINE__, log, strerror(errno));
@@ -142,8 +160,11 @@ int write_read_hole_test(char* unifyfs_root)
      * this should be a full read, all from actual data */
     memset(buf, 2, bufsize);
     ssize_t nread = pread(fd, buf, bufsize, 0*bufsize);
-    ok(nread == bufsize, "%s:%d pread(%s) (fd=%d): %s",
-        __FILE__, __LINE__, path, fd, strerror(errno));
+    ok(nread == bufsize,
+        "%s:%d pread expected=%llu got=%llu: errno=%s",
+        __FILE__, __LINE__,
+        (unsigned long long) bufsize, (unsigned long long) nread,
+        strerror(errno));
 
     /* check that full buffer is "1" */
     int valid = check_contents(buf, bufsize, 1);
@@ -155,8 +176,11 @@ int write_read_hole_test(char* unifyfs_root)
      * this should be a full read, all from a hole */
     memset(buf, 2, bufsize);
     nread = pread(fd, buf, bufsize, 1*bufsize);
-    ok(nread == bufsize, "%s:%d pread(%s) (fd=%d): %s",
-        __FILE__, __LINE__, path, fd, strerror(errno));
+    ok(nread == bufsize,
+        "%s:%d pread expected=%llu got=%llu: errno=%s",
+        __FILE__, __LINE__,
+        (unsigned long long) bufsize, (unsigned long long) nread,
+        strerror(errno));
 
     /* check that full buffer is "0" */
     valid = check_contents(buf, bufsize, 0);
@@ -168,8 +192,11 @@ int write_read_hole_test(char* unifyfs_root)
      * should be a full read, half data, half hole */
     memset(buf, 2, bufsize);
     nread = pread(fd, buf, bufsize, bufsize/2);
-    ok(nread == bufsize, "%s:%d pread(%s) (fd=%d): %s",
-        __FILE__, __LINE__, path, fd, strerror(errno));
+    ok(nread == bufsize,
+        "%s:%d pread expected=%llu got=%llu: errno=%s",
+        __FILE__, __LINE__,
+        (unsigned long long) bufsize, (unsigned long long) nread,
+        strerror(errno));
 
     /* check that data portion is "1" */
     valid = check_contents(buf, bufsize/2, 1);
@@ -182,16 +209,19 @@ int write_read_hole_test(char* unifyfs_root)
         __FILE__, __LINE__);
 
 
-    /* read segment [2.5MB, 3.5MB)
+    /* read segment [3.5MB, 4.5MB)
      * should read only half of requested amount,
-     * half data, half past end of file */
+     * half hole, half past end of file */
     memset(buf, 2, bufsize);
-    nread = pread(fd, buf, bufsize, 2*bufsize + bufsize/2);
-    ok(nread == bufsize/2, "%s:%d pread(%s) (fd=%d): %s",
-        __FILE__, __LINE__, path, fd, strerror(errno));
+    nread = pread(fd, buf, bufsize, 3*bufsize + bufsize/2);
+    ok(nread == bufsize/2,
+        "%s:%d pread expected=%llu got=%llu: errno=%s",
+        __FILE__, __LINE__,
+        (unsigned long long) bufsize/2, (unsigned long long) nread,
+        strerror(errno));
 
-    /* first half of buffer should be "1" */
-    valid = check_contents(buf, bufsize/2, 1);
+    /* first half of buffer should be "0" */
+    valid = check_contents(buf, bufsize/2, 0);
     ok(valid == 1, "%s:%d data check",
         __FILE__, __LINE__);
 

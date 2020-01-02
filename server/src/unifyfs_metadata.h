@@ -129,6 +129,16 @@ int unifyfs_get_file_extents(int num_keys,
                              int* num_values, unifyfs_keyval_t** keyval);
 
 /**
+ * Delete File extents from the KV-Store.
+ *
+ * @param[in] num_entries number of key value pairs to delete
+ * @param[in] keys array storing the keys
+ * @param[in] key_lens array with the length of the elements in \p keys
+ */
+int unifyfs_delete_file_extents(int num_entries,
+                                unifyfs_key_t** keys, int* key_lens);
+
+/**
  * Store File extents in the KV-Store.
  *
  * @param [in] num_entries number of key value pairs to store

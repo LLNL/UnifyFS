@@ -50,4 +50,10 @@ int write_read_test(char* unifyfs_root);
 /* test reading from file with holes */
 int write_read_hole_test(char* unifyfs_root);
 
+/* Tests for UNIFYFS_WRAP(ftruncate) and UNIFYFS_WRAP(truncate) */
+int truncate_test(char* unifyfs_root);
+int truncate_bigempty(char* unifyfs_root);
+int truncate_eof(char* unifyfs_root);
+int truncate_truncsync(char* unifyfs_root);
+
 #endif /* SYSIO_SUITE_H */

@@ -85,6 +85,15 @@ int main(int argc, char* argv[])
 
     write_read_hole_test(unifyfs_root);
 
+    truncate_test(unifyfs_root);
+    truncate_bigempty(unifyfs_root);
+    truncate_eof(unifyfs_root);
+    truncate_truncsync(unifyfs_root);
+    truncate_pattern_size(unifyfs_root, 0);
+    truncate_pattern_size(unifyfs_root, 2020);
+    truncate_empty_read(unifyfs_root, 0);
+    truncate_empty_read(unifyfs_root, 2020);
+
     MPI_Finalize();
 
     done_testing();

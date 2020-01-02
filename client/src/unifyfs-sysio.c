@@ -233,22 +233,35 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
 {
     /* determine whether we should intercept this path or not */
     if (unifyfs_intercept_path(path)) {
-        /* lookup the fid for the path */
+        /* get file id for path name */
         int fid = unifyfs_get_fid_from_path(path);
-        if (fid < 0) {
+        if (fid >= 0) {
+            /* got the file locally, use fid_truncate the file */
+            int rc = unifyfs_fid_truncate(fid, length);
+            if (rc != UNIFYFS_SUCCESS) {
+                errno = EIO;
+                return -1;
+            }
+        } else {
+            /* otherwise call gfid truncate to attempt to
+             * truncate the global file */
+            int gfid = unifyfs_generate_gfid(path);
+
+            /* invoke truncate rpc */
+            int rc = invoke_client_truncate_rpc(gfid, length);
+            if (rc != UNIFYFS_SUCCESS) {
+                LOGDBG("truncate rpc failed %s in UNIFYFS", path);
+                errno = EIO;
+                return -1;
+            }
+        }
+
+#if 0
             /* ERROR: file does not exist */
             LOGDBG("Couldn't find entry for %s in UNIFYFS", path);
             errno = ENOENT;
             return -1;
-        }
-
-        /* truncate the file */
-        int rc = unifyfs_fid_truncate(fid, length);
-        if (rc != UNIFYFS_SUCCESS) {
-            LOGDBG("unifyfs_fid_truncate failed for %s in UNIFYFS", path);
-            errno = EIO;
-            return -1;
-        }
+#endif
 
         /* success */
         return 0;
@@ -335,30 +348,63 @@ int UNIFYFS_WRAP(remove)(const char* path)
     }
 }
 
+/* Get global file meta data with accurate file size */
+static int unifyfs_get_meta_with_size(int gfid, unifyfs_file_attr_t* pfattr)
+{
+    /* lookup global meta data for this file */
+    int ret = unifyfs_get_global_file_meta(gfid, pfattr);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGDBG("get metadata rpc failed");
+        return ret;
+    }
+
+    /* if file is laminated, we assume the file size in the meta
+     * data is already accurate, if not, look up the current file
+     * size with an rpc */
+    if (!pfattr->is_laminated) {
+        /* lookup current global file size */
+        size_t filesize;
+        ret = invoke_client_filesize_rpc(gfid, &filesize);
+        if (ret == UNIFYFS_SUCCESS) {
+            /* success, we have a file size value */
+            pfattr->size = (uint64_t) filesize;
+        } else {
+            /* failed to get file size for some reason */
+            LOGDBG("filesize rpc failed");
+            return ret;
+        }
+    }
+
+    return UNIFYFS_SUCCESS;
+}
+
 /* The main stat call for all the *stat() functions */
 static int __stat(const char* path, struct stat* buf)
 {
-    int gfid, fid, ret;
-    unifyfs_file_attr_t fattr;
-
     /* check that caller gave us a buffer to write to */
     if (!buf) {
-        errno = EFAULT;
+        /* forgot buffer for stat */
+        LOGDBG("invalid stat buffer");
+        errno = EINVAL;
         return -1;
     }
+
+    /* clear the user buffer */
     memset(buf, 0, sizeof(*buf));
 
-    /* lookup stat data for global file id */
-    gfid = unifyfs_generate_gfid(path);
-    ret = unifyfs_get_global_file_meta(gfid, &fattr);
+    /* get global file id for given path */
+    int gfid = unifyfs_generate_gfid(path);
+
+    /* get stat information for file */
+    unifyfs_file_attr_t fattr;
+    int ret = unifyfs_get_meta_with_size(gfid, &fattr);
     if (ret != UNIFYFS_SUCCESS) {
-        LOGDBG("metaget failed");
-        errno = ENOENT;
+        errno = EIO;
         return -1;
     }
 
     /* update local file metadata (if applicable) */
-    fid = unifyfs_get_fid_from_path(path);
+    int fid = unifyfs_get_fid_from_path(path);
     if (fid != -1) {
         unifyfs_fid_update_file_meta(fid, &fattr);
     }
@@ -379,12 +425,6 @@ static int __stat(const char* path, struct stat* buf)
         buf->st_rdev |= (unifyfs_fid_local_size(fid) & 0xFFFFFFFF);
     }
 
-    /* global filesize is zero for non-laminated files */
-    if (!fattr.is_laminated) {
-        LOGDBG("file is NOT laminated")
-        buf->st_size = 0;
-    }
-
     return 0;
 }
 
@@ -401,14 +441,12 @@ int UNIFYFS_WRAP(stat)(const char* path, struct stat* buf)
 
 int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
 {
-    int fid;
-    const char* path;
     LOGDBG("fstat was called for fd: %d", fd);
 
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
-        fid = unifyfs_get_fid_from_fd(fd);
-        path = unifyfs_path_from_fid(fid);
+        int fid = unifyfs_get_fid_from_fd(fd);
+        const char* path = unifyfs_path_from_fid(fid);
         return __stat(path, buf);
     } else {
         MAP_OR_FAIL(fstat);
@@ -466,8 +504,6 @@ int UNIFYFS_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
 int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
 {
     LOGDBG("fxstat was called for fd %d", fd);
-    int fid;
-    const char* path;
 
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
@@ -476,8 +512,8 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
             return -1;
         }
 
-        fid = unifyfs_get_fid_from_fd(fd);
-        path = unifyfs_path_from_fid(fid);
+        int fid = unifyfs_get_fid_from_fd(fd);
+        const char* path = unifyfs_path_from_fid(fid);
         return __stat(path, buf);
     } else {
         MAP_OR_FAIL(__fxstat);
@@ -1850,6 +1886,7 @@ ssize_t UNIFYFS_WRAP(pwrite64)(int fd, const void* buf, size_t count,
 int UNIFYFS_WRAP(ftruncate)(int fd, off_t length)
 {
     /* check whether we should intercept this file descriptor */
+    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
         /* get the file id for this file descriptor */
         int fid = unifyfs_get_fid_from_fd(fd);
@@ -1865,6 +1902,9 @@ int UNIFYFS_WRAP(ftruncate)(int fd, off_t length)
             errno = EBADF;
             return -1;
         }
+
+        /* sync any pending writes if we have any before we truncate */
+        UNIFYFS_WRAP(fsync)(origfd);
 
         /* truncate the file */
         int rc = unifyfs_fid_truncate(fid, length);
