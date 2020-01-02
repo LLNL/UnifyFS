@@ -88,7 +88,7 @@ int write_read_test(char* unifyfs_root)
 
     /* Check global and local size on our un-laminated file */
     get_size(path, &global, &local, &log);
-    ok(global == 0, "%s: global size is %d: %s",  __FILE__, global,
+    ok(global == 15, "%s: global size is %d: %s",  __FILE__, global,
         strerror(errno));
     ok(local == 15, "%s: local size is %d: %s",  __FILE__, local,
         strerror(errno));
@@ -116,7 +116,7 @@ int write_read_test(char* unifyfs_root)
 
     /* Check global and local size on our un-laminated file */
     get_size(path, &global, &local, &log);
-    ok(global == 0, "%s: global size is %d: %s",  __FILE__, global,
+    ok(global == 21, "%s: global size is %d: %s",  __FILE__, global,
         strerror(errno));
     ok(local == 21, "%s: local size is %d: %s",  __FILE__, local,
         strerror(errno));

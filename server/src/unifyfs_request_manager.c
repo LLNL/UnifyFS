@@ -606,7 +606,360 @@ int rm_cmd_filesize(
         keyvals = NULL;
     }
 
+    /* get filesize as recorded in metadata, which may be bigger if
+     * user issued an ftruncate on the file to extend it past the
+     * last write */
+    size_t filesize_meta = filesize;
+
+    /* given the global file id, look up file attributes
+     * from key/value store */
+    unifyfs_file_attr_t fattr;
+    int ret = unifyfs_get_file_attribute(gfid, &fattr);
+    if (ret == UNIFYFS_SUCCESS) {
+        /* found file attribute for this file, now get its size */
+        filesize_meta = fattr.size;
+    } else {
+        /* failed to find file attributes for this file */
+        return UNIFYFS_FAILURE;
+    }
+
+    /* take maximum of last write and file size from metadata */
+    if (filesize_meta > filesize) {
+        filesize = filesize_meta;
+    }
+
     *outsize = filesize;
+    return rc;
+}
+
+/* delete any key whose last byte is beyond the specified
+ * file size */
+static int truncate_delete_keys(
+    size_t filesize,           /* new file size */
+    int num,                   /* number of entries in keyvals */
+    unifyfs_keyval_t* keyvals) /* list of existing key/values */
+{
+    /* assume we'll succeed */
+    int ret = (int) UNIFYFS_SUCCESS;
+
+    /* pointers to memory we'll dynamically allocate for file extents */
+    unifyfs_key_t** unifyfs_keys = NULL;
+    unifyfs_val_t** unifyfs_vals = NULL;
+    int* unifyfs_key_lens        = NULL;
+    int* unifyfs_val_lens        = NULL;
+
+    /* in the worst case, we'll have to delete all existing keys */
+    /* allocate storage for file extent key/values */
+    /* TODO: possibly get this from memory pool */
+    unifyfs_keys     = alloc_key_array(num);
+    unifyfs_vals     = alloc_value_array(num);
+    unifyfs_key_lens = calloc(num, sizeof(int));
+    unifyfs_val_lens = calloc(num, sizeof(int));
+    if ((NULL == unifyfs_keys) ||
+        (NULL == unifyfs_vals) ||
+        (NULL == unifyfs_key_lens) ||
+        (NULL == unifyfs_val_lens)) {
+        LOGERR("failed to allocate memory for file extents");
+        ret = (int)UNIFYFS_ERROR_NOMEM;
+        goto truncate_delete_exit;
+    }
+
+    /* counter for number of key/values we need to delete */
+    int delete_count = 0;
+
+    /* iterate over each key, and if this index extends beyond desired
+     * file size, create an entry to delete that key */
+    int i;
+    for (i = 0; i < num; i++) {
+        /* get pointer to next key value pair */
+        unifyfs_keyval_t* kv = &keyvals[i];
+
+        /* get last byte offset for this segment of the file */
+        size_t last_offset = kv->key.offset + kv->val.len;
+
+        /* if this segment extends beyond the new file size,
+         * we need to delete this index entry */
+        if (last_offset > filesize) {
+            /* found an index that extends past end of desired
+             * file size, get next empty key entry from the pool */
+            unifyfs_key_t* key = unifyfs_keys[delete_count];
+
+            /* define the key to be deleted */
+            key->gfid   = kv->key.gfid;
+            key->offset = kv->key.offset;
+
+            /* MDHIM needs to know the byte size of each key and value */
+            unifyfs_key_lens[delete_count] = sizeof(unifyfs_key_t);
+            //unifyfs_val_lens[delete_count] = sizeof(unifyfs_val_t);
+
+            /* increment the number of keys we're deleting */
+            delete_count++;
+        }
+    }
+
+    /* batch delete file extent key/values from MDHIM */
+    if (delete_count > 0) {
+        ret = unifyfs_delete_file_extents(delete_count,
+            unifyfs_keys, unifyfs_key_lens);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* TODO: need proper error handling */
+            LOGERR("unifyfs_delete_file_extents() failed");
+            goto truncate_delete_exit;
+        }
+    }
+
+truncate_delete_exit:
+    /* clean up memory */
+
+    if (NULL != unifyfs_keys) {
+        free_key_array(unifyfs_keys);
+    }
+
+    if (NULL != unifyfs_vals) {
+        free_value_array(unifyfs_vals);
+    }
+
+    if (NULL != unifyfs_key_lens) {
+        free(unifyfs_key_lens);
+    }
+
+    if (NULL != unifyfs_val_lens) {
+        free(unifyfs_val_lens);
+    }
+
+    return ret;
+}
+
+/* rewrite any key that overlaps with new file size,
+ * we assume the existing key has already been deleted */
+static int truncate_rewrite_keys(
+    size_t filesize,           /* new file size */
+    int num,                   /* number of entries in keyvals */
+    unifyfs_keyval_t* keyvals) /* list of existing key/values */
+{
+    /* assume we'll succeed */
+    int ret = (int) UNIFYFS_SUCCESS;
+
+    /* pointers to memory we'll dynamically allocate for file extents */
+    unifyfs_key_t** unifyfs_keys = NULL;
+    unifyfs_val_t** unifyfs_vals = NULL;
+    int* unifyfs_key_lens        = NULL;
+    int* unifyfs_val_lens        = NULL;
+
+    /* in the worst case, we'll have to rewrite all existing keys */
+    /* allocate storage for file extent key/values */
+    /* TODO: possibly get this from memory pool */
+    unifyfs_keys     = alloc_key_array(num);
+    unifyfs_vals     = alloc_value_array(num);
+    unifyfs_key_lens = calloc(num, sizeof(int));
+    unifyfs_val_lens = calloc(num, sizeof(int));
+    if ((NULL == unifyfs_keys) ||
+        (NULL == unifyfs_vals) ||
+        (NULL == unifyfs_key_lens) ||
+        (NULL == unifyfs_val_lens)) {
+        LOGERR("failed to allocate memory for file extents");
+        ret = (int)UNIFYFS_ERROR_NOMEM;
+        goto truncate_rewrite_exit;
+    }
+
+    /* counter for number of key/values we need to rewrite */
+    int count = 0;
+
+    /* iterate over each key, and if this index starts before
+     * and ends after the desired file size, create an entry
+     * that ends at new file size */
+    int i;
+    for (i = 0; i < num; i++) {
+        /* get pointer to next key value pair */
+        unifyfs_keyval_t* kv = &keyvals[i];
+
+        /* get first byte offset for this segment of the file */
+        size_t first_offset = kv->key.offset;
+
+        /* get last byte offset for this segment of the file */
+        size_t last_offset = kv->key.offset + kv->val.len;
+
+        /* if this segment extends beyond the new file size,
+         * we need to rewrite this index entry */
+        if (first_offset < filesize &&
+            last_offset  > filesize) {
+            /* found an index that overlaps end of desired
+             * file size, get next empty key entry from the pool */
+            unifyfs_key_t* key = unifyfs_keys[count];
+
+            /* define the key to be rewritten */
+            key->gfid   = kv->key.gfid;
+            key->offset = kv->key.offset;
+
+            /* compute new length of this entry */
+            size_t newlen = (size_t)(filesize - first_offset);
+
+            /* for the value, we store the log position, the length,
+             * the host server (delegator rank), the mount point id
+             * (app id), and the client id (rank) */
+            unifyfs_val_t* val = unifyfs_vals[count];
+            val->addr           = kv->val.addr;
+            val->len            = newlen;
+            val->delegator_rank = kv->val.delegator_rank;
+            val->app_id         = kv->val.app_id;
+            val->rank           = kv->val.rank;
+
+            /* MDHIM needs to know the byte size of each key and value */
+            unifyfs_key_lens[count] = sizeof(unifyfs_key_t);
+            unifyfs_val_lens[count] = sizeof(unifyfs_val_t);
+
+            /* increment the number of keys we're deleting */
+            count++;
+        }
+    }
+
+    /* batch set file extent key/values from MDHIM */
+    if (count > 0) {
+        ret = unifyfs_set_file_extents(count,
+            unifyfs_keys, unifyfs_key_lens,
+            unifyfs_vals, unifyfs_val_lens);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* TODO: need proper error handling */
+            LOGERR("unifyfs_set_file_extents() failed");
+            goto truncate_rewrite_exit;
+        }
+    }
+
+truncate_rewrite_exit:
+    /* clean up memory */
+
+    if (NULL != unifyfs_keys) {
+        free_key_array(unifyfs_keys);
+    }
+
+    if (NULL != unifyfs_vals) {
+        free_value_array(unifyfs_vals);
+    }
+
+    if (NULL != unifyfs_key_lens) {
+        free(unifyfs_key_lens);
+    }
+
+    if (NULL != unifyfs_val_lens) {
+        free(unifyfs_val_lens);
+    }
+
+    return ret;
+}
+
+/* given an app_id, client_id, global file id,
+ * and file size, truncate file to specified size
+ */
+int rm_cmd_truncate(
+    int app_id,     /* app_id for requesting client */
+    int client_id,  /* client_id for requesting client */
+    int gfid,       /* global file id */
+    size_t newsize) /* desired file size */
+{
+    /* set offset and length to request *all* key/value pairs
+     * for this file */
+    size_t offset = 0;
+
+    /* want to pick the highest integer offset value a file
+     * could have here */
+    size_t length = (SIZE_MAX >> 1) - 1;
+
+    /* get the locations of all the read requests from the
+     * key-value store*/
+    unifyfs_key_t key1, key2;
+
+    /* create key to describe first byte we'll read */
+    key1.gfid   = gfid;
+    key1.offset = offset;
+
+    /* create key to describe last byte we'll read */
+    key2.gfid   = gfid;
+    key2.offset = offset + length - 1;
+
+    /* set up input params to specify range lookup */
+    unifyfs_key_t* unifyfs_keys[2] = {&key1, &key2};
+    int key_lens[2] = {sizeof(unifyfs_key_t), sizeof(unifyfs_key_t)};
+
+    /* look up all entries in this range */
+    int num_vals = 0;
+    unifyfs_keyval_t* keyvals = NULL;
+    int rc = unifyfs_get_file_extents(2, unifyfs_keys, key_lens,
+                                      &num_vals, &keyvals);
+    if (UNIFYFS_SUCCESS != rc) {
+        /* failed to look up extents, bail with error */
+        return UNIFYFS_FAILURE;
+    }
+
+    /* compute our file size by iterating over each file
+     * segment and taking the max logical offset */
+    int i;
+    size_t filesize = 0;
+    for (i = 0; i < num_vals; i++) {
+        /* get pointer to next key value pair */
+        unifyfs_keyval_t* kv = &keyvals[i];
+
+        /* get last byte offset for this segment of the file */
+        size_t last_offset = kv->key.offset + kv->val.len;
+
+        /* update our filesize if this offset is bigger than the current max */
+        if (last_offset > filesize) {
+            filesize = last_offset;
+        }
+    }
+
+    /* get filesize as recorded in metadata, which may be bigger if
+     * user issued an ftruncate on the file to extend it past the
+     * last write */
+    size_t filesize_meta = filesize;
+
+    /* given the global file id, look up file attributes
+     * from key/value store */
+    unifyfs_file_attr_t fattr;
+    rc = unifyfs_get_file_attribute(gfid, &fattr);
+    if (rc == UNIFYFS_SUCCESS) {
+        /* found file attribute for this file, now get its size */
+        filesize_meta = fattr.size;
+    } else {
+        /* failed to find file attributes for this file */
+        goto truncate_exit;
+    }
+
+    /* take maximum of last write and file size from metadata */
+    if (filesize_meta > filesize) {
+        filesize = filesize_meta;
+    }
+
+    /* may need to throw away and rewrite keys if shrinking file */
+    if (newsize < filesize) {
+        /* delete any key that extends beyond new file size */
+        rc = truncate_delete_keys(newsize, num_vals, keyvals);
+        if (rc != UNIFYFS_SUCCESS) {
+            goto truncate_exit;
+        }
+
+        /* rewrite any key that overlaps new file size */
+        rc = truncate_rewrite_keys(newsize, num_vals, keyvals);
+        if (rc != UNIFYFS_SUCCESS) {
+            goto truncate_exit;
+        }
+    }
+
+    /* update file size field with latest size */
+    fattr.size = newsize;
+    rc = unifyfs_set_file_attribute(&fattr);
+    if (rc != UNIFYFS_SUCCESS) {
+        /* failed to update file attributes with new file size */
+        goto truncate_exit;
+    }
+
+truncate_exit:
+
+    /* free off key/value buffer returned from get_file_extents */
+    if (NULL != keyvals) {
+        free(keyvals);
+        keyvals = NULL;
+    }
+
     return rc;
 }
 

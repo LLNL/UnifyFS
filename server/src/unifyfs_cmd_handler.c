@@ -495,6 +495,33 @@ static void unifyfs_filesize_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(unifyfs_filesize_rpc)
 
+/* given an app_id, client_id, global file id,
+ * and file size, truncate file to that size */
+static void unifyfs_truncate_rpc(hg_handle_t handle)
+{
+    /* get input params */
+    unifyfs_truncate_in_t in;
+    hg_return_t hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* truncate file to specified size */
+    int ret = rm_cmd_truncate(in.app_id, in.local_rank_idx,
+                              in.gfid, in.filesize);
+
+    /* build our output values */
+    unifyfs_truncate_out_t out;
+    out.ret = (int32_t) ret;
+
+    /* return to caller */
+    hret = margo_respond(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* free margo resources */
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(unifyfs_truncate_rpc)
+
 /* given an app_id, client_id, global file id, an offset, and a length,
  * initiate read operation to lookup and return data,
  * client synchronizes with server again later when data is available

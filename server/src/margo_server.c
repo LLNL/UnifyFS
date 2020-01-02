@@ -171,6 +171,10 @@ static void register_client_server_rpcs(margo_instance_id mid)
                    unifyfs_filesize_in_t, unifyfs_filesize_out_t,
                    unifyfs_filesize_rpc);
 
+    MARGO_REGISTER(mid, "unifyfs_truncate_rpc",
+                   unifyfs_truncate_in_t, unifyfs_truncate_out_t,
+                   unifyfs_truncate_rpc);
+
     MARGO_REGISTER(mid, "unifyfs_read_rpc",
                    unifyfs_read_in_t, unifyfs_read_out_t,
                    unifyfs_read_rpc)

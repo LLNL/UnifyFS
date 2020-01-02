@@ -110,6 +110,9 @@ int rm_cmd_read(int app_id, int client_id, int gfid,
 
 int rm_cmd_filesize(int app_id, int client_id, int gfid, size_t* outsize);
 
+/* truncate file to specified size */
+int rm_cmd_truncate(int app_id, int client_id, int gfid, size_t size);
+
 /* function called by main thread to instruct
  * resource manager thread to exit,
  * returns UNIFYFS_SUCCESS on success */

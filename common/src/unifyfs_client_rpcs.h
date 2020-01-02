@@ -116,6 +116,19 @@ MERCURY_GEN_PROC(unifyfs_filesize_out_t,
                  ((hg_size_t)(filesize)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_filesize_rpc)
 
+/* unifyfs_truncate_rpc (client => server)
+ *
+ * given an app_id, client_id, global file id,
+ * and a filesize, truncate file to that size */
+MERCURY_GEN_PROC(unifyfs_truncate_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(local_rank_idx))
+                 ((int32_t)(gfid))
+                 ((hg_size_t)(filesize)))
+MERCURY_GEN_PROC(unifyfs_truncate_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_truncate_rpc)
+
 /* unifyfs_read_rpc (client => server)
  *
  * given an app_id, client_id, global file id, an offset, and a length,

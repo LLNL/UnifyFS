@@ -15,6 +15,7 @@ typedef struct ClientRpcIds {
     hg_id_t metaset_id;
     hg_id_t metaget_id;
     hg_id_t filesize_id;
+    hg_id_t truncate_id;
     hg_id_t fsync_id;
     hg_id_t read_id;
     hg_id_t mread_id;
@@ -44,6 +45,8 @@ int invoke_client_metaset_rpc(unifyfs_file_attr_t* f_meta);
 int invoke_client_metaget_rpc(int gfid, unifyfs_file_attr_t* f_meta);
 
 int invoke_client_filesize_rpc(int gfid, size_t* filesize);
+
+int invoke_client_truncate_rpc(int gfid, size_t filesize);
 
 int invoke_client_fsync_rpc(int gfid);
 
