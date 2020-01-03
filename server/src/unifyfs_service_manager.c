@@ -36,7 +36,6 @@
 #include "unifyfs_server_rpcs.h"
 #include "margo_server.h"
 
-
 /* Service Manager (SM) state */
 typedef struct {
     /* the SM thread */
@@ -74,7 +73,10 @@ do { \
     pthread_mutex_unlock(&(sm->sync)); \
 } while (0)
 
-/* Decode and issue chunk-reads received from request manager
+/* Decode and issue chunk-reads received from request manager.
+ * We get a list of read requests for data on our node.  Read
+ * data for each request and construct a set of read replies
+ * that will be sent back to the request manager.
  *
  * @param src_rank      : source delegator rank
  * @param src_app_id    : app id at source delegator
@@ -102,109 +104,158 @@ int sm_issue_chunk_reads(int src_rank,
     ptr += sizeof(int);
     assert(num == num_chks);
 
+    /* total data size we'll be reading */
     size_t total_data_sz = *((size_t*)ptr);
     ptr += sizeof(size_t);
 
-    /* get pointer to read request */
+    /* get pointer to read request array */
     chunk_read_req_t* reqs = (chunk_read_req_t*)ptr;
 
+    /* we'll allocate a buffer to hold a list of chunk read response
+     * structures, one for each chunk, followed by a data buffer
+     * to hold all data for all reads */
+
+    /* compute the size of that buffer */
+    size_t resp_sz = sizeof(chunk_read_resp_t) * num_chks;
+    size_t buf_sz  = resp_sz + total_data_sz;
+
+    /* allocate the buffer */
+    // NOTE: calloc() is required here, don't use malloc
+    char* crbuf = (char*) calloc(1, buf_sz);
+    if (NULL == crbuf) {
+        LOGERR("failed to allocate chunk_read_reqs");
+        return UNIFYFS_ERROR_NOMEM;
+    }
+
+    /* the chunk read response array starts as the first
+     * byte in our buffer and the data buffer follows
+     * the read response array */
+    chunk_read_resp_t* resp = (chunk_read_resp_t*)crbuf;
+    char* databuf = crbuf + resp_sz;
+
+    /* allocate a struct for the chunk read request */
     remote_chunk_reads_t* rcr = (remote_chunk_reads_t*)
         calloc(1, sizeof(remote_chunk_reads_t));
     if (NULL == rcr) {
         LOGERR("failed to allocate remote_chunk_reads");
         return UNIFYFS_ERROR_NOMEM;
     }
-    rcr->rank = src_rank;
-    rcr->app_id = src_app_id;
-    rcr->client_id = src_client_id;
-    rcr->rdreq_id = src_req_id;
+
+    /* fill in chunk read request */
+    rcr->rank       = src_rank;
+    rcr->app_id     = src_app_id;
+    rcr->client_id  = src_client_id;
+    rcr->rdreq_id   = src_req_id;
     rcr->num_chunks = num_chks;
-    rcr->reqs = NULL;
-
-    size_t resp_sz = sizeof(chunk_read_resp_t) * num_chks;
-    size_t buf_sz = resp_sz + total_data_sz;
-    rcr->total_sz = buf_sz;
-
-    // NOTE: calloc() is required here, don't use malloc
-    char* crbuf = (char*) calloc(1, buf_sz);
-    if (NULL == crbuf) {
-        LOGERR("failed to allocate chunk_read_reqs");
-        free(rcr);
-        return UNIFYFS_ERROR_NOMEM;
-    }
-    chunk_read_resp_t* resp = (chunk_read_resp_t*)crbuf;
-    rcr->resp = resp;
-
-    char* databuf = crbuf + resp_sz;
+    rcr->reqs       = NULL;
+    rcr->total_sz   = buf_sz;
+    rcr->resp       = resp;
 
     LOGDBG("issuing %d requests, total data size = %zu",
            num_chks, total_data_sz);
 
-    /* points to offset in read reply buffer */
+    /* points to offset in read reply buffer to place
+     * data for next read */
     size_t buf_cursor = 0;
 
     int i;
     int last_app = -1;
     app_config_t* app_config = NULL;
     for (i = 0; i < num_chks; i++) {
+        /* pointer to next read request */
         chunk_read_req_t* rreq = reqs + i;
+
+        /* pointer to next read response */
         chunk_read_resp_t* rresp = resp + i;
 
-        /* get size of data we are to read */
-        size_t size = rreq->nbytes;
+        /* get size and log offset of data we are to read */
+        size_t size   = rreq->nbytes;
         size_t offset = rreq->log_offset;
 
         /* record request metadata in response */
-        rresp->nbytes = size;
-        rresp->offset = rreq->offset;
-        LOGDBG("reading chunk(offset=%zu, size=%zu)", rreq->offset, size);
+        rresp->read_rc = 0;
+        rresp->nbytes  = size;
+        rresp->offset  = rreq->offset;
+        LOGDBG("reading chunk(offset=%zu, size=%zu)",
+            rreq->offset, size);
 
-        /* get app id and client id for this read task,
-         * defines log files holding data */
+        /* get app id and corresponding app_config struct */
         int app_id = rreq->log_app_id;
-        int cli_id = rreq->log_client_id;
         if (app_id != last_app) {
             /* look up app config for given app id */
             app_config = (app_config_t*)
                 arraylist_get(app_config_list, app_id);
             assert(app_config);
+
+            /* remember the current app_id to skip lookup if the next
+             * request is for the same app_id */
             last_app = app_id;
         }
-        int spillfd = app_config->spill_log_fds[cli_id];
-        char* log_ptr = app_config->shm_superblocks[cli_id] +
-                        app_config->data_offset + offset;
 
-        char* buf_ptr = databuf + buf_cursor;
+        /* client id for this read task */
+        int cli_id = rreq->log_client_id;
+
+        /* get size of data region for this
+         * app_id and client_id */
+        size_t data_size = app_config->data_size;
 
         /* prepare read opertions based on data location */
-        size_t sz_from_mem = 0;
+        size_t sz_from_mem   = 0;
         size_t sz_from_spill = 0;
-        if ((offset + size) <= app_config->data_size) {
+        if ((offset + size) <= data_size) {
             /* requested data is totally in shared memory */
             sz_from_mem = size;
-        } else if (offset < app_config->data_size) {
+        } else if (offset < data_size) {
             /* part of the requested data is in shared memory */
-            sz_from_mem = app_config->data_size - offset;
+            sz_from_mem   = data_size - offset;
             sz_from_spill = size - sz_from_mem;
         } else {
             /* all requested data is in spillover file */
             sz_from_spill = size;
         }
+
+        /* get pointer to next position in buffer to store read data */
+        char* buf_ptr = databuf + buf_cursor;
+
+        /* read data from shared memory */
         if (sz_from_mem > 0) {
-            /* read data from shared memory */
-            memcpy(buf_ptr, log_ptr, sz_from_mem);
+            /* start of data within in superblock */
+            char* super_addr = app_config->shm_superblocks[cli_id];
+            char* data_addr  = super_addr + app_config->data_offset;
+            char* data_ptr   = data_addr + offset;
+
+            /* copy data from superblock into read reply buffer */
+            memcpy(buf_ptr, data_ptr, sz_from_mem);
+
+            /* we assume memcpy copied everything */
             rresp->read_rc = sz_from_mem;
         }
+
+        /* read data from spillover file */
         if (sz_from_spill > 0) {
-            /* read data from spillover file */
-            ssize_t nread = pread(spillfd, (buf_ptr + sz_from_mem),
-                                  sz_from_spill, 0);
+            /* file descriptor for open spillover file for this
+             * app/client */
+            int spill_fd = app_config->spill_log_fds[cli_id];
+
+            /* offset within spill over file, need to subtract off
+             * range of offsets that land in data region of
+             * superblock */
+            off_t spill_offset = (off_t)(offset - data_size +
+                sz_from_mem);
+
+            /* read data from the spillover file */
+            ssize_t nread = pread(spill_fd, (buf_ptr + sz_from_mem),
+                                  sz_from_spill, spill_offset);
             if (-1 == nread) {
+                /* pread hit an error, return error code */
                 rresp->read_rc = (ssize_t)(-errno);
             } else {
+                /* add to byte counts we may have started from memcpy */
                 rresp->read_rc += nread;
             }
         }
+
+        /* update to point to next slot in read reply buffer */
         buf_cursor += size;
 
         /* update accounting for burst size */
@@ -212,15 +263,22 @@ int sm_issue_chunk_reads(int src_rank,
     }
 
     if (src_rank != glb_pmi_rank) {
-        /* add chunk_reads to svcmgr response list */
+        /* we need to send these read responses to another rank,
+         * add chunk_reads to svcmgr response list and another
+         * thread will take care of that */
         LOGDBG("adding to svcmgr chunk_reads");
         assert(NULL != sm);
+
         SM_LOCK();
         arraylist_add(sm->chunk_reads, rcr);
         SM_UNLOCK();
+
+        /* rcr will be freed later by the sending thread */
+
         LOGDBG("done adding to svcmgr chunk_reads");
         return UNIFYFS_SUCCESS;
-    } else { /* response is for myself */
+    } else {
+        /* response is for myself, post it directly */
         LOGDBG("responding to myself");
         int rc = rm_post_chunk_read_responses(src_app_id, src_client_id,
                                               src_rank, src_req_id,
@@ -228,8 +286,10 @@ int sm_issue_chunk_reads(int src_rank,
         if (rc != (int)UNIFYFS_SUCCESS) {
             LOGERR("failed to handle chunk read responses");
         }
+
         /* clean up allocated buffers */
         free(rcr);
+
         return rc;
     }
 }
@@ -237,6 +297,8 @@ int sm_issue_chunk_reads(int src_rank,
 /* initialize and launch service manager thread */
 int svcmgr_init(void)
 {
+    /* allocate a service manager struct,
+     * store in global variable */
     sm = (svcmgr_state_t*)calloc(1, sizeof(svcmgr_state_t));
     if (NULL == sm) {
         LOGERR("failed to allocate service manager state!");
@@ -282,6 +344,7 @@ int svcmgr_fini(void)
             sm->time_to_exit = 1;
             pthread_join(sm->thrd, NULL);
         }
+
         if (sm->initialized) {
             SM_LOCK();
         }
@@ -293,6 +356,7 @@ int svcmgr_fini(void)
             pthread_mutex_destroy(&(sm->sync));
         }
 
+        /* free the service manager struct allocated during init */
         free(sm);
         sm = NULL;
     }
@@ -302,25 +366,44 @@ int svcmgr_fini(void)
 /* iterate over list of chunk reads and send responses */
 static int send_chunk_read_responses(void)
 {
+    /* assume we'll succeed */
     int rc = (int)UNIFYFS_SUCCESS;
+
+    /* this will hold a list of chunk read requests if we find any */
     arraylist_t* chunk_reads = NULL;
+
+    /* lock to access global service manager object */
     pthread_mutex_lock(&(sm->sync));
+
+    /* if we have any chunk reads, take pointer to the list
+     * of chunk read requests and replace it with a newly allocated
+     * list on the service manager structure */
     int num_chunk_reads = arraylist_size(sm->chunk_reads);
     if (num_chunk_reads) {
+        /* got some chunk read requets, take the list and replace
+         * it with an empty list */
         LOGDBG("processing %d chunk read responses", num_chunk_reads);
         chunk_reads = sm->chunk_reads;
         sm->chunk_reads = arraylist_create();
     }
+
+    /* release lock on service manager object */
     pthread_mutex_unlock(&(sm->sync));
+
+    /* iterate over each chunk read request */
     for (int i = 0; i < num_chunk_reads; i++) {
-        /* get data structure */
+        /* get next chunk read request */
         remote_chunk_reads_t* rcr = (remote_chunk_reads_t*)
             arraylist_get(chunk_reads, i);
+
         rc = invoke_chunk_read_response_rpc(rcr);
     }
+
+    /* free the list if we have one */
     if (NULL != chunk_reads) {
         arraylist_free(chunk_reads);
     }
+
     return rc;
 }
 
@@ -388,58 +471,71 @@ void* sm_service_reads(void* arg)
 
 /* BEGIN MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
 
-/* invokes the chunk_read_response rpc */
+/* invokes the chunk_read_response rpc, this sends a set of read
+ * reply headers and corresponding data back to a server that
+ * had requested we read data on its behalf, the headers and
+ * data are posted as a bulk transfer buffer */
 int invoke_chunk_read_response_rpc(remote_chunk_reads_t* rcr)
 {
+    /* assume we'll succeed */
     int rc = (int)UNIFYFS_SUCCESS;
-    int dst_srvr_rank = rcr->rank;
+
+    /* rank of destination server */
+    int dst_rank = rcr->rank;
+    assert(dst_rank < (int)glb_num_servers);
+
+    /* get address of destinaton server */
+    hg_addr_t dst_addr = glb_servers[dst_rank].margo_svr_addr;
+
+    /* pointer to struct containing rpc context info,
+     * shorter name for convience */
+    ServerRpcContext_t* ctx = unifyfsd_rpc_context;
+
+    /* get handle to read response rpc on destination server */
     hg_handle_t handle;
-    chunk_read_response_in_t in;
-    chunk_read_response_out_t out;
-    hg_return_t hret;
-    hg_addr_t dst_srvr_addr;
-    hg_size_t bulk_sz = rcr->total_sz;
-    void* data_buf = (void*)rcr->resp;
-
-    assert(dst_srvr_rank < (int)glb_num_servers);
-    dst_srvr_addr = glb_servers[dst_srvr_rank].margo_svr_addr;
-
-    hret = margo_create(unifyfsd_rpc_context->svr_mid, dst_srvr_addr,
-                        unifyfsd_rpc_context->rpcs.chunk_read_response_id,
-                        &handle);
+    hg_return_t hret = margo_create(ctx->svr_mid, dst_addr,
+        ctx->rpcs.chunk_read_response_id, &handle);
     assert(hret == HG_SUCCESS);
+
+    /* get address and size of our response buffer */
+    void* data_buf    = (void*)rcr->resp;
+    hg_size_t bulk_sz = rcr->total_sz;
 
     /* fill in input struct */
-    in.src_rank = (int32_t)glb_pmi_rank;
-    in.app_id = (int32_t)rcr->app_id;
+    chunk_read_response_in_t in;
+    in.src_rank  = (int32_t)glb_pmi_rank;
+    in.app_id    = (int32_t)rcr->app_id;
     in.client_id = (int32_t)rcr->client_id;
-    in.req_id = (int32_t)rcr->rdreq_id;
-    in.num_chks = (int32_t)rcr->num_chunks;
+    in.req_id    = (int32_t)rcr->rdreq_id;
+    in.num_chks  = (int32_t)rcr->num_chunks;
     in.bulk_size = bulk_sz;
 
-    /* register request buffer for bulk remote access */
-    hret = margo_bulk_create(unifyfsd_rpc_context->svr_mid, 1,
-                             &data_buf, &bulk_sz,
-                             HG_BULK_READ_ONLY, &in.bulk_handle);
+    /* register our response buffer for bulk remote read access */
+    hret = margo_bulk_create(ctx->svr_mid, 1,
+        &data_buf, &bulk_sz, HG_BULK_READ_ONLY, &in.bulk_handle);
     assert(hret == HG_SUCCESS);
 
+    /* call the read response rpc */
     LOGDBG("invoking the chunk-read-response rpc function");
     hret = margo_forward(handle, &in);
     if (hret != HG_SUCCESS) {
+        /* failed to invoke the rpc */
         rc = (int)UNIFYFS_FAILURE;
     } else {
-        /* decode response */
+        /* rpc executed, now decode response */
+        chunk_read_response_out_t out;
         hret = margo_get_output(handle, &out);
         if (hret == HG_SUCCESS) {
             rc = (int)out.ret;
             LOGDBG("chunk-read-response rpc to %d - ret=%d",
-                   dst_srvr_rank, rc);
+                   dst_rank, rc);
             margo_free_output(handle, &out);
         } else {
             rc = (int)UNIFYFS_FAILURE;
         }
     }
 
+    /* free resources allocated for executing margo rpc */
     margo_bulk_free(in.bulk_handle);
     margo_destroy(handle);
 
@@ -457,27 +553,25 @@ int invoke_chunk_read_response_rpc(remote_chunk_reads_t* rcr)
  * print the message, and return my rank */
 static void server_hello_rpc(hg_handle_t handle)
 {
-    int rc, src_rank;
-    hg_return_t hret;
-    char* msg;
-    server_hello_in_t in;
-    server_hello_out_t out;
-
     /* get input params */
-    rc = margo_get_input(handle, &in);
+    server_hello_in_t in;
+    int rc = margo_get_input(handle, &in);
     assert(rc == HG_SUCCESS);
-    src_rank = (int)in.src_rank;
-    msg = strdup(in.message_str);
+
+    /* extract params from input struct */
+    int src_rank = (int)in.src_rank;
+    char* msg = strdup(in.message_str);
     if (NULL != msg) {
         LOGDBG("got message '%s' from server %d", msg, src_rank);
         free(msg);
     }
 
     /* fill output structure to return to caller */
+    server_hello_out_t out;
     out.ret = (int32_t)glb_pmi_rank;
 
     /* send output back to caller */
-    hret = margo_respond(handle, &out);
+    hg_return_t hret = margo_respond(handle, &out);
     assert(hret == HG_SUCCESS);
 
     /* free margo resources */
@@ -491,21 +585,19 @@ DEFINE_MARGO_RPC_HANDLER(server_hello_rpc)
  * decode payload based on tag, and call appropriate svcmgr routine */
 static void server_request_rpc(hg_handle_t handle)
 {
-    int rc, req_id, src_rank, tag;
     int32_t ret;
     hg_return_t hret;
-    hg_bulk_t bulk_handle;
-    size_t bulk_sz;
-    server_request_in_t in;
-    server_request_out_t out;
 
     /* get input params */
-    rc = margo_get_input(handle, &in);
+    server_request_in_t in;
+    int rc = margo_get_input(handle, &in);
     assert(rc == HG_SUCCESS);
-    src_rank = (int)in.src_rank;
-    req_id = (int)in.req_id;
-    tag = (int)in.req_tag;
-    bulk_sz = (size_t)in.bulk_size;
+
+    /* extract params from input struct */
+    int src_rank   = (int)in.src_rank;
+    int req_id     = (int)in.req_id;
+    int tag        = (int)in.req_tag;
+    size_t bulk_sz = (size_t)in.bulk_size;
 
     LOGDBG("handling request from server %d: tag=%d req=%d sz=%zu",
            src_rank, tag, req_id, bulk_sz);
@@ -513,10 +605,11 @@ static void server_request_rpc(hg_handle_t handle)
     /* get margo info */
     const struct hg_info* hgi = margo_get_info(handle);
     assert(NULL != hgi);
+
     margo_instance_id mid = margo_hg_info_get_instance(hgi);
     assert(mid != MARGO_INSTANCE_NULL);
 
-    int reqcmd = 0;
+    hg_bulk_t bulk_handle;
     void* reqbuf = NULL;
     if (bulk_sz) {
         /* allocate and register local target buffer for bulk access */
@@ -534,7 +627,6 @@ static void server_request_rpc(hg_handle_t handle)
                                    in.bulk_handle, 0,
                                    bulk_handle, 0, in.bulk_size);
         assert(hret == HG_SUCCESS);
-        reqcmd = *(int*)reqbuf;
     }
 
     switch (tag) {
@@ -545,10 +637,13 @@ static void server_request_rpc(hg_handle_t handle)
       }
     }
 
+    server_request_out_t out;
 request_out:
 
-    /* fill output structure and return to caller */
+    /* fill output structure */
     out.ret = ret;
+
+    /* return to caller */
     hret = margo_respond(handle, &out);
     assert(hret == HG_SUCCESS);
 
@@ -567,24 +662,20 @@ DEFINE_MARGO_RPC_HANDLER(server_request_rpc)
  * decode payload based on tag, and call appropriate svcmgr routine */
 static void chunk_read_request_rpc(hg_handle_t handle)
 {
-    int rc, req_id, num_chks;
-    int src_rank, app_id, client_id;
-    int32_t ret;
     hg_return_t hret;
-    hg_bulk_t bulk_handle;
-    size_t bulk_sz;
-    chunk_read_request_in_t in;
-    chunk_read_request_out_t out;
 
     /* get input params */
-    rc = margo_get_input(handle, &in);
+    chunk_read_request_in_t in;
+    int rc = margo_get_input(handle, &in);
     assert(rc == HG_SUCCESS);
-    src_rank = (int)in.src_rank;
-    app_id = (int)in.app_id;
-    client_id = (int)in.client_id;
-    req_id = (int)in.req_id;
-    num_chks = (int)in.num_chks;
-    bulk_sz = (size_t)in.bulk_size;
+
+    /* extract params from input struct */
+    int src_rank   = (int)in.src_rank;
+    int app_id     = (int)in.app_id;
+    int client_id  = (int)in.client_id;
+    int req_id     = (int)in.req_id;
+    int num_chks   = (int)in.num_chks;
+    size_t bulk_sz = (size_t)in.bulk_size;
 
     LOGDBG("handling chunk read request from server %d: "
            "req=%d num_chunks=%d bulk_sz=%zu",
@@ -593,9 +684,11 @@ static void chunk_read_request_rpc(hg_handle_t handle)
     /* get margo info */
     const struct hg_info* hgi = margo_get_info(handle);
     assert(NULL != hgi);
+
     margo_instance_id mid = margo_hg_info_get_instance(hgi);
     assert(mid != MARGO_INSTANCE_NULL);
 
+    hg_bulk_t bulk_handle;
     int reqcmd = (int)SVC_CMD_INVALID;
     void* reqbuf = NULL;
     if (bulk_sz) {
@@ -611,13 +704,17 @@ static void chunk_read_request_rpc(hg_handle_t handle)
                                        in.bulk_handle, 0,
                                        bulk_handle, 0, in.bulk_size);
             assert(hret == HG_SUCCESS);
+
+            /* first int in request buffer is the command */
             reqcmd = *(int*)reqbuf;
         }
     }
+
     /* verify this is a request for data */
+    int32_t ret;
     if (reqcmd == (int)SVC_CMD_RDREQ_CHK) {
+        /* chunk read request command */
         LOGDBG("request command: SVC_CMD_RDREQ_CHK");
-        /* chunk read request */
         sm_issue_chunk_reads(src_rank, app_id, client_id, req_id,
                              num_chks, (char*)reqbuf);
         ret = (int32_t)UNIFYFS_SUCCESS;
@@ -627,8 +724,11 @@ static void chunk_read_request_rpc(hg_handle_t handle)
         ret = (int32_t)UNIFYFS_ERROR_INVAL;
     }
 
-    /* fill output structure and return to caller */
+    /* fill output structure */
+    chunk_read_request_out_t out;
     out.ret = ret;
+
+    /* return output to caller */
     hret = margo_respond(handle, &out);
     assert(hret == HG_SUCCESS);
 
