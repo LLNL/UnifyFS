@@ -1141,29 +1141,31 @@ int rm_post_chunk_read_responses(int app_id,
                                  size_t bulk_sz,
                                  char* resp_buf)
 {
-    int rc, thrd_id;
-    app_config_t* app_config = NULL;
-    reqmgr_thrd_t* thrd_ctrl = NULL;
-    server_read_req_t* rdreq = NULL;
-    remote_chunk_reads_t* del_reads = NULL;
+    int rc;
 
     /* lookup RM thread control structure for this app id */
-    app_config = (app_config_t*) arraylist_get(app_config_list, app_id);
+    app_config_t* app_config = (app_config_t*)
+        arraylist_get(app_config_list, app_id);
     assert(NULL != app_config);
-    thrd_id = app_config->thrd_idxs[client_id];
-    thrd_ctrl = rm_get_thread(thrd_id);
+
+    int thrd_id = app_config->thrd_idxs[client_id];
+
+    reqmgr_thrd_t* thrd_ctrl = rm_get_thread(thrd_id);
     assert(NULL != thrd_ctrl);
 
     RM_LOCK(thrd_ctrl);
 
+    remote_chunk_reads_t* del_reads = NULL;
+
     /* find read req associated with req_id */
-    rdreq = thrd_ctrl->read_reqs + req_id;
+    server_read_req_t* rdreq = thrd_ctrl->read_reqs + req_id;
     for (int i = 0; i < rdreq->num_remote_reads; i++) {
         if (rdreq->remote_reads[i].rank == src_rank) {
             del_reads = rdreq->remote_reads + i;
             break;
         }
     }
+
     if (NULL != del_reads) {
         LOGDBG("posting chunk responses for req %d from delegator %d",
                req_id, src_rank);
@@ -1556,63 +1558,86 @@ int invoke_chunk_read_request_rpc(int dst_srvr_rank,
 /* handler for remote read request response */
 static void chunk_read_response_rpc(hg_handle_t handle)
 {
-    int rc, src_rank, req_id;
-    int app_id, client_id, thrd_id;
-    int i, num_chks;
     int32_t ret;
     hg_return_t hret;
-    hg_bulk_t bulk_handle;
-    size_t bulk_sz;
-    chunk_read_response_in_t in;
-    chunk_read_response_out_t out;
-    void* resp_buf = NULL;
 
     /* get input params */
-    rc = margo_get_input(handle, &in);
+    chunk_read_response_in_t in;
+    int rc = margo_get_input(handle, &in);
     assert(rc == HG_SUCCESS);
-    src_rank = (int)in.src_rank;
-    app_id = (int)in.app_id;
-    client_id = (int)in.client_id;
-    req_id = (int)in.req_id;
-    num_chks = (int)in.num_chks;
-    bulk_sz = (size_t)in.bulk_size;
 
+    /* extract params from input struct */
+    int src_rank   = (int)in.src_rank;
+    int app_id     = (int)in.app_id;
+    int client_id  = (int)in.client_id;
+    int req_id     = (int)in.req_id;
+    int num_chks   = (int)in.num_chks;
+    size_t bulk_sz = (size_t)in.bulk_size;
+
+    /* The input parameters specify the info for a bulk transfer
+     * buffer on the sending process.  We use that info to pull data
+     * from the sender into a local buffer.  This buffer contains
+     * the read reply headers and associated read data for requests
+     * we had sent earlier. */
+
+    /* pull the remote data via bulk transfer */
     if (0 == bulk_sz) {
+        /* sender is trying to send an empty buffer,
+         * don't think that should happen unless maybe
+         * we had sent a read request list that was empty? */
         LOGERR("empty response buffer");
         ret = (int32_t)UNIFYFS_ERROR_INVAL;
     } else {
-        resp_buf = malloc(bulk_sz);
+        /* allocate a buffer to hold the incoming data */
+        char* resp_buf = (char*) malloc(bulk_sz);
         if (NULL == resp_buf) {
+            /* allocation failed, that's bad */
             LOGERR("failed to allocate chunk read responses buffer");
             ret = (int32_t)UNIFYFS_ERROR_NOMEM;
         } else {
-            /* pull response data */
+            /* got a buffer, now pull response data */
             ret = (int32_t)UNIFYFS_SUCCESS;
+
+            /* get margo info */
             const struct hg_info* hgi = margo_get_info(handle);
             assert(NULL != hgi);
+
             margo_instance_id mid = margo_hg_info_get_instance(hgi);
             assert(mid != MARGO_INSTANCE_NULL);
-            hret = margo_bulk_create(mid, 1, &resp_buf, &in.bulk_size,
-                                     HG_BULK_WRITE_ONLY, &bulk_handle);
-            assert(hret == HG_SUCCESS);
-            hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
-                                       in.bulk_handle, 0,
-                                       bulk_handle, 0, in.bulk_size);
+
+            /* pass along address of buffer we want to transfer
+             * data into to prepare it for a bulk write,
+             * get resulting margo handle */
+            hg_bulk_t bulk_handle;
+            hret = margo_bulk_create(mid, 1, (void**)&resp_buf, &in.bulk_size,
+                HG_BULK_WRITE_ONLY, &bulk_handle);
             assert(hret == HG_SUCCESS);
 
+            /* execute the transfer to pull data from remote side
+             * into our local bulk transfer buffer */
+            hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
+                in.bulk_handle, 0, bulk_handle, 0, in.bulk_size);
+            assert(hret == HG_SUCCESS);
+
+            /* process read replies (headers and data) we just
+             * received */
             rc = rm_post_chunk_read_responses(app_id, client_id,
-                                              src_rank, req_id, num_chks,
-                                              bulk_sz, (char*)resp_buf);
+                src_rank, req_id, num_chks, bulk_sz, resp_buf);
             if (rc != (int)UNIFYFS_SUCCESS) {
                 LOGERR("failed to handle chunk read responses")
                 ret = rc;
             }
+
+            /* deregister our bulk transfer buffer */
             margo_bulk_free(bulk_handle);
         }
     }
 
-    /* fill output structure and return to caller */
+    /* fill output structure */
+    chunk_read_response_out_t out;
     out.ret = ret;
+
+    /* return to caller */
     hret = margo_respond(handle, &out);
     assert(hret == HG_SUCCESS);
 
