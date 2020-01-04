@@ -493,7 +493,7 @@ static int unifyfs_stream_flush(FILE* stream)
 /* reads count bytes from stream into buf, sets stream EOF and error
  * indicators as appropriate, sets errno if error, updates file
  * position, returns number of bytes read in retcount, returns UNIFYFS
- * error codes*/
+ * error codes */
 static int unifyfs_stream_read(
     FILE* stream,
     void* buf,
@@ -599,15 +599,15 @@ static int unifyfs_stream_read(
 
             /* read data from file into buffer */
             size_t bufcount;
-            size_t read_rc = unifyfs_fd_read(s->fd, current, s->buf,
+            ssize_t read_rc = unifyfs_fd_read(s->fd, current, s->buf,
                 s->bufsize);
-            if (read_rc  == -1) {
+            if (read_rc == -1) {
                 /*
                  * ERROR: read error, set error indicator. errno is already set
                  * by unifyfs_fd_read()
                  */
                 s->err = 1;
-                return read_rc;
+                return UNIFYFS_ERROR_IO;
             }
 
             /* record new buffer range within file */
@@ -2270,7 +2270,7 @@ static int __srefill(unifyfs_stream_t* stream)
 
         /* read data from file into buffer */
         size_t bufcount;
-        size_t read_rc = unifyfs_fd_read(s->fd, current, s->buf, s->bufsize);
+        ssize_t read_rc = unifyfs_fd_read(s->fd, current, s->buf, s->bufsize);
         if (read_rc < 0) {
             /* ERROR: read error, set error indicator */
             s->err = 1;
