@@ -548,32 +548,35 @@ ssize_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
         return 0;
     }
 
-    read_req_t tmp_req;
-    tmp_req.gfid    = unifyfs_gfid_from_fid(fid);
-    tmp_req.offset  = (size_t) pos;
-    tmp_req.length  = count;
-    tmp_req.errcode = UNIFYFS_SUCCESS;
-    tmp_req.buf     = buf;
+    /* fill in read request */
+    read_req_t req;
+    req.gfid    = unifyfs_gfid_from_fid(fid);
+    req.offset  = (size_t) pos;
+    req.length  = count;
+    req.nread   = 0;
+    req.errcode = UNIFYFS_SUCCESS;
+    req.buf     = buf;
 
-    int ret = unifyfs_fd_logreadlist(&tmp_req, 1);
-
-    /*
-     * FIXME: when we can get the global file size correctly, the following
-     * should be rewritten. currently, we cannot detect EOF reliably.
-     */
+    /* execute read operation */
+    ssize_t retcount;
+    int ret = unifyfs_fd_logreadlist(&req, 1);
     if (ret != UNIFYFS_SUCCESS) {
-        if (tmp_req.errcode != UNIFYFS_SUCCESS) {
-            /* error reading data */
-            errno = EIO;
-            count = -1;
-        } else {
-            count = 0; /* possible EOF */
-        }
+        /* failed to issue read operation */
+        errno = EIO;
+        retcount = -1;
+    } else if (req.errcode != UNIFYFS_SUCCESS) {
+        /* read executed, but failed */
+        errno = EIO;
+        retcount = -1;
     } else {
-        /* success, update position */
-        filedesc->pos += (off_t) count;
+        /* success, get number of bytes read from read request field */
+        retcount = (ssize_t) req.nread;
+
+        /* update file pointer position */
+        filedesc->pos += (off_t) retcount;
     }
-    return count;
+
+    return retcount;
 }
 
 /*
@@ -974,21 +977,9 @@ ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
             return (ssize_t)(-1);
         }
 
-#if 0 // THIS IS BROKEN UNTIL WE HAVE GLOBAL SIZE
-        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-        if (meta == NULL) {
-            /* ERROR: invalid file descriptor */
-            errno = EBADF;
-            return (ssize_t)(-1);
-        }
-
-        /* check for end of file */
-        if (filedesc->pos >= meta->size) {
-            return 0;   /* EOF */
-        }
-#endif
-
-        return unifyfs_fd_read(fd, filedesc->pos, buf, count);
+        /* execute read */
+        ssize_t ret = unifyfs_fd_read(fd, filedesc->pos, buf, count);
+        return ret;
     } else {
         MAP_OR_FAIL(read);
         ssize_t ret = UNIFYFS_REAL(read)(fd, buf, count);
@@ -1142,6 +1133,7 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
                     reqs[reqcnt].gfid    = unifyfs_gfid_from_fid(fid);
                     reqs[reqcnt].offset  = (size_t)(cbp->aio_offset);
                     reqs[reqcnt].length  = cbp->aio_nbytes;
+                    reqs[reqcnt].nread   = 0;
                     reqs[reqcnt].errcode = EINPROGRESS;
                     reqs[reqcnt].buf     = (char*)(cbp->aio_buf);
                     reqcnt++;
@@ -1239,77 +1231,6 @@ static int compare_read_req(const void* a, const void* b)
         return -1;
     } else {
         return 1;
-    }
-}
-
-/* returns index into read_req of item whose offset is
- * just below offset of target item (if one exists) */
-static int unifyfs_locate_req(read_req_t* read_reqs, int count,
-                              read_req_t* match_req)
-{
-    /* if list is empty, indicate that there is valid starting request */
-    if (count == 0) {
-        return -1;
-    }
-
-    /* if we only have one item, return its index */
-    if (count == 1) {
-        return 0;
-    }
-
-    /* if we have two items, return index to item that must come before */
-    if (count == 2) {
-        if (compare_read_req(match_req, &read_reqs[1]) < 0) {
-            /* second item is clearly bigger, so try first */
-            return 0;
-        }
-
-        /* second item is less than or equal to target */
-        return 1;
-    }
-
-    /* execute binary search comparing target to list of requests */
-
-    int left  = 0;
-    int right = count - 1;
-    int mid   = (left + right) / 2;
-
-    /* binary search until we find an exact match or have cut the list
-     * to just two items */
-    int cmp;
-    while ((left + 1) < right) {
-        cmp = compare_read_req(match_req, &read_reqs[mid]);
-        if (cmp == 0) {
-            /* found exact match */
-            return mid;
-        } else if (cmp > 0) {
-            /* if target if bigger than mid, set left bound to mid */
-            left = mid;
-        } else {
-            /* if target is smaller than mid, set right bounds to mid */
-            right = mid;
-        }
-
-        /* update middle index */
-        mid = (left + right) / 2;
-    }
-
-    /* got two items, let's pick one */
-    if (compare_read_req(match_req, &read_reqs[left]) < 0) {
-        /* target is smaller than left item,
-         * return index to left of left item if we can */
-        if (left == 0) {
-            /* at left most item, so return this index */
-            return 0;
-        }
-        return left - 1;
-    } else if (compare_read_req(match_req, &read_reqs[right]) < 0) {
-        /* target is smaller than right item,
-         * return index of item one less than right */
-        return right - 1;
-    } else {
-        /* target is greater or equal to right item */
-        return right;
     }
 }
 
@@ -1450,165 +1371,6 @@ static int unifyfs_split_read_request(
     return UNIFYFS_SUCCESS;
 }
 
-/*
- * match the received read_requests with the
- * client's read requests
- * @param read_reqs: a list of read requests
- * @param count: number of read requests
- * @param match_req: received read request to match
- * @return error code
- *
- * */
-static int unifyfs_match_received_ack(read_req_t* read_reqs, int count,
-                                      read_req_t* match_req)
-{
-    /* given fid, offset, and length of match_req that holds read reply,
-     * identify which read request this belongs to in read_req array,
-     * then copy data to user buffer */
-
-    /* create a request corresponding to the first byte in read reply */
-    read_req_t match_start = *match_req;
-
-    /* create a request corresponding to last byte in read reply */
-    read_req_t match_end = *match_req;
-    match_end.offset += match_end.length - 1;
-
-    /* find index of read request that contains our first byte */
-    int start_pos = unifyfs_locate_req(read_reqs, count, &match_start);
-
-    /* find index of read request that contains our last byte */
-    int end_pos = unifyfs_locate_req(read_reqs, count, &match_end);
-
-    /* could not find a valid read request in read_req array */
-    if (start_pos == -1) {
-        return UNIFYFS_FAILURE;
-    }
-
-    /* s: start of match_req, e: end of match_req */
-
-    if (start_pos == 0) {
-        if (compare_read_req(&match_start, &read_reqs[0]) < 0) {
-            /* starting offset in read reply comes before lowest
-             * offset in read requests, consider this to be an error
-             *
-             *   ************    ***********         *************
-             * s
-             *
-             * */
-            return UNIFYFS_FAILURE;
-        }
-    }
-
-    /* create read request corresponding to first byte of first read request */
-    read_req_t first_start = read_reqs[start_pos];
-
-    /* create read request corresponding to last byte of first read request */
-    read_req_t first_end = read_reqs[start_pos];
-    first_end.offset += first_end.length - 1;
-
-    /* check whether read reply is fully contained by first read request */
-    if (compare_read_req(&match_start, &first_start) >= 0 &&
-        compare_read_req(&match_end,   &first_end)   <= 0) {
-        /* read reply is fully contained within first read request
-         *
-         * first_s   first_e
-         * *****************           *************
-         *        s  e
-         *
-         * */
-
-        /* copy data to user buffer if no error */
-        if (match_req->errcode == UNIFYFS_SUCCESS) {
-            /* compute buffer location to copy data */
-            size_t offset = (size_t)(match_start.offset - first_start.offset);
-            char* buf = first_start.buf + offset;
-
-            /* copy data to user buffer */
-            memcpy(buf, match_req->buf, match_req->length);
-
-            return UNIFYFS_SUCCESS;
-        } else {
-            /* hit an error during read, so record this fact
-             * in user's original read request */
-            read_reqs[start_pos].errcode = match_req->errcode;
-            return UNIFYFS_FAILURE;
-        }
-    }
-
-    /* define read request for offset of first byte in last read request */
-    read_req_t last_start = read_reqs[end_pos];
-
-    /* define read request for offset of last byte in last read request */
-    read_req_t last_end = read_reqs[end_pos];
-    last_end.offset += last_end.length - 1;
-
-    /* determine whether read reply is contained in a range of read requests */
-    if (compare_read_req(&match_start, &first_start) >= 0 &&
-        compare_read_req(&match_end,   &last_end)    <= 0) {
-        /* read reply spans multiple read requests
-         *
-         *  first_s   first_e  req_s req_e  req_s req_e  last_s    last_e
-         *  *****************  ***********  ***********  ****************
-         *          s                                              e
-         *
-         * */
-
-        /* check that read requests from start_pos to end_pos
-         * define a contiguous set of bytes */
-        int i;
-        for (i = start_pos + 1; i <= end_pos; i++) {
-            if ((read_reqs[i - 1].offset + read_reqs[i - 1].length)
-                != read_reqs[i].offset) {
-                /* read requests are noncontiguous, error */
-                return UNIFYFS_FAILURE;
-            }
-        }
-
-        /* read requests are contiguous, fill all buffers in middle */
-        if (match_req->errcode == UNIFYFS_SUCCESS) {
-            /* get pointer to start of read reply data */
-            char* ptr = match_req->buf;
-
-            /* compute position in user buffer to copy data */
-            size_t offset = (size_t)(match_start.offset - first_start.offset);
-            char* buf = first_start.buf + offset;
-
-            /* compute number of bytes to copy into first read request */
-            size_t length =
-                (size_t)(first_end.offset - match_start.offset + 1);
-
-            /* copy data into user buffer for first read request */
-            memcpy(buf, ptr, length);
-            ptr += length;
-
-            /* copy data for middle read requests */
-            for (i = start_pos + 1; i < end_pos; i++) {
-                memcpy(read_reqs[i].buf, ptr, read_reqs[i].length);
-                ptr += read_reqs[i].length;
-            }
-
-            /* compute bytes for last read request */
-            length = (size_t)(match_end.offset - last_start.offset + 1);
-
-            /* copy data into user buffer for last read request */
-            memcpy(last_start.buf, ptr, length);
-            ptr += length;
-
-            return UNIFYFS_SUCCESS;
-        } else {
-            /* hit an error during read, update errcode in user's
-             * original read request from start to end inclusive */
-            for (i = start_pos; i <= end_pos; i++) {
-                read_reqs[i].errcode = match_req->errcode;
-            }
-            return UNIFYFS_FAILURE;
-        }
-    }
-
-    /* could not find a matching read request, return an error */
-    return UNIFYFS_FAILURE;
-}
-
 /* notify our delegator that the shared memory buffer
  * is now clear and ready to hold more read data */
 static void delegator_signal(void)
@@ -1689,38 +1451,112 @@ static int process_read_data(read_req_t* read_reqs, int count, int* done)
     shm_header_t* shm_hdr = (shm_header_t*)shm_recv_buf;
     char* shmptr = ((char*)shm_hdr) + sizeof(shm_header_t);
 
+    /* get number of read replies in shared memory */
     size_t num = shm_hdr->meta_cnt;
     if (0 == num) {
         LOGDBG("no read responses available");
         return rc;
     }
 
-    /* process each of our replies */
+    /* process each of our read replies */
     size_t i;
     for (i = 0; i < num; i++) {
         /* get pointer to current read reply header */
-        shm_meta_t* msg = (shm_meta_t*)shmptr;
+        shm_meta_t* rep = (shm_meta_t*)shmptr;
         shmptr += sizeof(shm_meta_t);
 
-        /* define request object */
-        read_req_t req;
-        req.gfid    = msg->gfid;
-        req.offset  = msg->offset;
-        req.length  = msg->length;
-        req.errcode = msg->errcode;
-
-        LOGDBG("read reply: gfid=%d offset=%zu size=%zu",
-               req.gfid, req.offset, req.length);
-
         /* get pointer to data */
-        req.buf = shmptr;
-        shmptr += msg->length;
+        char* rep_buf = shmptr;
+        shmptr += rep->length;
 
-        /* process this read reply, identify which application read
-         * request this reply goes to and copy data to user buffer */
-        int tmp_rc = unifyfs_match_received_ack(read_reqs, count, &req);
-        if (tmp_rc != UNIFYFS_SUCCESS) {
-            rc = UNIFYFS_FAILURE;
+        /* get start and end offset of reply */
+        size_t rep_start = rep->offset;
+        size_t rep_end   = rep->offset + rep->length;
+
+        /* iterate over each of our read requests */
+        size_t j;
+        for (j = 0; j < count; j++) {
+            /* get pointer to read request */
+            read_req_t* req = &read_reqs[j];
+
+            /* skip if this request if not the same file */
+            if (rep->gfid != req->gfid) {
+                /* request and reply are for different files */
+                continue;
+            }
+
+            /* same file, now get start and end offsets
+             * of this read request */
+            size_t req_start = req->offset;
+            size_t req_end   = req->offset + req->length;
+
+            /* test whether reply overlaps with request,
+             * overlap if:
+             *   start of reply comes before the end of request
+             * AND
+             *   end of reply comes after the start of request */
+            int overlap = (rep_start < req_end && rep_end > req_start);
+            if (!overlap) {
+                /* reply does not overlap with this request */
+                continue;
+            }
+
+            /* this reply overlaps with the request, check that
+             * we didn't get an error */
+            if (rep->errcode != UNIFYFS_SUCCESS) {
+                /* TODO: should we look for the reply with an errcode
+                 * with the lowest start offset? */
+
+                /* read reply has an error, mark the read request
+                 * as also having an error, then quit processing */
+                req->errcode = rep->errcode;
+                continue;
+            }
+
+            /* otherwise, we have an error-free, overlapping reply
+             * for this request, copy data into request buffer */
+
+            /* start of overlapping segment is the maximum of
+             * reply and request start offsets */
+            size_t start = rep_start;
+            if (req_start > start) {
+                start = req_start;
+            }
+
+            /* end of overlapping segment is the mimimum of
+             * reply and request end offsets */
+            size_t end = rep_end;
+            if (req_end < end) {
+                end = req_end;
+            }
+
+            /* compute length of overlapping segment */
+            size_t length = end - start;
+
+            /* get number of bytes from start of reply and request
+             * buffers to the start of the overlap region */
+            size_t rep_offset = start - rep_start;
+            size_t req_offset = start - req_start;
+
+            /* if we have a gap, fill with zeros */
+            size_t gap_start = req_start + req->nread;
+            if (start > gap_start) {
+                size_t gap_length = start - gap_start;
+                char* req_ptr = req->buf + req->nread;
+                memset(req_ptr, 0, gap_length);
+            }
+
+            /* copy data from reply buffer into request buffer */
+            char* req_ptr = req->buf + req_offset;
+            char* rep_ptr = rep_buf  + rep_offset;
+            memcpy(req_ptr, rep_ptr, length);
+
+            /* update max number of bytes we have written to in the
+             * request buffer */
+            size_t nread = end - req_start;
+            if (nread > req->nread) {
+                req->nread = nread;
+            }
         }
     }
 
@@ -1853,6 +1689,60 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
         }
     }
 
+    /* check for short reads, compare to file size, fill holes */
+    for (i = 0; i < count; i++) {
+        /* get pointer to next read request */
+        read_req_t* req = &read_reqs[i];
+
+        /* if we hit an error on our read, nothing else to do */
+        if (req->errcode != UNIFYFS_SUCCESS) {
+            continue;
+        }
+
+        /* if we read all of the bytes, we're done */
+        if (req->nread == req->length) {
+            continue;
+        }
+
+        /* otherwise, we have a short read, check whether there
+         * would be a hole after us, in which case we fill with
+         * zeros */
+
+        /* get file size for this file */
+        size_t filesize;
+        int ret = invoke_client_filesize_rpc(req->gfid, &filesize);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* failed to get file size */
+            req->errcode = ret;
+            continue;
+        }
+
+        /* get offset of where hole starts */
+        size_t gap_start = req->offset + req->nread;
+
+        /* get last offset of the read request */
+        size_t req_end = req->offset + req->length;
+
+        /* if file size is larger than last offset we wrote to in
+         * read request, then there is a hole we can fill */
+        if (filesize > gap_start) {
+            /* assume we can fill the full request with zero */
+            size_t gap_length = req_end - gap_start;
+            if (req_end > filesize) {
+                /* request is trying to read past end of file,
+                 * so only fill zeros up to end of file */
+                gap_length = filesize - gap_start;
+            }
+
+            /* copy zeros into request buffer */
+            char* req_ptr = req->buf + req->nread;
+            memset(req_ptr, 0, gap_length);
+
+            /* update number of bytes read */
+            req->nread += gap_length;
+        }
+    }
+
     return rc;
 }
 
@@ -1871,44 +1761,33 @@ ssize_t UNIFYFS_WRAP(pread)(int fd, void* buf, size_t count, off_t offset)
             return (ssize_t)(-1);
         }
 
-#if 0 // THIS IS BROKEN UNTIL WE HAVE GLOBAL SIZE
-        /* get pointer to file descriptor structure */
-        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-        if (meta == NULL) {
-            /* ERROR: invalid file descriptor */
-            errno = EBADF;
-            return (ssize_t)(-1);
-        }
+        /* fill in read request */
+        read_req_t req;
+        req.gfid    = unifyfs_gfid_from_fid(fid);
+        req.offset  = offset;
+        req.length  = count;
+        req.nread   = 0;
+        req.errcode = UNIFYFS_SUCCESS;
+        req.buf     = buf;
 
-        /* check for end of file */
-        if (offset >= meta->size) {
-            return 0;
-        }
-#endif
-
-        /* assume we'll succeed in read */
-        size_t retcount = count;
-
-        read_req_t tmp_req;
-        tmp_req.gfid    = unifyfs_gfid_from_fid(fid);
-        tmp_req.offset  = offset;
-        tmp_req.length  = count;
-        tmp_req.errcode = UNIFYFS_SUCCESS;
-        tmp_req.buf     = buf;
-
-        int ret = unifyfs_fd_logreadlist(&tmp_req, 1);
+        /* execute read operation */
+        ssize_t retcount;
+        int ret = unifyfs_fd_logreadlist(&req, 1);
         if (ret != UNIFYFS_SUCCESS) {
             /* error reading data */
             errno = EIO;
             retcount = -1;
-        } else if (tmp_req.errcode != UNIFYFS_SUCCESS) {
+        } else if (req.errcode != UNIFYFS_SUCCESS) {
             /* error reading data */
             errno = EIO;
             retcount = -1;
+        } else {
+            /* read succeeded, get number of bytes from nread field */
+            retcount = (ssize_t) req.nread;
         }
 
         /* return number of bytes read */
-        return (ssize_t) retcount;
+        return retcount;
     } else {
         MAP_OR_FAIL(pread);
         ssize_t ret = UNIFYFS_REAL(pread)(fd, buf, count, offset);

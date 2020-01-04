@@ -297,12 +297,23 @@ typedef struct {
 } unifyfs_filename_t;
 
 /*unifyfs structures*/
+
+/* This structure defines a client read request for a file.
+ * It is initialized by the client describing the global file id,
+ * offset, and length to be read and provides a pointer to
+ * the user buffer where the data should be placed.  The
+ * server sets the errcode field to UNIFYFS_SUCCESS if the read
+ * succeeds and otherwise records an error code pertaining to
+ * why the read failed.  The server records the number of bytes
+ * read in the nread field, which the client can use to detect
+ * short read operations. */
 typedef struct {
-    int gfid;
-    int errcode;
-    size_t offset;
-    size_t length;
-    char* buf;
+    int gfid;      /* global file id to be read */
+    int errcode;   /* error code for read operation if any */
+    size_t offset; /* logical offset in file to read from */
+    size_t length; /* number of bytes to read */
+    size_t nread;  /* number of bytes actually read */
+    char* buf;     /* pointer to user buffer to place data */
 } read_req_t;
 
 typedef struct {
