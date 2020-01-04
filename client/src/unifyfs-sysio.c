@@ -1453,10 +1453,6 @@ static int process_read_data(read_req_t* read_reqs, int count, int* done)
 
     /* get number of read replies in shared memory */
     size_t num = shm_hdr->meta_cnt;
-    if (0 == num) {
-        LOGDBG("no read responses available");
-        return rc;
-    }
 
     /* process each of our read replies */
     size_t i;

@@ -352,10 +352,10 @@ int create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
                           int num_vals,
                           unifyfs_keyval_t* keyvals)
 {
-    int thrd_id = thrd_ctrl->thrd_ndx;
+    /* get app id for this request batch */
     int app_id = thrd_ctrl->app_id;
-    int client_id = thrd_ctrl->client_id;
 
+    /* allocate read request structures */
     chunk_read_req_t* all_chunk_reads = (chunk_read_req_t*)
         calloc((size_t)num_vals, sizeof(chunk_read_req_t));
     if (NULL == all_chunk_reads) {
@@ -363,36 +363,45 @@ int create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
         return UNIFYFS_ERROR_NOMEM;
     }
 
+    /* wait on lock before we attach new array to global variable */
     RM_LOCK(thrd_ctrl);
 
     LOGDBG("creating chunk requests for rdreq %d", rdreq->req_ndx);
 
+    /* attach read request array to global request mananger struct */
     rdreq->chunks = all_chunk_reads;
 
-    int i, curr_del;
+    /* iterate over write index values and create read requests
+     * for each one, also count up number of delegators that we'll
+     * forward read requests to */
+    int i;
     int prev_del = -1;
-    int del_ndx = 0;
-    chunk_read_req_t* chk_read;
+    int num_del = 0;
     for (i = 0; i < num_vals; i++) {
-        /* count the delegators */
-        curr_del = keyvals[i].val.delegator_rank;
-        if ((prev_del != -1) && (curr_del != prev_del)) {
-            del_ndx++;
+        /* get target delegator for this request */
+        int curr_del = keyvals[i].val.delegator_rank;
+
+        /* if target delegator is different from last target,
+         * increment our delegator count */
+        if ((prev_del == -1) || (curr_del != prev_del)) {
+            num_del++;
         }
         prev_del = curr_del;
 
-        /* create chunk-reads */
+        /* get pointer to next read request structure */
         debug_log_key_val(__func__, &keyvals[i].key, &keyvals[i].val);
-        chk_read = all_chunk_reads + i;
-        chk_read->nbytes = keyvals[i].val.len;
-        chk_read->offset = keyvals[i].key.offset;
-        chk_read->log_offset = keyvals[i].val.addr;
-        chk_read->log_app_id = keyvals[i].val.app_id;
-        chk_read->log_client_id = keyvals[i].val.rank;
+        chunk_read_req_t* chk = all_chunk_reads + i;
+
+        /* fill in chunk read request */
+        chk->nbytes        = keyvals[i].val.len;
+        chk->offset        = keyvals[i].key.offset;
+        chk->log_offset    = keyvals[i].val.addr;
+        chk->log_app_id    = keyvals[i].val.app_id;
+        chk->log_client_id = keyvals[i].val.rank;
     }
 
     /* allocate per-delgator chunk-reads */
-    int num_dels = del_ndx + 1;
+    int num_dels = num_del;
     rdreq->num_remote_reads = num_dels;
     rdreq->remote_reads = (remote_chunk_reads_t*)
         calloc((size_t)num_dels, sizeof(remote_chunk_reads_t));
@@ -402,44 +411,124 @@ int create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
         return UNIFYFS_ERROR_NOMEM;
     }
 
-    /* populate per-delegator chunk-reads info */
-    size_t del_data_sz = 0;
-    remote_chunk_reads_t* del_reads;
+    /* get pointer to start of chunk read request array */
+    remote_chunk_reads_t* reads = rdreq->remote_reads;
+
+    /* iterate over write index values again and now create
+     * per-delegator chunk-reads info, for each delegator
+     * that we'll request data from, this totals up the number
+     * of read requests and total read data size from that
+     * delegator  */
     prev_del = -1;
-    del_ndx = 0;
+    size_t del_data_sz = 0;
     for (i = 0; i < num_vals; i++) {
-        curr_del = keyvals[i].val.delegator_rank;
+        /* get target delegator for this request */
+        int curr_del = keyvals[i].val.delegator_rank;
+
+        /* if target delegator is different from last target,
+         * close out the total number of bytes for the last
+         * delegator, note this assumes our write index values are
+         * sorted by delegator rank */
         if ((prev_del != -1) && (curr_del != prev_del)) {
             /* record total data for previous delegator */
-            del_reads = rdreq->remote_reads + del_ndx;
-            del_reads->total_sz = del_data_sz;
-            /* advance to next delegator */
-            del_ndx++;
+            reads->total_sz = del_data_sz;
+
+            /* advance to read request for next delegator */
+            reads += 1;
+
+            /* reset our running tally of bytes to 0 */
             del_data_sz = 0;
         }
         prev_del = curr_del;
 
-        /* update total data size for current delegator */
+        /* update total read data size for current delegator */
         del_data_sz += keyvals[i].val.len;
 
-        del_reads = rdreq->remote_reads + del_ndx;
-        if (0 == del_reads->num_chunks) {
-            /* initialize structure */
-            del_reads->rank = curr_del;
-            del_reads->rdreq_id = rdreq->req_ndx;
-            del_reads->reqs = all_chunk_reads + i;
-            del_reads->resp = NULL;
+        /* if this is the first read request for this delegator,
+         * initialize fields on the per-delegator read request
+         * structure */
+        if (0 == reads->num_chunks) {
+            /* TODO: let's describe what these fields are for */
+            reads->rank     = curr_del;
+            reads->rdreq_id = rdreq->req_ndx;
+            reads->reqs     = all_chunk_reads + i;
+            reads->resp     = NULL;
         }
-        del_reads->num_chunks++;
+
+        /* increment number of read requests we're sending
+         * to this delegator */
+        reads->num_chunks++;
     }
-    del_reads = rdreq->remote_reads + del_ndx;
-    del_reads->total_sz = del_data_sz;
+
+    /* record total data size for final delegator (if any),
+     * would have missed doing this in the above loop */
+    if (num_vals > 0) {
+        reads->total_sz = del_data_sz;
+    }
+
+    /* mark request as ready to be started */
+    rdreq->status = READREQ_READY;
 
     /* wake up the request manager thread for the requesting client */
     signal_new_requests(thrd_ctrl);
+
     RM_UNLOCK(thrd_ctrl);
 
     return UNIFYFS_SUCCESS;
+}
+
+/* signal the client process for it to start processing read
+ * data in shared memory */
+static int client_signal(shm_header_t* hdr,
+                         shm_region_state_e flag)
+{
+    if (flag == SHMEM_REGION_DATA_READY) {
+        LOGDBG("setting data-ready");
+    } else if (flag == SHMEM_REGION_DATA_COMPLETE) {
+        LOGDBG("setting data-complete");
+    }
+
+    /* we signal the client by setting a flag value within
+     * a shared memory segment that the client is monitoring */
+    hdr->state = flag;
+
+    /* TODO: MEM_FLUSH */
+
+    return UNIFYFS_SUCCESS;
+}
+
+/* wait until client has processed all read data in shared memory */
+static int client_wait(shm_header_t* hdr)
+{
+    int rc = (int)UNIFYFS_SUCCESS;
+
+    /* specify time to sleep between checking flag in shared
+     * memory indicating client has processed data */
+    struct timespec shm_wait_tm;
+    shm_wait_tm.tv_sec  = 0;
+    shm_wait_tm.tv_nsec = SHM_WAIT_INTERVAL;
+
+    /* wait for client to set flag to 0 */
+    int max_sleep = 10000000; // 10s
+    volatile int* vip = (volatile int*)&(hdr->state);
+    while (*vip != SHMEM_REGION_EMPTY) {
+        /* not there yet, sleep for a while */
+        nanosleep(&shm_wait_tm, NULL);
+
+        /* TODO: MEM_FETCH */
+
+        max_sleep--;
+        if (0 == max_sleep) {
+            LOGERR("timed out waiting for empty");
+            rc = (int)UNIFYFS_ERROR_SHMEM;
+            break;
+        }
+    }
+
+    /* reset header to reflect empty state */
+    hdr->meta_cnt = 0;
+    hdr->bytes = 0;
+    return rc;
 }
 
 /************************
@@ -543,15 +632,13 @@ int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl,
         return UNIFYFS_ERROR_NOMEM;
     }
 
-    /* TODO: if there are file extents not accounted for we should
-     * either return 0 for that data (holes) or EOF if reading past
-     * the end of the file */
-    if (UNIFYFS_SUCCESS != rc || num_vals == 0) {
+    if (UNIFYFS_SUCCESS != rc) {
         /* failed to find any key / value pairs */
         rc = UNIFYFS_FAILURE;
     } else {
+        /* if we get more than one write index entry
+         * sort them by file id and then by delegator rank */
         if (num_vals > 1) {
-            /* sort keyvals by delegator */
             qsort(keyvals, (size_t)num_vals, sizeof(unifyfs_keyval_t),
                   compare_kv_gfid_rank);
         }
@@ -564,6 +651,7 @@ int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl,
             rdreq->client_id      = client_id;
             rdreq->extent.gfid    = gfid;
             rdreq->extent.errcode = EINPROGRESS;
+
             rc = create_chunk_requests(thrd_ctrl, rdreq,
                                        num_vals, keyvals);
             if (rc != (int)UNIFYFS_SUCCESS) {
@@ -971,7 +1059,7 @@ static int rm_request_remote_chunks(reqmgr_thrd_t* thrd_ctrl)
         if (req->num_remote_reads > 0) {
             LOGDBG("read req %d is active", i);
             debug_print_read_req(req);
-            if (req->status == READREQ_INIT) {
+            if (req->status == READREQ_READY) {
                 req->status = READREQ_STARTED;
                 /* iterate over each delegator we need to send requests to */
                 remote_chunk_reads_t* remote_reads;
@@ -1003,6 +1091,10 @@ static int rm_request_remote_chunks(reqmgr_thrd_t* thrd_ctrl)
             } else {
                 /* already started */
                 LOGDBG("read req %d already processed", i);
+            }
+        } else if (req->num_remote_reads == 0) {
+            if (req->status == READREQ_READY) {
+                req->status = READREQ_STARTED;
             }
         }
     }
@@ -1042,57 +1134,37 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
                     ret = rc;
                 }
             }
+        } else if ((req->num_remote_reads == 0) &&
+                   (req->status == READREQ_STARTED)) {
+            /* look up client shared memory region */
+            app_config_t* app_config =
+                (app_config_t*) arraylist_get(app_config_list, req->app_id);
+            assert(NULL != app_config);
+            shm_header_t* client_shm =
+                (shm_header_t*) app_config->shm_recv_bufs[req->client_id];
+
+            RM_LOCK(thrd_ctrl);
+
+            /* mark request as complete */
+            req->status = READREQ_COMPLETE;
+
+            /* signal client that we're now done writing data */
+            client_signal(client_shm, SHMEM_REGION_DATA_COMPLETE);
+
+            /* wait for client to read data */
+            client_wait(client_shm);
+
+            rc = release_read_req(thrd_ctrl, req);
+            if (rc != (int)UNIFYFS_SUCCESS) {
+                LOGERR("failed to release server_read_req_t");
+                ret = rc;
+            }
+
+            RM_UNLOCK(thrd_ctrl);
         }
     }
 
     return ret;
-}
-
-/* signal the client process for it to start processing read
- * data in shared memory */
-static int client_signal(shm_header_t* hdr,
-                         shm_region_state_e flag)
-{
-    if (flag == SHMEM_REGION_DATA_READY) {
-        LOGDBG("setting data-ready");
-    } else if (flag == SHMEM_REGION_DATA_COMPLETE) {
-        LOGDBG("setting data-complete");
-    }
-    hdr->state = flag;
-    /* TODO: MEM_FLUSH */
-    return UNIFYFS_SUCCESS;
-}
-
-/* wait until client has processed all read data in shared memory */
-static int client_wait(shm_header_t* hdr)
-{
-    int rc = (int)UNIFYFS_SUCCESS;
-
-    /* specify time to sleep between checking flag in shared
-     * memory indicating client has processed data */
-    struct timespec shm_wait_tm;
-    shm_wait_tm.tv_sec  = 0;
-    shm_wait_tm.tv_nsec = SHM_WAIT_INTERVAL;
-
-    /* wait for client to set flag to 0 */
-    int max_sleep = 10000000; // 10s
-    volatile int* vip = (volatile int*)&(hdr->state);
-    while (*vip != SHMEM_REGION_EMPTY) {
-        /* not there yet, sleep for a while */
-        nanosleep(&shm_wait_tm, NULL);
-        /* TODO: MEM_FETCH */
-        max_sleep--;
-        if (0 == max_sleep) {
-            LOGERR("timed out waiting for empty");
-            rc = (int)UNIFYFS_ERROR_SHMEM;
-            break;
-        }
-    }
-
-    /* reset header to reflect empty state */
-    hdr->meta_cnt = 0;
-    hdr->bytes = 0;
-    return rc;
 }
 
 static shm_meta_t* reserve_shmem_meta(app_config_t* app_config,
