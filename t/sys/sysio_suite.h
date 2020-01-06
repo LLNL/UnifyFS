@@ -47,4 +47,7 @@ int open64_test(char* unifyfs_root);
 
 int write_read_test(char* unifyfs_root);
 
+/* Tests for UNIFYFS_WRAP(ftruncate) and UNIFYFS_WRAP(truncate) */
+int truncate_test(char* unifyfs_root);
+
 #endif /* SYSIO_SUITE_H */
