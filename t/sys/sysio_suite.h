@@ -47,4 +47,7 @@ int open64_test(char* unifyfs_root);
 
 int write_read_test(char* unifyfs_root);
 
+/* test reading from file with holes */
+int write_read_hole_test(char* unifyfs_root);
+
 #endif /* SYSIO_SUITE_H */
