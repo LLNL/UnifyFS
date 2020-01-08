@@ -106,6 +106,16 @@ static void register_server_server_rpcs(margo_instance_id mid)
         MARGO_REGISTER(mid, "chunk_read_response_rpc",
                        chunk_read_response_in_t, chunk_read_response_out_t,
                        chunk_read_response_rpc);
+
+    unifyfsd_rpc_context->rpcs.filesize_request_id =
+        MARGO_REGISTER(mid, "filesize_request_rpc",
+                       filesize_request_in_t, filesize_request_out_t,
+                       filesize_request_rpc);
+
+    unifyfsd_rpc_context->rpcs.filesize_response_id =
+        MARGO_REGISTER(mid, "filesize_response_rpc",
+                       filesize_response_in_t, filesize_response_out_t,
+                       filesize_response_rpc);
 }
 
 /* setup_local_target - Initializes the client-server margo target */

@@ -77,6 +77,28 @@ MERCURY_GEN_PROC(chunk_read_response_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(chunk_read_response_rpc)
 
+/* filesize_response_rpc (server => server)
+ *
+ * initiates filesize request operation */
+MERCURY_GEN_PROC(filesize_request_in_t,
+                 ((int32_t)(root))
+                 ((int32_t)(gfid))
+                 ((int32_t)(tag)))
+MERCURY_GEN_PROC(filesize_request_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(filesize_request_rpc)
+
+/* filesize_response_rpc (server => server)
+ *
+ * response to filesize request */
+MERCURY_GEN_PROC(filesize_response_in_t,
+                 ((int32_t)(tag))
+                 ((hg_size_t)(filesize))
+                 ((int32_t)(err)))
+MERCURY_GEN_PROC(filesize_response_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(filesize_response_rpc)
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
