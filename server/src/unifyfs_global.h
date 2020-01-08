@@ -48,13 +48,14 @@
 #include "unifyfs_meta.h"
 #include "unifyfs_shm.h"
 #include "unifyfs_sock.h"
+#include "unifyfs_tree.h"
 
 #include <margo.h>
 #include <pthread.h>
 
-#if defined(UNIFYFSD_USE_MPI)
+//#if defined(UNIFYFSD_USE_MPI)
 # include <mpi.h>
-#endif
+//#endif
 
 extern arraylist_t* app_config_list;
 extern arraylist_t* rm_thrd_list;

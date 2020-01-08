@@ -160,11 +160,11 @@ void exit_request(int sig)
     }
 }
 
-#if defined(UNIFYFSD_USE_MPI)
+//#if defined(UNIFYFSD_USE_MPI)
 static void init_MPI(void)
 {
     int rc, provided;
-    rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+    rc = MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
     if (rc != MPI_SUCCESS) {
         exit(1);
     }
@@ -184,7 +184,7 @@ static void fini_MPI(void)
 {
     MPI_Finalize();
 }
-#endif // UNIFYFSD_USE_MPI
+//#endif // UNIFYFSD_USE_MPI
 
 static int allocate_servers(size_t n_servers)
 {
@@ -306,9 +306,9 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-#if defined(UNIFYFSD_USE_MPI)
+//#if defined(UNIFYFSD_USE_MPI)
     init_MPI();
-#endif
+//#endif
 
     // start logging
     gethostname(glb_host, sizeof(glb_host));
@@ -706,10 +706,10 @@ static int unifyfs_exit(void)
     LOGDBG("stopping metadata service");
     meta_sanitize();
 
-#if defined(UNIFYFSD_USE_MPI)
+//#if defined(UNIFYFSD_USE_MPI)
     LOGDBG("finalizing MPI");
     fini_MPI();
-#endif
+//#endif
 
     LOGDBG("all done!");
     unifyfs_log_close();
