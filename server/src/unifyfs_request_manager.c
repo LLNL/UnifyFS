@@ -611,6 +611,47 @@ int rm_cmd_filesize(
         filesize = filesize_meta;
     }
 
+    /* allocate structure to track state of file size request collective */
+    int tag = glb_pmi_rank;
+    unifyfs_state_filesize_t* st = state_filesize_alloc(glb_pmi_rank,
+        gfid, -1, tag);
+
+    /* lock structure until we can wait on it */
+    if (glb_pmi_size > 1) {
+        /* init mutex and lock before we use them,
+         * these are only needed on the root server */
+        ABT_mutex_create(&st->mutex);
+        ABT_cond_create(&st->cond);
+
+        /* lock the mutex */
+        ABT_mutex_lock(st->mutex);
+    }
+
+    /* start the reduction to get the file size */
+    filesize_request_forward(st);
+
+    /* wait on signal that reduction has completed */
+    if (glb_pmi_size > 1) {
+        ABT_cond_wait(st->cond, st->mutex);
+    }
+
+    /* have result at this point, get it */
+    //filesize = st->filesize;
+    printf("BUCKEYES got a filesize of %llu\n",
+        (unsigned long long) st->filesize);
+    fflush(stdout);
+
+    /* set error code if file size operation failed */
+    if (st->err != UNIFYFS_SUCCESS) {
+        rc = st->err;
+    }
+
+    /* release lock and free state */
+    if (glb_pmi_size > 1) {
+        ABT_mutex_unlock(st->mutex);
+    }
+    state_filesize_free(&st);
+
     *outsize = filesize;
     return rc;
 }
