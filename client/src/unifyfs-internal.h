@@ -96,6 +96,7 @@
 #include "unifyfs_log.h"
 #include "unifyfs_meta.h"
 #include "unifyfs_shm.h"
+#include "seg_tree.h"
 
 // client headers
 #include "unifyfs.h"
@@ -283,6 +284,8 @@ typedef struct {
     uint32_t mode;                  /* st_mode bits.  This has file
                                      * permission info and will tell you if this
                                      * is a regular file or directory. */
+    struct seg_tree seg_tree;       /* Segment tree containing our coalesced
+                                     * writes */
 } unifyfs_filemeta_t;
 
 /* struct used to map a full path to its local file id,
@@ -387,6 +390,7 @@ extern int unifyfs_use_memfs;
 extern int unifyfs_use_spillover;
 
 extern int    unifyfs_max_files;  /* maximum number of files to store */
+extern bool   unifyfs_flatten_writes;    /* enable write flattening */
 extern size_t
 unifyfs_chunk_mem;  /* number of bytes in memory to be used for chunk storage */
 extern int    unifyfs_chunk_bits; /* we set chunk size = 2^unifyfs_chunk_bits */

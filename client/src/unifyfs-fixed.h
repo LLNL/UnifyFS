@@ -81,4 +81,6 @@ int unifyfs_fid_store_fixed_write(
     size_t count             /* number of bytes to write */
 );
 
+void unifyfs_rewrite_index_from_seg_tree(void);
+int unifyfs_sync(int gfid);
 #endif /* UNIFYFS_FIXED_H */

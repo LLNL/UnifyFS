@@ -82,7 +82,7 @@ int size_test(char* unifyfs_root)
         strerror(errno));
     ok(local == 12, "%s: local size is %d: %s",  __FILE__, local,
         strerror(errno));
-    ok(log == 12, "%s: log size is %d: %s",  __FILE__, local,
+    ok(log == 12, "%s: log size is %d: %s",  __FILE__, log,
         strerror(errno));
 
     /* Open the file again with append, write to it. */
@@ -95,7 +95,6 @@ int size_test(char* unifyfs_root)
 
     rc = ftell(fp);
     ok(rc == 24, "%s: ftell() (rc=%d) %s", __FILE__, rc, strerror(errno));
-
 
     /*
      * Set our position to somewhere in the middle of the file.  Since the file
@@ -124,7 +123,7 @@ int size_test(char* unifyfs_root)
         strerror(errno));
     ok(local == 30, "%s: local size is %d: %s",  __FILE__, local,
         strerror(errno));
-    ok(log == 30, "%s: log size is %d: %s",  __FILE__, local,
+    ok(log == 30, "%s: log size is %d: %s",  __FILE__, log,
         strerror(errno));
 
 
@@ -147,7 +146,7 @@ int size_test(char* unifyfs_root)
         strerror(errno));
     ok(local == 30, "%s: local size is %d: %s",  __FILE__, local,
         strerror(errno));
-    ok(local == 30, "%s: log size is %d: %s",  __FILE__, local,
+    ok(log == 30, "%s: log size is %d: %s",  __FILE__, log,
         strerror(errno));
 
     /* Read it back */

@@ -23,7 +23,8 @@ if HAVE_LD_WRAP
   app-tileio-static \
   transfer-static \
   size-static \
-  chmod-static
+  chmod-static \
+  multi-write-static
 endif
 
 if HAVE_GOTCHA
@@ -44,7 +45,8 @@ if HAVE_GOTCHA
     app-tileio-gotcha \
     transfer-gotcha \
     size-gotcha \
-    chmod-gotcha
+    chmod-gotcha \
+	multi-write-gotcha
 endif
 
 if HAVE_FORTRAN
@@ -309,4 +311,14 @@ chmod_static_SOURCES  = chmod.c testutil.c
 chmod_static_CPPFLAGS = $(test_cppflags)
 chmod_static_LDADD    = $(test_static_ldadd)
 chmod_static_LDFLAGS  = $(test_static_ldflags)
+
+multi_write_gotcha_SOURCES  = multi-write.c testutil.c
+multi_write_gotcha_CPPFLAGS = $(test_cppflags)
+multi_write_gotcha_LDADD    = $(test_gotcha_ldadd)
+multi_write_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+multi_write_static_SOURCES  = multi-write.c testutil.c
+multi_write_static_CPPFLAGS = $(test_cppflags)
+multi_write_static_LDADD    = $(test_static_ldadd)
+multi_write_static_LDFLAGS  = $(test_static_ldflags)
 

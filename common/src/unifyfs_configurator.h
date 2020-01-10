@@ -70,6 +70,7 @@
     UNIFYFS_CFG_CLI(unifyfs, daemonize, BOOL, on, "enable server daemonization", NULL, 'D', "on|off") \
     UNIFYFS_CFG_CLI(unifyfs, mountpoint, STRING, /unifyfs, "mountpoint directory", NULL, 'm', "specify full path to desired mountpoint") \
     UNIFYFS_CFG(client, max_files, INT, UNIFYFS_MAX_FILES, "client max file count", NULL) \
+    UNIFYFS_CFG(client, flatten_writes, BOOL, on, "flatten writes", NULL) \
     UNIFYFS_CFG_CLI(log, verbosity, INT, 0, "log verbosity level", NULL, 'v', "specify logging verbosity level") \
     UNIFYFS_CFG_CLI(log, file, STRING, unifyfsd.log, "log file name", NULL, 'l', "specify log file name") \
     UNIFYFS_CFG_CLI(log, dir, STRING, LOGDIR, "log file directory", configurator_directory_check, 'L', "specify full path to directory to contain log file") \

@@ -62,6 +62,7 @@
 #include "unifyfs_server_rpcs.h"
 #include "unifyfs_rpc_util.h"
 #include "margo_client.h"
+#include "seg_tree.h"
 
 /* avoid duplicate mounts (for now) */
 static int unifyfs_mounted = -1;
@@ -118,6 +119,7 @@ static off_t unifyfs_min_long;
 
 /* TODO: moved these to fixed file */
 int    unifyfs_max_files;  /* maximum number of files to store */
+bool   unifyfs_flatten_writes;  /* flatten our writes (true = enabled) */
 size_t unifyfs_chunk_mem;  /* number of bytes in memory to be used for chunk storage */
 int    unifyfs_chunk_bits; /* we set chunk size = 2^unifyfs_chunk_bits */
 off_t  unifyfs_chunk_size; /* chunk size in bytes */
@@ -644,6 +646,11 @@ static int unifyfs_fid_store_free(int fid)
     /* set storage type back to NULL */
     meta->storage = FILE_STORAGE_NULL;
 
+    /* Free our write seg_tree */
+    if (unifyfs_flatten_writes) {
+        seg_tree_destroy(&meta->seg_tree);
+    }
+
     return UNIFYFS_SUCCESS;
 }
 
@@ -916,6 +923,8 @@ int unifyfs_fid_free(int fid)
  * returns the new fid, or negative value on error */
 int unifyfs_fid_create_file(const char* path)
 {
+    int rc;
+
     /* check that pathname is within bounds */
     size_t pathlen = strlen(path) + 1;
     if (pathlen > UNIFYFS_MAX_FILENAME) {
@@ -950,6 +959,15 @@ int unifyfs_fid_create_file(const char* path)
     meta->chunks       = 0;
     meta->is_laminated = 0;
     meta->mode         = UNIFYFS_STAT_DEFAULT_FILE_MODE;
+
+    if (unifyfs_flatten_writes) {
+        /* Initialize our segment tree that will record our writes */
+        rc = seg_tree_init(&meta->seg_tree);
+        if (rc != 0) {
+            errno = rc;
+            return -rc;
+        }
+    }
 
     /* PTHREAD_PROCESS_SHARED allows Process-Shared Synchronization */
     pthread_spin_init(&meta->fspinlock, PTHREAD_PROCESS_SHARED);
@@ -1028,7 +1046,10 @@ int unifyfs_fid_create_directory(const char* path)
 
 /* write count bytes from buf into file starting at offset pos,
  * all bytes are assumed to be allocated to file, so file should
- * be extended before calling this routine */
+ * be extended before calling this routine.
+ *
+ * Returns a UNIFYFS_ERROR on error, 0 on success.
+ */
 int unifyfs_fid_write(int fid, off_t pos, const void* buf, size_t count)
 {
     int rc;
@@ -1757,6 +1778,16 @@ static int unifyfs_init(int rank)
             rc = configurator_int_val(cfgval, &l);
             if (rc == 0) {
                 unifyfs_max_files = (int)l;
+            }
+        }
+
+        /* Determine if we should flatten writes or not */
+        unifyfs_flatten_writes = 1;
+        cfgval = client_cfg.client_flatten_writes;
+        if (cfgval != NULL) {
+            rc = configurator_bool_val(cfgval, &b);
+            if (rc == 0) {
+                unifyfs_flatten_writes = (bool)b;
             }
         }
 

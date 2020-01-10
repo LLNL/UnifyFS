@@ -63,11 +63,12 @@ a given section and key.
 .. table:: ``[client]`` section - client settings
    :widths: auto
 
-   =============  ======  =====================================================
-   Key            Type    Description
-   =============  ======  =====================================================
-   max_files      INT     maximum number of open files per client process
-   =============  ======  =====================================================
+   ==============  ======  =================================================================
+   Key             Type    Description
+   ==============  ======  =================================================================
+   max_files       INT     maximum number of open files per client process
+   flatten_writes  BOOL    enable flattening writes (optimization for overwrite-heavy codes)
+   ==============  ======  =================================================================
 
 .. table:: ``[log]`` section - logging settings
    :widths: auto
