@@ -60,4 +60,7 @@ int truncate_empty_read(char* unifyfs_root, int pos);
 int truncate_ftrunc_before_sync(char* unifyfs_root);
 int truncate_trunc_before_sync(char* unifyfs_root);
 
+/* Test for UNIFYFS_WRAP(unlink) */
+int unlink_test(char* unifyfs_root);
+
 #endif /* SYSIO_SUITE_H */

@@ -45,6 +45,16 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
                        unifyfs_truncate_out_t,
                        NULL);
 
+    ctx->rpcs.unlink_id = MARGO_REGISTER(mid, "unifyfs_unlink_rpc",
+                       unifyfs_unlink_in_t,
+                       unifyfs_unlink_out_t,
+                       NULL);
+
+    ctx->rpcs.laminate_id = MARGO_REGISTER(mid, "unifyfs_laminate_rpc",
+                       unifyfs_laminate_in_t,
+                       unifyfs_laminate_out_t,
+                       NULL);
+
     ctx->rpcs.fsync_id = MARGO_REGISTER(mid, "unifyfs_fsync_rpc",
                        unifyfs_fsync_in_t,
                        unifyfs_fsync_out_t,
@@ -273,8 +283,18 @@ int invoke_client_unmount_rpc(void)
     return (int)ret;
 }
 
-/* invokes the client metaset rpc function */
-int invoke_client_metaset_rpc(unifyfs_file_attr_t* f_meta)
+/*
+ * Set the metadata values for a file (after optionally creating it).
+ * The gfid for the file is in f_meta->gfid.
+ *
+ * create: If set to 1, attempt to create the file first.  If the file
+ *         already exists, then update its metadata with the values in
+ *         f_meta.  If set to 0, and the file does not exist, then
+ *         the server will return an error.
+ *
+ * f_meta: The metadata values to update.
+ */
+int invoke_client_metaset_rpc(int create, unifyfs_file_attr_t* f_meta)
 {
     /* check that we have initialized margo */
     if (NULL == client_rpc_context) {
@@ -286,6 +306,7 @@ int invoke_client_metaset_rpc(unifyfs_file_attr_t* f_meta)
 
     /* fill in input struct */
     unifyfs_metaset_in_t in;
+    in.create       = (int32_t) create;
     in.gfid         = f_meta->gfid;
     in.filename     = f_meta->filename;
     in.mode         = f_meta->mode;
@@ -421,6 +442,76 @@ int invoke_client_truncate_rpc(int gfid, size_t filesize)
 
     /* call rpc function */
     LOGDBG("invoking the truncate rpc function in client");
+    hg_return_t hret = margo_forward(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* decode response */
+    unifyfs_filesize_out_t out;
+    hret = margo_get_output(handle, &out);
+    assert(hret == HG_SUCCESS);
+    int32_t ret = out.ret;
+    LOGDBG("Got response ret=%" PRIi32, ret);
+
+    /* free resources */
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+    return (int)ret;
+}
+
+/* invokes the client unlink rpc function */
+int invoke_client_unlink_rpc(int gfid)
+{
+    /* check that we have initialized margo */
+    if (NULL == client_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* get handle to rpc function */
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.unlink_id);
+
+    /* fill in input struct */
+    unifyfs_unlink_in_t in;
+    in.app_id         = (int32_t)app_id;
+    in.local_rank_idx = (int32_t)local_rank_idx;
+    in.gfid           = (int32_t)gfid;
+
+    /* call rpc function */
+    LOGDBG("invoking the unlink rpc function in client");
+    hg_return_t hret = margo_forward(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* decode response */
+    unifyfs_filesize_out_t out;
+    hret = margo_get_output(handle, &out);
+    assert(hret == HG_SUCCESS);
+    int32_t ret = out.ret;
+    LOGDBG("Got response ret=%" PRIi32, ret);
+
+    /* free resources */
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+    return (int)ret;
+}
+
+/* invokes the client-to-server laminate rpc function */
+int invoke_client_laminate_rpc(int gfid)
+{
+    /* check that we have initialized margo */
+    if (NULL == client_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* get handle to rpc function */
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.laminate_id);
+
+    /* fill in input struct */
+    unifyfs_unlink_in_t in;
+    in.app_id         = (int32_t)app_id;
+    in.local_rank_idx = (int32_t)local_rank_idx;
+    in.gfid           = (int32_t)gfid;
+
+    /* call rpc function */
+    LOGDBG("invoking the laminate rpc function in client");
     hg_return_t hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 

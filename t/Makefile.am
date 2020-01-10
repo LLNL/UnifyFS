@@ -102,7 +102,8 @@ sys_sysio_gotcha_t_SOURCES = sys/sysio_suite.h \
                              sys/open64.c \
                              sys/write-read.c \
                              sys/write-read-hole.c \
-                             sys/truncate.c
+                             sys/truncate.c \
+                             sys/unlink.c
 
 sys_sysio_gotcha_t_CPPFLAGS = $(test_cppflags)
 sys_sysio_gotcha_t_LDADD = $(test_ldadd)
@@ -117,7 +118,8 @@ sys_sysio_static_t_SOURCES = sys/sysio_suite.h \
                              sys/open64.c \
                              sys/write-read.c \
                              sys/write-read-hole.c \
-                             sys/truncate.c
+                             sys/truncate.c \
+                             sys/unlink.c
 
 sys_sysio_static_t_CPPFLAGS = $(test_cppflags)
 sys_sysio_static_t_LDADD = $(test_static_ldadd)

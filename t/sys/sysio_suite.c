@@ -96,6 +96,8 @@ int main(int argc, char* argv[])
     truncate_ftrunc_before_sync(unifyfs_root);
     truncate_trunc_before_sync(unifyfs_root);
 
+    unlink_test(unifyfs_root);
+
     MPI_Finalize();
 
     done_testing();

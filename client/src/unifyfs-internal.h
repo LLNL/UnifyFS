@@ -576,13 +576,18 @@ int unifyfs_fid_unlink(int fid);
 
 int unifyfs_generate_gfid(const char* path);
 
-int unifyfs_set_global_file_meta_from_fid(int fid);
+int unifyfs_set_global_file_meta_from_fid(
+    int fid,
+    int create);
 
-int unifyfs_set_global_file_meta(int gfid,
-                                 unifyfs_file_attr_t* gfattr);
+int unifyfs_set_global_file_meta(
+    int gfid,
+    int create,
+    unifyfs_file_attr_t* gfattr);
 
-int unifyfs_get_global_file_meta(int gfid,
-                                 unifyfs_file_attr_t* gfattr);
+int unifyfs_get_global_file_meta(
+    int gfid,
+    unifyfs_file_attr_t* gfattr);
 
 // These require types/structures defined above
 #include "unifyfs-fixed.h"

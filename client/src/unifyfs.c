@@ -818,15 +818,35 @@ int unifyfs_fid_update_file_meta(int fid, unifyfs_file_attr_t* gfattr)
     return UNIFYFS_FAILURE;
 }
 
-int unifyfs_set_global_file_meta(int gfid, unifyfs_file_attr_t* gfattr)
+/*
+ * Set the metadata values for a file (after optionally creating it).
+ * The gfid for the file is in f_meta->gfid.
+ *
+ * gfid:   The global file id on which to set metadata.
+ *
+ * create: If set to 1, attempt to create the file first.  If the file
+ *         already exists, then update its metadata with the values in
+ *         gfattr.  If set to 0, and the file does not exist, then
+ *         the server will return an error.
+ *
+ * gfattr: The metadata values to store.
+ */
+int unifyfs_set_global_file_meta(
+    int gfid,   /* file id to set meta data for */
+    int create, /* whether to set size/laminated fields (1) or not (0) */
+    unifyfs_file_attr_t* gfattr) /* meta data to store for file */
 {
     /* check that we have an input buffer */
     if (NULL == gfattr) {
         return UNIFYFS_FAILURE;
     }
 
+    /* force the gfid field value to match the gfid we're
+     * submitting this under */
+    gfattr->gfid = gfid;
+
     /* submit file attributes to global key/value store */
-    int ret = invoke_client_metaset_rpc(gfattr);
+    int ret = invoke_client_metaset_rpc(create, gfattr);
     return ret;
 }
 
@@ -847,7 +867,18 @@ int unifyfs_get_global_file_meta(int gfid, unifyfs_file_attr_t* gfattr)
     return ret;
 }
 
-int unifyfs_set_global_file_meta_from_fid(int fid)
+/*
+ * Set the metadata values for a file (after optionally creating it),
+ * using metadata associated with a given local file id.
+ *
+ * fid:    The local file id on which to base global metadata values.
+ *
+ * create: If set to 1, attempt to create the file first.  If the file
+ *         already exists, then update its metadata with the values in
+ *         gfattr.  If set to 0, and the file does not exist, then
+ *         the server will return an error.
+ */
+int unifyfs_set_global_file_meta_from_fid(int fid, int create)
 {
     /* initialize an empty file attributes structure */
     unifyfs_file_attr_t fattr = {0};
@@ -870,30 +901,19 @@ int unifyfs_set_global_file_meta_from_fid(int fid)
     fattr.ctime = tp;
 
     /* copy file mode bits and lamination flag */
-    fattr.mode         = meta->mode;
-    fattr.is_laminated = meta->is_laminated;
+    fattr.mode = meta->mode;
 
-    /* set file size, we use the global size field if laminated
-     * set size to 0 otherwise */
-    if (meta->is_laminated) {
-        /*
-         * If is_laminated is set, we're either laminating for the first time,
-         * in which case meta->global_size will have already been calculated and
-         * filled in with the global file size, or, the file was already
-         * laminated.  In either case, we write meta->global_size to the server.
-         */
-        fattr.size = meta->global_size;
-        LOGDBG("setting fattr to %d", fattr.size);
-    } else {
-        fattr.size = 0;
-    }
+    /* these fields are set by server, except when we're creating a
+     * new file in which case, we should initialize them both to 0 */
+    fattr.is_laminated = 0;
+    fattr.size         = 0;
 
     /* capture current uid and gid */
     fattr.uid = getuid();
     fattr.gid = getgid();
 
     /* submit file attributes to global key/value store */
-    int ret = unifyfs_set_global_file_meta(meta->gfid, &fattr);
+    int ret = unifyfs_set_global_file_meta(meta->gfid, create, &fattr);
     return ret;
 }
 
@@ -1037,7 +1057,7 @@ int unifyfs_fid_create_directory(const char* path)
     meta->mode = (meta->mode & ~S_IFREG) | S_IFDIR;
 
     /* insert global meta data for directory */
-    int ret = unifyfs_set_global_file_meta_from_fid(fid);
+    int ret = unifyfs_set_global_file_meta_from_fid(fid, 1);
     if (ret != UNIFYFS_SUCCESS) {
         LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
                path, fid);
@@ -1333,7 +1353,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         }
 
         /* insert file attribute for file in key-value store */
-        ret = unifyfs_set_global_file_meta_from_fid(fid);
+        ret = unifyfs_set_global_file_meta_from_fid(fid, 1);
         if (ret != UNIFYFS_SUCCESS) {
             LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
                    path, fid);
@@ -1366,17 +1386,14 @@ int unifyfs_fid_unlink(int fid)
 {
     int rc;
 
-    /* if we have a file, return any data to free pools */
-    if (!unifyfs_fid_is_dir(fid)) {
-        rc = unifyfs_fid_truncate(fid, 0);
-        if (rc != UNIFYFS_SUCCESS) {
-            /* failed to release storage for the file,
-             * so bail out to keep its file id active */
-            return rc;
-        }
+    /* invoke unlink rpc */
+    int gfid = unifyfs_gfid_from_fid(fid);
+    rc = invoke_client_unlink_rpc(gfid);
+    if (rc != UNIFYFS_SUCCESS) {
+        /* TODO: if item does not exist globally, but just locally,
+         * we still want to delete item locally */
+        return rc;
     }
-
-    /* TODO: delete global file meta data */
 
     /* finalize the storage we're using for this file */
     rc = unifyfs_fid_store_free(fid);
