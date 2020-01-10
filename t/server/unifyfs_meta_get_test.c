@@ -20,7 +20,7 @@ int unifyfs_set_file_attribute_test(void)
     snprintf(fattr.filename, sizeof(fattr.filename), TEST_META_FILE);
     fflush(NULL);
 
-    rc = unifyfs_set_file_attribute(&fattr);
+    rc = unifyfs_set_file_attribute(1, 1, &fattr);
     ok(UNIFYFS_SUCCESS == rc, "Stored file attribute");
     fflush(NULL);
     return 0;

@@ -946,7 +946,7 @@ int rm_cmd_truncate(
 
     /* update file size field with latest size */
     fattr.size = newsize;
-    rc = unifyfs_set_file_attribute(&fattr);
+    rc = unifyfs_set_file_attribute(1, 0, &fattr);
     if (rc != UNIFYFS_SUCCESS) {
         /* failed to update file attributes with new file size */
         goto truncate_exit;
@@ -959,6 +959,88 @@ truncate_exit:
         free(keyvals);
         keyvals = NULL;
     }
+
+    return rc;
+}
+
+/* given an app_id, client_id, and global file id,
+ * remove file */
+int rm_cmd_unlink(
+    int app_id,     /* app_id for requesting client */
+    int client_id,  /* client_id for requesting client */
+    int gfid)       /* global file id */
+{
+    int rc = UNIFYFS_SUCCESS;
+
+    /* given the global file id, look up file attributes
+     * from key/value store */
+    unifyfs_file_attr_t attr;
+    int ret = unifyfs_get_file_attribute(gfid, &attr);
+    if (ret != UNIFYFS_SUCCESS) {
+        /* failed to find attributes for the file */
+        return ret;
+    }
+
+    /* if item is a file, call truncate to free space */
+    mode_t mode = (mode_t) attr.mode;
+    if ((mode & S_IFMT) == S_IFREG) {
+        /* item is regular file, truncate to 0 */
+        ret = rm_cmd_truncate(app_id, client_id, gfid, 0);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* failed to delete write extents for file,
+             * let's leave the file attributes in place */
+            return ret;
+        }
+    }
+
+    /* delete metadata */
+    ret = unifyfs_delete_file_attribute(gfid);
+    if (ret != UNIFYFS_SUCCESS) {
+        rc = ret;
+    }
+
+    return rc;
+}
+
+/* given an app_id, client_id, and global file id,
+ * laminate file */
+int rm_cmd_laminate(
+    int app_id,     /* app_id for requesting client */
+    int client_id,  /* client_id for requesting client */
+    int gfid)       /* global file id */
+{
+    int rc = UNIFYFS_SUCCESS;
+
+    /* given the global file id, look up file attributes
+     * from key/value store */
+    unifyfs_file_attr_t attr;
+    int ret = unifyfs_get_file_attribute(gfid, &attr);
+    if (ret != UNIFYFS_SUCCESS) {
+        /* failed to find attributes for the file */
+        return ret;
+    }
+
+    /* if item is not a file, bail with error */
+    mode_t mode = (mode_t) attr.mode;
+    if ((mode & S_IFMT) != S_IFREG) {
+        /* item is not a regular file */
+        return UNIFYFS_ERROR_INVAL;
+    }
+
+    /* lookup current file size */
+    size_t filesize;
+    ret = rm_cmd_filesize(app_id, client_id, gfid, &filesize);
+    if (ret != UNIFYFS_SUCCESS) {
+        /* failed to get file size for file */
+        return ret;
+    }
+
+    /* update fields in metadata */
+    attr.size         = filesize;
+    attr.is_laminated = 1;
+
+    /* update metadata, set size and laminate */
+    rc = unifyfs_set_file_attribute(1, 1, &attr);
 
     return rc;
 }

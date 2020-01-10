@@ -58,6 +58,7 @@ MERCURY_GEN_STRUCT_PROC(sys_timespec_t,
  * given a global file id and a file name,
  * record key/value entry for this file */
 MERCURY_GEN_PROC(unifyfs_metaset_in_t,
+                 ((int32_t)(create))
                  ((hg_const_string_t)(filename))
                  ((int32_t)(gfid))
                  ((uint32_t)(mode))
@@ -128,6 +129,30 @@ MERCURY_GEN_PROC(unifyfs_truncate_in_t,
 MERCURY_GEN_PROC(unifyfs_truncate_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_truncate_rpc)
+
+/* unifyfs_unlink_rpc (client => server)
+ *
+ * given an app_id, client_id, and global file id,
+ * unlink the file */
+MERCURY_GEN_PROC(unifyfs_unlink_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(local_rank_idx))
+                 ((int32_t)(gfid)))
+MERCURY_GEN_PROC(unifyfs_unlink_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_unlink_rpc)
+
+/* unifyfs_laminate_rpc (client => server)
+ *
+ * given an app_id, client_id, and global file id,
+ * laminate the file */
+MERCURY_GEN_PROC(unifyfs_laminate_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(local_rank_idx))
+                 ((int32_t)(gfid)))
+MERCURY_GEN_PROC(unifyfs_laminate_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_laminate_rpc)
 
 /* unifyfs_read_rpc (client => server)
  *

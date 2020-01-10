@@ -2226,35 +2226,40 @@ static int __chmod(int fid, mode_t mode)
      */
     if ((meta->mode & 0222) &&
         (((meta->mode & 0222) & mode) == 0)) {
-
-        /*
-         * We're laminating. Calculate the file size so we can cache it
-         * (both locally and on the server).
-         */
-        ret = invoke_client_filesize_rpc(gfid, &meta->global_size);
+        /* We're laminating. */
+        ret = invoke_client_laminate_rpc(gfid);
         if (ret) {
             LOGERR("chmod: couldn't get the global file size on laminate");
             errno = EIO;
             return -1;
         }
-
-        /* record locally that this file is now laminated */
-        meta->is_laminated = 1;
     }
 
     /* Clear out our old permission bits, and set the new ones in */
     meta->mode = meta->mode & ~0777;
     meta->mode = meta->mode | mode;
 
-    /* update the global meta data to reflect new permissions,
-     * size, and laminated flag */
-    ret = unifyfs_set_global_file_meta_from_fid(fid);
+    /* update the global meta data to reflect new permissions */
+    ret = unifyfs_set_global_file_meta_from_fid(fid, 0);
     if (ret) {
         LOGERR("chmod: can't set global meta entry for %s (fid:%d)",
                path, fid);
         errno = EIO;
         return -1;
     }
+
+    /* read metadata back to pick up file size and laminated flag */
+    unifyfs_file_attr_t attr = {0};
+    ret = unifyfs_get_global_file_meta(gfid, &attr);
+    if (ret) {
+        LOGERR("chmod: can't get global meta entry for %s (fid:%d)",
+               path, fid);
+        errno = EIO;
+        return -1;
+    }
+
+    /* update global size of file from global metadata */
+    unifyfs_fid_update_file_meta(fid, &attr);
 
     return 0;
 }

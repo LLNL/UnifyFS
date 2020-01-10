@@ -175,6 +175,14 @@ static void register_client_server_rpcs(margo_instance_id mid)
                    unifyfs_truncate_in_t, unifyfs_truncate_out_t,
                    unifyfs_truncate_rpc);
 
+    MARGO_REGISTER(mid, "unifyfs_unlink_rpc",
+                   unifyfs_unlink_in_t, unifyfs_unlink_out_t,
+                   unifyfs_unlink_rpc);
+
+    MARGO_REGISTER(mid, "unifyfs_laminate_rpc",
+                   unifyfs_laminate_in_t, unifyfs_laminate_out_t,
+                   unifyfs_laminate_rpc);
+
     MARGO_REGISTER(mid, "unifyfs_read_rpc",
                    unifyfs_read_in_t, unifyfs_read_out_t,
                    unifyfs_read_rpc)

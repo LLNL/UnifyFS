@@ -94,12 +94,25 @@ int unifyfs_get_file_attribute(int gfid,
                                unifyfs_file_attr_t* ptr_attr_val);
 
 /**
+ * Delete file attribute from the KV-Store.
+ *
+ * @param [in] gfid
+ * @return UNIFYFS_SUCCESS on success
+ */
+int unifyfs_delete_file_attribute(int gfid);
+
+/**
  * Store a File attribute to the KV-Store.
  *
+ * @param[in] size_flag
+ * @param[in] laminate_flag
  * @param[in] *ptr_attr_val
  * @return UNIFYFS_SUCCESS on success
  */
-int unifyfs_set_file_attribute(unifyfs_file_attr_t* ptr_attr_val);
+int unifyfs_set_file_attribute(
+    int size_flag,
+    int laminate_flag,
+    unifyfs_file_attr_t* ptr_attr_val);
 
 /**
  * Store File attributes to the KV-Store.

@@ -209,15 +209,46 @@ int meta_sanitize(void)
 /*
  *
  */
-int unifyfs_set_file_attribute(unifyfs_file_attr_t* fattr_ptr)
+int unifyfs_set_file_attribute(
+    int set_size,
+    int set_laminate,
+    unifyfs_file_attr_t* fattr_ptr)
 {
     int rc = UNIFYFS_SUCCESS;
 
     /* select index for file attributes */
     md->primary_index = unifyfs_indexes[IDX_FILE_ATTR];
 
-    /* insert file attribute for given global file id */
     int gfid = fattr_ptr->gfid;
+
+    /* if we want to preserve some settings,
+     * we copy those fields from attributes
+     * on the existing entry, if there is one */
+    int preserve = (!set_size || !set_laminate);
+    if (preserve) {
+        /* lookup existing attributes for the file */
+        unifyfs_file_attr_t attr;
+        int get_rc = unifyfs_get_file_attribute(gfid, &attr);
+        if (get_rc == UNIFYFS_SUCCESS) {
+            /* found the attributes for this file,
+             * if size flag is not set, preserve existing size value */
+            if (!set_size) {
+                fattr_ptr->size = attr.size;
+            }
+
+            /* if laminate flag is not set,
+             * preserve existing is_laminated state */
+            if (!set_laminate) {
+                fattr_ptr->is_laminated = attr.is_laminated;
+            }
+        } else {
+            /* otherwise, trying to update attributes for a file that
+             * we can't find */
+            return get_rc;
+        }
+    }
+
+    /* insert file attribute for given global file id */
     struct mdhim_brm_t* brm = mdhimPut(md,
         &gfid, sizeof(int),
         fattr_ptr, sizeof(unifyfs_file_attr_t),
@@ -305,6 +336,45 @@ int unifyfs_get_file_attribute(
     /* free resources returned from lookup */
     if (bgrm) {
         mdhim_full_release_msg(bgrm);
+    }
+
+    return rc;
+}
+
+/* given a global file id, delete file attributes */
+int unifyfs_delete_file_attribute(
+    int gfid)
+{
+    int rc = UNIFYFS_SUCCESS;
+
+    /* select index holding file attributes,
+     * delete entry for given file id */
+    md->primary_index = unifyfs_indexes[IDX_FILE_ATTR];
+    struct mdhim_brm_t* brm = mdhimDelete(md, md->primary_index,
+        &gfid, sizeof(int));
+
+    /* check for errors and free resources */
+    if (!brm) {
+        LOGERR("Error deleting file attributes from MDHIM");
+        rc = (int)UNIFYFS_ERROR_MDHIM;
+    } else {
+        /* step through linked list of messages,
+         * scan for any error and free messages */
+        struct mdhim_brm_t* brmp = brm;
+        while (brmp) {
+            /* check current item for error */
+            if (brmp->error < 0) {
+                LOGERR("Error deleting file attributes from MDHIM");
+                rc = (int)UNIFYFS_ERROR_MDHIM;
+            }
+
+            /* record pointer to current item,
+             * advance loop pointer to next item in list,
+             * free resources for current item */
+            brm  = brmp;
+            brmp = brmp->next;
+            mdhim_full_release_msg(brm);
+        }
     }
 
     return rc;
