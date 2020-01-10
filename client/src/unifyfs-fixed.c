@@ -44,6 +44,7 @@
 #include "unifyfs-fixed.h"
 #include "unifyfs_log.h"
 #include "margo_client.h"
+#include "seg_tree.h"
 
 static inline
 unifyfs_chunkmeta_t* filemeta_get_chunkmeta(const unifyfs_filemeta_t* meta,
@@ -336,12 +337,22 @@ static int unifyfs_coalesce_index(
     return UNIFYFS_SUCCESS;
 }
 
-/* given an index, split it into multiple indices whose range is equal or
- * smaller than slice_range size
- * @param  cur_idx:     the index to split
- * @param  slice_range: the slice size of the key-value store
- * @return index_set:   the set of split indices
- * @param  maxcount:     number of entries in output array */
+/*
+ * Given an index, split it into multiple indices whose range is equal or
+ * smaller than slice_range size.  For example, if you passed a cur_index
+ * for a 3.5MB write, and the slice size was 1MB, it would split it into
+ * four indexes, and update cur_index.length to be zero.  This also takes
+ * in a 'maxcount' field, so you can limit the number of indexes you
+ * create.  Using our above example, if 'maxcount=2', then this would
+ * create two indexes, and update cur_index.length to 1.5MB (for the remaining
+ * data).
+ *
+ * @param  cur_idx:     The index to split
+ * @param  slice_range: The slice size of the key-value store
+ * @return index_set:   The set of split indices
+ * @param  maxcount:    Number of entries in output array
+ * @param  used_count:  Number of entries we actually added in the split
+ */
 static int unifyfs_split_index(
     unifyfs_index_t* cur_idx,   /* write index to split (offset and length) */
     long slice_range,           /* number of bytes in each slice */
@@ -471,6 +482,152 @@ static int unifyfs_split_index(
     return UNIFYFS_SUCCESS;
 }
 
+/*
+ * Clear all entries in the log index.  This only clears the metadata,
+ * not the data itself.
+ */
+static void
+unifyfs_clear_index(void)
+{
+    *unifyfs_indices.ptr_num_entries = 0;
+}
+
+/*
+ * Sync all the extents to the server.  Clears the metadata index afterwards.
+ *
+ * Returns 0 on success, nonzero otherwise.
+ */
+int
+unifyfs_sync(int gfid)
+{
+    if (unifyfs_flatten_writes) {
+        unifyfs_rewrite_index_from_seg_tree();
+    }
+
+    int ret = invoke_client_fsync_rpc(gfid);
+    if (ret != UNIFYFS_SUCCESS) {
+        /* something went wrong when trying to flush key/values */
+        LOGERR("failed to flush key/value index to server");
+        return UNIFYFS_ERROR_IO;
+    }
+
+    /*
+     * flushed, clear buffer and refresh number of entries
+     * and number remaining
+     */
+    unifyfs_clear_index();
+
+    return UNIFYFS_SUCCESS;
+}
+
+void
+unifyfs_add_index_entry_to_seg_tree(unifyfs_filemeta_t* meta,
+    unifyfs_index_t* index)
+{
+    if (!unifyfs_flatten_writes) {
+        /* We're not flattening writes.  Nothing to do */
+        return;
+    }
+
+    /*
+     * Store the write in our segment tree.  We will later use this for
+     * flattening writes.
+     */
+    seg_tree_add(&meta->seg_tree, index->file_pos,
+        index->file_pos + index->length - 1,
+        index->log_pos);
+
+    /*
+     * We want to make sure the next write following this wont overflow the
+     * max number of index entries (if it were synced).  A write can at most
+     * create two new nodes in the seg_tree.  If we're close to potentially
+     * filling up the index, sync it out.
+     */
+    if (seg_tree_count(&meta->seg_tree) >= (unifyfs_max_index_entries - 2)) {
+        unifyfs_sync(meta->gfid);
+    }
+}
+
+/* Add the metadata for a single write to the index */
+static int unifyfs_logio_add_write_meta_to_index(unifyfs_filemeta_t* meta,
+    off_t file_pos, off_t log_pos, size_t length)
+{
+    /* define an new index entry for this write operation */
+    int gfid = meta->gfid;
+    unifyfs_index_t cur_idx;
+    cur_idx.gfid     = gfid;
+    cur_idx.file_pos = file_pos;
+    cur_idx.log_pos  = log_pos;
+    cur_idx.length   = length;
+
+    /* lookup number of existing index entries */
+    off_t num_entries = *(unifyfs_indices.ptr_num_entries);
+
+    /* get pointer to index array */
+    unifyfs_index_t* idxs = unifyfs_indices.index_entry;
+
+    /* attempt to coalesce contiguous index entries if we
+     * have an existing index in the buffer */
+    if (num_entries > 0) {
+        /* get pointer to last element in index array */
+        unifyfs_index_t* prev_idx = &idxs[num_entries - 1];
+
+        /* attempt to coalesce current index with last index,
+         * updates fields in last index and current index
+         * accordingly */
+        unifyfs_coalesce_index(prev_idx, &cur_idx,
+            unifyfs_key_slice_range);
+        if (cur_idx.length == 0) {
+            /* We were able to coalesce this write into prev_idx */
+            unifyfs_add_index_entry_to_seg_tree(meta, prev_idx);
+        }
+    }
+
+    /* add new index entries if needed */
+    while (cur_idx.length > 0) {
+        /* remaining entries we can fit in the shared memory region */
+        off_t remaining_entries = unifyfs_max_index_entries - num_entries;
+
+        /* if we have filled the key/value buffer, flush it to server */
+        if (0 == remaining_entries) {
+            /* index buffer is full, flush it */
+            int ret = unifyfs_sync(cur_idx.gfid);
+            if (ret != UNIFYFS_SUCCESS) {
+                /* something went wrong when trying to flush key/values */
+                LOGERR("failed to flush key/value index to server");
+                return UNIFYFS_ERROR_IO;
+            }
+        }
+
+        /* split any remaining write index at boundaries of
+         * unifyfs_key_slice_range */
+        off_t used_entries = 0;
+        int split_rc = unifyfs_split_index(&cur_idx,
+            unifyfs_key_slice_range, &idxs[num_entries],
+            remaining_entries, &used_entries);
+        if (split_rc != UNIFYFS_SUCCESS) {
+            /* in this case, we have copied data to the log,
+             * but we failed to generate index entries,
+             * we're returning with an error and leaving the data
+             * in the log */
+            LOGERR("failed to split write index");
+            return UNIFYFS_ERROR_IO;
+        }
+
+        /* Add our split index entries to our seg_tree */
+        for (int i = 0; i < used_entries; i++) {
+            unifyfs_add_index_entry_to_seg_tree(meta, &idxs[num_entries + i]);
+        }
+
+        /* account for entries we just added */
+        num_entries += used_entries;
+
+        /* update number of entries in index array */
+        (*unifyfs_indices.ptr_num_entries) = num_entries;
+    }
+    return UNIFYFS_SUCCESS;
+}
+
 /* write count bytes from user buffer into specified chunk id at chunk offset,
  * count should fit within chunk starting from specified offset */
 static int unifyfs_logio_chunk_write(
@@ -543,78 +700,64 @@ static int unifyfs_logio_chunk_write(
     /* get global file id for this file */
     int gfid = unifyfs_gfid_from_fid(fid);
 
-    /* define an new index entry for this write operation */
-    unifyfs_index_t cur_idx;
-    cur_idx.gfid     = gfid;
-    cur_idx.file_pos = pos;
-    cur_idx.log_pos  = log_offset;
-    cur_idx.length   = count;
+    /* Update our write metadata with the new write */
+    int rc = unifyfs_logio_add_write_meta_to_index(meta, pos, log_offset,
+        count);
+    return rc;
+}
 
-    /* lookup number of existing index entries */
-    off_t num_entries = *(unifyfs_indices.ptr_num_entries);
+/*
+ * Remove all entries in the current index and re-write it using the write
+ * metadata stored in all the file's seg_trees.  This only re-writes the
+ * metadata in the index.  All the actual data is still kept in the log and
+ * will be referenced correctly by the new metadata.
+ *
+ * After this function is done 'unifyfs_indices' will have been totally
+ * re-written.  The writes in the index will be flattened, non-overlapping,
+ * and sequential, for each file, one after another.  All seg_trees will be
+ * cleared.
+ *
+ * This function is called when we sync our extents.
+ */
+void unifyfs_rewrite_index_from_seg_tree(void)
+{
+    struct seg_tree_node* node;
+    unifyfs_index_t* indexes = unifyfs_indices.index_entry;
+    unsigned long idx = 0;
 
-    /* get pointer to index array */
-    unifyfs_index_t* idxs = unifyfs_indices.index_entry;
 
-    /* attempt to coalesce contiguous index entries if we
-     * have an existing index in the buffer */
-    if (num_entries > 0) {
-        /* get pointer to last element in index array */
-        unifyfs_index_t* prev_idx = &idxs[num_entries - 1];
+    /* Erase the index before we re-write it */
+    unifyfs_clear_index();
 
-        /* attempt to coalesce current index with last index,
-         * updates fields in last index and current index
-         * accordingly */
-        unifyfs_coalesce_index(prev_idx, &cur_idx,
-            unifyfs_key_slice_range);
-    }
+    /* For each fid .. */
+    for (int i = 0; i < UNIFYFS_MAX_FILEDESCS; i++) {
+        int fid, gfid;
 
-    /* add new index entries if needed */
-    while (cur_idx.length > 0) {
-        /* remaining entries we can fit in the shared memory region */
-        off_t remaining_entries = unifyfs_max_index_entries - num_entries;
-
-        /* if we have filled the key/value buffer, flush it to server */
-        if (0 == remaining_entries) {
-            /* index buffer is full, flush it */
-            int ret = invoke_client_fsync_rpc(cur_idx.gfid);
-            if (ret != UNIFYFS_SUCCESS) {
-                /* something went wrong when trying to flush key/values */
-                LOGERR("failed to flush key/value index to server");
-                return UNIFYFS_ERROR_IO;
-            }
-
-            /* flushed, clear buffer and refresh number of entries
-             * and number remaining */
-            num_entries = 0;
-            *(unifyfs_indices.ptr_num_entries) = num_entries;
-            remaining_entries = unifyfs_max_index_entries - num_entries;
+        fid = unifyfs_fds[i].fid;
+        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+        if (!meta) {
+            continue;
         }
 
-        /* split any remaining write index at boundaries of
-         * unifyfs_key_slice_range */
-        off_t used_entries = 0;
-        int split_rc = unifyfs_split_index(&cur_idx,
-            unifyfs_key_slice_range, &idxs[num_entries],
-            remaining_entries, &used_entries);
-        if (split_rc != UNIFYFS_SUCCESS) {
-            /* in this case, we have copied data to the log,
-             * but we failed to generate index entries,
-             * we're returning with an error and leaving the data
-             * in the log */
-            LOGERR("failed to split write index");
-            return UNIFYFS_ERROR_IO;
+        gfid = unifyfs_gfid_from_fid(fid);
+
+        node = NULL;
+        seg_tree_rdlock(&meta->seg_tree);
+
+        /* For each write in this file's seg_tree ... */
+        while ((node = seg_tree_iter(&meta->seg_tree, node))) {
+            indexes[idx].file_pos = node->start;
+            indexes[idx].log_pos = node->ptr;
+            indexes[idx].length = node->end - node->start + 1;
+            indexes[idx].gfid = gfid;
+            idx++;
         }
+        seg_tree_unlock(&meta->seg_tree);
 
-        /* account for entries we just added */
-        num_entries += used_entries;
-
-        /* update number of entries in index array */
-        (*unifyfs_indices.ptr_num_entries) = num_entries;
+        /* All done processing this files writes.  Clear its seg_tree */
+        seg_tree_clear(&meta->seg_tree);
     }
-
-    /* assume write was successful if we get to here */
-    return UNIFYFS_SUCCESS;
+    *unifyfs_indices.ptr_num_entries = idx;
 }
 
 /* write count bytes from user buffer into specified chunk id at chunk offset,

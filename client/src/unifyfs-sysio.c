@@ -1885,6 +1885,11 @@ int UNIFYFS_WRAP(fsync)(int fd)
 {
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
+        if (*unifyfs_indices.ptr_num_entries == 0) {
+            /* Nothing to sync */
+            return 0;
+        }
+
         /* get the file id for this file descriptor */
         int fid = unifyfs_get_fid_from_fd(fd);
         if (fid < 0) {
@@ -1911,7 +1916,7 @@ int UNIFYFS_WRAP(fsync)(int fd)
 
         /* invoke fsync rpc to register index metadata with server */
         int gfid = unifyfs_gfid_from_fid(fid);
-        int ret = invoke_client_fsync_rpc(gfid);
+        int ret = unifyfs_sync(gfid);
         if (ret != UNIFYFS_SUCCESS) {
             /* sync failed for some reason, set errno and return error */
             errno = unifyfs_err_map_to_errno(ret);

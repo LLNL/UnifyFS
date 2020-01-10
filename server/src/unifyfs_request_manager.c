@@ -915,6 +915,12 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
      * created by the client, these are stored as index_t
      * structs starting one page size offset into meta region */
     char* ptr_extents = meta + page_sz;
+
+    if (extent_num_entries == 0) {
+        /* Nothing to do */
+        return UNIFYFS_SUCCESS;
+    }
+
     unifyfs_index_t* meta_payload = (unifyfs_index_t*)(ptr_extents);
 
     /* allocate storage for file extent key/values */

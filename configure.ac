@@ -196,6 +196,9 @@ AC_CHECK_HEADERS(mntent.h sys/mount.h)
 AX_LIB_HDF5
 AM_CONDITIONAL([HAVE_HDF5], [test x$with_hdf5 = xyes])
 
+# Look for pthreads
+AX_PTHREAD([],[AC_MSG_ERROR([pthreads are required])])
+
 # libc functions wrapped by unifyfs
 
 CP_WRAPPERS+="-Wl,-wrap,access"
