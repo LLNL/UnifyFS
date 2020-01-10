@@ -1286,9 +1286,8 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
 
         if (flags & O_APPEND) {
             /* We only support O_APPEND on non-laminated (local) files, so
-             * use local_size here. */
-            unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-            pos = meta->local_size;
+             * this will use local_size here. */
+            pos = unifyfs_fid_logical_size(fid);
         }
     } else {
         /* !found_local && !found_global

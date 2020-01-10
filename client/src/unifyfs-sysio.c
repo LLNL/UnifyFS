@@ -1010,7 +1010,7 @@ ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
              * file position.
              */
             int fid = unifyfs_get_fid_from_fd(fd);
-            pos = unifyfs_fid_local_size(fid);
+            pos = unifyfs_fid_logical_size(fid);
         } else {
             pos = filedesc->pos;
         }
