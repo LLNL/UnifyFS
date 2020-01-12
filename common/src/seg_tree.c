@@ -72,19 +72,22 @@ void seg_tree_destroy(struct seg_tree* seg_tree)
     seg_tree_clear(seg_tree);
 };
 
-/* Allocate a range tree.  Free it with free() when finished */
+/* Allocate a node for the range tree.  Free node with free() when finished */
 static struct seg_tree_node*
 seg_tree_node_alloc(unsigned long start, unsigned long end, unsigned long ptr)
 {
+    /* allocate a new node structure */
     struct seg_tree_node* node;
     node = calloc(1, sizeof(*node));
     if (!node) {
         return NULL;
     }
 
+    /* record logical range and physical offset */
     node->start = start;
     node->end = end;
     node->ptr = ptr;
+
     return node;
 }
 
@@ -95,39 +98,50 @@ seg_tree_node_alloc(unsigned long start, unsigned long end, unsigned long ptr)
  * return 1 from this function, else return 0.  If there are two
  * non-overlapping ranges, return the first one in new_start/new_end.
  */
-static int
-get_non_overlapping_range(unsigned long start1, unsigned long end1,
-    long start2, long end2, long* new_start, long* new_end)
+static int get_non_overlapping_range(
+    unsigned long start1, unsigned long end1,
+    long start2, long end2,
+    long* new_start, long* new_end)
 {
-    if (start1 >= start2 && end1 <= end2) {
-        /* Completely overlapping */
-        return 1;
-    } else if (start1 < start2) {
+    /*
+     * This function is only called when we know that segment 1 and segment 2
+     * overlap with each other. Find first portion of segment 1 that does not
+     * overlap with segment 2, if any.
+     */
+    if (start1 < start2) {
         /*
-         * s1 ------- e1
-         *      s2--------e2
-         *    ---- non-overlap
+         * Segment 1 includes a portion before segment 2 starts return start/end
+         * of that leading portion of segment 1.
          *
-         * also:
-         *
-         * s1 -------------------e1
-         *      s2--------e2
-         *    ---- non-overlap
+         * s1-------e1
+         *     s2--------e2
+         *   ---- non-overlap
          */
         *new_start = start1;
-        *new_end = MIN(end1, start2 - 1);
-    } else if (start1 > start2 && end1 > end2) {
+        *new_end = start2 - 1;
+        return 0;
+    } else if (end1 > end2) {
         /*
-         *       s1 ----- e1
-         *  s2------- e2
+         * Segment 1 does not start before segment 2, but segment 1 extends past
+         * end of segment 2. return start/end of trailing portion of segment 1.
+         *
+         *       s1-----e1
+         *  s2-------e2
+         *           --- non-overlap
          */
-        *new_start = MAX(start1, end2 + 1);
-        *new_end = end1;
-    } else if (start1 == start2 && end1 > end2) {
         *new_start = end2 + 1;
         *new_end = end1;
+        return 0;
     }
-    return 0;
+
+    /*
+     * Segment 2 completely envelops segment 1 so nothing left of segment 1 to
+     * return, so return 1 to indicate this case.
+     *
+     *    s1-------e1
+     * s2-------------e2
+     */
+    return 1;
 }
 
 /*
@@ -136,12 +150,15 @@ get_non_overlapping_range(unsigned long start1, unsigned long end1,
 int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
     unsigned long end, unsigned long ptr)
 {
+    /* Assume we'll succeed */
+    int rc = 0;
     struct seg_tree_node* node;
-    struct seg_tree_node* overlap = NULL;
-    struct seg_tree_node* resized;
     struct seg_tree_node* remaining;
-    long new_start = 0, new_end = 0;
-    int rc;
+    struct seg_tree_node* resized;
+    struct seg_tree_node* overlap;
+    long new_start;
+    long new_end;
+    int ret;
 
     /* Create our range */
     node = seg_tree_node_alloc(start, end, ptr);
@@ -149,13 +166,16 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
         return ENOMEM;
     }
 
+    /* Lock the tree so we can modify it */
     seg_tree_wrlock(seg_tree);
+
     /*
      * Try to insert our range into the RB tree.  If it overlaps with any other
      * range, then it is not inserted, and the overlapping range node is
      * returned in 'overlap'.  If 'overlap' is NULL, then there were no
      * overlaps, and our range was successfully inserted.
      */
+    overlap = NULL;
     while ((overlap = RB_INSERT(inttree, &seg_tree->head, node))) {
         /*
          * Our range overlaps with another range (in 'overlap'). Is there any
@@ -163,13 +183,17 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
          * delete the old 'overlap' and insert the smaller, non-overlapping
          * range.
          */
-        rc = get_non_overlapping_range(overlap->start, overlap->end, start, end,
-                &new_start, &new_end);
-        if (rc) {
-            /* We can't find a non-overlapping range.  Delete the old range. */
+        ret = get_non_overlapping_range(overlap->start, overlap->end, start,
+            end, &new_start, &new_end);
+        if (ret) {
+            /*
+             * The new range we are adding completely covers the existing
+             * range in the tree defined in overlap. We can't find a
+             * non-overlapping range.  Delete the existing range.
+             */
             RB_REMOVE(inttree, &seg_tree->head, overlap);
-            seg_tree->count--;
             free(overlap);
+            seg_tree->count--;
         } else {
             /*
              * Part of the old range was non-overlapping.  Split the old range
@@ -181,47 +205,78 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
             resized = seg_tree_node_alloc(new_start, new_end,
                 overlap->ptr + (new_start - overlap->start));
             if (!resized) {
-                return ENOMEM;
+                free(node);
+                rc = ENOMEM;
+                goto release_add;
             }
-            /* Remove our old range */
-            RB_REMOVE(inttree, &seg_tree->head, overlap);
 
-            /* Insert the non-overlapping part of the new range */
-            RB_INSERT(inttree, &seg_tree->head, resized);
-
-            if (resized->end + 1 >= overlap->start &&
-                resized->end +1 <= overlap->end) {
+            /*
+             * If the non-overlapping part came from the front portion of the
+             * existing range, then there is a trailing portion of the
+             * existing range to add back to be considered again in the next
+             * loop iteration.
+             */
+            remaining = NULL;
+            if (resized->end < overlap->end) {
                 /*
                  * There's still a remaining section after the non-overlapping
                  * part.  Add it in.
                  */
-                remaining = seg_tree_node_alloc(resized->end + 1, overlap->end,
+                remaining = seg_tree_node_alloc(
+                    resized->end + 1, overlap->end,
                     overlap->ptr + (resized->end + 1 - overlap->start));
-                if (!resized) {
-                    free(overlap);
-                    return ENOMEM;
+                if (!remaining) {
+                    free(node);
+                    free(resized);
+                    rc = ENOMEM;
+                    goto release_add;
                 }
+            }
+
+            /* Remove our old range */
+            RB_REMOVE(inttree, &seg_tree->head, overlap);
+            free(overlap);
+            seg_tree->count--;
+
+            /* Insert the non-overlapping part of the new range */
+            RB_INSERT(inttree, &seg_tree->head, resized);
+            seg_tree->count++;
+
+            /*
+             * If we have a trailing portion, insert range for that, and
+             * increase our extent count since we just turned one range entry
+             * into two
+             */
+            if (remaining != NULL) {
                 RB_INSERT(inttree, &seg_tree->head, remaining);
                 seg_tree->count++;
             }
-            free(overlap);
         }
     }
-    if (!overlap) {
-        seg_tree->count++;
-    }
 
+    /* Increment segment count in the tree for the range we just added */
+    seg_tree->count++;
+
+    /*
+     * Update max ending offset if end of new range we just inserted
+     * is larger.
+     */
     seg_tree->max = MAX(seg_tree->max, end);
+
+release_add:
+
     seg_tree_unlock(seg_tree);
 
-    return 0;
+    return rc;
 }
 
-/* Search tree for an entry that overlaps with given range of
- * [start, end].  Returns the first overlapping entry if found,
- * which is the overlapping entry having the lowest starting
- * offset, and returns NULL otherwise.  Assumes caller has lock
- * on tree. */
+/*
+ * Search tree for an entry that overlaps with given range of [start, end].
+ * Returns the first overlapping entry if found, which is the overlapping entry
+ * having the lowest starting offset, and returns NULL otherwise.
+ *
+ * This function assumes you've already locked the seg_tree.
+ */
 struct seg_tree_node* seg_tree_find_nolock(
     struct seg_tree* seg_tree,
     unsigned long start,
@@ -251,6 +306,25 @@ struct seg_tree_node* seg_tree_find_nolock(
     /* Otherwise, there is not element that overlaps with the
      * target range of [start, end]. */
     return NULL;
+}
+
+/*
+ * Search tree for an entry that overlaps with given range of [start, end].
+ * Returns the first overlapping entry if found, which is the overlapping entry
+ * having the lowest starting offset, and returns NULL otherwise.
+ */
+struct seg_tree_node* seg_tree_find(
+    struct seg_tree* seg_tree,
+    unsigned long start,
+    unsigned long end)
+{
+    struct seg_tree_node* node;
+
+    seg_tree_rdlock(seg_tree);
+    node = seg_tree_find_nolock(seg_tree, start, end);
+    seg_tree_unlock(seg_tree);
+
+    return node;
 }
 
 /*
@@ -370,21 +444,17 @@ void seg_tree_clear(struct seg_tree* seg_tree)
 /* Return the number of segments in the segment tree */
 unsigned long seg_tree_count(struct seg_tree* seg_tree)
 {
-    unsigned long count;
-
-    seg_tree_wrlock(seg_tree);
-    count = seg_tree->count;
+    seg_tree_rdlock(seg_tree);
+    unsigned long count = seg_tree->count;
     seg_tree_unlock(seg_tree);
     return count;
 }
 
-/* Return the maximum segment value in the tree */
+/* Return the maximum ending logical offset in the tree */
 unsigned long seg_tree_max(struct seg_tree* seg_tree)
 {
-    unsigned long max;
-
-    seg_tree_wrlock(seg_tree);
-    max = seg_tree->max;
+    seg_tree_rdlock(seg_tree);
+    unsigned long max = seg_tree->max;
     seg_tree_unlock(seg_tree);
     return max;
 }
