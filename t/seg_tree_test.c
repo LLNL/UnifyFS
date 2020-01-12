@@ -48,6 +48,7 @@ int main(int argc, char** argv)
     char tmp[255];
     int i;
     unsigned long max, count;
+    struct seg_tree_node* node;
 
     plan(NO_PLAN);
 
@@ -127,6 +128,23 @@ int main(int argc, char** argv)
     count = seg_tree_count(&seg_tree);
     ok(max == 50, "max 50 (got %lu)", max);
     ok(count == 8, "count is 8 (got %lu)", count);
+
+    /*
+     * Test seg_tree_find().  Find between a range that multiple segments.  It
+     * should return the first one.
+     */
+    node = seg_tree_find(&seg_tree, 2, 7);
+    ok(node->start == 2 && node->end == 2, "seg_tree_find found correct node");
+
+    /* Test finding a segment that partially overlaps our range */
+    seg_tree_add(&seg_tree, 100, 200, (unsigned long) (buf + 100));
+    node = seg_tree_find(&seg_tree, 90, 120);
+    ok(node->start == 100 && node->end == 200,
+        "seg_tree_find found partial overlapping node");
+
+    /* Look for a range that doesn't exist.  Should return NULL. */
+    node = seg_tree_find(&seg_tree, 2000, 3000);
+    ok(node == NULL, "seg_tree_find correctly returned NULL");
 
     /*
      * Write a range, then completely overwrite it with the
