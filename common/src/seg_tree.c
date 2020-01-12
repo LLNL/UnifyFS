@@ -98,60 +98,47 @@ seg_tree_node_alloc(unsigned long start, unsigned long end, unsigned long ptr)
  * return 1 from this function, else return 0.  If there are two
  * non-overlapping ranges, return the first one in new_start/new_end.
  */
-static int
-get_non_overlapping_range(unsigned long start1, unsigned long end1,
-    long start2, long end2, long* new_start, long* new_end)
+static int get_non_overlapping_range(
+    unsigned long start1, unsigned long end1,
+    long start2, long end2,
+    long* new_start, long* new_end)
 {
-    if (start1 >= start2 && end1 <= end2) {
-        /* Segment 2 completely envelops segment 1
-         * nothing left of segment 1 to return
-         * return 1 to indicate this case
-         *
-         *    s1-------e1
-         * s2-------------e2
-         */
-        return 1;
-    } else if (start1 < start2) {
+    /* this function is only called when we know that segment 1
+     * and segment 2 overlap with each other, find first portion
+     * of segment 1 that does not overlap with segment 2, if any */
+    if (start1 < start2) {
         /* Segment 1 inlcudes a portion before segment 2 starts
          * return start/end of that leading portion of segment 1
          *
          * s1-------e1
          *     s2--------e2
          *   ---- non-overlap
-         *
-         * also:
-         *
-         * s1-------------------e1
-         *     s2--------e2
-         *   ---- non-overlap
          */
         *new_start = start1;
-        *new_end   = MIN(end1, start2 - 1);
-    } else if (start1 > start2 && end1 > end2) {
-        /* Segment 1 extends past end of segment 2
+        *new_end   = start2 - 1;
+        return 0;
+    } else if (end1 > end2) {
+        /* Segment 1 does not start before segment 2,
+         * but segment 1 extends past end of segment 2
          * return start/end of trailing portion of segment 1
          *
          *       s1-----e1
          *  s2-------e2
          *           --- non-overlap
          */
-        *new_start = MAX(start1, end2 + 1);
-        *new_end   = end1;
-    } else if (start1 == start2 && end1 > end2) {
-        /* Segment 1 extends past end of segment 2
-         * return start/end of trailing portion of segment 1
-         *
-         *  s1----------e1
-         *  s2-------e2
-         *           --- non-overlap
-         */
         *new_start = end2 + 1;
         *new_end   = end1;
+        return 0;
     }
 
-    /* return 0 to indicate that we are returning start/end
-     * for a non-overlapping portion of segment 1 */
-    return 0;
+    /* Segment 2 completely envelops segment 1
+     * nothing left of segment 1 to return
+     * so return 1 to indicate this case
+     *
+     *    s1-------e1
+     * s2-------------e2
+     */
+    return 1;
 }
 
 /*
@@ -219,8 +206,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
              * portion of the existing range, then there is a
              * trailing portion of the existing range to add back
              * to be considered again in the next loop iteration */
-            if (resized->end + 1 >= overlap->start &&
-                resized->end + 1 <= overlap->end) {
+            if (resized->end < overlap->end) {
                 /*
                  * There's still a remaining section after the non-overlapping
                  * part.  Add it in.
@@ -243,9 +229,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
     }
 
     /* increment segment count in the tree for the range we just added */
-    if (!overlap) {
-        seg_tree->count++;
-    }
+    seg_tree->count++;
 
     /* update max ending offset if end of new range we just inserted
      * is larger */
