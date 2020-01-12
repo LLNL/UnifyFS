@@ -512,6 +512,71 @@ static int client_wait(shm_data_header* hdr)
     return rc;
 }
 
+/* given an extent tree and starting and ending logical offsets,
+ * fill in key/value entries that overlap that range, returns at
+ * most max entries starting from lowest starting offset,
+ * sets outnum with actual number of entries returned */
+static int extent_tree_span(
+    struct extent_tree* extent_tree, /* extent tree to search */
+    int gfid,                        /* global file id we're looking in */
+    unsigned long start,             /* starting logical offset */
+    unsigned long end,               /* ending logical offset */
+    int max,                         /* maximum number of key/vals to return */
+    unifyfs_key_t* keys,             /* array of length max for output keys */
+    unifyfs_val_t* vals,             /* array of length max for output values */
+    int* outnum)                     /* number of entries returned */
+{
+    /* initialize output parameters */
+    *outnum = 0;
+
+#if 0
+    /* Create our range */
+    struct extent_tree_node* node = extent_tree_node_alloc(
+        start, end, 0, 0, 0, 0);
+    if (!node) {
+        return ENOMEM;
+    }
+#endif
+
+    /* lock the tree for reading */
+    extent_tree_rdlock(extent_tree);
+
+    int count = 0;
+    struct extent_tree_node* next = extent_tree_find(extent_tree, start, end);
+    while (next != NULL      &&
+           next->start < end &&
+           count < max) {
+        /* got an entry that overlaps with given span */
+
+        /* fill in key */
+        unifyfs_key_t* key = &keys[count];
+        key->gfid   = gfid;
+        key->offset = next->start;
+
+        /* fill in value */
+        unifyfs_val_t* val = &vals[count];
+        val->addr           = next->pos;
+        val->len            = next->end - next->start;
+        val->delegator_rank = next->svr_rank;
+        val->app_id         = next->app_id;
+        val->rank           = next->cli_id;
+
+        /* increment the number of key/values we found */
+        count++;
+
+        /* get the next element in the tree */
+        next = extent_tree_iter(extent_tree, next);
+    }
+
+    /* return to user the number of key/values we set */
+    *outnum = count;
+
+    /* done reading the tree */
+    extent_tree_unlock(extent_tree);
+
+    return 0;
+}
+
 /************************
  * These functions are called by the rpc handler to assign work
  * to the request manager thread
@@ -1612,6 +1677,32 @@ int rm_cmd_sync(int app_id, int client_id)
 
         /* count up the number of keys we used for this index */
         count += used;
+
+        /* TODO: need to lock/unlock gfid2ext tree */
+        /* get extent map for this gfid */
+        struct extent_tree* extent_tree;
+        extent_tree = gfid2ext_tree_extents(&glb_gfid2ext, gfid);
+        if (NULL == extent_tree) {
+            /* map does not have an entry for this gfid,
+             * allocate a new extent tree */
+            extent_tree = calloc(1, sizeof(*extent_tree));
+            if (NULL == extent_tree) {
+                LOGERR("failed to allocate memory for file extent tree");
+                ret = (int)UNIFYFS_ERROR_NOMEM;
+                goto rm_cmd_fsync_exit;
+            }
+
+            /* initialize the extent tree */
+            extent_tree_init(extent_tree);
+
+            /* insert emtpy tree into gfid-to-extent map */
+            gfid2ext_tree_add(&glb_gfid2ext, gfid, extent_tree);
+        }
+
+        /* insert entry for this extent into extent map for given gfid */
+        unsigned long end = (unsigned long) (offset + length);
+        extent_tree_add(extent_tree, (unsigned long)offset, end,
+            glb_pmi_rank, app_id, client_side_id, (unsigned long)logpos);
     }
 
     /* batch insert file extent key/values into MDHIM */
