@@ -54,6 +54,8 @@ size_t glb_host_ndx;        // index of localhost in glb_servers
 size_t glb_num_servers;     // size of glb_servers array
 server_info_t* glb_servers; // array of server_info_t
 
+struct gfid2ext_tree glb_gfid2ext;
+
 arraylist_t* app_config_list;
 
 int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
@@ -407,6 +409,9 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
+    /* initialize our tree that maps a gfid to its extent tree */
+    gfid2ext_tree_init(&glb_gfid2ext);
+
     LOGDBG("finished service initialization");
 
     while (1) {
@@ -429,6 +434,9 @@ int main(int argc, char* argv[])
             break;
         }
     }
+
+    /* tear down gfid-to-extents tree */
+    gfid2ext_tree_destroy(&glb_gfid2ext);
 
     LOGDBG("stopping service manager thread");
     rc = svcmgr_fini();

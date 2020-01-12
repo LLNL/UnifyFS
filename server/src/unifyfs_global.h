@@ -49,6 +49,8 @@
 #include "unifyfs_shm.h"
 #include "unifyfs_sock.h"
 #include "unifyfs_tree.h"
+#include "extent_tree.h"
+#include "gfid2ext_tree.h"
 
 #include <margo.h>
 #include <pthread.h>
@@ -62,6 +64,8 @@ extern arraylist_t* rm_thrd_list;
 
 extern char glb_host[UNIFYFS_MAX_HOSTNAME];
 extern int glb_pmi_rank, glb_pmi_size;
+
+extern struct gfid2ext_tree glb_gfid2ext;
 
 extern size_t max_recs_per_slice;
 

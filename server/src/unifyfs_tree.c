@@ -130,7 +130,23 @@ static unifyfs_state_filesize_t* get_state(int32_t tag)
 /* function to lookup local max write offset for given file id */
 static size_t get_max_offset(int gfid)
 {
-    size_t filesize = glb_pmi_rank + 100;
+    gfid2ext_tree_rdlock(&glb_gfid2ext);
+
+    struct extent_tree* extents = gfid2ext_tree_extents(&glb_gfid2ext, gfid);
+
+    /* TODO: if we don't have any extents for this file,
+     * we should return an invalid file size */
+    if (NULL == extents) {
+        gfid2ext_tree_unlock(&glb_gfid2ext);
+        return 0;
+    }
+
+    /* otherwise we have some actual extents,
+     * return the max offset */
+    size_t filesize = extent_tree_max(extents);
+
+    gfid2ext_tree_unlock(&glb_gfid2ext);
+
     return filesize;
 }
 
