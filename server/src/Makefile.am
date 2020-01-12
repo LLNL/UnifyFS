@@ -14,7 +14,11 @@ libunifyfsd_a_SOURCES = \
     unifyfs_service_manager.c \
     unifyfs_service_manager.h \
     unifyfs_tree.c \
-    unifyfs_tree.h
+    unifyfs_tree.h \
+    extent_tree.c \
+    extent_tree.h \
+    gfid2ext_tree.c \
+    gfid2ext_tree.h
 
 bin_PROGRAMS = unifyfsd
 
