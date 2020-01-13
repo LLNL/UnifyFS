@@ -126,11 +126,12 @@ files.
 .. table:: ``[server]`` section - server settings
    :widths: auto
 
-   ==========  ======  ========================
-   Key         Type    Description
-   ==========  ======  ========================
-   hostfile    STRING  path to server hostfile
-   ==========  ======  ========================
+   =============  ======  =====================================================
+   Key            Type    Description
+   =============  ======  =====================================================
+   hostfile       STRING  path to server hostfile
+   local_extents  BOOL    enable extent tracking to service reads of local data
+   =============  ======  =====================================================
 
 .. table:: ``[sharedfs]`` section - server shared files settings
    :widths: auto

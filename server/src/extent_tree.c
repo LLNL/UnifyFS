@@ -279,20 +279,32 @@ struct extent_tree_node* extent_tree_find(
     unsigned long start, /* starting offset to search */
     unsigned long end)   /* ending offset to search */
 {
-    /* Create our range */
+    /* Create a range of just our starting byte offset */
     struct extent_tree_node* node = extent_tree_node_alloc(
-        start, end, 0, 0, 0, 0);
+        start, start, 0, 0, 0, 0);
     if (!node) {
         return NULL;
     }
 
-    /* search tree for overlapping range */
-    struct extent_tree_node* next = RB_FIND(
+    /* search tree for either a range that overlaps with
+     * the target range (starting byte), or otherwise the
+     * node for the next biggest starting byte */
+    struct extent_tree_node* next = RB_NFIND(
         inttree, &extent_tree->head, node);
 
     free(node);
 
-    return next;
+    /* we may have found a node that doesn't include our starting
+     * byte offset, but it would be the range with the lowest
+     * starting offset after the target starting offset, check whether
+     * this overlaps our end offset */
+    if (next && next->start <= end) {
+        return next;
+    }
+
+    /* otherwise, there is not element that overlaps with the
+     * target range of [start, end] */
+    return NULL;
 }
 
 /* truncate extents to use new maximum, discards extent entries
