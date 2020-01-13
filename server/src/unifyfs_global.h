@@ -40,6 +40,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 // common headers
 #include "arraylist.h"
@@ -65,7 +66,12 @@ extern arraylist_t* rm_thrd_list;
 extern char glb_host[UNIFYFS_MAX_HOSTNAME];
 extern int glb_pmi_rank, glb_pmi_size;
 
+/* maps a global file id to its extent map */
 extern struct gfid2ext_tree glb_gfid2ext;
+
+/* configuration flag whether to use local extent tracking
+ * on server to service client read requests of local data */
+extern bool unifyfs_local_extents;
 
 extern size_t max_recs_per_slice;
 

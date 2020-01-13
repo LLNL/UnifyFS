@@ -54,7 +54,12 @@ size_t glb_host_ndx;        // index of localhost in glb_servers
 size_t glb_num_servers;     // size of glb_servers array
 server_info_t* glb_servers; // array of server_info_t
 
+/* maps a global file id to its extent map */
 struct gfid2ext_tree glb_gfid2ext;
+
+/* configuration flag whether to use local extent tracking
+ * on server to service client read requests of local data */
+bool unifyfs_local_extents;
 
 arraylist_t* app_config_list;
 
@@ -259,6 +264,7 @@ static int process_servers_hostfile(const char* hostfile)
 int main(int argc, char* argv[])
 {
     int rc;
+    bool b;
     int kv_rank, kv_nranks;
     bool daemon = true;
     struct sigaction sa;
@@ -277,6 +283,17 @@ int main(int argc, char* argv[])
     }
     if (daemon) {
         daemonize();
+    }
+
+    /* Determine if we should track all write extents and use them
+     * to service read requests if all data is local */
+    unifyfs_local_extents = false;
+    char* cfgval = server_cfg.server_local_extents;
+    if (cfgval != NULL) {
+        rc = configurator_bool_val(cfgval, &b);
+        if (rc == 0) {
+            unifyfs_local_extents = (bool)b;
+        }
     }
 
     /* unifyfs default log level is LOG_ERR */

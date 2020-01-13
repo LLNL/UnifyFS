@@ -83,6 +83,7 @@
     UNIFYFS_CFG(meta, range_size, INT, META_DEFAULT_RANGE_SZ, "metadata range size", NULL) \
     UNIFYFS_CFG_CLI(runstate, dir, STRING, RUNDIR, "runstate file directory", configurator_directory_check, 'R', "specify full path to directory to contain server runstate file") \
     UNIFYFS_CFG_CLI(server, hostfile, STRING, NULLSTRING, "server hostfile name", NULL, 'H', "specify full path to server hostfile") \
+    UNIFYFS_CFG(server, local_extents, BOOL, off, "track extents to read back local data", NULL) \
     UNIFYFS_CFG_CLI(sharedfs, dir, STRING, NULLSTRING, "shared file system directory", configurator_directory_check, 'S', "specify full path to directory to contain server shared files") \
     UNIFYFS_CFG(shmem, chunk_bits, INT, UNIFYFS_CHUNK_BITS, "shared memory data chunk size in bits (i.e., size=2^bits)", NULL) \
     UNIFYFS_CFG(shmem, chunk_mem, INT, UNIFYFS_CHUNK_MEM, "shared memory segment size for data chunks", NULL) \
