@@ -529,22 +529,13 @@ static int extent_tree_span(
     /* initialize output parameters */
     *outnum = 0;
 
-#if 0
-    /* Create our range */
-    struct extent_tree_node* node = extent_tree_node_alloc(
-        start, end, 0, 0, 0, 0);
-    if (!node) {
-        return ENOMEM;
-    }
-#endif
-
     /* lock the tree for reading */
     extent_tree_rdlock(extent_tree);
 
     int count = 0;
     struct extent_tree_node* next = extent_tree_find(extent_tree, start, end);
-    while (next != NULL      &&
-           next->start < end &&
+    while (next != NULL       &&
+           next->start <= end &&
            count < max) {
         /* got an entry that overlaps with given span */
 
@@ -556,7 +547,7 @@ static int extent_tree_span(
         /* fill in value */
         unifyfs_val_t* val = &vals[count];
         val->addr           = next->pos;
-        val->len            = next->end - next->start;
+        val->len            = next->end - next->start + 1;
         val->delegator_rank = next->svr_rank;
         val->app_id         = next->app_id;
         val->rank           = next->cli_id;
@@ -1139,15 +1130,282 @@ int rm_cmd_laminate(
     return rc;
 }
 
+/* given a set of input key pairs, where each pair describes the first
+ * and last byte offset of a data range, refer to our local extent map
+ * and generate keyval responses for any ranges covering data that is
+ * local to the server, generate new key pairs to describe remaining
+ * holes that will be queried against the global key/value store,
+ * the list of output keys, key lengths, and keyvals are allocated
+ * and returned to be freed by the caller */
+int get_local_keyvals(
+    int num_keys,               /* number of input keys */
+    unifyfs_key_t** keys,       /* list of input keys */
+    int* keylens,               /* list of input key lengths */
+    int* out_global,            /* number of output keys for server */
+    unifyfs_key_t*** out_keys,  /* list of output keys */
+    int** out_keylens,          /* list of output key lengths */
+    int* num_keyvals,           /* number of output keyvals from local data */
+    unifyfs_keyval_t** keyvals) /* list of output keyvals */
+{
+    /* initialize output parameters */
+    *out_global  = 0;
+    *out_keys    = NULL;
+    *out_keylens = NULL;
+    *num_keyvals = 0;
+    *keyvals     = NULL;
+
+    /* allocate memory to copy key/value data */
+    int max_keyvals = UNIFYFS_MAX_SPLIT_CNT;
+    unifyfs_keyval_t* kvs_local = (unifyfs_keyval_t*) calloc(
+        max_keyvals, sizeof(unifyfs_keyval_t));
+    if (NULL == kvs_local) {
+        LOGERR("failed to allocate keyvals");
+        return (int)UNIFYFS_ERROR_MDHIM;
+    }
+
+    /* allocate memory to define remaining keys to
+     * search in global store */
+    unifyfs_key_t** keys_global = alloc_key_array(max_keyvals);
+    if (NULL == keys_global) {
+        LOGERR("failed to allocate keys");
+        free(kvs_local);
+        return (int)UNIFYFS_ERROR_MDHIM;
+    }
+
+    /* allocate memory to define key lengths for remaining keys to
+     * search in global store */
+    int* keylens_global = (int*) calloc(max_keyvals, sizeof(int));
+    if (NULL == keylens_global) {
+        LOGERR("failed to allocate keylens");
+        free_key_array(keys_global);
+        free(kvs_local);
+        return (int)UNIFYFS_ERROR_MDHIM;
+    }
+
+    /* counters for the number of local keyvals we create and the
+     * number of keys we generate for the global key/value store */
+    int count_global = 0;
+    int count_local  = 0;
+
+    int i;
+    for (i = 0; i < num_keys; i += 2) {
+        /* get next key pair that describe start and end offsets */
+        unifyfs_key_t* k1 = keys[i+0];
+        unifyfs_key_t* k2 = keys[i+1];
+
+        /* get gfid, start, and end offset of this pair */
+        int gfid     = k1->gfid;
+        size_t start = k1->offset;
+        size_t end   = k2->offset;
+
+        /* we'll define key/values in these temp arrays that correspond
+         * to extents we have locally */
+        unifyfs_key_t tmpkeys[UNIFYFS_MAX_SPLIT_CNT];
+        unifyfs_val_t tmpvals[UNIFYFS_MAX_SPLIT_CNT];
+
+        /* look up any entries we can find in our local extent map */
+        int num_local = 0;
+        struct extent_tree* extent_tree;
+        extent_tree = gfid2ext_tree_extents(&glb_gfid2ext, gfid);
+        if (extent_tree != NULL) {
+            extent_tree_span(extent_tree, gfid, start, end,
+                UNIFYFS_MAX_SPLIT_CNT, tmpkeys, tmpvals, &num_local);
+        }
+
+        /* iterate over local keys, create new keys to pass to server
+         * for any holes in our local extents */
+        int j;
+        size_t nextstart = start;
+        for (j = 0; j < num_local; j++) {
+            /* get next key/value returned from local extent */
+            unifyfs_key_t* k = &tmpkeys[j];
+            unifyfs_val_t* v = &tmpvals[j];
+
+            /* if we have a gap in our data,
+             * we need to ask the global key/value store */
+            if (nextstart < k->offset) {
+                /* we're missing a section of bytes, so create a key
+                 * pair to search for this hole in the global key/value
+                 * store */
+
+                /* check that we don't overflow the global array */
+                if (count_global + 2 > max_keyvals) {
+                    /* exhausted our space */
+                    free(keylens_global);
+                    free_key_array(keys_global);
+                    free(kvs_local);
+                    return (int)UNIFYFS_ERROR_NOMEM;
+                }
+
+                /* first key is for starting offset of the hole,
+                 * which is defined in next start */
+                unifyfs_key_t* gk1 = keys_global[count_global];
+                gk1->gfid   = gfid;
+                gk1->offset = nextstart;
+                keylens_global[count_global] = sizeof(unifyfs_key_t);
+                count_global++;
+
+                /* second key is for ending offset of the hole,
+                 * which will be the offset of the byte that comes
+                 * just before the offset of the current key */
+                unifyfs_key_t* gk2 = keys_global[count_global];
+                gk2->gfid   = gfid;
+                gk2->offset = k->offset - 1;
+                keylens_global[count_global] = sizeof(unifyfs_key_t);
+                count_global++;
+            } else {
+                /* otherwise we have a local extent that matches,
+                 * copy the corresponding key/value pair into the
+                 * local output array */
+
+                /* check that we don't overflow the local array */
+                if (count_local + 1 > max_keyvals) {
+                    /* exhausted our space */
+                    free(keylens_global);
+                    free_key_array(keys_global);
+                    free(kvs_local);
+                    return (int)UNIFYFS_ERROR_NOMEM;
+                }
+
+                /* create a key/value describing the
+                 * current local extent */
+
+                /* get pointer to next key/val */
+                unifyfs_keyval_t* kv = &kvs_local[count_local];
+
+                /* copy in the key and value generated from the call
+                 * to tree_span into our array of local key/value pairs */
+                memcpy(&kv->key, k, sizeof(unifyfs_key_t));
+                memcpy(&kv->val, v, sizeof(unifyfs_val_t));
+
+                /* increase the number of keyvals we've found locally */
+                count_local++;
+            }
+
+            /* advance to start of next segment we're looking for */
+            nextstart = k->offset + v->len;
+        }
+
+        /* verify that we covered the full range, create a key pair
+         * to look in the global key/value store for any trailing hole */
+        if (nextstart <= end) {
+            /* check that we don't overflow the global array */
+            if (count_global + 2 > max_keyvals) {
+                /* exhausted our space */
+                free(keylens_global);
+                free_key_array(keys_global);
+                free(kvs_local);
+                return (int)UNIFYFS_ERROR_NOMEM;
+            }
+
+            /* first key is for starting offset of the hole,
+             * which is defined in next start */
+            unifyfs_key_t* gk1 = keys_global[count_global];
+            gk1->gfid   = gfid;
+            gk1->offset = nextstart;
+            keylens_global[count_global] = sizeof(unifyfs_key_t);
+            count_global++;
+
+            /* second key is for ending offset of the hole */
+            unifyfs_key_t* gk2 = keys_global[count_global];
+            gk2->gfid   = gfid;
+            gk2->offset = end;
+            keylens_global[count_global] = sizeof(unifyfs_key_t);
+            count_global++;
+        }
+    }
+
+    /* set output values */
+    *out_global  = count_global;
+    *out_keys    = keys_global;
+    *out_keylens = keylens_global;
+    *num_keyvals = count_local;
+    *keyvals     = kvs_local;
+
+    return UNIFYFS_SUCCESS;
+}
+
 int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl,
                             int gfid, int app_id, int client_id,
                             int num_keys, unifyfs_key_t** keys, int* keylens)
 {
-    /* lookup all key/value pairs for given range */
+    int rc = UNIFYFS_SUCCESS;
+
     int num_vals = 0;
     unifyfs_keyval_t* keyvals = NULL;
-    int rc = unifyfs_get_file_extents(num_keys, keys, keylens,
-                                      &num_vals, &keyvals);
+
+    if (!unifyfs_local_extents) {
+        /* not using our local extent map,
+         * lookup all keys from global key/value store */
+        rc = unifyfs_get_file_extents(num_keys, keys, keylens,
+            &num_vals, &keyvals);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to lookup keyvals from global key/val store");
+            return rc;
+        }
+    } else {
+        /* lookup entries from local key/value map first,
+         * for any missing gaps, create new keys to search in global map */
+        int global_num_keys = 0;
+        int local_num       = 0;
+        unifyfs_key_t** global_keys     = NULL;
+        int* global_keylens             = NULL;
+        unifyfs_keyval_t* local_keyvals = NULL;
+        rc = get_local_keyvals(num_keys, keys, keylens,
+            &global_num_keys, &global_keys, &global_keylens,
+            &local_num, &local_keyvals);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to lookup keyvals from local extents");
+            return rc;
+        }
+
+        /* now lookup remaining keys in global key/value store */
+        int global_num = 0;
+        unifyfs_keyval_t* global_keyvals = NULL;
+        if (global_num_keys > 0) {
+            rc = unifyfs_get_file_extents(
+                global_num_keys, global_keys, global_keylens,
+                &global_num, &global_keyvals);
+            if (rc != UNIFYFS_SUCCESS) {
+                LOGERR("failed to lookup keyvals from global key/val store");
+                free_key_array(global_keys);
+                free(global_keylens);
+                free(local_keyvals);
+                return rc;
+            }
+        }
+
+        /* total up number of keyvals we have from local and global
+         * server combined */
+        num_vals = local_num + global_num;
+
+        /* allocate space to combine local and global keyvals */
+        keyvals = (unifyfs_keyval_t*) calloc(
+            num_vals, sizeof(unifyfs_keyval_t));
+        if (NULL == keyvals) {
+            LOGERR("failed to allocate keyvals");
+            free_key_array(global_keys);
+            free(global_keylens);
+            free(local_keyvals);
+            free(global_keyvals);
+            return (int)UNIFYFS_ERROR_MDHIM;
+        }
+
+        /* merge local and global keyvals into one array,
+         * copy in local keyvals first */
+        memcpy(&keyvals[0], local_keyvals,
+            local_num * sizeof(unifyfs_keyval_t));
+
+        /* copy global keyvals into array after any local keyvals */
+        memcpy(&keyvals[local_num], global_keyvals,
+            global_num * sizeof(unifyfs_keyval_t));
+
+        /* free memory allocated during lookup functions */
+        free_key_array(global_keys);
+        free(global_keylens);
+        free(local_keyvals);
+        free(global_keyvals);
+    }
 
     /* this is to maintain limits imposed in previous code
      * that would throw fatal errors */
@@ -1700,7 +1958,7 @@ int rm_cmd_sync(int app_id, int client_id)
         }
 
         /* insert entry for this extent into extent map for given gfid */
-        unsigned long end = (unsigned long) (offset + length);
+        unsigned long end = (unsigned long) (offset + length - 1);
         extent_tree_add(extent_tree, (unsigned long)offset, end,
             glb_pmi_rank, app_id, client_side_id, (unsigned long)logpos);
     }

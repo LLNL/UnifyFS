@@ -41,6 +41,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 // common headers
 #include "arraylist.h"
@@ -82,7 +83,12 @@ typedef struct {
 extern server_info_t* glb_servers; /* array of server info structs */
 extern size_t glb_num_servers; /* number of entries in glb_servers array */
 
+/* maps a global file id to its extent map */
 extern struct gfid2ext_tree glb_gfid2ext;
+
+/* configuration flag whether to use local extent tracking
+ * on server to service client read requests of local data */
+extern bool unifyfs_local_extents;
 
 /* defines commands for messages sent to service manager threads */
 typedef enum {

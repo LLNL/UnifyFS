@@ -139,6 +139,7 @@ files.
    ============  ======  =============================================================================
    hostfile      STRING  path to server hostfile
    init_timeout  INT     timeout in seconds to wait for servers to be ready for clients (default: 120)
+   local_extents  BOOL    enable extent tracking to service reads of local data
    ============  ======  =============================================================================
 
 .. table:: ``[sharedfs]`` section - server shared files settings

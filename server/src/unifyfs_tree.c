@@ -145,6 +145,16 @@ static size_t get_max_offset(int gfid)
      * return the max offset */
     size_t filesize = extent_tree_max(extents);
 
+    /* the max value here is the offset of the last byte actually written
+     * to, we want the filesize here, which would be one more than the last
+     * offset since offsets are zero-based.  However, we can't just add one
+     * because the above function also returns in the case where there are
+     * no extents, thus we only add one if we have at least one extent */
+    int segments = extent_tree_count(extents);
+    if (segments > 0) {
+        filesize += 1;
+    }
+
     gfid2ext_tree_unlock(&glb_gfid2ext);
 
     return filesize;
