@@ -3514,7 +3514,7 @@ sub process {
 			      ($s !~ /^\s*(?:\}|\{|else\b)/)) ||
 			     ($sindent > $indent + 8))) {
 				WARN("SUSPECT_CODE_INDENT",
-				     "suspect code indent for conditional statements ($indent, $sindent)\n" . $herecurr . "$stat_real\n");
+				     "suspect (wrong # of spaces?) code indent for cond. stmts ($indent, $sindent)\n" . $herecurr . "$stat_real\n");
 			}
 		}
 
