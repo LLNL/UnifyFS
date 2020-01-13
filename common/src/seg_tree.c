@@ -147,6 +147,9 @@ static int get_non_overlapping_range(
 int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
     unsigned long end, unsigned long ptr)
 {
+    /* assume we'll succeed */
+    int rc = 0;
+
     /* Create our range */
     struct seg_tree_node* node = seg_tree_node_alloc(start, end, ptr);
     if (!node) {
@@ -156,75 +159,79 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
     /* lock the tree so we can modify it */
     seg_tree_wrlock(seg_tree);
 
-    /*
-     * Try to insert our range into the RB tree.  If it overlaps with any other
+    /* Try to insert our range into the RB tree.  If it overlaps with any other
      * range, then it is not inserted, and the overlapping range node is
      * returned in 'overlap'.  If 'overlap' is NULL, then there were no
-     * overlaps, and our range was successfully inserted.
-     */
+     * overlaps, and our range was successfully inserted. */
     struct seg_tree_node* overlap = NULL;
     while ((overlap = RB_INSERT(inttree, &seg_tree->head, node))) {
-        /*
-         * Our range overlaps with another range (in 'overlap'). Is there any
+        /* Our range overlaps with another range (in 'overlap'). Is there any
          * any part of 'overlap' that does not overlap our range?  If so,
          * delete the old 'overlap' and insert the smaller, non-overlapping
-         * range.
-         */
+         * range. */
         long new_start = 0;
         long new_end   = 0;
-        int rc = get_non_overlapping_range(overlap->start, overlap->end,
+        int ret = get_non_overlapping_range(overlap->start, overlap->end,
             start, end, &new_start, &new_end);
-        if (rc) {
+        if (ret) {
             /* The new range we are adding completely covers the existing
              * range in the tree defined in overlap.
              * We can't find a non-overlapping range.
              * Delete the existing range. */
             RB_REMOVE(inttree, &seg_tree->head, overlap);
-            seg_tree->count--;
             free(overlap);
+            seg_tree->count--;
         } else {
-            /*
-             * Part of the old range was non-overlapping.  Split the old range
+            /* Part of the old range was non-overlapping.  Split the old range
              * into two ranges: one for the non-overlapping section, and one for
              * the remaining section.  The non-overlapping section gets
              * inserted without issue.  The remaining section will be processed
-             * on the next pass of this while() loop.
-             */
+             * on the next pass of this while() loop. */
             struct seg_tree_node* resized = seg_tree_node_alloc(
                 new_start, new_end,
                 overlap->ptr + (new_start - overlap->start));
             if (!resized) {
-                return ENOMEM;
+                /* failed to allocate node,
+                 * return error and release lock */
+                rc = ENOMEM;
+                goto release_add;
             }
-            /* Remove our old range */
-            RB_REMOVE(inttree, &seg_tree->head, overlap);
-
-            /* Insert the non-overlapping part of the new range */
-            RB_INSERT(inttree, &seg_tree->head, resized);
 
             /* if the non-overlapping part came from the front
              * portion of the existing range, then there is a
              * trailing portion of the existing range to add back
              * to be considered again in the next loop iteration */
+            struct seg_tree_node* remaining = NULL;
             if (resized->end < overlap->end) {
-                /*
-                 * There's still a remaining section after the non-overlapping
-                 * part.  Add it in.
-                 */
-                struct seg_tree_node* remaining = seg_tree_node_alloc(
+                /* There's still a remaining section after the non-overlapping
+                 * part.  Add it in. */
+                remaining = seg_tree_node_alloc(
                     resized->end + 1, overlap->end,
                     overlap->ptr + (resized->end + 1 - overlap->start));
                 if (!remaining) {
-                    free(overlap);
-                    return ENOMEM;
+                    /* failed to allocate node,
+                     * return error and release lock */
+                    rc = ENOMEM;
+                    goto release_add;
                 }
+            }
+
+            /* Remove our old range */
+            RB_REMOVE(inttree, &seg_tree->head, overlap);
+            free(overlap);
+            seg_tree->count--;
+
+            /* Insert the non-overlapping part of the new range */
+            RB_INSERT(inttree, &seg_tree->head, resized);
+            seg_tree->count++;
+
+            /* if we have a trailing portion, insert range for that,
+             * and increase our extent count since we just turned one
+             * range entry into two */
+            if (remaining != NULL) {
                 RB_INSERT(inttree, &seg_tree->head, remaining);
                 seg_tree->count++;
             }
-
-            /* we've extracted this node from the tree and inserted
-             * newly allocated nodes to replace it, free the old node */
-            free(overlap);
         }
     }
 
@@ -235,10 +242,12 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
      * is larger */
     seg_tree->max = MAX(seg_tree->max, end);
 
+release_add:
+
     /* done modifying the tree */
     seg_tree_unlock(seg_tree);
 
-    return 0;
+    return rc;
 }
 
 /* Search tree for an entry that overlaps with given range of
