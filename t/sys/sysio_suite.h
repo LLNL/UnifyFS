@@ -55,5 +55,9 @@ int truncate_test(char* unifyfs_root);
 int truncate_bigempty(char* unifyfs_root);
 int truncate_eof(char* unifyfs_root);
 int truncate_truncsync(char* unifyfs_root);
+int truncate_pattern_size(char* unifyfs_root, int pos);
+int truncate_empty_read(char* unifyfs_root, int pos);
+int truncate_ftrunc_before_sync(char* unifyfs_root);
+int truncate_trunc_before_sync(char* unifyfs_root);
 
 #endif /* SYSIO_SUITE_H */

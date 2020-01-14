@@ -665,3 +665,129 @@ int truncate_empty_read(char* unifyfs_root, off_t seekpos)
 
     return 0;
 }
+
+int truncate_ftrunc_before_sync(char* unifyfs_root)
+{
+    char path[64];
+    int rc;
+    int fd;
+    size_t global, local, log;
+
+    size_t bufsize = 1024;
+    char* buf = (char*) malloc(bufsize);
+
+    testutil_rand_path(path, sizeof(path), unifyfs_root);
+
+    /* Open a new file for writing */
+    fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0222);
+    ok(fd != -1, "%s:%d open(%s) (fd=%d): %s",
+        __FILE__, __LINE__, path, fd, strerror(errno));
+
+    /* file should be 0 bytes at this point */
+    get_size(path, &global, &local, &log);
+    ok(global == 0, "%s:%d global size is %d expected %d",
+        __FILE__, __LINE__, global, 0);
+    ok(local == 0, "%s:%d local size is %d expected %d",
+        __FILE__, __LINE__, local, 0);
+    ok(log == 0, "%s:%d log size is %d expected %d",
+        __FILE__, __LINE__, log, 0);
+
+    /* write a small amount, intended to be small enough that
+     * the write itself does not cause an implicit fsync */
+
+    /* write data to file */
+    rc = write(fd, buf, bufsize);
+    ok(rc == bufsize, "%s:%d write(%d) (rc=%d): %s",
+        __FILE__, __LINE__, bufsize, rc, strerror(errno));
+
+    /* then truncate the file to 0 */
+    off_t truncsize = 0;
+    rc = ftruncate(fd, truncsize);
+    ok(rc == 0, "%s:%d ftruncate(%d) (rc=%d): %s",
+        __FILE__, __LINE__, (int)truncsize, rc, strerror(errno));
+
+    /* then fsync the file */
+    rc = fsync(fd);
+    ok(rc == 0, "%s:%d fsync() (rc=%d): %s",
+        __FILE__, __LINE__, rc, strerror(errno));
+
+    /* finally, check that the file is 0 bytes,
+     * i.e., check that the writes happened before the truncate
+     * and not at the fsync */
+    get_size(path, &global, &local, &log);
+    ok(global == truncsize, "%s:%d global size is %d expected %d",
+        __FILE__, __LINE__, global, (int)truncsize);
+    ok(local == truncsize, "%s:%d local size is %d expected %d",
+        __FILE__, __LINE__, local, (int)truncsize);
+    ok(log == bufsize, "%s:%d log size is %d expected %d",
+        __FILE__, __LINE__, log, bufsize);
+
+    close(fd);
+
+    free(buf);
+
+    return 0;
+}
+
+int truncate_trunc_before_sync(char* unifyfs_root)
+{
+    char path[64];
+    int rc;
+    int fd;
+    size_t global, local, log;
+
+    size_t bufsize = 1024;
+    char* buf = (char*) malloc(bufsize);
+
+    testutil_rand_path(path, sizeof(path), unifyfs_root);
+
+    /* Open a new file for writing */
+    fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0222);
+    ok(fd != -1, "%s:%d open(%s) (fd=%d): %s",
+        __FILE__, __LINE__, path, fd, strerror(errno));
+
+    /* file should be 0 bytes at this point */
+    get_size(path, &global, &local, &log);
+    ok(global == 0, "%s:%d global size is %d expected %d",
+        __FILE__, __LINE__, global, 0);
+    ok(local == 0, "%s:%d local size is %d expected %d",
+        __FILE__, __LINE__, local, 0);
+    ok(log == 0, "%s:%d log size is %d expected %d",
+        __FILE__, __LINE__, log, 0);
+
+    /* write a small amount, intended to be small enough that
+     * the write itself does not cause an implicit fsync */
+
+    /* write data to file */
+    rc = write(fd, buf, bufsize);
+    ok(rc == bufsize, "%s:%d write(%d) (rc=%d): %s",
+        __FILE__, __LINE__, bufsize, rc, strerror(errno));
+
+    /* then truncate the file to 0 */
+    off_t truncsize = 0;
+    rc = truncate(path, truncsize);
+    ok(rc == 0, "%s:%d truncate(%d) (rc=%d): %s",
+        __FILE__, __LINE__, (int)truncsize, rc, strerror(errno));
+
+    /* then fsync the file */
+    rc = fsync(fd);
+    ok(rc == 0, "%s:%d fsync() (rc=%d): %s",
+        __FILE__, __LINE__, rc, strerror(errno));
+
+    /* finally, check that the file is 0 bytes,
+     * i.e., check that the writes happened before the truncate
+     * and not at the fsync */
+    get_size(path, &global, &local, &log);
+    ok(global == truncsize, "%s:%d global size is %d expected %d",
+        __FILE__, __LINE__, global, (int)truncsize);
+    ok(local == truncsize, "%s:%d local size is %d expected %d",
+        __FILE__, __LINE__, local, (int)truncsize);
+    ok(log == bufsize, "%s:%d log size is %d expected %d",
+        __FILE__, __LINE__, log, bufsize);
+
+    close(fd);
+
+    free(buf);
+
+    return 0;
+}

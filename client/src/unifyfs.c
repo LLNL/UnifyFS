@@ -77,6 +77,9 @@ static size_t unifyfs_fattr_buf_size;
 unsigned long unifyfs_max_index_entries; /* max metadata log entries */
 int unifyfs_spillmetablock;
 
+/* tracks total number of unsync'd segments for all files */
+unsigned long unifyfs_segment_count;
+
 int global_rank_cnt;  /* count of world ranks */
 int local_rank_cnt;
 int local_rank_idx;

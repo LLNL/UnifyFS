@@ -233,6 +233,17 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
 {
     /* determine whether we should intercept this path or not */
     if (unifyfs_intercept_path(path)) {
+        /* get global file id for path */
+        int gfid = unifyfs_generate_gfid(path);
+
+        /* before we truncate, sync any data cached this file id */
+        int ret = unifyfs_sync(gfid);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* sync failed for some reason, set errno and return error */
+            errno = unifyfs_err_map_to_errno(ret);
+            return -1;
+        }
+
         /* get file id for path name */
         int fid = unifyfs_get_fid_from_path(path);
         if (fid >= 0) {
@@ -243,10 +254,6 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
                 return -1;
             }
         } else {
-            /* otherwise call gfid truncate to attempt to
-             * truncate the global file */
-            int gfid = unifyfs_generate_gfid(path);
-
             /* invoke truncate rpc */
             int rc = invoke_client_truncate_rpc(gfid, length);
             if (rc != UNIFYFS_SUCCESS) {
@@ -255,13 +262,6 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
                 return -1;
             }
         }
-
-#if 0
-            /* ERROR: file does not exist */
-            LOGDBG("Couldn't find entry for %s in UNIFYFS", path);
-            errno = ENOENT;
-            return -1;
-#endif
 
         /* success */
         return 0;
@@ -1903,8 +1903,16 @@ int UNIFYFS_WRAP(ftruncate)(int fd, off_t length)
             return -1;
         }
 
-        /* sync any pending writes if we have any before we truncate */
-        UNIFYFS_WRAP(fsync)(origfd);
+        /* get global file id for fid */
+        int gfid = unifyfs_gfid_from_fid(fid);
+
+        /* before we truncate, sync any data cached this file id */
+        int ret = unifyfs_sync(gfid);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* sync failed for some reason, set errno and return error */
+            errno = unifyfs_err_map_to_errno(ret);
+            return -1;
+        }
 
         /* truncate the file */
         int rc = unifyfs_fid_truncate(fid, length);
@@ -1925,11 +1933,6 @@ int UNIFYFS_WRAP(fsync)(int fd)
 {
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
-        if (*unifyfs_indices.ptr_num_entries == 0) {
-            /* Nothing to sync */
-            return 0;
-        }
-
         /* get the file id for this file descriptor */
         int fid = unifyfs_get_fid_from_fd(fd);
         if (fid < 0) {
@@ -1938,20 +1941,10 @@ int UNIFYFS_WRAP(fsync)(int fd)
             return -1;
         }
 
+        /* skip this file if no new data has been written to it */
         unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
         if (!meta->needs_sync) {
             return 0;
-        }
-
-        /* if using spill over, fsync spillover data to disk */
-        if (unifyfs_use_spillover) {
-            int ret = __real_fsync(unifyfs_spilloverblock);
-            if (ret != 0) {
-                /* error, need to set errno appropriately,
-                 * we called the real fsync which should
-                 * have already set errno to something reasonable */
-                return -1;
-            }
         }
 
         /* invoke fsync rpc to register index metadata with server */
@@ -1963,9 +1956,7 @@ int UNIFYFS_WRAP(fsync)(int fd)
             return -1;
         }
 
-        /* server has processed entries in index buffer, reset it */
-        *(unifyfs_indices.ptr_num_entries) = 0;
-
+        /* update metadata to indicate that data has been synced */
         meta->needs_sync = 0;
         return 0;
     } else {

@@ -328,6 +328,9 @@ extern unifyfs_index_buf_t unifyfs_indices;
 extern unsigned long unifyfs_max_index_entries;
 extern long unifyfs_spillover_max_chunks;
 
+/* tracks total number of unsync'd segments for all files */
+extern unsigned long unifyfs_segment_count;
+
 extern int local_rank_cnt;
 extern int local_rank_idx;
 extern int local_del_cnt;
