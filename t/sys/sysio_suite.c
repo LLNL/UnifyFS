@@ -93,6 +93,8 @@ int main(int argc, char* argv[])
     truncate_pattern_size(unifyfs_root, 2020);
     truncate_empty_read(unifyfs_root, 0);
     truncate_empty_read(unifyfs_root, 2020);
+    truncate_ftrunc_before_sync(unifyfs_root);
+    truncate_trunc_before_sync(unifyfs_root);
 
     MPI_Finalize();
 

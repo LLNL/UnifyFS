@@ -486,8 +486,7 @@ static int unifyfs_split_index(
  * Clear all entries in the log index.  This only clears the metadata,
  * not the data itself.
  */
-static void
-unifyfs_clear_index(void)
+static void unifyfs_clear_index(void)
 {
     *unifyfs_indices.ptr_num_entries = 0;
 }
@@ -497,13 +496,33 @@ unifyfs_clear_index(void)
  *
  * Returns 0 on success, nonzero otherwise.
  */
-int
-unifyfs_sync(int gfid)
+int unifyfs_sync(int gfid)
 {
+    /* write contents from segment tree to index buffer
+     * if we're using that optimization */
     if (unifyfs_flatten_writes) {
         unifyfs_rewrite_index_from_seg_tree();
     }
 
+    /* if there are no index entries, we've got nothing to sync */
+    if (*unifyfs_indices.ptr_num_entries == 0) {
+        return UNIFYFS_SUCCESS;
+    }
+
+    /* ensure any data written to the spill over file is flushed */
+    /* if using spill over, fsync spillover data to disk */
+    if (unifyfs_use_spillover) {
+        int ret = __real_fsync(unifyfs_spilloverblock);
+        if (ret != 0) {
+            /* error, need to set errno appropriately,
+             * we called the real fsync which should
+             * have already set errno to something reasonable */
+            LOGERR("failed to flush data to spill over file");
+            return UNIFYFS_ERROR_IO;
+        }
+    }
+
+    /* tell the server to grab our new extents */
     int ret = invoke_client_fsync_rpc(gfid);
     if (ret != UNIFYFS_SUCCESS) {
         /* something went wrong when trying to flush key/values */
@@ -511,23 +530,26 @@ unifyfs_sync(int gfid)
         return UNIFYFS_ERROR_IO;
     }
 
-    /*
-     * flushed, clear buffer and refresh number of entries
-     * and number remaining
-     */
+    /* flushed, clear buffer and refresh number of entries
+     * and number remaining */
     unifyfs_clear_index();
 
     return UNIFYFS_SUCCESS;
 }
 
-void
-unifyfs_add_index_entry_to_seg_tree(unifyfs_filemeta_t* meta,
+void unifyfs_add_index_entry_to_seg_tree(
+    unifyfs_filemeta_t* meta,
     unifyfs_index_t* index)
 {
     if (!unifyfs_flatten_writes) {
         /* We're not flattening writes.  Nothing to do */
         return;
     }
+
+    /* to update the global running segment count, we need to capture
+     * the count in this tree before adding and the count after to
+     * add the difference */
+    unsigned long count_before = seg_tree_count(&meta->seg_tree);
 
     /*
      * Store the write in our segment tree.  We will later use this for
@@ -543,8 +565,15 @@ unifyfs_add_index_entry_to_seg_tree(unifyfs_filemeta_t* meta,
      * create two new nodes in the seg_tree.  If we're close to potentially
      * filling up the index, sync it out.
      */
-    if (seg_tree_count(&meta->seg_tree) >= (unifyfs_max_index_entries - 2)) {
+    if (unifyfs_segment_count >= (unifyfs_max_index_entries - 2)) {
+        /* this will flush our segments, sync them, and set the running
+         * segment count back to 0 */
         unifyfs_sync(meta->gfid);
+    } else {
+        /* increase the running global segment count by the number of
+         * new entries we added to this tree */
+        unsigned long count_after = seg_tree_count(&meta->seg_tree);
+        unifyfs_segment_count += (count_after - count_before);
     }
 }
 
@@ -721,42 +750,48 @@ static int unifyfs_logio_chunk_write(
  */
 void unifyfs_rewrite_index_from_seg_tree(void)
 {
-    struct seg_tree_node* node;
+    /* get pointer to index buffer */
     unifyfs_index_t* indexes = unifyfs_indices.index_entry;
-    unsigned long idx = 0;
-
 
     /* Erase the index before we re-write it */
     unifyfs_clear_index();
 
+    /* count up number of entries we wrote to buffer */
+    unsigned long idx = 0;
+
     /* For each fid .. */
     for (int i = 0; i < UNIFYFS_MAX_FILEDESCS; i++) {
-        int fid, gfid;
-
-        fid = unifyfs_fds[i].fid;
+        /* get file id for each file descriptor */
+        int fid = unifyfs_fds[i].fid;
         unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
         if (!meta) {
             continue;
         }
 
-        gfid = unifyfs_gfid_from_fid(fid);
+        int gfid = unifyfs_gfid_from_fid(fid);
 
-        node = NULL;
         seg_tree_rdlock(&meta->seg_tree);
 
         /* For each write in this file's seg_tree ... */
+        struct seg_tree_node* node = NULL;
         while ((node = seg_tree_iter(&meta->seg_tree, node))) {
             indexes[idx].file_pos = node->start;
-            indexes[idx].log_pos = node->ptr;
-            indexes[idx].length = node->end - node->start + 1;
-            indexes[idx].gfid = gfid;
+            indexes[idx].log_pos  = node->ptr;
+            indexes[idx].length   = node->end - node->start + 1;
+            indexes[idx].gfid     = gfid;
             idx++;
         }
+
         seg_tree_unlock(&meta->seg_tree);
 
         /* All done processing this files writes.  Clear its seg_tree */
         seg_tree_clear(&meta->seg_tree);
     }
+
+    /* reset our segment count since we just dumped them all */
+    unifyfs_segment_count = 0;
+
+    /* record total number of entries in index buffer */
     *unifyfs_indices.ptr_num_entries = idx;
 }
 
