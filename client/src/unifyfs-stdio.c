@@ -483,6 +483,24 @@ static int unifyfs_stream_flush(FILE* stream)
             return write_rc;
         }
 
+        /* lookup file id from file descriptor attached to stream */
+        int fid = unifyfs_get_fid_from_fd(s->fd);
+        if (fid < 0) {
+            s->err = 1;
+            errno = EBADF;
+            return EBADF;
+        }
+
+        /* invoke fsync rpc to register index metadata with server */
+        int gfid = unifyfs_gfid_from_fid(fid);
+        int ret = unifyfs_sync(gfid);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* sync failed for some reason, set errno and return error */
+            s->err = 1;
+            errno = unifyfs_rc_errno(ret);
+            return ret;
+        }
+
         /* indicate that buffer is now flushed */
         s->bufdirty = 0;
     }
@@ -598,7 +616,6 @@ static int unifyfs_stream_read(
             }
 
             /* read data from file into buffer */
-            size_t bufcount;
             ssize_t read_rc = unifyfs_fd_read(s->fd, current, s->buf,
                 s->bufsize);
             if (read_rc == -1) {
@@ -615,7 +632,7 @@ static int unifyfs_stream_read(
             s->buflen  = read_rc;
 
             /* set end-of-file flag if our read was short */
-            if (bufcount < s->bufsize) {
+            if (s->buflen < s->bufsize) {
                 eof = 1;
             }
         }
@@ -1718,7 +1735,6 @@ int UNIFYFS_WRAP(fflush)(FILE* stream)
         /* TODO: check that stream is active */
         /* flush output on stream */
         int rc = unifyfs_stream_flush(stream);
-
         if (rc != UNIFYFS_SUCCESS) {
             /* ERROR: flush sets error indicator and errno */
             return EOF;
@@ -2287,7 +2303,6 @@ static int __srefill(unifyfs_stream_t* stream)
         }
 
         /* read data from file into buffer */
-        size_t bufcount;
         ssize_t read_rc = unifyfs_fd_read(s->fd, current, s->buf, s->bufsize);
         if (read_rc < 0) {
             /* ERROR: read error, set error indicator */

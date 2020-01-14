@@ -78,7 +78,7 @@ int size_test(char* unifyfs_root)
     ok(rc == 0, "%s: fclose() (rc=%d): %s", __FILE__, rc, strerror(errno));
 
     get_size(path, &global, &local, &log);
-    ok(global == 0, "%s: global size is %d: %s",  __FILE__, global,
+    ok(global == 12, "%s: global size is %d: %s",  __FILE__, global,
         strerror(errno));
     ok(local == 12, "%s: local size is %d: %s",  __FILE__, local,
         strerror(errno));
@@ -119,7 +119,7 @@ int size_test(char* unifyfs_root)
     ok(rc == 0, "%s: fclose() (rc=%d): %s", __FILE__, rc, strerror(errno));
 
     get_size(path, &global, &local, &log);
-    ok(global == 0, "%s: global size is %d: %s",  __FILE__, global,
+    ok(global == 30, "%s: global size is %d: %s",  __FILE__, global,
         strerror(errno));
     ok(local == 30, "%s: local size is %d: %s",  __FILE__, local,
         strerror(errno));

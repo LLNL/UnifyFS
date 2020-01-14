@@ -559,20 +559,6 @@ ssize_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
 
     /* TODO: check that file is open for reading */
 
-    /* check that we don't try to read past the end of the file */
-    off_t lastread = pos + (off_t) count;
-    off_t filesize = unifyfs_fid_logical_size(fid);
-    if (filesize < lastread) {
-        /* adjust count so we don't read past end of file */
-        if (filesize > pos) {
-            /* read all bytes until end of file */
-            count = (size_t)(filesize - pos);
-        } else {
-            /* pos is already at or past the end of the file */
-            count = 0;
-        }
-    }
-
     /* if we don't read any bytes, return success */
     if (count == 0) {
         LOGDBG("returning EOF");
@@ -1679,8 +1665,8 @@ int unifyfs_fd_logreadlist(read_req_t* in_reqs, int in_count)
     int count = in_count;
     read_req_t* read_reqs = in_reqs;
 
-    /* TODO: if the file is laminated and we know the file size,
-     * we could adjust some reads to not try reading past the EOF */
+    /* TODO: if the file is laminated so that we know the file size,
+     * we can adjust read requests to not read past the EOF */
 
     /* if the option is enabled to service requests locally, try it,
      * in this case we'll allocate a large array which we split into
@@ -1849,13 +1835,13 @@ int unifyfs_fd_logreadlist(read_req_t* in_reqs, int in_count)
          * request buffer with zeros */
 
         /* get file size for this file */
-        size_t filesize;
-        int ret = invoke_client_filesize_rpc(req->gfid, &filesize);
-        if (ret != UNIFYFS_SUCCESS) {
+        off_t filesize_offt = unifyfs_gfid_filesize(req->gfid);
+        if (filesize_offt == (off_t)-1) {
             /* failed to get file size */
-            req->errcode = ret;
+            req->errcode = ENOENT;
             continue;
         }
+        size_t filesize = (size_t)filesize_offt;
 
         /* get offset of where hole starts */
         size_t gap_start = req->offset + req->nread;
