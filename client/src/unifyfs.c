@@ -639,8 +639,54 @@ off_t unifyfs_fid_logical_size(int fid)
     if (unifyfs_fid_is_laminated(fid)) {
         return unifyfs_fid_global_size(fid);
     } else {
-        return unifyfs_fid_local_size(fid);
+        /* TODO: move this to a runtime configurable? */
+        int use_local_size = 0;
+        if (use_local_size) {
+            return unifyfs_fid_local_size(fid);
+        }
+
+        /* otherwise, we invoke an rpc to ask the server
+         * what the file size is */
+
+        /* get gfid for this file */
+        int gfid = unifyfs_gfid_from_fid(fid);
+
+        /* get file size for this file */
+        size_t filesize;
+        int ret = invoke_client_filesize_rpc(gfid, &filesize);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* failed to get file size */
+            return (off_t)-1;
+        }
+        return (off_t)filesize;
     }
+}
+
+/* if we have a local fid structure corresponding to the gfid
+ * in question, we attempt the file lookup with the fid method
+ * otherwise call back to the rpc */
+off_t unifyfs_gfid_filesize(int gfid)
+{
+    off_t filesize = (off_t)-1;
+
+    /* see if we have a fid for this gfid */
+    int fid = unifyfs_fid_from_gfid(gfid);
+    if (fid >= 0) {
+        /* got a fid, look up file size through that
+         * method, since it may avoid a server rpc call */
+        filesize = unifyfs_fid_logical_size(fid);
+    } else {
+        /* no fid for this gfid,
+         * look it up with server rpc */
+        size_t size;
+        int ret = invoke_client_filesize_rpc(gfid, &size);
+        if (ret == UNIFYFS_SUCCESS) {
+            /* got the file size successfully */
+            filesize = size;
+        }
+    }
+
+    return filesize;
 }
 
 /* Return the local (un-laminated) size of the file */
@@ -1113,8 +1159,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         }
 
         if (flags & O_APPEND) {
-            /* We only support O_APPEND on non-laminated (local) files, so
-             * this will use local_size here. */
+            /* We only support O_APPEND on non-laminated files */
             pos = unifyfs_fid_logical_size(fid);
         }
     } else {
