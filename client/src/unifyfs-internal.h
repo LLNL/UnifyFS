@@ -266,26 +266,27 @@ typedef struct {
 } unifyfs_chunkmeta_t;
 
 typedef struct {
-    off_t global_size;               /* Global size of the file */
-    off_t local_size;                /* Local size of the file */
-    off_t log_size;                  /* Log size.  This is the sum of all the
-                                      * write counts. */
-    pthread_spinlock_t fspinlock;    /* file lock variable */
-    enum flock_enum flock_status;    /* file lock status */
+    off_t global_size;            /* Global size of the file */
+    off_t local_size;             /* Local size of the file */
+    off_t log_size;               /* Log size.  This is the sum of all the
+                                   * write counts. */
+    pthread_spinlock_t fspinlock; /* file lock variable */
+    enum flock_enum flock_status; /* file lock status */
 
-    int storage;                     /* FILE_STORAGE type */
+    int storage;                  /* FILE_STORAGE type */
 
-    int gfid;                        /* global file id for this file */
-    int needs_sync;                  /* have unsynced writes */
+    int gfid;                     /* global file id for this file */
+    int needs_sync;               /* have unsynced writes */
 
-    off_t chunks;                   /* number of chunks allocated to file */
-    off_t chunkmeta_idx;            /* starting index in unifyfs_chunkmeta */
-    int is_laminated;               /* Is this file laminated */
-    uint32_t mode;                  /* st_mode bits.  This has file
-                                     * permission info and will tell you if this
-                                     * is a regular file or directory. */
-    struct seg_tree seg_tree;       /* Segment tree containing our coalesced
-                                     * writes */
+    off_t chunks;                 /* number of chunks allocated to file */
+    off_t chunkmeta_idx;          /* starting index in unifyfs_chunkmeta */
+    int is_laminated;             /* Is this file laminated */
+    uint32_t mode;                /* st_mode bits.  This has file
+                                   * permission info and will tell you if this
+                                   * is a regular file or directory. */
+    struct seg_tree extents_sync; /* Segment tree containing our coalesced
+                                   * writes between sync operations */
+    struct seg_tree extents;      /* Segment tree of all local data extents */
 } unifyfs_filemeta_t;
 
 /* struct used to map a full path to its local file id,
@@ -393,7 +394,8 @@ extern int unifyfs_use_memfs;
 extern int unifyfs_use_spillover;
 
 extern int    unifyfs_max_files;  /* maximum number of files to store */
-extern bool   unifyfs_flatten_writes;    /* enable write flattening */
+extern bool   unifyfs_flatten_writes; /* enable write flattening */
+extern bool   unifyfs_local_extents;  /* enable tracking of local extents */
 extern size_t
 unifyfs_chunk_mem;  /* number of bytes in memory to be used for chunk storage */
 extern int    unifyfs_chunk_bits; /* we set chunk size = 2^unifyfs_chunk_bits */
@@ -483,6 +485,10 @@ const char* unifyfs_path_from_fid(int fid);
 
 /* Given a fid, return a gfid */
 int unifyfs_gfid_from_fid(const int fid);
+
+/* returns fid for corresponding gfid, if one is active,
+ * returns -1 otherwise */
+int unifyfs_fid_from_gfid(const int gfid);
 
 /* given an UNIFYFS error code, return corresponding errno code */
 int unifyfs_err_map_to_errno(int rc);

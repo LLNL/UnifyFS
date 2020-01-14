@@ -22,6 +22,12 @@ void seg_tree_destroy(struct seg_tree* seg_tree);
 int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
     unsigned long end, unsigned long ptr);
 
+struct seg_tree_node* seg_tree_find_nolock(
+    struct seg_tree* seg_tree,
+    unsigned long start,
+    unsigned long end
+);
+
 struct seg_tree_node* seg_tree_iter(struct seg_tree* seg_tree,
     struct seg_tree_node* start);
 

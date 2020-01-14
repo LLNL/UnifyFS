@@ -122,7 +122,8 @@ static off_t unifyfs_min_long;
 
 /* TODO: moved these to fixed file */
 int    unifyfs_max_files;  /* maximum number of files to store */
-bool   unifyfs_flatten_writes;  /* flatten our writes (true = enabled) */
+bool   unifyfs_flatten_writes; /* flatten our writes (true = enabled) */
+bool   unifyfs_local_extents;  /* track data extents in client to read local */
 size_t unifyfs_chunk_mem;  /* number of bytes in memory to be used for chunk storage */
 int    unifyfs_chunk_bits; /* we set chunk size = 2^unifyfs_chunk_bits */
 off_t  unifyfs_chunk_size; /* chunk size in bytes */
@@ -651,7 +652,12 @@ static int unifyfs_fid_store_free(int fid)
 
     /* Free our write seg_tree */
     if (unifyfs_flatten_writes) {
-        seg_tree_destroy(&meta->seg_tree);
+        seg_tree_destroy(&meta->extents_sync);
+    }
+
+    /* Free our extent seg_tree */
+    if (unifyfs_local_extents) {
+        seg_tree_destroy(&meta->extents);
     }
 
     return UNIFYFS_SUCCESS;
@@ -701,6 +707,22 @@ int unifyfs_gfid_from_fid(const int fid)
     /* return global file id, cached in file meta struct */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     return meta->gfid;
+}
+
+/* scan list of files and return fid corresponding to target gfid,
+ * returns -1 if not found */
+int unifyfs_fid_from_gfid(int gfid)
+{
+    int i;
+    for (i = 0; i < unifyfs_max_files; i++) {
+        if (unifyfs_filelist[i].in_use &&
+            unifyfs_filemetas[i].gfid == gfid) {
+            /* found a file id that's in use and it matches
+             * the target fid, this is the one */
+            return i;
+        }
+    }
+    return -1;
 }
 
 /* Given a fid, return the path.  */
@@ -985,10 +1007,20 @@ int unifyfs_fid_create_file(const char* path)
 
     if (unifyfs_flatten_writes) {
         /* Initialize our segment tree that will record our writes */
-        rc = seg_tree_init(&meta->seg_tree);
+        rc = seg_tree_init(&meta->extents_sync);
         if (rc != 0) {
             errno = rc;
-            return -rc;
+            fid = -1;
+        }
+    }
+
+    /* Initialize our segment tree to track extents for all writes
+     * by this process, can be used to read back local data */
+    if (unifyfs_local_extents) {
+        rc = seg_tree_init(&meta->extents);
+        if (rc != 0) {
+            errno = rc;
+            fid = -1;
         }
     }
 
@@ -1804,6 +1836,17 @@ static int unifyfs_init(int rank)
             rc = configurator_bool_val(cfgval, &b);
             if (rc == 0) {
                 unifyfs_flatten_writes = (bool)b;
+            }
+        }
+
+        /* Determine if we should track all write extents and use them
+         * to service read requests if all data is local */
+        unifyfs_local_extents = 0;
+        cfgval = client_cfg.client_local_extents;
+        if (cfgval != NULL) {
+            rc = configurator_bool_val(cfgval, &b);
+            if (rc == 0) {
+                unifyfs_local_extents = (bool)b;
             }
         }
 

@@ -44,6 +44,7 @@
 #include "unifyfs-sysio.h"
 #include "margo_client.h"
 #include "ucr_read_builder.h"
+#include "seg_tree.h"
 
 /* -------------------
  * define external variables
@@ -1270,143 +1271,6 @@ static int compare_read_req(const void* a, const void* b)
     }
 }
 
-/* given a read request, split it into multiple requests whose range
- * is equal or smaller than slice_range size
- *
- * @param  req:         read request to be split
- * @param  slice_range: slice size of the key-value store
- * @return out_set:     output set of split read requests
- * @param  maxcount:    number of entries in output array
- * @return used_count:  number of entries added to output array */
-static int unifyfs_split_read_request(
-    read_req_t* in_req,  /* read request to split */
-    long slice_range,    /* number of bytes in each slice */
-    read_req_t* out_set, /* output array to store new requests in */
-    off_t maxcount,      /* max number of items in output array */
-    off_t* used_count)   /* number of entries we added in split */
-{
-    /* check that we have at least one spot in buffer */
-    if (maxcount == 0) {
-        *used_count = 0;
-        return UNIFYFS_FAILURE;
-    }
-
-    /* make a copy of the input request so we can modify it */
-    read_req_t tmp_req = *in_req;
-    read_req_t* req = &tmp_req;
-
-    /* first byte offset this request will read from */
-    size_t req_start = req->offset;
-
-    /* last byte offset this request will read from */
-    size_t req_end = req->offset + req->length - 1;
-
-    /* compute offset of first and last byte of slice
-     * that contains first byte of request */
-
-    /* starting byte offset of slice that first read offset falls in */
-    size_t slice_start = (req->offset / slice_range) * slice_range;
-
-    /* last byte offset of slice that first read offset falls in */
-    size_t slice_end = slice_start + slice_range - 1;
-
-    /* initialize request count in output set */
-    int count = 0;
-
-    /* define new read requests in out_set by splitting request
-     * at slice boundaries */
-    if (req_end <= slice_end) {
-        /* slice fully contains request
-         *
-         * slice_start           slice_end
-         *      req_start   req_end
-         */
-        out_set[count] = *req;
-        count++;
-    } else {
-        /* ending offset of request is beyond last offset in first slice,
-         * so this request spans across multiple slices
-         *
-         * slice_start  slice_end  next_slice_start      next_slice_end
-         *      req_start                          req_end
-         *
-         */
-
-        /* compute number of bytes until end of first slice */
-        long length = slice_end - req_start + 1;
-
-        out_set[count].gfid    = req->gfid;
-        out_set[count].offset  = req->offset;
-        out_set[count].length  = length;
-        out_set[count].errcode = req->errcode;
-        count++;
-
-        /* update write index to account for index we just added */
-        req->offset += length;
-        req->length -= length;
-
-        /* check that we have room to write more requests */
-        if (count >= maxcount) {
-            /* no room to write more requests,
-             * and we have at least one more,
-             * record number we wrote and return with error */
-            *used_count = count;
-            return UNIFYFS_FAILURE;
-        }
-
-        /* advance slice boundary offsets to next slice */
-        slice_end += slice_range;
-
-        /* loop until we find the slice that contains
-         * ending offset of read */
-        while (req_end > slice_end) {
-            /* ending offset of read is beyond end of this slice,
-             * so read spans the full length of this slice */
-            length = slice_range;
-
-            /* full slice is contained in read request */
-            out_set[count].gfid    = req->gfid;
-            out_set[count].offset  = req->offset;
-            out_set[count].length  = length;
-            out_set[count].errcode = req->errcode;
-            count++;
-
-            /* update read request to account for index we just added */
-            req->offset += length;
-            req->length -= length;
-
-            /* check that we have room to write more requests */
-            if (count >= maxcount) {
-                /* no room to write more requests,
-                 * and we have at least one more,
-                 * record number we wrote and return with error */
-                *used_count = count;
-                return UNIFYFS_FAILURE;
-            }
-
-            /* advance slice boundary offsets to next slice */
-            slice_end += slice_range;
-        }
-
-        /* this slice contains the remainder of read */
-        length = req->length;
-        out_set[count].gfid    = req->gfid;
-        out_set[count].offset  = req->offset;
-        out_set[count].length  = length;
-        out_set[count].errcode = req->errcode;
-        count++;
-
-        /* update read request to account for index we just added */
-        req->offset += length;
-        req->length -= length;
-    }
-
-    /* record number of entries we added */
-    *used_count = count;
-
-    return UNIFYFS_SUCCESS;
-}
-
 /* notify our delegator that the shared memory buffer
  * is now clear and ready to hold more read data */
 static void delegator_signal(void)
@@ -1600,59 +1464,336 @@ static int process_read_data(read_req_t* read_reqs, int count, int* done)
     return rc;
 }
 
+/* This uses information in the extent map for a file on the client to
+ * complete any read requests.  It only complets a request if it contains
+ * all of the data.  Otherwise the request is copied to the list of
+ * requests to be handled by the server. */
+static void service_local_reqs(
+    read_req_t* read_reqs,   /* list of input read requests */
+    int count,               /* number of input read requests */
+    read_req_t* local_reqs,  /* list to copy requests completed by client */
+    read_req_t* server_reqs, /* list to copy requests to be handled by server */
+    int* out_count)          /* number of items copied to server list */
+{
+    /* this will track the total number of requests we're passing
+     * on to the server */
+    int local_count  = 0;
+    int server_count = 0;
+
+    /* iterate over each input read request, satisfy it locally if we can
+     * otherwise copy request into output list that the server will handle
+     * for us */
+    int i;
+    for (i = 0; i < count; i++) {
+        /* get current read request */
+        read_req_t* req = &read_reqs[i];
+
+        /* skip any request that's already completed or errored out,
+         * we pass those requests on to server */
+        if (req->nread >= req->length || req->errcode != UNIFYFS_SUCCESS) {
+            /* copy current request into list of requests
+             * that we'll ask server for */
+            memcpy(&server_reqs[server_count], req, sizeof(read_req_t));
+            server_count++;
+            continue;
+        }
+
+        /* get gfid, start, and length of this request */
+        int gfid         = req->gfid;
+        size_t req_start = req->offset;
+        size_t req_end   = req->offset + req->length;
+
+        /* lookup local extents if we have them */
+        int fid = unifyfs_fid_from_gfid(gfid);
+
+        /* move to next request if we can't find the matching fid */
+        if (fid < 0) {
+            /* copy current request into list of requests
+             * that we'll ask server for */
+            memcpy(&server_reqs[server_count], req, sizeof(read_req_t));
+            server_count++;
+            continue;
+        }
+
+        /* get pointer to extents for this file */
+        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+        struct seg_tree* extents = &meta->extents;
+
+        /* lock the extent tree for reading */
+        seg_tree_rdlock(extents);
+
+        /* identify whether we can satisfy this full request
+         * or not, assume we can */
+        int have_local = 1;
+
+        /* this will point to the offset of the next byte we
+         * need to account for */
+        size_t expected_start = req_start;
+
+        /* iterate over extents we have for this file,
+         * and check that there are no holes in coverage,
+         * we search for a starting extent using a range
+         * of just the very first byte that we need */
+        struct seg_tree_node* first;
+        first = seg_tree_find_nolock(extents, req_start, req_start);
+        struct seg_tree_node* next = first;
+        while (next != NULL && next->start < req_end) {
+            if (expected_start >= next->start) {
+                /* this extent has the next byte we expect,
+                 * bump up to the first byte past the end
+                 * of this extent */
+                expected_start = next->end + 1;
+            } else {
+                /* there is a gap between extents so we're missing
+                 * some bytes */
+                have_local = 0;
+                break;
+            }
+
+            /* get the next element in the tree */
+            next = seg_tree_iter(extents, next);
+        }
+
+        /* check that we account for the full request
+         * up until the last byte */
+        if (expected_start < req_end) {
+            /* missing some bytes at the end of the request */
+            have_local = 0;
+        }
+
+        /* if we can't fully satisfy the request, copy request to
+         * output array, so it can be passed on to server */
+        if (!have_local) {
+            /* copy current request into list of requests
+             * that we'll ask server for */
+            memcpy(&server_reqs[server_count], req, sizeof(read_req_t));
+            server_count++;
+
+            /* release lock before we go to next request */
+            seg_tree_unlock(extents);
+
+            continue;
+        }
+
+        /* otherwise we can copy the data locally, iterate
+         * over the extents and copy data into request buffer,
+         * again search for a starting extent using a range
+         * of just the very first byte that we need */
+        next = first;
+        while (next != NULL && next->start < req_end) {
+            /* get start and end of this extent (reply) */
+            size_t rep_start = next->start;
+            size_t rep_end   = next->end + 1;
+
+            /* get the offset into the log */
+            size_t pos = next->ptr;
+
+            /* start of overlapping segment is the maximum of
+             * reply and request start offsets */
+            size_t start = rep_start;
+            if (req_start > start) {
+                start = req_start;
+            }
+
+            /* end of overlapping segment is the mimimum of
+             * reply and request end offsets */
+            size_t end = rep_end;
+            if (req_end < end) {
+                end = req_end;
+            }
+
+            /* compute length of overlapping segment */
+            size_t length = end - start;
+
+            /* get number of bytes from start of reply and request
+             * buffers to the start of the overlap region */
+            size_t rep_offset = start - rep_start;
+            size_t req_offset = start - req_start;
+
+            /* if we have a gap, fill with zeros */
+            size_t gap_start = req_start + req->nread;
+            if (start > gap_start) {
+                size_t gap_length = start - gap_start;
+                char* req_ptr = req->buf + req->nread;
+                memset(req_ptr, 0, gap_length);
+            }
+
+            /* copy data from reply buffer into request buffer */
+            char* req_ptr = req->buf + req_offset;
+
+            /* compute total size of shared memory data region */
+            size_t chunk_mem_size = unifyfs_max_chunks * unifyfs_chunk_size;
+
+            /* compute number of bytes we'll read from shared memory */
+            size_t mem_length = 0;
+            if (pos < chunk_mem_size) {
+                /* we need to start from memory, assume we'll get it all */
+                mem_length = length;
+                if (pos + length > chunk_mem_size) {
+                    /* amount to read extends past end of memory segment,
+                     * compute the number of bytes in memory */
+                    mem_length = chunk_mem_size - pos;
+                }
+            }
+
+            /* any remainder comes from the spill over file */
+            size_t spill_length = length - mem_length;
+
+            /* copy data from memory into request buffer */
+            if (mem_length > 0) {
+                /* pointer to data is starting address of superblock
+                 * data region (unify_chunks) + offset within the
+                 * superblock to the start of the segment in
+                 * reply (pos) + any offset from start of that segment
+                 * until the first byte we are asking for (rep_offset) */
+                char* mem_ptr = unifyfs_chunks + pos + rep_offset;
+                memcpy(req_ptr, mem_ptr, mem_length);
+            }
+
+            /* copy data from spill over into request buffer */
+            if (spill_length > 0) {
+                /* advance in user buffer past any bytes we copied in
+                 * from memory */
+                char* reqbuf = req_ptr + mem_length;
+
+                /* offset to start of data in spill over file is
+                 * position within log (pos) + offset from start of
+                 * segment to the first byte in segment that overlaps
+                 * with request (rep_offset) + any bytes copied from
+                 * memory (mem_length) - the size of the data region
+                 * in memory */
+                off_t spill_offset = pos + rep_offset + mem_length
+                    - chunk_mem_size;
+
+                /* TODO: loop on this if we get a short read
+                 * or EIO/EAGAIN */
+
+                /* read data from file into request buffer */
+                ssize_t rc = pread(unifyfs_spilloverblock,
+                    reqbuf, spill_length, spill_offset);
+                if (rc != length) {
+                    /* had a problem reading,
+                     * set the request error code */
+                    req->errcode = UNIFYFS_ERROR_IO;
+                }
+            }
+
+            /* update max number of bytes we have written to in the
+             * request buffer */
+            size_t nread = end - req_start;
+            if (nread > req->nread) {
+                req->nread = nread;
+            }
+
+            /* get the next element in the tree */
+            next = seg_tree_iter(extents, next);
+        }
+
+        /* copy request data to list we completed locally */
+        memcpy(&local_reqs[local_count], req, sizeof(read_req_t));
+        local_count++;
+
+        /* done reading the tree */
+        seg_tree_unlock(extents);
+    }
+
+    /* return to user the number of key/values we set */
+    *out_count = server_count;
+
+    return;
+}
+
 /*
  * get data for a list of read requests from the
  * delegator
+ *
  * @param read_reqs: a list of read requests
  * @param count: number of read requests
  * @return error code
- *
  * */
-int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
+int unifyfs_fd_logreadlist(read_req_t* in_reqs, int in_count)
 {
+    int i;
     int read_rc;
 
+    /* assume we'll succeed */
     int rc = UNIFYFS_SUCCESS;
 
-    /*
-     * Todo: When the number of read requests exceed the
+    /* assume we'll service all requests from the server */
+    int count = in_count;
+    read_req_t* read_reqs = in_reqs;
+
+    /* TODO: if the file is laminated and we know the file size,
+     * we could adjust some reads to not try reading past the EOF */
+
+    /* if the option is enabled to service requests locally, try it,
+     * in this case we'll allocate a large array which we split into
+     * two, the first half will record requests we completed locally
+     * and the second half will store requests to be sent to the server */
+
+    /* this records the pointer to the temp request array if
+     * we allocate one, we should free this later if not NULL */
+    read_req_t* reqs = NULL;
+
+    /* this will point to the start of the array of requests we
+     * complete locally */
+    read_req_t* local_reqs = NULL;
+
+    /* attempt to complete requests locally if enabled */
+    if (unifyfs_local_extents) {
+        /* allocate space to make local and server copies of the requests,
+         * each list will be at most in_count long */
+        size_t reqs_size = 2 * in_count * sizeof(read_req_t);
+        reqs = (read_req_t*) malloc(reqs_size);
+        if (reqs == NULL) {
+            return UNIFYFS_ERROR_NOMEM;
+        }
+
+        /* define pointers to space where we can build our list
+         * of requests handled on the client and those left
+         * for the server */
+        local_reqs = &reqs[0];
+        read_reqs  = &reqs[in_count];
+
+        /* service reads from local extent info if we can, this copies
+         * completed requests from in_reqs into local_reqs, and it copies
+         * any requests that can't be completed locally into the read_reqs
+         * to be processed by the server */
+        service_local_reqs(in_reqs, in_count, local_reqs, read_reqs, &count);
+
+        /* bail early if we satisfied all requests locally */
+        if (count == 0) {
+            /* copy completed requests back into user's array */
+            memcpy(in_reqs, local_reqs, in_count * sizeof(read_req_t));
+
+            /* free the temporary array */
+            free(reqs);
+            return rc;
+        }
+    }
+
+    /* TODO: When the number of read requests exceed the
      * request buffer, split list io into multiple bulk
-     * sends and transfer in bulks
-     * */
+     * sends and transfer in bulks */
+
+    /* check that we have enough slots for all read requests */
+    if (count > UNIFYFS_MAX_READ_CNT) {
+        LOGERR("Too many requests to pass to server");
+        if (reqs != NULL) {
+            free(reqs);
+        }
+        return read_rc;
+    }
 
     /* order read request by increasing file id, then increasing offset */
     qsort(read_reqs, count, sizeof(read_req_t), compare_read_req);
 
-    /* TODO: move this split code to server and then pass original
-     * read requests from client to server */
-    /* split read requests at file offset boundaries used internally
-     * in the server key/value store */
-    int i;
-    off_t req_count = 0;
-    read_req_t read_set[UNIFYFS_MAX_READ_CNT];
-    for (i = 0; i < count; i++) {
-        /* remaining entries we have in our read requests array */
-        off_t remaining = UNIFYFS_MAX_READ_CNT - req_count;
-
-        /* split current request at key/value offsets */
-        off_t used = 0;
-        read_rc = unifyfs_split_read_request(&read_reqs[i],
-            unifyfs_key_slice_range, &read_set[req_count], remaining, &used);
-
-        /* bail out with error if we failed to process read requests */
-        if (read_rc != UNIFYFS_SUCCESS) {
-            LOGERR("Failed to split read requests");
-            return read_rc;
-        }
-
-        /* account of request slots we used up */
-        req_count += used;
-    }
-
     /* prepare our shared memory buffer for delegator */
     delegator_signal();
 
-    if (req_count > 1) {
+    /* we select different rpcs depending on the number of
+     * read requests */
+    if (count > 1) {
         /* got multiple read requests,
          * build up a flat buffer to include them all */
         flatcc_builder_t builder;
@@ -1662,11 +1803,9 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
         unifyfs_Extent_vec_start(&builder);
 
         /* fill in values for each request entry */
-        for (i = 0; i < req_count; i++) {
+        for (i = 0; i < count; i++) {
             unifyfs_Extent_vec_push_create(&builder,
-                                           read_set[i].gfid,
-                                           read_set[i].offset,
-                                           read_set[i].length);
+                read_reqs[i].gfid, read_reqs[i].offset, read_reqs[i].length);
         }
 
         /* complete the array */
@@ -1678,26 +1817,34 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
         size_t size = 0;
         void* buffer = flatcc_builder_finalize_buffer(&builder, &size);
         assert(buffer);
+
         LOGDBG("mread: n_reqs:%d, flatcc buffer (%p) sz:%zu",
-               req_count, buffer, size);
+               count, buffer, size);
 
-        /* invoke read rpc here */
-        read_rc = invoke_client_mread_rpc(req_count, size, buffer);
+        /* invoke multi-read rpc */
+        read_rc = invoke_client_mread_rpc(count, size, buffer);
 
+        /* free flat buffer resources */
         flatcc_builder_clear(&builder);
         free(buffer);
     } else {
         /* got a single read request */
-        int gfid      = read_set[0].gfid;
-        size_t offset = read_set[0].offset;
-        size_t length = read_set[0].length;
+        int gfid      = read_reqs[0].gfid;
+        size_t offset = read_reqs[0].offset;
+        size_t length = read_reqs[0].length;
+
         LOGDBG("read: offset:%zu, len:%zu", offset, length);
+
+        /* invoke single read rpc */
         read_rc = invoke_client_read_rpc(gfid, offset, length);
     }
 
     /* bail out with error if we failed to even start the read */
     if (read_rc != UNIFYFS_SUCCESS) {
         LOGERR("Failed to issue read RPC to server");
+        if (reqs != NULL) {
+            free(reqs);
+        }
         return read_rc;
     }
 
@@ -1706,6 +1853,9 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
      * are missed
      * */
 
+    /* spin waiting for read data to come back from the server,
+     * we process it in batches as it comes in, eventually the
+     * server will tell us it's sent us everything it can */
     int done = 0;
     while (!done) {
         int tmp_rc = delegator_wait();
@@ -1721,7 +1871,9 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
         }
     }
 
-    /* check for short reads, compare to file size, fill holes */
+    /* got all of the data we'll get from the server,
+     * check for short reads and whether those short
+     * reads are from errors, holes, or the end of the file */
     for (i = 0; i < count; i++) {
         /* get pointer to next read request */
         read_req_t* req = &read_reqs[i];
@@ -1737,8 +1889,8 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
         }
 
         /* otherwise, we have a short read, check whether there
-         * would be a hole after us, in which case we fill with
-         * zeros */
+         * would be a hole after us, in which case we fill the
+         * request buffer with zeros */
 
         /* get file size for this file */
         size_t filesize;
@@ -1772,6 +1924,33 @@ int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
 
             /* update number of bytes read */
             req->nread += gap_length;
+        }
+    }
+
+    /* if we attempted to service requests from our local extent map,
+     * then we need to copy the resulting read requests from the local
+     * and server arrays back into the user's original array */
+    if (unifyfs_local_extents) {
+        /* TODO: would be nice to copy these back into the same order
+         * in which we received them. */
+
+        /* copy locally completed requests back into user's array */
+        int local_count = in_count - count;
+        if (local_count > 0) {
+            memcpy(in_reqs, local_reqs, local_count * sizeof(read_req_t));
+        }
+
+        /* copy sever completed requests back into user's array */
+        if (count > 0) {
+            /* skip past any items we copied in from the local requests */
+            char* in_ptr = in_reqs + local_count * sizeof(read_req_t);
+            memcpy(in_ptr, read_reqs, count * sizeof(read_req_t));
+        }
+
+        /* free storage we used for copies of requests */
+        if (reqs != NULL) {
+            free(reqs);
+            reqs = NULL;
         }
     }
 
