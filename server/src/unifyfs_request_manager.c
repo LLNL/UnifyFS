@@ -1104,6 +1104,150 @@ int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl,
     return rc;
 }
 
+/* return number of slice ranges needed to cover range */
+static size_t num_slices(size_t offset, size_t length)
+{
+    size_t start = offset / max_recs_per_slice;
+    size_t end   = (offset + length - 1) / max_recs_per_slice;
+    size_t count = end - start + 1;
+    return count;
+}
+
+/* given a global file id, an offset, and a length to read from that
+ * file, create keys needed to query MDHIM for location of data
+ * corresponding to that extent, returns the number of keys inserted
+ * into key array provided by caller */
+static int split_request(
+    unifyfs_key_t** keys, /* list to add newly created keys into */
+    int* keylens,         /* list to add byte size of each key */
+    int gfid,             /* target global file id to read from */
+    size_t offset,        /* starting offset of read */
+    size_t length)        /* number of bytes to read */
+{
+    /* offset of first byte in request */
+    size_t pos = offset;
+
+    /* offset of last byte in request */
+    size_t last_offset = offset + length - 1;
+
+    /* iterate over slice ranges and generate a start/end
+     * pair of keys for each */
+    int count = 0;
+    while (pos <= last_offset) {
+        /* compute offset for first byte in this segment */
+        size_t start = pos;
+
+        /* offset for last byte in this segment,
+         * assume that's the last byte of the same segment
+         * containing start, unless that happens to be
+         * beyond the last byte of the actual request */
+        size_t start_slice = start / max_recs_per_slice;
+        size_t end = (start_slice + 1) * max_recs_per_slice - 1;
+        if (end > last_offset) {
+            end = last_offset;
+        }
+
+        /* create key to describe first byte we'll read
+         * in this slice */
+        keys[count]->gfid   = gfid;
+        keys[count]->offset = start;
+        keylens[count] = sizeof(unifyfs_key_t);
+        count++;
+
+        /* create key to describe last byte we'll read
+         * in this slice */
+        keys[count]->gfid   = gfid;
+        keys[count]->offset = end;
+        keylens[count] = sizeof(unifyfs_key_t);
+        count++;
+
+        /* advance to first byte offset of next slice */
+        pos = end + 1;
+    }
+
+    /* return number of keys we generated */
+    return count;
+}
+
+/* given an extent corresponding to a write index, create new key/value
+ * pairs for that extent, splitting into multiple keys at the slice
+ * range boundaries (max_recs_per_slice), it returns the number of
+ * newly created key/values inserted into the given key and value
+ * arrays */
+static int split_index(
+    unifyfs_key_t** keys, /* list to add newly created keys into */
+    unifyfs_val_t** vals, /* list to add newly created values into */
+    int* keylens,         /* list for size of each key */
+    int* vallens,         /* list for size of each value */
+    int gfid,             /* global file id of write */
+    size_t offset,        /* starting byte offset of extent */
+    size_t length,        /* number of bytes in extent */
+    size_t log_offset,    /* offset within data log */
+    int server_rank,      /* rank of server hosting data */
+    int app_id,           /* app_id holding data */
+    int client_rank)      /* client rank holding data */
+{
+    /* offset of first byte in request */
+    size_t pos = offset;
+
+    /* offset of last byte in request */
+    size_t last_offset = offset + length - 1;
+
+    /* this will track the current offset within the log
+     * where the data starts, we advance it with each key
+     * we generate depending on the data associated with
+     * each key */
+    size_t logpos = log_offset;
+
+    /* iterate over slice ranges and generate a start/end
+     * pair of keys for each */
+    int count = 0;
+    while (pos <= last_offset) {
+        /* compute offset for first byte in this slice */
+        size_t start = pos;
+
+        /* offset for last byte in this slice,
+         * assume that's the last byte of the same slice
+         * containing start, unless that happens to be
+         * beyond the last byte of the actual request */
+        size_t start_slice = start / max_recs_per_slice;
+        size_t end = (start_slice + 1) * max_recs_per_slice - 1;
+        if (end > last_offset) {
+            end = last_offset;
+        }
+
+        /* length of extent in this slice */
+        size_t len = end - start + 1;
+
+        /* create key to describe this log entry */
+        unifyfs_key_t* k = keys[count];
+        k->gfid   = gfid;
+        k->offset = start;
+        keylens[count] = sizeof(unifyfs_key_t);
+
+        /* create value to store address of data */
+        unifyfs_val_t* v = vals[count];
+        v->addr           = logpos;
+        v->len            = len;
+        v->app_id         = app_id;
+        v->rank           = client_rank;
+        v->delegator_rank = server_rank;
+        vallens[count] = sizeof(unifyfs_val_t);
+
+        /* advance to next slot in key/value arrays */
+        count++;
+
+        /* advance offset into log */
+        logpos += len;
+
+        /* advance to first byte offset of next slice */
+        pos = end + 1;
+    }
+
+    /* return number of keys we generated */
+    return count;
+}
+
 /* read function for one requested extent,
  * called from rpc handler to fill shared data structures
  * with read requests to be handled by the delegator thread
@@ -1137,34 +1281,56 @@ int rm_cmd_read(
      *       other mechanism to retrieve all relevant key-value pairs from the
      *       KV-store.
      */
-    unifyfs_key_t key1, key2;
 
-    /* create key to describe first byte we'll read */
-    key1.gfid   = gfid;
-    key1.offset = offset;
+    /* count number of slices this range covers */
+    size_t slices = num_slices(offset, length);
+    if (slices >= UNIFYFS_MAX_SPLIT_CNT) {
+        LOGERR("Error allocating buffers");
+        return (int)UNIFYFS_ERROR_NOMEM;
+    }
 
-    /* create key to describe last byte we'll read */
-    key2.gfid   = gfid;
-    key2.offset = offset + length - 1;
+    /* allocate key storage */
+    size_t key_cnt = slices * 2;
+    unifyfs_key_t** keys = alloc_key_array(key_cnt);
+    int* key_lens = (int*) calloc(key_cnt, sizeof(int));
+    if ((NULL == keys) ||
+        (NULL == key_lens)) {
+        // this is a fatal error
+        // TODO: we need better error handling
+        LOGERR("Error allocating buffers");
+        return (int)UNIFYFS_ERROR_NOMEM;
+    }
 
-    unifyfs_key_t* unifyfs_keys[2] = {&key1, &key2};
-    int key_lens[2] = {sizeof(unifyfs_key_t), sizeof(unifyfs_key_t)};
+    /* split range of read request at boundaries used for
+     * MDHIM range query */
+    split_request(keys, key_lens, gfid, offset, length);
 
-    return create_gfid_chunk_reads(thrd_ctrl, gfid, app_id, client_id,
-                                   2, unifyfs_keys, key_lens);
+    /* queue up the read operations */
+    int rc = create_gfid_chunk_reads(thrd_ctrl, gfid,
+        app_id, client_id, key_cnt, keys, key_lens);
+
+    /* free memory allocated for key storage */
+    free_key_array(keys);
+    free(key_lens);
+
+    return rc;
 }
 
 /* send the read requests to the remote delegators
  *
  * @param app_id: application id
  * @param client_id: client id for requesting process
- * @param gfid: global file id
  * @param req_num: number of read requests
  * @param reqbuf: read requests buffer
  * @return success/error code */
-int rm_cmd_mread(int app_id, int client_id,
-                 size_t req_num, void* reqbuf)
+int rm_cmd_mread(
+    int app_id,
+    int client_id,
+    size_t req_num,
+    void* reqbuf)
 {
+    int rc = UNIFYFS_SUCCESS;
+
     /* get pointer to app structure for this app id */
     app_config_t* app_config =
         (app_config_t*)arraylist_get(app_config_list, app_id);
@@ -1185,13 +1351,27 @@ int rm_cmd_mread(int app_id, int client_id,
     size_t extents_len = unifyfs_Extent_vec_len(extents);
     assert(extents_len == req_num);
 
-    // allocate key storage
-    unifyfs_key_t** unifyfs_keys;
-    int* key_lens;
-    size_t key_cnt = req_num * 2;
-    unifyfs_keys = alloc_key_array(key_cnt);
-    key_lens = (int*) calloc(key_cnt, sizeof(int));
-    if ((NULL == unifyfs_keys) ||
+    /* count up number of slices these request cover */
+    int j;
+    size_t slices = 0;
+    for (j = 0; j < req_num; j++) {
+        /* get offset and length of next request */
+        size_t off = unifyfs_Extent_offset(unifyfs_Extent_vec_at(extents, j));
+        size_t len = unifyfs_Extent_length(unifyfs_Extent_vec_at(extents, j));
+
+        /* add in number of slices this request needs */
+        slices += num_slices(off, len);
+    }
+    if (slices >= UNIFYFS_MAX_SPLIT_CNT) {
+        LOGERR("Error allocating buffers");
+        return (int)UNIFYFS_ERROR_NOMEM;
+    }
+
+    /* allocate key storage */
+    size_t key_cnt = slices * 2;
+    unifyfs_key_t** keys = alloc_key_array(key_cnt);
+    int* key_lens = (int*) calloc(key_cnt, sizeof(int));
+    if ((NULL == keys) ||
         (NULL == key_lens)) {
         // this is a fatal error
         // TODO: we need better error handling
@@ -1200,29 +1380,32 @@ int rm_cmd_mread(int app_id, int client_id,
     }
 
     /* get chunks corresponding to requested client read extents */
-    int rc, num_keys;
-    int gfid = -1;
+    int ret;
+    int num_keys = 0;
     int last_gfid = -1;
-    int ndx = 0;
-    size_t j, eoff, elen;
     for (j = 0; j < req_num; j++) {
-        gfid = unifyfs_Extent_fid(unifyfs_Extent_vec_at(extents, j));
+        /* get the file id for this request */
+        int gfid = unifyfs_Extent_fid(unifyfs_Extent_vec_at(extents, j));
+
+        /* if we have switched to a different file, create chunk reads
+         * for the previous file */
         if (j && (gfid != last_gfid)) {
-            // create requests for all extents of last_gfid
-            num_keys = ndx;
-            rc = create_gfid_chunk_reads(thrd_ctrl, last_gfid, app_id,
-                                         client_id, num_keys,
-                                         unifyfs_keys, key_lens);
-            if (rc != UNIFYFS_SUCCESS) {
+            /* create requests for all extents of last_gfid */
+            ret = create_gfid_chunk_reads(thrd_ctrl, last_gfid,
+                app_id, client_id, num_keys, keys, key_lens);
+            if (ret != UNIFYFS_SUCCESS) {
                 LOGERR("Error creating chunk reads for gfid=%d", last_gfid);
+                rc = ret;
             }
-            // reset ndx for current gfid
-            ndx = 0;
+
+            /* reset key counter for the current gfid */
+            num_keys = 0;
         }
 
-        eoff = unifyfs_Extent_offset(unifyfs_Extent_vec_at(extents, j));
-        elen = unifyfs_Extent_length(unifyfs_Extent_vec_at(extents, j));
-        LOGDBG("gfid:%d, offset:%zu, length:%zu", gfid, eoff, elen);
+        /* get offset and length of current read request */
+        size_t off = unifyfs_Extent_offset(unifyfs_Extent_vec_at(extents, j));
+        size_t len = unifyfs_Extent_length(unifyfs_Extent_vec_at(extents, j));
+        LOGDBG("gfid:%d, offset:%zu, length:%zu", gfid, off, len);
 
         /* Generate a pair of keys for each read request, representing
          * the start and end offsets. MDHIM returns all key-value pairs that
@@ -1233,32 +1416,27 @@ int rm_cmd_mread(int app_id, int client_id,
          *       utilize some other mechanism to retrieve all relevant KV
          *       pairs from the KV-store.
          */
-        key_lens[ndx] = sizeof(unifyfs_key_t);
-        key_lens[ndx + 1] = sizeof(unifyfs_key_t);
 
-        /* create key to describe first byte we'll read */
-        unifyfs_keys[ndx]->gfid   = gfid;
-        unifyfs_keys[ndx]->offset = eoff;
+        /* split range of read request at boundaries used for
+         * MDHIM range query */
+        int used = split_request(&keys[num_keys], &key_lens[num_keys],
+            gfid, off, len);
+        num_keys += used;
 
-        /* create key to describe last byte we'll read */
-        unifyfs_keys[ndx + 1]->gfid   = gfid;
-        unifyfs_keys[ndx + 1]->offset = eoff + elen - 1;
-
-        ndx += 2;
+        /* keep track of the last gfid value that we processed */
         last_gfid = gfid;
     }
 
-    // create requests for all extents of last_gfid
-    num_keys = ndx;
-    rc = create_gfid_chunk_reads(thrd_ctrl, last_gfid, app_id,
-                                 client_id, num_keys,
-                                 unifyfs_keys, key_lens);
-    if (rc != UNIFYFS_SUCCESS) {
+    /* create requests for all extents of final gfid */
+    ret = create_gfid_chunk_reads(thrd_ctrl, last_gfid,
+        app_id, client_id, num_keys, keys, key_lens);
+    if (ret != UNIFYFS_SUCCESS) {
         LOGERR("Error creating chunk reads for gfid=%d", last_gfid);
+        rc = ret;
     }
 
-    // cleanup
-    free_key_array(unifyfs_keys);
+    /* free memory allocated for key storage */
+    free_key_array(keys);
     free(key_lens);
 
     return rc;
@@ -1323,12 +1501,6 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
     /* assume we'll succeed */
     int ret = (int)UNIFYFS_SUCCESS;
 
-    /* pointers to memory we'll dynamically allocate for file extents */
-    unifyfs_key_t** unifyfs_keys = NULL;
-    unifyfs_val_t** unifyfs_vals = NULL;
-    int* unifyfs_key_lens        = NULL;
-    int* unifyfs_val_lens        = NULL;
-
     /* get memory page size on this machine */
     int page_sz = getpagesize();
 
@@ -1358,51 +1530,63 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
 
     unifyfs_index_t* meta_payload = (unifyfs_index_t*)(ptr_extents);
 
+    /* total up number of key/value pairs we'll need for this
+     * set of index values */
+    size_t slices = 0;
+    for (i = 0; i < extent_num_entries; i++) {
+        size_t offset = meta_payload[i].file_pos;
+        size_t length = meta_payload[i].length;
+        slices += num_slices(offset, length);
+    }
+    if (slices >= UNIFYFS_MAX_SPLIT_CNT) {
+        LOGERR("Error allocating buffers");
+        return (int)UNIFYFS_ERROR_NOMEM;
+    }
+
+    /* pointers to memory we'll dynamically allocate for file extents */
+    unifyfs_key_t** keys = NULL;
+    unifyfs_val_t** vals = NULL;
+    int* key_lens        = NULL;
+    int* val_lens        = NULL;
+
     /* allocate storage for file extent key/values */
     /* TODO: possibly get this from memory pool */
-    unifyfs_keys     = alloc_key_array(extent_num_entries);
-    unifyfs_vals     = alloc_value_array(extent_num_entries);
-    unifyfs_key_lens = calloc(extent_num_entries, sizeof(int));
-    unifyfs_val_lens = calloc(extent_num_entries, sizeof(int));
-    if ((NULL == unifyfs_keys) ||
-        (NULL == unifyfs_vals) ||
-        (NULL == unifyfs_key_lens) ||
-        (NULL == unifyfs_val_lens)) {
+    keys     = alloc_key_array(slices);
+    vals     = alloc_value_array(slices);
+    key_lens = calloc(slices, sizeof(int));
+    val_lens = calloc(slices, sizeof(int));
+    if ((NULL == keys) ||
+        (NULL == vals) ||
+        (NULL == key_lens) ||
+        (NULL == val_lens)) {
         LOGERR("failed to allocate memory for file extents");
         ret = (int)UNIFYFS_ERROR_NOMEM;
         goto rm_cmd_fsync_exit;
     }
 
     /* create file extent key/values for insertion into MDHIM */
+    int count = 0;
     for (i = 0; i < extent_num_entries; i++) {
-        /* for a key, we store the global file id and logical file offset */
-        unifyfs_key_t* key = unifyfs_keys[i];
-        key->gfid   = meta_payload[i].gfid;
-        key->offset = meta_payload[i].file_pos;
+        /* get file offset, length, and log offset for this entry */
+        unifyfs_index_t* meta = &meta_payload[i];
+        int gfid      = meta->gfid;
+        size_t offset = meta->file_pos;
+        size_t length = meta->length;
+        size_t logpos = meta->log_pos;
 
-        /* for the value, we store the log position, the length,
-         * the host server (delegator rank), the mount point id (app id),
-         * and the client id (rank) */
-        unifyfs_val_t* val = unifyfs_vals[i];
-        val->addr           = meta_payload[i].log_pos;
-        val->len            = meta_payload[i].length;
-        val->delegator_rank = glb_pmi_rank;
-        val->app_id         = app_id;
-        val->rank           = client_side_id;
+        /* split this entry at the offset boundaries */
+        int used = split_index(
+            &keys[count], &vals[count], &key_lens[count], &val_lens[count],
+            gfid, offset, length, logpos,
+            glb_pmi_rank, app_id, client_side_id);
 
-        LOGDBG("extent - gfid:%d, offset:%zu, length:%zu, app:%d, clid:%d",
-               key->gfid, key->offset,
-               val->len, val->app_id, val->rank);
-
-        /* MDHIM needs to know the byte size of each key and value */
-        unifyfs_key_lens[i] = sizeof(unifyfs_key_t);
-        unifyfs_val_lens[i] = sizeof(unifyfs_val_t);
+        /* count up the number of keys we used for this index */
+        count += used;
     }
 
     /* batch insert file extent key/values into MDHIM */
-    ret = unifyfs_set_file_extents((int)extent_num_entries,
-                                   unifyfs_keys, unifyfs_key_lens,
-                                   unifyfs_vals, unifyfs_val_lens);
+    ret = unifyfs_set_file_extents((int)count,
+        keys, key_lens, vals, val_lens);
     if (ret != UNIFYFS_SUCCESS) {
         /* TODO: need proper error handling */
         LOGERR("unifyfs_set_file_extents() failed");
@@ -1412,20 +1596,20 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
 rm_cmd_fsync_exit:
     /* clean up memory */
 
-    if (NULL != unifyfs_keys) {
-        free_key_array(unifyfs_keys);
+    if (NULL != keys) {
+        free_key_array(keys);
     }
 
-    if (NULL != unifyfs_vals) {
-        free_value_array(unifyfs_vals);
+    if (NULL != vals) {
+        free_value_array(vals);
     }
 
-    if (NULL != unifyfs_key_lens) {
-        free(unifyfs_key_lens);
+    if (NULL != key_lens) {
+        free(key_lens);
     }
 
-    if (NULL != unifyfs_val_lens) {
-        free(unifyfs_val_lens);
+    if (NULL != val_lens) {
+        free(val_lens);
     }
 
     return ret;

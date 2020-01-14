@@ -217,6 +217,42 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
     return 0;
 }
 
+/* Search tree for an entry that overlaps with given range of
+ * [start, end].  Returns the first overlapping entry if found,
+ * which is the overlapping entry having the lowest starting
+ * offset, and returns NULL otherwise.  Assumes caller has lock
+ * on tree. */
+struct seg_tree_node* seg_tree_find_nolock(
+    struct seg_tree* seg_tree,
+    unsigned long start,
+    unsigned long end)
+{
+    /* Create a range of just our starting byte offset */
+    struct seg_tree_node* node = seg_tree_node_alloc(start, start, 0);
+    if (!node) {
+        return NULL;
+    }
+
+    /* Search tree for either a range that overlaps with
+     * the target range (starting byte), or otherwise the
+     * node for the next biggest starting byte. */
+    struct seg_tree_node* next = RB_NFIND(inttree, &seg_tree->head, node);
+
+    free(node);
+
+    /* We may have found a node that doesn't include our starting
+     * byte offset, but it would be the range with the lowest
+     * starting offset after the target starting offset.  Check whether
+     * this overlaps our end offset */
+    if (next && next->start <= end) {
+        return next;
+    }
+
+    /* Otherwise, there is not element that overlaps with the
+     * target range of [start, end]. */
+    return NULL;
+}
+
 /*
  * Given a range tree and a starting node, iterate though all the nodes
  * in the tree, returning the next one each time.  If start is NULL, then

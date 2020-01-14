@@ -338,151 +338,6 @@ static int unifyfs_coalesce_index(
 }
 
 /*
- * Given an index, split it into multiple indices whose range is equal or
- * smaller than slice_range size.  For example, if you passed a cur_index
- * for a 3.5MB write, and the slice size was 1MB, it would split it into
- * four indexes, and update cur_index.length to be zero.  This also takes
- * in a 'maxcount' field, so you can limit the number of indexes you
- * create.  Using our above example, if 'maxcount=2', then this would
- * create two indexes, and update cur_index.length to 1.5MB (for the remaining
- * data).
- *
- * @param  cur_idx:     The index to split
- * @param  slice_range: The slice size of the key-value store
- * @return index_set:   The set of split indices
- * @param  maxcount:    Number of entries in output array
- * @param  used_count:  Number of entries we actually added in the split
- */
-static int unifyfs_split_index(
-    unifyfs_index_t* cur_idx,   /* write index to split (offset and length) */
-    long slice_range,           /* number of bytes in each slice */
-    unifyfs_index_t* index_set, /* output array to store new indexes in */
-    off_t maxcount,             /* max number of items in output array */
-    off_t* used_count)          /* number of entries we added in split */
-{
-    /* first byte offset this write will write to */
-    long idx_start = cur_idx->file_pos;
-
-    /* last byte offset this write will write to */
-    long idx_end = cur_idx->file_pos + cur_idx->length - 1;
-
-    /* starting byte offset of slice that first write offset falls in */
-    long slice_start = (idx_start / slice_range) * slice_range;
-
-    /* last byte offset of slice that first write offset falls in */
-    long slice_end = slice_start + slice_range - 1;
-
-    /* get pointer to first output index structure */
-    unifyfs_index_t* set = index_set;
-
-    /* initialize count of output index entries */
-    off_t count = 0;
-
-    /* define new index entries in index_set by splitting write index
-     * at slice boundaries */
-    if (idx_end <= slice_end) {
-        /* index falls fully within one slice
-         *
-         * slice_start           slice_end
-         *      idx_start   idx_end
-         */
-        set[count] = *cur_idx;
-        count++;
-
-        /* update write index to account for index we just added */
-        long length = cur_idx->length;
-        cur_idx->file_pos += length;
-        cur_idx->log_pos  += length;
-        cur_idx->length   -= length;
-    } else {
-        /* ending offset of index is beyond last offset in first slice,
-         * so this index spans across multiple slices
-         *
-         * slice_start  slice_end  next_slice_start   next_slice_end
-         *      idx_start                          idx_end
-         */
-
-        /* compute number of bytes until end of first slice */
-        long length = slice_end - idx_start + 1;
-
-        /* copy over all fields in current index,
-         * update length field to adjust for boundary of first slice */
-        set[count].gfid     = cur_idx->gfid;
-        set[count].file_pos = cur_idx->file_pos;
-        set[count].length   = length;
-        set[count].log_pos  = cur_idx->log_pos;
-        count++;
-
-        /* update write index to account for index we just added */
-        cur_idx->file_pos += length;
-        cur_idx->log_pos  += length;
-        cur_idx->length   -= length;
-
-        /* check that we have room to write more index values */
-        if (count >= maxcount) {
-            /* no room to write more index values,
-             * and we have at least one more,
-             * record number we wrote and return with success */
-            *used_count = count;
-            return UNIFYFS_SUCCESS;
-        }
-
-        /* advance slice boundary offsets to next slice */
-        slice_end += slice_range;
-
-        /* loop until we find the slice that contains
-         * ending offset of write */
-        while (idx_end > slice_end) {
-            /* ending offset of write is beyond end of this slice,
-             * so write spans the full length of this slice */
-            length = slice_range;
-
-            /* define index for this slice */
-            set[count].gfid     = cur_idx->gfid;
-            set[count].file_pos = cur_idx->file_pos;
-            set[count].length   = length;
-            set[count].log_pos  = cur_idx->log_pos;
-            count++;
-
-            /* update write index to account for index we just added */
-            cur_idx->file_pos += length;
-            cur_idx->log_pos  += length;
-            cur_idx->length   -= length;
-
-            /* check that we have room to write more index values */
-            if (count >= maxcount) {
-                /* no room to write more index values,
-                 * and we have at least one more,
-                 * record number we wrote and return with success */
-                *used_count = count;
-                return UNIFYFS_SUCCESS;
-            }
-
-            /* advance slice boundary offsets to next slice */
-            slice_end += slice_range;
-        }
-
-        /* this slice contains the remainder of write */
-        length = cur_idx->length;
-        set[count].gfid     = cur_idx->gfid;
-        set[count].file_pos = cur_idx->file_pos;
-        set[count].length   = length;
-        set[count].log_pos  = cur_idx->log_pos;
-        count++;
-
-        /* update write index to account for index we just added */
-        cur_idx->file_pos += length;
-        cur_idx->log_pos  += length;
-        cur_idx->length   -= length;
-    }
-
-    /* record number of entires we added */
-    *used_count = count;
-
-    return UNIFYFS_SUCCESS;
-}
-
-/*
  * Clear all entries in the log index.  This only clears the metadata,
  * not the data itself.
  */
@@ -541,6 +396,13 @@ void unifyfs_add_index_entry_to_seg_tree(
     unifyfs_filemeta_t* meta,
     unifyfs_index_t* index)
 {
+    /* add index to our local log */
+    if (unifyfs_local_extents) {
+        seg_tree_add(&meta->extents, index->file_pos,
+            index->file_pos + index->length - 1,
+            index->log_pos);
+    }
+
     if (!unifyfs_flatten_writes) {
         /* We're not flattening writes.  Nothing to do */
         return;
@@ -549,13 +411,13 @@ void unifyfs_add_index_entry_to_seg_tree(
     /* to update the global running segment count, we need to capture
      * the count in this tree before adding and the count after to
      * add the difference */
-    unsigned long count_before = seg_tree_count(&meta->seg_tree);
+    unsigned long count_before = seg_tree_count(&meta->extents_sync);
 
     /*
      * Store the write in our segment tree.  We will later use this for
      * flattening writes.
      */
-    seg_tree_add(&meta->seg_tree, index->file_pos,
+    seg_tree_add(&meta->extents_sync, index->file_pos,
         index->file_pos + index->length - 1,
         index->log_pos);
 
@@ -572,7 +434,7 @@ void unifyfs_add_index_entry_to_seg_tree(
     } else {
         /* increase the running global segment count by the number of
          * new entries we added to this tree */
-        unsigned long count_after = seg_tree_count(&meta->seg_tree);
+        unsigned long count_after = seg_tree_count(&meta->extents_sync);
         unifyfs_segment_count += (count_after - count_before);
     }
 }
@@ -581,8 +443,10 @@ void unifyfs_add_index_entry_to_seg_tree(
 static int unifyfs_logio_add_write_meta_to_index(unifyfs_filemeta_t* meta,
     off_t file_pos, off_t log_pos, size_t length)
 {
-    /* define an new index entry for this write operation */
+    /* global file id for this entry */
     int gfid = meta->gfid;
+
+    /* define an new index entry for this write operation */
     unifyfs_index_t cur_idx;
     cur_idx.gfid     = gfid;
     cur_idx.file_pos = file_pos;
@@ -612,8 +476,8 @@ static int unifyfs_logio_add_write_meta_to_index(unifyfs_filemeta_t* meta,
         }
     }
 
-    /* add new index entries if needed */
-    while (cur_idx.length > 0) {
+    /* add new index entry if needed */
+    if (cur_idx.length > 0) {
         /* remaining entries we can fit in the shared memory region */
         off_t remaining_entries = unifyfs_max_index_entries - num_entries;
 
@@ -628,32 +492,19 @@ static int unifyfs_logio_add_write_meta_to_index(unifyfs_filemeta_t* meta,
             }
         }
 
-        /* split any remaining write index at boundaries of
-         * unifyfs_key_slice_range */
-        off_t used_entries = 0;
-        int split_rc = unifyfs_split_index(&cur_idx,
-            unifyfs_key_slice_range, &idxs[num_entries],
-            remaining_entries, &used_entries);
-        if (split_rc != UNIFYFS_SUCCESS) {
-            /* in this case, we have copied data to the log,
-             * but we failed to generate index entries,
-             * we're returning with an error and leaving the data
-             * in the log */
-            LOGERR("failed to split write index");
-            return UNIFYFS_ERROR_IO;
-        }
+        /* copy entry into index buffer */
+        idxs[num_entries] = cur_idx;
 
-        /* Add our split index entries to our seg_tree */
-        for (int i = 0; i < used_entries; i++) {
-            unifyfs_add_index_entry_to_seg_tree(meta, &idxs[num_entries + i]);
-        }
+        /* Add index entry to our seg_tree */
+        unifyfs_add_index_entry_to_seg_tree(meta, &idxs[num_entries]);
 
         /* account for entries we just added */
-        num_entries += used_entries;
+        num_entries += 1;
 
         /* update number of entries in index array */
         (*unifyfs_indices.ptr_num_entries) = num_entries;
     }
+
     return UNIFYFS_SUCCESS;
 }
 
@@ -770,11 +621,11 @@ void unifyfs_rewrite_index_from_seg_tree(void)
 
         int gfid = unifyfs_gfid_from_fid(fid);
 
-        seg_tree_rdlock(&meta->seg_tree);
+        seg_tree_rdlock(&meta->extents_sync);
 
         /* For each write in this file's seg_tree ... */
         struct seg_tree_node* node = NULL;
-        while ((node = seg_tree_iter(&meta->seg_tree, node))) {
+        while ((node = seg_tree_iter(&meta->extents_sync, node))) {
             indexes[idx].file_pos = node->start;
             indexes[idx].log_pos  = node->ptr;
             indexes[idx].length   = node->end - node->start + 1;
@@ -782,10 +633,10 @@ void unifyfs_rewrite_index_from_seg_tree(void)
             idx++;
         }
 
-        seg_tree_unlock(&meta->seg_tree);
+        seg_tree_unlock(&meta->extents_sync);
 
         /* All done processing this files writes.  Clear its seg_tree */
-        seg_tree_clear(&meta->seg_tree);
+        seg_tree_clear(&meta->extents_sync);
     }
 
     /* reset our segment count since we just dumped them all */

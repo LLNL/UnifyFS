@@ -68,7 +68,14 @@ a given section and key.
    ==============  ======  =================================================================
    max_files       INT     maximum number of open files per client process
    flatten_writes  BOOL    enable flattening writes (optimization for overwrite-heavy codes)
+   local_extents   BOOL    service reads from local data if possible (default: off)
    ==============  ======  =================================================================
+
+Enabling the ``local_extents`` optimization may significantly improve read
+performance.  However, it should not be used by applications
+in which different processes write to a given byte offset within
+the file, nor should it be used with applications that truncate
+files.
 
 .. table:: ``[log]`` section - logging settings
    :widths: auto
