@@ -10,6 +10,7 @@ TESTS = \
 	0500-sysio-static.t \
 	0600-stdio-static.t \
 	9005-unifyfs-unmount.t \
+	9006-seg-tree-test.t \
 	9010-stop-unifyfsd.t \
 	9020-mountpoint-empty.t \
 	9100-metadata-api.t \
@@ -22,6 +23,7 @@ check_SCRIPTS = \
 	0500-sysio-static.t \
 	0600-stdio-static.t \
 	9005-unifyfs-unmount.t \
+	9006-seg-tree-test.t \
 	9010-stop-unifyfsd.t \
 	9020-mountpoint-empty.t \
 	9100-metadata-api.t \
@@ -44,7 +46,9 @@ libexec_PROGRAMS = \
 	sys/sysio-static.t \
 	std/stdio-static.t \
 	server/metadata.t \
-	unifyfs_unmount.t
+	unifyfs_unmount.t \
+	seg_tree_test.t
+
 
 test_ldadd = \
 	$(top_builddir)/t/lib/libtap.la \
@@ -156,5 +160,10 @@ server_metadata_t_LDFLAGS = $(AM_LDFLAGS)
 
 unifyfs_unmount_t_SOURCES = unifyfs_unmount.c
 unifyfs_unmount_t_CPPFLAGS = $(test_cppflags)
-unifyfs_unmount_t_LDADD = $(test_ldadd)
-unifyfs_unmount_t_LDFLAGS = $(AM_LDFLAGS)
+unifyfs_unmount_t_LDADD = $(test_static_ldadd)
+unifyfs_unmount_t_LDFLAGS = $(test_static_ldflags)
+
+seg_tree_test_t_SOURCES = seg_tree_test.c
+seg_tree_test_t_CPPFLAGS = $(test_cppflags)
+seg_tree_test_t_LDADD = $(test_static_ldadd)
+seg_tree_test_t_LDFLAGS = $(test_static_ldflags)
