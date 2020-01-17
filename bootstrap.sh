@@ -63,6 +63,7 @@ cd ..
 
 echo "### building argobots ###"
 cd argobots
+git checkout v1.0rc2
 ./autogen.sh && CC=gcc ./configure --prefix="$INSTALL_DIR"
 make -j $(nproc) && make install
 cd ..
