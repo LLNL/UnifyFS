@@ -667,10 +667,19 @@ int rm_cmd_filesize(
         filesize = filesize_meta;
     }
 
-    /* allocate structure to track state of file size request collective */
-    int tag = glb_pmi_rank;
+    /* allocate a new structure to track state of this filesize operation,
+     * we assign an integer tag to this structure which we pass to any process
+     * that will later send us a response, that process will include this tag
+     * in its response, and we use the tag value on that incoming message to
+     * lookup the structure using a tag2state map */
+    // TODO: protect these structures from concurrent rpcs with locking
+    int tag = unifyfs_stack_pop(glb_tag_stack);
+    if (tag < 0) {
+        // ERROR!
+    }
     unifyfs_state_filesize_t* st = state_filesize_alloc(glb_pmi_rank,
         gfid, -1, tag);
+    int2void_add(&glb_tag2state, st->tag, (void*)st);
 
     /* lock structure until we can wait on it */
     if (glb_pmi_size > 1) {
@@ -706,6 +715,10 @@ int rm_cmd_filesize(
     if (glb_pmi_size > 1) {
         ABT_mutex_unlock(st->mutex);
     }
+    // TODO: need to protect tag stack with locking
+    // TODO: delete tag-->state entry in tag2state map
+    int2void_delete(&glb_tag2state, st->tag);
+    unifyfs_stack_push(glb_tag_stack, st->tag);
     state_filesize_free(&st);
 
     *outsize = filesize;
