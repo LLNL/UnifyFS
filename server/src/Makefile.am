@@ -19,7 +19,9 @@ libunifyfsd_a_SOURCES = \
     extent_tree.c \
     extent_tree.h \
     gfid2ext_tree.c \
-    gfid2ext_tree.h
+    gfid2ext_tree.h \
+    int2void.c \
+    int2void.h
 
 bin_PROGRAMS = unifyfsd
 

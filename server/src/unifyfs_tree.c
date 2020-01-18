@@ -113,18 +113,16 @@ void unifyfs_tree_free(unifyfs_tree_t* t)
     return;
 }
 
-/* for now we'll use a global variable to track state */
-static unifyfs_state_filesize_t* state_filesize;
-
 /* lookup function that maps tag to collective state object,
  * for now we only have the one global structure */
 static unifyfs_state_filesize_t* get_state(int32_t tag)
 {
-    if (tag != glb_pmi_rank) {
-        printf("ERROR: tag %d is not expected %d\n", tag, glb_pmi_rank);
-        fflush(stdout);
+    // TODO: lookup tag-->state entry in tag2state map, return state
+    void* value = int2void_find(&glb_tag2state, tag);
+    if (value == NULL) {
+        // ERROR, not found
     }
-    return state_filesize;
+    return (unifyfs_state_filesize_t*)value;
 }
 
 /* function to lookup local max write offset for given file id */
@@ -242,23 +240,23 @@ unifyfs_state_filesize_t* state_filesize_alloc(
     int32_t ptag,
     int32_t tag)
 {
-    state_filesize = (unifyfs_state_filesize_t*)
+    unifyfs_state_filesize_t* st = (unifyfs_state_filesize_t*)
         malloc(sizeof(unifyfs_state_filesize_t));
-    state_filesize->root          = root;
-    state_filesize->gfid          = gfid;
-    state_filesize->parent_tag    = ptag;
-    state_filesize->tag           = tag;
-    state_filesize->num_responses = 0;
-    state_filesize->filesize      = 0;
-    state_filesize->err           = UNIFYFS_SUCCESS;
-    state_filesize->mutex         = ABT_MUTEX_NULL;
-    state_filesize->cond          = ABT_COND_NULL;
+    st->root          = root;
+    st->gfid          = gfid;
+    st->parent_tag    = ptag;
+    st->tag           = tag;
+    st->num_responses = 0;
+    st->filesize      = 0;
+    st->err           = UNIFYFS_SUCCESS;
+    st->mutex         = ABT_MUTEX_NULL;
+    st->cond          = ABT_COND_NULL;
 
     /* define tree to use for given root */
     unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, root, 2,
-        &state_filesize->tree);
+        &st->tree);
 
-    return state_filesize;
+    return st;
 }
 
 void state_filesize_free(unifyfs_state_filesize_t** pst)
@@ -315,6 +313,9 @@ static void filesize_response_forward(unifyfs_state_filesize_t* st)
             rpc_invoke_filesize_response(parent, st);
 
             /* free state */
+            // TODO: need to protect this code with pthread/margo locks
+            int2void_delete(&glb_tag2state, st->tag);
+            unifyfs_stack_push(glb_tag_stack, st->tag);
             state_filesize_free(&st);
         } else {
             /* we're the root, deliver result back to client */
@@ -402,9 +403,18 @@ static void filesize_request_rpc(hg_handle_t handle)
     margo_free_input(handle, &in);
     margo_destroy(handle);
 
-    /* allocate a new structure to track state of this filesize operation */
-    int32_t tag = glb_pmi_rank;
+    /* allocate a new structure to track state of this filesize operation,
+     * we assign an integer tag to this structure which we pass to any process
+     * that will later send us a response, that process will include this tag
+     * in its response, and we use the tag value on that incoming message to
+     * lookup the structure using a tag2state map */
+    // TODO: protect these structures from concurrent rpcs with locking
+    int32_t tag = unifyfs_stack_pop(glb_tag_stack);
+    if (tag < 0) {
+        // ERROR!
+    }
     unifyfs_state_filesize_t* st = state_filesize_alloc(root, gfid, ptag, tag);
+    int2void_add(&glb_tag2state, st->tag, (void*)st);
 
     /* forward request to children if needed */
     filesize_request_forward(st);
