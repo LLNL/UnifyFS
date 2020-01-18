@@ -53,8 +53,6 @@ CLIENT_COMMON_SOURCES = \
   unifyfs-fixed.c \
   unifyfs-fixed.h \
   unifyfs-internal.h \
-  unifyfs-stack.c \
-  unifyfs-stack.h \
   unifyfs-stdio.c \
   unifyfs-stdio.h \
   unifyfs-sysio.c \
