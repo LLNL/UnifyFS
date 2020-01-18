@@ -35,6 +35,8 @@ BASE_SRCS = \
   unifyfs_runstate.c \
   unifyfs_shm.h \
   unifyfs_shm.c \
+  unifyfs-stack.h \
+  unifyfs-stack.c \
   tree.h \
   seg_tree.h \
   seg_tree.c
