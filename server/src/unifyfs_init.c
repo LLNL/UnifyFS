@@ -57,6 +57,12 @@ server_info_t* glb_servers; // array of server_info_t
 /* maps a global file id to its extent map */
 struct gfid2ext_tree glb_gfid2ext;
 
+/* stack to manage free communication tags */
+void* glb_tag_stack;
+
+/* maps a tag to a collective state structure (stored as void*) */
+struct int2void glb_tag2state;
+
 /* configuration flag whether to use local extent tracking
  * on server to service client read requests of local data */
 bool unifyfs_local_extents;
@@ -429,6 +435,22 @@ int main(int argc, char* argv[])
     /* initialize our tree that maps a gfid to its extent tree */
     gfid2ext_tree_init(&glb_gfid2ext);
 
+    /* create a stack to manage free tag values to use with
+     * outstanding server communication operations, on incoming
+     * replies, we use these tags to lookup the corresponding
+     * state structure allocated to manage the operation */
+    int max_tags = 1000000;
+    size_t tag_stack_size = unifyfs_stack_bytes(max_tags);
+    glb_tag_stack = malloc(tag_stack_size);
+    if (glb_tag_stack == NULL) {
+        LOGERR("failed to allocate tag stack");
+        exit(1);
+    }
+    unifyfs_stack_init(glb_tag_stack, max_tags);
+
+    /* initialize our tree that maps a tag to a state structure */
+    int2void_init(&glb_tag2state);
+
     LOGDBG("finished service initialization");
 
     while (1) {
@@ -450,6 +472,15 @@ int main(int argc, char* argv[])
             LOGDBG("starting service shutdown");
             break;
         }
+    }
+
+    /* tear down tag-to-state tree */
+    int2void_destroy(&glb_tag2state);
+
+    /* free our tag stack */
+    if (glb_tag_stack != NULL) {
+        free(glb_tag_stack);
+        glb_tag_stack = NULL;
     }
 
     /* tear down gfid-to-extents tree */

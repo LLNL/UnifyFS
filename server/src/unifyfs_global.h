@@ -52,6 +52,8 @@
 #include "unifyfs_tree.h"
 #include "extent_tree.h"
 #include "gfid2ext_tree.h"
+#include "int2void.h"
+#include "unifyfs-stack.h"
 
 #include <margo.h>
 #include <pthread.h>
@@ -68,6 +70,12 @@ extern int glb_pmi_rank, glb_pmi_size;
 
 /* maps a global file id to its extent map */
 extern struct gfid2ext_tree glb_gfid2ext;
+
+/* stack to manage free communication tags */
+void* glb_tag_stack;
+
+/* maps a tag to a collective state structure (stored as void*) */
+extern struct int2void glb_tag2state;
 
 /* configuration flag whether to use local extent tracking
  * on server to service client read requests of local data */
