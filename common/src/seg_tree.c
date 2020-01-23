@@ -193,6 +193,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
             if (!resized) {
                 /* failed to allocate node,
                  * return error and release lock */
+                free(node);
                 rc = ENOMEM;
                 goto release_add;
             }
@@ -211,6 +212,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
                 if (!remaining) {
                     /* failed to allocate node,
                      * return error and release lock */
+                    free(node);
                     free(resized);
                     rc = ENOMEM;
                     goto release_add;
