@@ -9,9 +9,9 @@ cache:
 
 ##### Templates #####
 
-.quartz-template: &quartz_template
+.catalyst-template: &catalyst_template
   tags:
-    - quartz
+    - catalyst
     - shell
   variables:
     LLNL_SERVICE_USER: "unifysrv"
@@ -56,8 +56,8 @@ cache:
   after_script:
     - rm -rf /tmp/unify* /tmp/tmp.* /tmp/mdhim* /tmp/na_sm
 
-.quartz-batch-variables:
-  variables: &quartz_batch_variables
+.catalyst-batch-variables:
+  variables: &catalyst_batch_variables
     LLNL_SLURM_SCHEDULER_PARAMETERS: "-N $NNODES -p pbatch -t $WALL_TIME"
     LLNL_SERVICE_USER: "unifysrv"
     CI_PROJDIR: "$CI_PROJECT_DIR"
@@ -81,25 +81,25 @@ before_script:
   # check for sourced spack || check for unsourced spack in $HOME/spack and
   # source it || check for cached spack, clone if none, and source it
   - which spack || ((cd $HOME/spack && git describe) && . $HOME/spack/share/spack/setup-env.sh) || (((cd spack_ci && git describe) || git clone https://github.com/CamStan/spack spack_ci) && . spack_ci/share/spack/setup-env.sh)
-  - SPACK_ARCH=$(spack arch)
+  - SPACK_ARCH="$(spack arch -p)-$(spack arch -o)-$(uname -m)"
   - spack install leveldb && spack load leveldb arch=$SPACK_ARCH
   - spack install gotcha@0.0.2 && spack load gotcha@0.0.2 arch=$SPACK_ARCH
   - spack install flatcc && spack load flatcc arch=$SPACK_ARCH
-  - spack install margo^mercury+bmi~boostsys && spack load argobots arch=$SPACK_ARCH && spack load mercury arch=$SPACK_ARCH && spack load margo arch=$SPACK_ARCH
+  - spack install margo^mercury+bmi~boostsys^argobots~debug && spack load argobots arch=$SPACK_ARCH && spack load mercury arch=$SPACK_ARCH && spack load margo arch=$SPACK_ARCH
 
-build-quartz:
-  <<: *quartz_template
+build-catalyst:
+  <<: *catalyst_template
   <<: *build_template
 
 build-butte:
   <<: *butte_template
   <<: *build_template
 
-unit-test-quartz:
-  <<: *quartz_template
+unit-test-catalyst:
+  <<: *catalyst_template
   <<: *unit_test_template
   dependencies:
-    - build-quartz
+    - build-catalyst
 
 unit-test-butte:
   <<: *butte_template
@@ -107,17 +107,17 @@ unit-test-butte:
   dependencies:
     - build-butte
 
-#integ-test-quartz:
-#  <<: *quartz_template
-#  stage: test-integ
-#  tags:
-#    - quartz
-#    - batch
-#  variables: *quartz_batch_variables
-#  script:
-#    - cd t/ci && prove -v RUN_CI_TESTS.sh
-#  dependencies:
-#    - build-quartz
+integ-test-catalyst:
+  <<: *catalyst_template
+  stage: test-integ
+  tags:
+    - catalyst
+    - batch
+  variables: *catalyst_batch_variables
+  script:
+    - cd t/ci && prove -v RUN_CI_TESTS.sh
+  dependencies:
+    - build-catalyst
 
 integ-test-butte:
   <<: *butte_template
