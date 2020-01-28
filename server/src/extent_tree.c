@@ -211,6 +211,7 @@ int extent_tree_add(
                 /* failed to allocate memory for range node,
                  * bail out and release lock without further
                  * changing state of extent tree */
+                free(node);
                 rc = ENOMEM;
                 goto release_add;
             }
@@ -231,6 +232,8 @@ int extent_tree_add(
                     /* failed to allocate memory for range node,
                      * bail out and release lock without further
                      * changing state of extent tree */
+                    free(node);
+                    free(resized);
                     rc = ENOMEM;
                     goto release_add;
                 }
