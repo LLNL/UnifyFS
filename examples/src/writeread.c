@@ -182,14 +182,20 @@ int main(int argc, char* argv[])
     test_timer time_wr;
     test_timer time_rd;
     test_timer time_sync;
+    test_timer time_stat_pre;
+    test_timer time_stat_pre2;
     test_timer time_laminate;
+    test_timer time_stat_post;
 
     timer_init(&time_create2laminate, "create2laminate");
     timer_init(&time_create, "create");
     timer_init(&time_wr, "write");
     timer_init(&time_rd, "read");
     timer_init(&time_sync, "sync");
+    timer_init(&time_stat_pre, "statpre");
+    timer_init(&time_stat_pre2, "statpre2");
     timer_init(&time_laminate, "laminate");
+    timer_init(&time_stat_post, "statpost");
 
     rc = test_init(argc, argv, cfg);
     if (rc) {
@@ -257,6 +263,18 @@ int main(int argc, char* argv[])
 
     // close file
 
+    // stat file pre-laminate
+    timer_start_barrier(cfg, &time_stat_pre);
+    stat_file(cfg, target_file);
+    timer_stop_barrier(cfg, &time_stat_pre);
+    test_print_verbose_once(cfg, "DEBUG: finished stat pre");
+
+    // stat file pre-laminate (again)
+    timer_start_barrier(cfg, &time_stat_pre2);
+    stat_file(cfg, target_file);
+    timer_stop_barrier(cfg, &time_stat_pre2);
+    test_print_verbose_once(cfg, "DEBUG: finished stat pre2");
+
     // laminate
     timer_start_barrier(cfg, &time_laminate);
     rc = write_laminate(cfg, target_file);
@@ -265,6 +283,12 @@ int main(int argc, char* argv[])
     }
     timer_stop_barrier(cfg, &time_laminate);
     test_print_verbose_once(cfg, "DEBUG: finished laminate");
+
+    // stat file post-laminate
+    timer_start_barrier(cfg, &time_stat_post);
+    stat_file(cfg, target_file);
+    timer_stop_barrier(cfg, &time_stat_post);
+    test_print_verbose_once(cfg, "DEBUG: finished stat post");
 
     // post-write cleanup
     free(wr_buf);
@@ -310,41 +334,81 @@ int main(int argc, char* argv[])
 
     // calculate achieved bandwidth rates
     size_t rank_bytes = test_config.n_blocks * test_config.block_sz;
-    double write_bw, read_bw;
-    double aggr_write_bw, aggr_read_bw;
-    double max_write_time, max_read_time;
-    double min_sync_time, max_sync_time;
+    size_t total_bytes = rank_bytes * test_config.n_ranks;
 
-    write_bw = bandwidth_mib(rank_bytes, time_wr.elapsed_sec);
-    aggr_write_bw = test_reduce_double_sum(cfg, write_bw);
-    max_write_time = test_reduce_double_max(cfg, time_wr.elapsed_sec);
+    double min_local_write_time = test_reduce_double_min(cfg,
+        time_wr.elapsed_sec);
+    double max_local_write_time = test_reduce_double_max(cfg,
+        time_wr.elapsed_sec);
+    double max_global_write_time = test_reduce_double_max(cfg,
+        time_wr.elapsed_sec_all);
 
-    min_sync_time = test_reduce_double_min(cfg, time_sync.elapsed_sec);
-    max_sync_time = test_reduce_double_max(cfg, time_sync.elapsed_sec);
+    double local_write_bw = bandwidth_mib(rank_bytes, time_wr.elapsed_sec);
+    double min_local_write_bw = test_reduce_double_min(cfg, local_write_bw);
+    double max_local_write_bw = test_reduce_double_max(cfg, local_write_bw);
+    double aggr_local_write_bw = test_reduce_double_sum(cfg, local_write_bw);
 
-    read_bw = bandwidth_mib(rank_bytes, time_rd.elapsed_sec);
-    aggr_read_bw = test_reduce_double_sum(cfg, read_bw);
-    max_read_time = test_reduce_double_max(cfg, time_rd.elapsed_sec);
+    double global_write_bw = bandwidth_mib(total_bytes, max_global_write_time);
+
+    double min_local_sync_time  = test_reduce_double_min(cfg,
+        time_sync.elapsed_sec);
+    double max_local_sync_time  = test_reduce_double_max(cfg,
+        time_sync.elapsed_sec);
+    double max_global_sync_time = test_reduce_double_max(cfg,
+        time_sync.elapsed_sec_all);
+
+    double global_write_sync_bw = bandwidth_mib(total_bytes,
+        max_global_write_time + max_global_sync_time);
+
+    double min_local_read_time = test_reduce_double_min(cfg,
+        time_rd.elapsed_sec);
+    double max_local_read_time = test_reduce_double_max(cfg,
+        time_rd.elapsed_sec);
+    double max_global_read_time = test_reduce_double_max(cfg,
+        time_rd.elapsed_sec_all);
+
+    double local_read_bw = bandwidth_mib(rank_bytes, time_rd.elapsed_sec);
+    double min_local_read_bw = test_reduce_double_min(cfg, local_read_bw);
+    double max_local_read_bw = test_reduce_double_max(cfg, local_read_bw);
+    double aggr_local_read_bw = test_reduce_double_sum(cfg, local_read_bw);
+
+    double global_read_bw = bandwidth_mib(total_bytes, max_global_read_time);
 
     if (test_config.rank == 0) {
-        size_t total_bytes = rank_bytes * test_config.n_ranks;
-        double eff_write_bw, eff_read_bw;
-        eff_write_bw = bandwidth_mib(total_bytes, max_write_time);
-        eff_read_bw = bandwidth_mib(total_bytes, max_read_time);
-
-        printf("File create time is %.3lf s\n",
+        printf("File Create Time is %.6lf s\n",
                time_create.elapsed_sec_all);
-        printf("Aggregate Write BW is %.3lf MiB/s\n"
-               "Effective Write BW is %.3lf MiB/s\n\n",
-               aggr_write_bw, eff_write_bw);
-        printf("Minimum Sync Time is %.6lf s\n"
-               "Maximum Sync Time is %.6lf s\n\n",
-               min_sync_time, max_sync_time);
-        printf("Aggregate Read BW is %.3lf MiB/s\n"
-               "Effective Read BW is %.3lf MiB/s\n\n",
-               aggr_read_bw, eff_read_bw);
-        printf("File laminate time is %.3lf s\n",
+        printf("Minimum Local Write BW is %.3lf MiB/s\n",
+               min_local_write_bw);
+        printf("Maximum Local Write BW is %.3lf MiB/s\n",
+               max_local_write_bw);
+        printf("Aggregate Local Write BW is %.3lf MiB/s\n",
+               aggr_local_write_bw);
+        printf("Global Write BW is %.3lf MiB/s\n",
+               global_write_bw);
+        printf("Minimum Local Sync Time is %.6lf s\n",
+               min_local_sync_time);
+        printf("Maximum Local Sync Time is %.6lf s\n",
+               max_local_sync_time);
+        printf("Global Sync Time is %.6lf s\n",
+               max_global_sync_time);
+        printf("Global Write+Sync BW is %.3lf MiB/s\n",
+               global_write_sync_bw);
+        printf("Stat Time Pre-Laminate is %.6lf s\n",
+               time_stat_pre.elapsed_sec_all);
+        printf("Stat Time Pre-Laminate2 is %.6lf s\n",
+               time_stat_pre.elapsed_sec_all);
+        printf("File Laminate Time is %.6lf s\n",
                time_laminate.elapsed_sec_all);
+        printf("Stat Time Post-Laminate is %.6lf s\n",
+               time_stat_post.elapsed_sec_all);
+        printf("Minimum Local Read BW is %.3lf MiB/s\n",
+               min_local_read_bw);
+        printf("Maximum Local Read BW is %.3lf MiB/s\n",
+               max_local_read_bw);
+        printf("Aggregate Local Read BW is %.3lf MiB/s\n",
+               aggr_local_read_bw);
+        printf("Global Read BW is %.3lf MiB/s\n",
+               global_read_bw);
         fflush(stdout);
     }
 
@@ -356,7 +420,10 @@ int main(int argc, char* argv[])
     timer_fini(&time_wr);
     timer_fini(&time_rd);
     timer_fini(&time_sync);
+    timer_fini(&time_stat_pre);
+    timer_fini(&time_stat_pre2);
     timer_fini(&time_laminate);
+    timer_fini(&time_stat_post);
 
     test_fini(cfg);
 
