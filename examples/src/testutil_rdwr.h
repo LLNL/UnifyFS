@@ -239,6 +239,21 @@ int write_laminate(test_cfg* cfg, const char* filepath)
     return rc;
 }
 
+static inline
+int stat_file(test_cfg* cfg, const char* filepath)
+{
+    int rc = 0;
+    if (cfg->rank == 0 || cfg->io_pattern == IO_PATTERN_NN) {
+        struct stat s;
+        int stat_rc = stat(filepath, &s);
+        if (-1 == stat_rc) {
+            test_print(cfg, "ERROR - stat(%s) failed", filepath);
+            rc = -1;
+        }
+    }
+    return rc;
+}
+
 /* -------- Read Helper Methods -------- */
 
 static inline
