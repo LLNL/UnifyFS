@@ -141,3 +141,10 @@ One form of running this example could be:
 .. explicit external hyperlink targets
 
 .. _examples: https://github.com/LLNL/UnifyFS/tree/dev/examples/src
+
+The examples directory contains an example application that uses the transfer API to transfer files in or out of the UnifyFS file space.  To use the statically-built version to transfer a checkpoint file out of the UnifyFS file space to external file system, invoke it as follows: 
+.. code-block:: 
+
+    $ srun -N4 -n4 transfer-static /unifyfs/my_checkpoint_file_0054.dat /lustreFS/my_username/my_checkpoint_dir/my_checkpoint_file_0054.dat
+    
+    
