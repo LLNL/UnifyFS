@@ -14,11 +14,11 @@ certain settings have command line options. When defined via multiple methods,
 the command line options have the highest priority, followed by environment
 variables, and finally config file options from ``unifyfs.conf``.
 
-The config file is installed in /etc by default. However, one can
-specify a custom location for the
-unifyfs.conf file with the -f command-line option to unifyfsd (see below).
-There is a sample unifyfs.conf file in the installation directory
-under etc/unifyfs/.  This file is also available in the "extras" directory
+The system-wide configuration file is used by default when available.
+However, users can specify a custom location for the configuration file using
+the ``-f`` command-line option to ``unifyfsd`` (see below).
+There is a sample ``unifyfs.conf`` file in the installation directory
+under ``etc/unifyfs/``. This file is also available in the ``extras`` directory
 in the source repository.
 
 The unified method for providing configuration control is adapted from
@@ -172,6 +172,10 @@ For server command line options, we use ``getopt_long()`` format. Thus, all
 command line options have long and short forms. The long form uses
 ``--section-key=value``, while the short form ``-<optchar> value``, where
 the short option character is given in the below table.
+
+Note that for configuration options of type BOOL, the value is optional.
+When not provided, the ``true`` value is assumed. If the short form option
+is used, the value must immediately follow the option character (e.g., ``-Cyes``).
 
 .. table:: ``unifyfsd`` command line options
    :widths: auto
