@@ -2510,21 +2510,6 @@ int unifyfs_mount(const char prefix[], int rank, size_t size,
         return ret;
     }
 
-    /* call client mount rpc function here
-     * to register our shared memory and files with server */
-    LOGDBG("calling mount");
-    invoke_client_mount_rpc();
-
-#if defined(UNIFYFS_USE_DOMAIN_SOCKET)
-    /* open a socket to the server */
-    rc = unifyfs_init_socket(local_rank_idx, local_rank_cnt,
-                             local_del_cnt);
-    if (rc < 0) {
-        LOGERR("failed to initialize socket, rc == %d", rc);
-        return UNIFYFS_FAILURE;
-    }
-#endif
-
     /* create shared memory region for read requests */
     rc = unifyfs_init_req_shm(local_rank_idx, app_id);
     if (rc < 0) {
@@ -2536,8 +2521,46 @@ int unifyfs_mount(const char prefix[], int rank, size_t size,
     rc = unifyfs_init_recv_shm(local_rank_idx, app_id);
     if (rc < 0) {
         LOGERR("failed to init shared receive memory");
+        unifyfs_shm_unlink(shm_req_name);
         return UNIFYFS_FAILURE;
     }
+
+    /* Call client mount rpc function
+     * to register our shared memory and files with server */
+    LOGDBG("calling mount");
+    ret = invoke_client_mount_rpc();
+    if (ret != UNIFYFS_SUCCESS) {
+        /* If we fail to connect to the server, bail with an error */
+        LOGERR("Failed to mount to server");
+
+        /* TODO: need more clean up here, but this at least deletes
+         * some files we would otherwise leave behind */
+
+        /* Delete file for shared memory regions for
+         * read requests and read replies */
+        unifyfs_shm_unlink(shm_req_name);
+        unifyfs_shm_unlink(shm_recv_name);
+
+        return ret;
+    }
+
+    /* Once we return from mount, we know the server has attached to our
+     * shared memory regions for read requests and read replies, so we
+     * can safely remove these files.  The memory regions will stay active
+     * until both client and server unmap them.  We keep the superblock file
+     * around so that a future client can reattach to it. */
+    unifyfs_shm_unlink(shm_req_name);
+    unifyfs_shm_unlink(shm_recv_name);
+
+#if defined(UNIFYFS_USE_DOMAIN_SOCKET)
+    /* open a socket to the server */
+    rc = unifyfs_init_socket(local_rank_idx, local_rank_cnt,
+                             local_del_cnt);
+    if (rc < 0) {
+        LOGERR("failed to initialize socket, rc == %d", rc);
+        return UNIFYFS_FAILURE;
+    }
+#endif
 
     /* add mount point as a new directory in the file list */
     if (unifyfs_get_fid_from_path(prefix) < 0) {
