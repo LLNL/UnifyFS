@@ -100,3 +100,19 @@ use ``unifyfs terminate`` to terminate the servers. Typically, one would pass
 the ``--cleanup`` option to ``unifyfs start`` to have the servers remove
 temporary data locally stored on each node after termination.
 
+------------------------------------
+  Resource Manager Job Integration
+------------------------------------
+
+UnifyFS includes optional support for integrating directly with compatible
+resource managers to automatically start and stop servers at the beginning
+and end of a job when requested by users. Resource manager integration
+requires administrator privileges to deploy.
+
+Currently, only IBM's Platform LSF with Cluster System Manager (LSF-CSM)
+is supported. LSF-CSM is the resource manager on the CORAL2 IBM systems
+at ORNL and LLNL. The required job prologue and epilogue scripts, along
+with a README documenting the installation instructions, is available
+within the source repository at ``util/scripts/lsfcsm``.
+
+Support for the SLURM resource manager is under development.
