@@ -19,16 +19,20 @@
 extern "C" {
 #endif
 
-/* allocate and attach a named shared memory region of a particular size
- * and mmap into our memory, returns starting memory address on success,
- * returns NULL on failure */
+/* Allocate and attach a named shared memory region of a particular size
+ * and mmap into our memory.  Returns starting memory address on success.
+ * Returns NULL on failure. */
 void* unifyfs_shm_alloc(const char* name, size_t size);
 
-/* unmaps shared memory region from memory, and releases it,
- * caller should povider the address of a pointer to the region
- * in paddr, sets paddr to NULL on return,
- * returns UNIFYFS_SUCCESS on success */
+/* Unmaps shared memory region from memory.
+ * Caller should povider the address of a pointer to the region
+ * in paddr.  Sets paddr to NULL on return.
+ * Returns UNIFYFS_SUCCESS on success. */
 int unifyfs_shm_free(const char* name, size_t size, void** paddr);
+
+/* Delete file used to attach to shared memory segment.
+ * Returns UNIFYFS_SUCCESS on success. */
+int unifyfs_shm_unlink(const char* name);
 
 #ifdef __cplusplus
 } // extern "C"

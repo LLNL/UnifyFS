@@ -25,10 +25,9 @@
 #include "unifyfs_log.h"
 #include "unifyfs_const.h"
 
-/* TODO: same function exists in client code, move this to common */
-/* creates a shared memory of given size under specified name,
- * returns address of new shared memory if successful,
- * returns NULL on error  */
+/* Creates a shared memory of given size under specified name.
+ * Returns address of new shared memory if successful.
+ * Returns NULL on error. */
 void* unifyfs_shm_alloc(const char* name, size_t size)
 {
     int ret;
@@ -93,10 +92,10 @@ void* unifyfs_shm_alloc(const char* name, size_t size)
     return addr;
 }
 
-/* unmaps shared memory region from memory, and releases it,
- * caller should provide the address of a pointer to the region
- * in paddr, sets paddr to NULL on return,
- * returns UNIFYFS_SUCCESS on success */
+/* Unmaps shared memory region from memory.
+ * Caller should provide the address of a pointer to the region
+ * in paddr.  Sets paddr to NULL on return.
+ * Returns UNIFYFS_SUCCESS on success. */
 int unifyfs_shm_free(const char* name, size_t size, void** paddr)
 {
     /* check that we got an address (to something) */
@@ -107,7 +106,8 @@ int unifyfs_shm_free(const char* name, size_t size, void** paddr)
     /* get address of shared memory region */
     void* addr = *paddr;
 
-    /* if we have a pointer, try to munmap and unlink it */
+    /* if we have a pointer, munmap the region, when all procs
+     * have unmapped the region, the OS will free the memory */
     if (addr != NULL) {
         /* unmap shared memory from memory space */
         errno = 0;
@@ -119,23 +119,31 @@ int unifyfs_shm_free(const char* name, size_t size, void** paddr)
 
             /* not fatal, so keep going */
         }
-
-        /* release our reference to the shared memory region */
-        errno = 0;
-        rc = shm_unlink(name);
-        if (rc == -1) {
-            int err = errno;
-            if (ENOENT != err) {
-                /* failed to remove shared memory */
-                LOGERR("Failed to unlink shared memory %s errno=%d (%s)",
-                       name, err, strerror(err));
-            }
-            /* not fatal, so keep going */
-        }
     }
 
     /* set caller's pointer to NULL */
     *paddr = NULL;
+
+    return UNIFYFS_SUCCESS;
+}
+
+/* Unlinks file used to attach to a shared memory region.
+ * Once unlinked, no other processes may attach.
+ * Returns UNIFYFS_SUCCESS on success. */
+int unifyfs_shm_unlink(const char* name)
+{
+    /* delete associated file if told to unlink */
+    errno = 0;
+    int rc = shm_unlink(name);
+    if (rc == -1) {
+        int err = errno;
+        if (ENOENT != err) {
+            /* failed to remove shared memory */
+            LOGERR("Failed to unlink shared memory %s errno=%d (%s)",
+                   name, err, strerror(err));
+        }
+        /* not fatal, so keep going */
+    }
 
     return UNIFYFS_SUCCESS;
 }

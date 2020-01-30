@@ -661,22 +661,31 @@ static int unifyfs_exit(void)
 
         /* free resources allocate for each client */
         for (j = 0; j < MAX_NUM_CLIENTS; j++) {
-            /* release request buffer shared memory region */
+            /* Release request buffer shared memory region.  Client
+             * should have deleted file already, but will not hurt
+             * to do this again. */
             if (app->shm_req_bufs[j] != NULL) {
                 unifyfs_shm_free(app->req_buf_name[j], app->req_buf_sz,
                                  (void**)&(app->shm_req_bufs[j]));
+                unifyfs_shm_unlink(app->req_buf_name[j]);
             }
 
-            /* release receive buffer shared memory region */
+            /* Release receive buffer shared memory region.  Client
+             * should have deleted file already, but will not hurt
+             * to do this again. */
             if (app->shm_recv_bufs[j] != NULL) {
                 unifyfs_shm_free(app->recv_buf_name[j], app->recv_buf_sz,
                                  (void**)&(app->shm_recv_bufs[j]));
+                unifyfs_shm_unlink(app->recv_buf_name[j]);
             }
 
-            /* release super block shared memory region */
+            /* Release super block shared memory region.
+             * Server is responsible for deleting superblock shared
+             * memory file that was created by the client. */
             if (app->shm_superblocks[j] != NULL) {
                 unifyfs_shm_free(app->super_buf_name[j], app->superblock_sz,
                                  (void**)&(app->shm_superblocks[j]));
+                unifyfs_shm_unlink(app->super_buf_name[j]);
             }
 
             /* close spill log file and delete it */
