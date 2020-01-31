@@ -104,8 +104,6 @@ AS_IF([test "x$enable_pmi" = "xyes"],[
     AM_CONDITIONAL([USE_PMI2], [false])
 ])
 
-CHECK_NUMA
-
 AC_ARG_WITH(pkgconfigdir,
     [AS_HELP_STRING([--with-pkgconfigdir=DIR],[pkgconfig file in DIR @<:@LIBDIR/pkgconfig@:>@])],
             [pkgconfigdir=$withval],
