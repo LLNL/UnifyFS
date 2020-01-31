@@ -145,7 +145,7 @@ One form of running this example could be:
 Transfer API 
 ------------
 
-UnifyFS has a transfer API to move files from the UnifyFS file space out to external storage (or from external storage into the UnifyFS file space).  This can be invoked using the function API by linking, or using the available "transfer" application availalbe in the examples directory.  The example code also serves as a template for using the C function API. 
+UnifyFS has a transfer API to move files from the UnifyFS file space out to external storage (or from external storage into the UnifyFS file space).  This can be invoked using the "transfer" application in the examples directory.  The transfer source code also serves as a template for using transfer API through C functions. 
 
 .. code-block:: Bash
 
