@@ -48,10 +48,6 @@
 #include <mpi.h>
 #include <openssl/md5.h>
 
-#ifdef HAVE_LIBNUMA
-#include <numa.h>
-#endif
-
 #ifdef UNIFYFS_GOTCHA
 #include "gotcha/gotcha_types.h"
 #include "gotcha/gotcha.h"
@@ -135,11 +131,6 @@ static size_t unifyfs_spillover_size;
 
 /* maximum number of chunks that fit in spillover storage */
 long unifyfs_spillover_max_chunks;
-
-#ifdef HAVE_LIBNUMA
-static char unifyfs_numa_policy[10];
-static int unifyfs_numa_bank = -1;
-#endif
 
 extern pthread_mutex_t unifyfs_stack_mutex;
 
@@ -1891,28 +1882,6 @@ static int unifyfs_init(int rank)
         }
         unifyfs_max_index_entries =
             unifyfs_index_buf_size / sizeof(unifyfs_index_t);
-
-        /* if we're using NUMA, process some configuration settings */
-#ifdef HAVE_LIBNUMA
-        char* env = getenv("UNIFYFS_NUMA_POLICY");
-        if (env) {
-            sprintf(unifyfs_numa_policy, env);
-            LOGDBG("NUMA policy used: %s", unifyfs_numa_policy);
-        } else {
-            sprintf(unifyfs_numa_policy, "default");
-        }
-
-        env = getenv("UNIFYFS_USE_NUMA_BANK");
-        if (env) {
-            int val = atoi(env);
-            if (val >= 0) {
-                unifyfs_numa_bank = val;
-            } else {
-                LOGERR("Incorrect NUMA bank specified in UNIFYFS_USE_NUMA_BANK."
-                       " Proceeding with default allocation policy.");
-            }
-        }
-#endif
 
         /* record the max fd for the system */
         /* RLIMIT_NOFILE specifies a value one greater than the maximum
