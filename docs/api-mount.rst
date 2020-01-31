@@ -19,17 +19,19 @@ In this section, we describe how to use the UnifyFS API in an application.
 Mounting 
 ---------------------------
 
-In ``C`` applications, include *unifyfs.h*. See writeread.c_ for a full
+In C or C++ applications, include ``unifyfs.h``. See writeread.c_ for a full
 example.
 
 .. code-block:: C
+    :caption: C
 
     #include <unifyfs.h>
 
-In ``Fortran`` applications, include *unifyfsf.h*. See writeread.f90_ for a
+In Fortran applications, include ``unifyfsf.h``. See writeread.f90_ for a
 full example.
 
 .. code-block:: Fortran
+    :caption: Fortran
 
     include 'unifyfsf.h'
 
@@ -48,7 +50,7 @@ filesystem. For instance, to use UnifyFS on all path prefixes that begin with
 
     call UNIFYFS_MOUNT('/tmp', rank, size, 0, ierr);
 
-Where /tmp is the path prefix you want UnifyFS to intercept. The rank and rank
+Where ``/tmp`` is the path prefix you want UnifyFS to intercept. The rank and rank
 number is the rank you are currently on, and the number of tasks you have
 running in your job. Lastly, the zero corresponds to the app id.
 
@@ -61,16 +63,12 @@ When you are finished using UnifyFS in your application, you should unmount.
 .. code-block:: C
     :caption: C
 
-    if (rank == 0) {
-        unifyfs_unmount();
-    }
+    unifyfs_unmount();
 
 .. code-block:: Fortran
     :caption: Fortran
 
     call UNIFYFS_UNMOUNT(ierr);
-
-It is only necessary to call unmount once on rank zero.
 
 .. explicit external hyperlink targets
 

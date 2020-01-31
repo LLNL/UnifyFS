@@ -226,17 +226,6 @@ this:
     $ make
     $ make install
 
-.. note::
-
-    You may need to add the following to your configure line if it is not in
-    your default path on a linux machine:
-
-    ``--with-numa=$PATH_TO_NUMA``
-
-    This is needed to enable NUMA-aware memory allocation on Linux machines. Set the
-    NUMA policy at runtime with ``UNIFYFS_NUMA_POLICY = local | interleaved``, or set
-    NUMA nodes explicitly with ``UNIFYFS_USE_NUMA_BANK = <node no.>``
-
 ---------------------------
 
 ---------------------------
