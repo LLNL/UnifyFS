@@ -145,10 +145,9 @@ One form of running this example could be:
 Transfer API
 ------------
 
-UnifyFS has a transfer API to move files from the UnifyFS file space out to external storage (or from external storage into the UnifyFS file space).  This can be invoked using the "transfer" application in the examples directory.  The transfer source code also serves as a template for using transfer API through C functions.
-
+UnifyFS has a transfer API to move files from UnifyFS to external storage (or from external storage into UnifyFS).  The transfer functionality can be invoked by using the "transfer" application in the examples directory as show in the following example: 
 .. code-block:: Bash
 
-    $ srun -N4 -n4 transfer-static /unifyfs/snapshot.bin /scratch/snaps/snapshot.bin
+    $ srun -N4 -n4 transfer-static /unifyfs/file1 /scratch/mydir/file1
 
-(assuming that /unifyfs/snapshot.bin is a file you've written within the UnifyFS file space by an application.)
+(assuming that /unifyfs/snapshot.bin is a file you've written within the UnifyFS file space by an application..)  The transfer application source code also serves as a template for using the UnifyFS transfer API in a C program.
