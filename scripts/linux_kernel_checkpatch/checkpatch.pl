@@ -2747,10 +2747,10 @@ sub process {
 			    $fix) {
 				$fixed[$fixlinenr] =~ s/[\s\015]+$//;
 			}
-		} elsif ($rawline =~ /^\+.*\S\s+$/ || $rawline =~ /^\+\s+$/) {
+		} elsif ($rawline =~ /^\+.*\S\s{10,}$/ || $rawline =~ /^\+\s{15,}$/) {
 			my $herevet = "$here\n" . cat_vet($rawline) . "\n";
 			if (ERROR("TRAILING_WHITESPACE",
-				  "trailing whitespace\n" . $herevet) &&
+				  "excessive trailing whitespace\n" . $herevet) &&
 			    $fix) {
 				$fixed[$fixlinenr] =~ s/\s+$//;
 			}
