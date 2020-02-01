@@ -145,7 +145,7 @@ One form of running this example could be:
 Transfer API
 ------------
 
-UnifyFS has a transfer API to move files from UnifyFS to external storage (or from external storage into UnifyFS).  The transfer functionality can be invoked by using the "transfer" application in the examples directory as show in the following example: 
+UnifyFS has a transfer API to move files from UnifyFS to external storage (or from external storage into UnifyFS).  The transfer functionality can be invoked by using the "transfer" application in the examples directory as show in the following example:
 .. code-block:: Bash
 
     $ srun -N4 -n4 transfer-static /unifyfs/file1 /scratch/mydir/file1
