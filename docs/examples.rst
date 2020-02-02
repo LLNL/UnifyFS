@@ -151,7 +151,7 @@ UnifyFS has a transfer API to move files from UnifyFS to external storage (or fr
 
     $ srun -N4 -n4 transfer-static /unifyfs/file1 /scratch/mydir/file1
 
-(assuming that /unifyfs/file1 is a file you've written within the UnifyFS file space by an application.)  To use the transfer API functions directly in a C program, use the following as a template: 
+(assuming that /unifyfs/file1 is a file you've written within the UnifyFS file space by an application.)  To use the transfer API functions directly in a C program, use the following as a template:
 
 .. code-block:: C
 
@@ -164,7 +164,5 @@ UnifyFS has a transfer API to move files from UnifyFS to external storage (or fr
                 fprintf(stderr,"unifyfs copy failed (%d: %s)", ret, strerror(ret));
             }
         }
-        
-For a more complete example, please see the transfer.c source file in the examples directory.
- 
 
+For a more complete example, please see the transfer.c source file in the examples directory.
