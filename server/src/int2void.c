@@ -149,7 +149,7 @@ int int2void_delete(
 
     free(node);
 
-    if (existing) {
+    if (!existing) {
         /* failed to find item */
         return EEXIST;
     }
