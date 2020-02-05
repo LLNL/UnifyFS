@@ -87,10 +87,12 @@ void unifyfs_tree_init(
         t->rank -= ranks;
     }
 
-    /* rotate rank of our parent in tree */
-    t->parent_rank += root;
-    if (t->parent_rank >= ranks) {
-        t->parent_rank -= ranks;
+    /* rotate rank of our parent in tree if we have one */
+    if (t->parent_rank != -1) {
+        t->parent_rank += root;
+        if (t->parent_rank >= ranks) {
+            t->parent_rank -= ranks;
+        }
     }
 
     /* rotate rank of each child in tree */
