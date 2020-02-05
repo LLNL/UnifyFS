@@ -41,6 +41,7 @@ static int debug;
 static char* mountpoint = "/unifyfs";  /* unifyfs mountpoint */
 static char* filename = "/unifyfs";
 static int unmount;                /* unmount unifyfs after running the test */
+static int testrank = -1;
 
 #define FP_SPECIAL 1
 
@@ -113,10 +114,11 @@ static struct option const long_opts[] = {
     { "help", 0, 0, 'h' },
     { "mount", 1, 0, 'm' },
     { "unmount", 0, 0, 'u' },
+    { "rank", 1, 0, 'r' },
     { 0, 0, 0, 0},
 };
 
-static char* short_opts = "dhm:u";
+static char* short_opts = "dhm:ur:";
 
 static const char* usage_str =
     "\n"
@@ -129,6 +131,7 @@ static const char* usage_str =
     " -m, --mount=<mountpoint>         use <mountpoint> for unifyfs\n"
     "                                  (default: /unifyfs)\n"
     " -u, --unmount                    unmount the filesystem after test\n"
+    " -r, --rank=<rank>                only test on rank <rank>\n"
     "\n";
 
 static char* program;
@@ -167,6 +170,10 @@ int main(int argc, char** argv)
             unmount = 1;
             break;
 
+        case 'r':
+            testrank = atoi(optarg);
+            break;
+
         case 'h':
         default:
             print_usage();
@@ -175,6 +182,11 @@ int main(int argc, char** argv)
     }
 
     if (argc - optind != 1) {
+        print_usage();
+    }
+
+    if (testrank > total_ranks - 1) {
+        test_print(0, "Please specify a vaild rank number.");
         print_usage();
     }
 
@@ -192,11 +204,13 @@ int main(int argc, char** argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    ret = stat(filename, &sb);
-    if (ret < 0) {
-        test_print(rank, "stat failed on \"%s\"", filename);
-    } else {
-        dump_stat(rank, &sb);
+    if (testrank < 0 || (testrank >= 0 && rank == testrank)) {
+        ret = stat(filename, &sb);
+        if (ret < 0) {
+            test_print(rank, "stat failed on \"%s\"", filename);
+        } else {
+            dump_stat(rank, &sb);
+        }
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
