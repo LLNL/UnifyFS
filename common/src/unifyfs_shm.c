@@ -37,8 +37,8 @@ void* unifyfs_shm_alloc(const char* name, size_t size)
     int fd = shm_open(name, O_RDWR | O_CREAT, 0770);
     if (fd == -1) {
         /* failed to open shared memory */
-        LOGERR("Failed to open shared memory %s errno=%d (%s)",
-               name, errno, strerror(errno));
+        LOGERR("Failed to open shared memory %s (%s)",
+               name, strerror(errno));
         return NULL;
     }
 
@@ -48,8 +48,8 @@ void* unifyfs_shm_alloc(const char* name, size_t size)
     if (ret != 0) {
         /* failed to set size shared memory */
         errno = ret;
-        LOGERR("posix_fallocate failed for %s errno=%d (%s)",
-               name, errno, strerror(errno));
+        LOGERR("posix_fallocate failed for %s (%s)",
+               name, strerror(errno));
         close(fd);
         return NULL;
     }
@@ -58,8 +58,8 @@ void* unifyfs_shm_alloc(const char* name, size_t size)
     ret = ftruncate(fd, size);
     if (ret == -1) {
         /* failed to set size of shared memory */
-        LOGERR("ftruncate failed for %s errno=%d (%s)",
-               name, errno, strerror(errno));
+        LOGERR("ftruncate failed for %s (%s)",
+               name, strerror(errno));
         close(fd);
         return NULL;
     }
@@ -71,8 +71,8 @@ void* unifyfs_shm_alloc(const char* name, size_t size)
                       fd, 0);
     if (addr == MAP_FAILED) {
         /* failed to open shared memory */
-        LOGERR("Failed to mmap shared memory %s errno=%d (%s)",
-               name, errno, strerror(errno));
+        LOGERR("Failed to mmap shared memory %s (%s)",
+               name, strerror(errno));
         close(fd);
         return NULL;
     }
@@ -82,8 +82,8 @@ void* unifyfs_shm_alloc(const char* name, size_t size)
     ret = close(fd);
     if (ret == -1) {
         /* failed to open shared memory */
-        LOGERR("Failed to mmap shared memory %s errno=%d (%s)",
-               name, errno, strerror(errno));
+        LOGERR("Failed to mmap shared memory %s (%s)",
+               name, strerror(errno));
 
         /* not fatal, so keep going */
     }
@@ -100,7 +100,7 @@ int unifyfs_shm_free(const char* name, size_t size, void** paddr)
 {
     /* check that we got an address (to something) */
     if (paddr == NULL) {
-        return UNIFYFS_FAILURE;
+        return EINVAL;
     }
 
     /* get address of shared memory region */
@@ -114,8 +114,8 @@ int unifyfs_shm_free(const char* name, size_t size, void** paddr)
         int rc = munmap(addr, size);
         if (rc == -1) {
             /* failed to unmap shared memory */
-            LOGERR("Failed to unmap shared memory %s errno=%d (%s)",
-                   name, errno, strerror(errno));
+            LOGERR("Failed to unmap shared memory %s (%s)",
+                   name, strerror(errno));
 
             /* not fatal, so keep going */
         }
@@ -139,8 +139,8 @@ int unifyfs_shm_unlink(const char* name)
         int err = errno;
         if (ENOENT != err) {
             /* failed to remove shared memory */
-            LOGERR("Failed to unlink shared memory %s errno=%d (%s)",
-                   name, err, strerror(err));
+            LOGERR("Failed to unlink shared memory %s (%s)",
+                   name, strerror(err));
         }
         /* not fatal, so keep going */
     }

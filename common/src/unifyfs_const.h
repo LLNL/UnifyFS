@@ -30,9 +30,8 @@
 #ifndef UNIFYFS_CONST_H
 #define UNIFYFS_CONST_H
 
-/* ********************** ERROR CODES ************************ */
-#include "err_enumerator.h"
-#define ULFS_SUCCESS ((int)UNIFYFS_SUCCESS)
+/* ********************** RETURN CODES ************************ */
+#include "unifyfs_rc.h"
 
 /* ********************** STRING CONSTANTS ************************ */
 #define DEFAULT_INTERFACE "ib0"

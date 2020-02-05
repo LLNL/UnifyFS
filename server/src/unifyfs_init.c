@@ -56,8 +56,6 @@ server_info_t* glb_servers; // array of server_info_t
 
 arraylist_t* app_config_list;
 
-int invert_sock_ids[MAX_NUM_CLIENTS]; /*records app_id for each sock_id*/
-
 unifyfs_cfg_t server_cfg;
 
 static int unifyfs_exit(void);
@@ -192,7 +190,7 @@ static int allocate_servers(size_t n_servers)
     glb_servers = (server_info_t*) calloc(n_servers, sizeof(server_info_t));
     if (NULL == glb_servers) {
         LOGERR("failed to allocate server_info array");
-        return (int)UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
     return (int)UNIFYFS_SUCCESS;
 }
@@ -205,7 +203,7 @@ static int process_servers_hostfile(const char* hostfile)
     char hostbuf[UNIFYFS_MAX_HOSTNAME+1];
 
     if (NULL == hostfile) {
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
     fp = fopen(hostfile, "r");
     if (!fp) {
@@ -296,13 +294,13 @@ int main(int argc, char* argv[])
 
     app_config_list = arraylist_create();
     if (app_config_list == NULL) {
-        LOGERR("%s", unifyfs_error_enum_description(UNIFYFS_ERROR_NOMEM));
+        LOGERR("%s", unifyfs_rc_enum_description(ENOMEM));
         exit(1);
     }
 
     rm_thrd_list = arraylist_create();
     if (rm_thrd_list == NULL) {
-        LOGERR("%s", unifyfs_error_enum_description(UNIFYFS_ERROR_NOMEM));
+        LOGERR("%s", unifyfs_rc_enum_description(ENOMEM));
         exit(1);
     }
 
@@ -316,7 +314,7 @@ int main(int argc, char* argv[])
              server_cfg.log_dir, server_cfg.log_file, glb_host);
     rc = unifyfs_log_open(dbg_fname);
     if (rc != UNIFYFS_SUCCESS) {
-        LOGERR("%s", unifyfs_error_enum_description((unifyfs_error_e)rc));
+        LOGERR("%s", unifyfs_rc_enum_description((unifyfs_rc)rc));
     }
 
     if (NULL != server_cfg.server_hostfile) {
@@ -364,66 +362,36 @@ int main(int argc, char* argv[])
     rc = configurator_bool_val(server_cfg.margo_tcp, &margo_use_tcp);
     rc = margo_server_rpc_init();
     if (rc != UNIFYFS_SUCCESS) {
-        LOGERR("%s", unifyfs_error_enum_description(UNIFYFS_ERROR_MARGO));
+        LOGERR("%s", unifyfs_rc_enum_description(rc));
         exit(1);
     }
 
     LOGDBG("connecting rpc servers");
     rc = margo_connect_servers();
     if (rc != UNIFYFS_SUCCESS) {
-        LOGERR("%s", unifyfs_error_enum_description(UNIFYFS_ERROR_MARGO));
+        LOGERR("%s", unifyfs_rc_enum_description(rc));
         exit(1);
     }
-
-#if defined(UNIFYFS_USE_DOMAIN_SOCKET)
-    int srvr_rank_idx = 0;
-#if defined(UNIFYFS_MULTIPLE_DELEGATORS)
-    rc = CountTasksPerNode(glb_pmi_rank, glb_pmi_size);
-    if (rc < 0) {
-        exit(1);
-    }
-    srvr_rank_idx = find_rank_idx(glb_pmi_rank);
-#endif // UNIFYFS_MULTIPLE_DELEGATORS
-    LOGDBG("creating server domain socket");
-    rc = sock_init_server(srvr_rank_idx);
-    if (rc != 0) {
-        LOGERR("%s", unifyfs_error_enum_description(UNIFYFS_ERROR_SOCKET));
-        exit(1);
-    }
-#endif // UNIFYFS_USE_DOMAIN_SOCKET
 
     /* launch the service manager */
     LOGDBG("launching service manager thread");
     rc = svcmgr_init();
     if (rc != (int)UNIFYFS_SUCCESS) {
-        LOGERR("launch failed - %s", unifyfs_error_enum_description(rc));
+        LOGERR("launch failed - %s", unifyfs_rc_enum_description(rc));
         exit(1);
     }
 
     LOGDBG("initializing metadata store");
     rc = meta_init_store(&server_cfg);
     if (rc != 0) {
-        LOGERR("%s", unifyfs_error_enum_description(UNIFYFS_ERROR_MDINIT));
+        LOGERR("%s", unifyfs_rc_enum_description(rc));
         exit(1);
     }
 
     LOGDBG("finished service initialization");
 
     while (1) {
-#if defined(UNIFYFS_USE_DOMAIN_SOCKET)
-        int timeout_ms = 2000; /* in milliseconds */
-        rc = sock_wait_cmd(timeout_ms);
-        if (rc != UNIFYFS_SUCCESS) {
-            // we ignore disconnects, they are expected
-            if (rc != UNIFYFS_ERROR_SOCK_DISCONNECT) {
-                LOGDBG("domain socket error %s",
-                       unifyfs_error_enum_description((unifyfs_error_e)rc));
-                time_to_exit = 1;
-            }
-        }
-#else
         sleep(1);
-#endif // UNIFYFS_USE_DOMAIN_SOCKET
         if (time_to_exit) {
             LOGDBG("starting service shutdown");
             break;
@@ -620,12 +588,6 @@ static int unifyfs_exit(void)
     /* shutdown rpc service */
     LOGDBG("stopping rpc service");
     margo_server_rpc_finalize();
-
-#if defined(UNIFYFS_USE_DOMAIN_SOCKET)
-    /* close remaining sockets */
-    LOGDBG("closing sockets");
-    sock_sanitize();
-#endif
 
     /* finalize kvstore service*/
     LOGDBG("finalizing kvstore service");

@@ -43,7 +43,7 @@ time_t unifyfs_log_time;
 struct tm* unifyfs_log_ltime;
 char unifyfs_log_timestamp[256];
 
-/* used to reduce source file name length */
+/* used to reduce source file pathname length */
 size_t unifyfs_log_source_base_len; // = 0
 static const char* this_file = __FILE__;
 
@@ -60,17 +60,20 @@ int unifyfs_log_open(const char* file)
         }
     }
 
-    /* stderr is our default log file stream */
-    unifyfs_log_stream = stderr;
+    if (NULL == unifyfs_log_stream) {
+        /* stderr is the default log stream */
+        unifyfs_log_stream = stderr;
+    }
 
     if (NULL != file) {
         FILE* logf = fopen(file, "a");
-        if (NULL != logf) {
-            unifyfs_log_stream = logf;
+        if (logf == NULL) {
+            return ENOENT;
         } else {
-            return EINVAL;
+            unifyfs_log_stream = logf;
         }
     }
+
     return (int)UNIFYFS_SUCCESS;
 }
 
@@ -82,6 +85,8 @@ int unifyfs_log_close(void)
     if (NULL != unifyfs_log_stream) {
         if (unifyfs_log_stream != stderr) {
             fclose(unifyfs_log_stream);
+
+            /* revert to stderr for any future log messages */
             unifyfs_log_stream = stderr;
         }
     }
@@ -93,7 +98,5 @@ void unifyfs_set_log_level(unifyfs_log_level_t lvl)
 {
     if (lvl < LOG_LEVEL_MAX) {
         unifyfs_log_level = lvl;
-    } else {
-        LOGERR("invalid log level %d", (int)lvl);
     }
 }

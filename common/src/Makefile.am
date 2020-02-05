@@ -1,14 +1,12 @@
 lib_LTLIBRARIES = libunifyfs_common.la
 
-include_HEADERS = unifyfs_const.h err_enumerator.h
+include_HEADERS = unifyfs_const.h unifyfs_rc.h
 
 libunifyfs_commondir = $(includedir)
 
 BASE_SRCS = \
   ini.h \
   ini.c \
-  err_enumerator.h \
-  err_enumerator.c \
   cm_enumerator.h \
   cm_enumerator.c \
   rm_enumerator.h \
@@ -31,6 +29,8 @@ BASE_SRCS = \
   unifyfs_rpc_util.c \
   unifyfs_client_rpcs.h \
   unifyfs_server_rpcs.h \
+  unifyfs_rc.h \
+  unifyfs_rc.c \
   unifyfs_runstate.h \
   unifyfs_runstate.c \
   unifyfs_shm.h \

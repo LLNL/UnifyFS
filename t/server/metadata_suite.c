@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
     rc = meta_init_store(&server_cfg);
     if (rc != 0) {
         LOG(LOG_ERR, "%s",
-            unifyfs_error_enum_description(UNIFYFS_ERROR_MDINIT));
+            unifyfs_rc_enum_description(UNIFYFS_ERROR_META));
         exit(1);
     }
 
