@@ -490,12 +490,6 @@ int unifyfs_gfid_from_fid(const int fid);
  * returns -1 otherwise */
 int unifyfs_fid_from_gfid(const int gfid);
 
-/* given an UNIFYFS error code, return corresponding errno code */
-int unifyfs_err_map_to_errno(int rc);
-
-/* given an errno error code, return corresponding UnifyFS error code */
-int unifyfs_errno_map_to_err(int rc);
-
 /* checks to see if fid is a directory
  * returns 1 for yes
  * returns 0 for no */

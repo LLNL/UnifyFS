@@ -236,82 +236,6 @@ int unifyfs_unsupported(
     return rc;
 }
 
-/* given an UNIFYFS error code, return corresponding errno code */
-int unifyfs_err_map_to_errno(int rc)
-{
-    unifyfs_error_e ec = (unifyfs_error_e)rc;
-
-    switch (ec) {
-    case UNIFYFS_SUCCESS:
-        return 0;
-    case UNIFYFS_ERROR_BADF:
-        return EBADF;
-    case UNIFYFS_ERROR_EXIST:
-        return EEXIST;
-    case UNIFYFS_ERROR_FBIG:
-        return EFBIG;
-    case UNIFYFS_ERROR_INVAL:
-        return EINVAL;
-    case UNIFYFS_ERROR_ISDIR:
-        return EISDIR;
-    case UNIFYFS_ERROR_NAMETOOLONG:
-        return ENAMETOOLONG;
-    case UNIFYFS_ERROR_NFILE:
-        return ENFILE;
-    case UNIFYFS_ERROR_NOENT:
-        return ENOENT;
-    case UNIFYFS_ERROR_NOMEM:
-        return ENOMEM;
-    case UNIFYFS_ERROR_NOSPC:
-        return ENOSPC;
-    case UNIFYFS_ERROR_NOTDIR:
-        return ENOTDIR;
-    case UNIFYFS_ERROR_OVERFLOW:
-        return EOVERFLOW;
-    default:
-        break;
-    }
-    return ec;
-}
-
-/* given an errno error code, return corresponding UnifyFS error code */
-int unifyfs_errno_map_to_err(int rc)
-{
-    switch (rc) {
-    case 0:
-        return (int)UNIFYFS_SUCCESS;
-    case EBADF:
-        return (int)UNIFYFS_ERROR_BADF;
-    case EEXIST:
-        return (int)UNIFYFS_ERROR_EXIST;
-    case EFBIG:
-        return (int)UNIFYFS_ERROR_FBIG;
-    case EINVAL:
-        return (int)UNIFYFS_ERROR_INVAL;
-    case EIO:
-        return (int)UNIFYFS_ERROR_IO;
-    case EISDIR:
-        return (int)UNIFYFS_ERROR_ISDIR;
-    case ENAMETOOLONG:
-        return (int)UNIFYFS_ERROR_NAMETOOLONG;
-    case ENFILE:
-        return (int)UNIFYFS_ERROR_NFILE;
-    case ENOENT:
-        return (int)UNIFYFS_ERROR_NOENT;
-    case ENOMEM:
-        return (int)UNIFYFS_ERROR_NOMEM;
-    case ENOSPC:
-        return (int)UNIFYFS_ERROR_NOSPC;
-    case ENOTDIR:
-        return (int)UNIFYFS_ERROR_NOTDIR;
-    case EOVERFLOW:
-        return (int)UNIFYFS_ERROR_OVERFLOW;
-    default:
-        break;
-    }
-    return (int)UNIFYFS_FAILURE;
-}
-
 /* returns 1 if two input parameters will overflow their type when
  * added together */
 inline int unifyfs_would_overflow_offt(off_t a, off_t b)
@@ -964,7 +888,7 @@ int unifyfs_fid_create_file(const char* path)
     /* check that pathname is within bounds */
     size_t pathlen = strlen(path) + 1;
     if (pathlen > UNIFYFS_MAX_FILENAME) {
-        return (int) UNIFYFS_ERROR_NAMETOOLONG;
+        return ENAMETOOLONG;
     }
 
     /* allocate an id for this file */
@@ -1026,7 +950,7 @@ int unifyfs_fid_create_directory(const char* path)
     /* check that pathname is within bounds */
     size_t pathlen = strlen(path) + 1;
     if (pathlen > UNIFYFS_MAX_FILENAME) {
-        return (int) UNIFYFS_ERROR_NAMETOOLONG;
+        return (int) ENAMETOOLONG;
     }
 
     /* get local and global file ids */
@@ -1045,7 +969,7 @@ int unifyfs_fid_create_directory(const char* path)
 
     /* can't create if it already exists */
     if (found_global) {
-        return (int) UNIFYFS_ERROR_EXIST;
+        return (int) EEXIST;
     }
 
     if (found_local) {
@@ -1065,14 +989,14 @@ int unifyfs_fid_create_directory(const char* path)
          * we currently return EIO, and this needs to be addressed according to
          * a consistency model this fs intance assumes.
          */
-        return (int) UNIFYFS_ERROR_IO;
+        return EIO;
     }
 
     /* now, we need to create a new directory. */
     fid = unifyfs_fid_create_file(path);
     if (fid < 0) {
         /* FIXME: ENOSPC or EIO? */
-        return (int) UNIFYFS_ERROR_IO;
+        return EIO;
     }
 
     /* Set as directory */
@@ -1084,7 +1008,7 @@ int unifyfs_fid_create_directory(const char* path)
     if (ret != UNIFYFS_SUCCESS) {
         LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
                path, fid);
-        return (int) UNIFYFS_ERROR_IO;
+        return EIO;
     }
 
     return UNIFYFS_SUCCESS;
@@ -1114,7 +1038,7 @@ int unifyfs_fid_write(int fid, off_t pos, const void* buf, size_t count)
         rc = unifyfs_fid_store_fixed_write(fid, meta, pos, buf, count);
     } else {
         /* unknown storage type */
-        rc = (int)UNIFYFS_ERROR_IO;
+        rc = EIO;
     }
 
     return rc;
@@ -1130,7 +1054,7 @@ int unifyfs_fid_write_zero(int fid, off_t pos, off_t count)
     size_t buf_size = 1024 * 1024;
     void* buf = (void*) malloc(buf_size);
     if (buf == NULL) {
-        return (int)UNIFYFS_ERROR_IO;
+        return EIO;
     }
 
     /* set values in this buffer to zero */
@@ -1150,7 +1074,7 @@ int unifyfs_fid_write_zero(int fid, off_t pos, off_t count)
         /* write data to file */
         int write_rc = unifyfs_fid_write(fid, curpos, buf, num);
         if (write_rc != UNIFYFS_SUCCESS) {
-            rc = (int)UNIFYFS_ERROR_IO;
+            rc = EIO;
             break;
         }
 
@@ -1181,7 +1105,7 @@ int unifyfs_fid_extend(int fid, off_t length)
         rc = unifyfs_fid_store_fixed_extend(fid, meta, length);
     } else {
         /* unknown storage type */
-        rc = (int)UNIFYFS_ERROR_IO;
+        rc = EIO;
     }
 
     return rc;
@@ -1192,7 +1116,7 @@ int unifyfs_fid_shrink(int fid, off_t length)
 {
     /* TODO: implement this function */
 
-    return UNIFYFS_ERROR_IO;
+    return EIO;
 }
 
 /* truncate file id to given length, frees resources if length is
@@ -1204,7 +1128,7 @@ int unifyfs_fid_truncate(int fid, off_t length)
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     if (meta->is_laminated) {
         /* Can't truncate a laminated file */
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     /* determine file storage type */
@@ -1222,7 +1146,7 @@ int unifyfs_fid_truncate(int fid, off_t length)
         meta->local_size  = length;
     } else {
         /* unknown storage type */
-        return (int)UNIFYFS_ERROR_IO;
+        return EIO;
     }
 
     return UNIFYFS_SUCCESS;
@@ -1243,7 +1167,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
     /* check that pathname is within bounds */
     size_t pathlen = strlen(path) + 1;
     if (pathlen > UNIFYFS_MAX_FILENAME) {
-        return (int) UNIFYFS_ERROR_NAMETOOLONG;
+        return ENAMETOOLONG;
     }
 
     /* check whether this file already exists */
@@ -1290,7 +1214,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         LOGDBG("file found locally, but seems to be deleted globally. "
                "invalidating the local cache.");
         unifyfs_fid_unlink(fid);
-        return (int) UNIFYFS_ERROR_NOENT;
+        return ENOENT;
     }
 
     /* for all other three cases below, we need to open the file and allocate a
@@ -1305,9 +1229,9 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         /* initialize local metadata for this file */
         fid = unifyfs_fid_create_file(path);
         if (fid < 0) {
-            /* FIXME: UNIFYFS_ERROR_NFILE or UNIFYFS_ERROR_IO ? */
+            /* FIXME: ENFILE or EIO ? */
             LOGERR("failed to create a new file %s", path);
-            return (int) UNIFYFS_ERROR_IO;
+            return EIO;
         }
 
         /* initialize local storage for this file */
@@ -1315,7 +1239,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         if (ret != UNIFYFS_SUCCESS) {
             LOGERR("failed to allocate storage space for file %s (fid=%d)",
                    path, fid);
-            return (int) UNIFYFS_ERROR_IO;
+            return EIO;
         }
 
         /* initialize global size of file from global metadata */
@@ -1323,15 +1247,15 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
     } else if (found_local && found_global) {
         /* file exists and is valid.  */
         if ((flags & O_CREAT) && (flags & O_EXCL)) {
-            return (int)UNIFYFS_ERROR_EXIST;
+            return EEXIST;
         }
 
         if ((flags & O_DIRECTORY) && !unifyfs_fid_is_dir(fid)) {
-            return (int)UNIFYFS_ERROR_NOTDIR;
+            return ENOTDIR;
         }
 
         if (!(flags & O_DIRECTORY) && unifyfs_fid_is_dir(fid)) {
-            return (int)UNIFYFS_ERROR_NOTDIR;
+            return ENOTDIR;
         }
 
         /* update local metadata from global metadata */
@@ -1352,7 +1276,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
          */
         if (!(flags & O_CREAT)) {
             LOGERR("%s does not exist (O_CREAT not given).", path);
-            return (int) UNIFYFS_ERROR_NOENT;
+            return ENOENT;
         }
 
         LOGDBG("Creating a new entry for %s.", path);
@@ -1365,14 +1289,14 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         fid = unifyfs_fid_create_file(path);
         if (fid < 0) {
             LOGERR("Failed to create new file %s", path);
-            return (int) UNIFYFS_ERROR_NFILE;
+            return ENFILE;
         }
 
         /* initialize the storage for the file */
         int store_rc = unifyfs_fid_store_alloc(fid);
         if (store_rc != UNIFYFS_SUCCESS) {
             LOGERR("Failed to create storage for file %s", path);
-            return (int) UNIFYFS_ERROR_IO;
+            return EIO;
         }
 
         /* insert file attribute for file in key-value store */
@@ -1380,7 +1304,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         if (ret != UNIFYFS_SUCCESS) {
             LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
                    path, fid);
-            return (int) UNIFYFS_ERROR_IO;
+            return EIO;
         }
     }
 
@@ -2094,77 +2018,6 @@ static int unifyfs_init_req_shm(int local_rank_idx, int app_id)
     return UNIFYFS_SUCCESS;
 }
 
-
-#if defined(UNIFYFS_USE_DOMAIN_SOCKET)
-/**
- * initialize the client-side socket
- * used to communicate with the server-side
- * delegators. Each client is serviced by
- * one delegator.
- * @param proc_id: local process id
- * @param l_num_procs_per_node: number
- * of ranks on each compute node
- * @param l_num_del_per_node: number of server-side
- * delegators on the same node
- * @return success/error code
- */
-static int unifyfs_init_socket(int proc_id, int l_num_procs_per_node,
-                               int l_num_del_per_node)
-{
-    int rc = -1;
-    int nprocs_per_del;
-    int len;
-    int result;
-    int flag;
-    struct sockaddr_un serv_addr;
-    char tmp_path[UNIFYFS_MAX_FILENAME] = {0};
-    char* pmi_path = NULL;
-
-    client_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (client_sockfd < 0) {
-        LOGERR("socket create failed");
-        return -1;
-    }
-
-    /* calculate delegator assignment */
-    nprocs_per_del = l_num_procs_per_node / l_num_del_per_node;
-    if ((l_num_procs_per_node % l_num_del_per_node) != 0) {
-        nprocs_per_del++;
-    }
-    snprintf(tmp_path, sizeof(tmp_path), "%s.%d.%d",
-             SOCKET_PATH, getuid(), (proc_id / nprocs_per_del));
-
-    // lookup domain socket path in key-val store
-    if (unifyfs_keyval_lookup_local(key_unifyfsd_socket, &pmi_path) == 0) {
-        memset(tmp_path, 0, sizeof(tmp_path));
-        snprintf(tmp_path, sizeof(tmp_path), "%s", pmi_path);
-        free(pmi_path);
-    }
-
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sun_family = AF_UNIX;
-    strcpy(serv_addr.sun_path, tmp_path);
-    len = sizeof(serv_addr);
-    result = connect(client_sockfd, (struct sockaddr*)&serv_addr, len);
-
-    /* exit with error if connection is not successful */
-    if (result == -1) {
-        rc = -1;
-        LOGERR("socket connect failed");
-        return rc;
-    }
-
-    flag = fcntl(client_sockfd, F_GETFL);
-    fcntl(client_sockfd, F_SETFL, flag | O_NONBLOCK);
-
-    cmd_fd.fd = client_sockfd;
-    cmd_fd.events = POLLIN | POLLHUP;
-    cmd_fd.revents = 0;
-
-    return 0;
-}
-#endif // UNIFYFS_USE_DOMAIN_SOCKET
-
 static int compare_int(const void* a, const void* b)
 {
     const int* ptr_a = a;
@@ -2520,16 +2373,6 @@ int unifyfs_mount(const char prefix[], int rank, size_t size,
      * around so that a future client can reattach to it. */
     unifyfs_shm_unlink(shm_req_name);
     unifyfs_shm_unlink(shm_recv_name);
-
-#if defined(UNIFYFS_USE_DOMAIN_SOCKET)
-    /* open a socket to the server */
-    rc = unifyfs_init_socket(local_rank_idx, local_rank_cnt,
-                             local_del_cnt);
-    if (rc < 0) {
-        LOGERR("failed to initialize socket, rc == %d", rc);
-        return UNIFYFS_FAILURE;
-    }
-#endif
 
     /* add mount point as a new directory in the file list */
     if (unifyfs_get_fid_from_path(prefix) < 0) {

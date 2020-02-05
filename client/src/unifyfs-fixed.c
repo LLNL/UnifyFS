@@ -164,7 +164,7 @@ static int unifyfs_chunk_alloc(int fid, unifyfs_filemeta_t* meta, int chunk_id)
             unifyfs_stack_unlock();
             if (id < unifyfs_max_chunks) {
                 LOGERR("spill-over device out of space (%d)", id);
-                return UNIFYFS_ERROR_NOSPC;
+                return ENOSPC;
             }
 
             /* got one from spill over */
@@ -173,7 +173,7 @@ static int unifyfs_chunk_alloc(int fid, unifyfs_filemeta_t* meta, int chunk_id)
         } else {
             /* spill over isn't available, so we're out of space */
             LOGERR("memfs out of space (%d)", id);
-            return UNIFYFS_ERROR_NOSPC;
+            return ENOSPC;
         }
     } else if (unifyfs_use_spillover) {
         /* memory file system is not enabled, but spill over is */
@@ -188,7 +188,7 @@ static int unifyfs_chunk_alloc(int fid, unifyfs_filemeta_t* meta, int chunk_id)
         unifyfs_stack_unlock();
         if (id < unifyfs_max_chunks) {
             LOGERR("spill-over device out of space (%d)", id);
-            return UNIFYFS_ERROR_NOSPC;
+            return ENOSPC;
         }
 
         /* got one from spill over */
@@ -197,7 +197,7 @@ static int unifyfs_chunk_alloc(int fid, unifyfs_filemeta_t* meta, int chunk_id)
     } else {
         /* don't know how to allocate chunk */
         chunk_meta->location = CHUNK_LOCATION_NULL;
-        return UNIFYFS_ERROR_IO;
+        return EIO;
     }
 
     return UNIFYFS_SUCCESS;
@@ -222,7 +222,7 @@ static int unifyfs_chunk_free(int fid, unifyfs_filemeta_t* meta, int chunk_id)
     } else {
         /* unkwown chunk location */
         LOGERR("unknown chunk location %d", chunk_meta->location);
-        return UNIFYFS_ERROR_IO;
+        return EIO;
     }
 
     /* update location of chunk */
@@ -255,12 +255,12 @@ static int unifyfs_chunk_read(
         off_t spill_offset = unifyfs_compute_spill_offset(meta, chunk_id, chunk_offset);
         ssize_t rc = pread(unifyfs_spilloverblock, buf, count, spill_offset);
         if (rc < 0) {
-            return unifyfs_errno_map_to_err(rc);
+            return errno;
         }
     } else {
         /* unknown chunk type */
         LOGERR("unknown chunk type");
-        return UNIFYFS_ERROR_IO;
+        return EIO;
     }
 
     /* assume read was successful if we get to here */
@@ -373,7 +373,7 @@ int unifyfs_sync(int gfid)
              * we called the real fsync which should
              * have already set errno to something reasonable */
             LOGERR("failed to flush data to spill over file");
-            return UNIFYFS_ERROR_IO;
+            return EIO;
         }
     }
 
@@ -382,7 +382,7 @@ int unifyfs_sync(int gfid)
     if (ret != UNIFYFS_SUCCESS) {
         /* something went wrong when trying to flush key/values */
         LOGERR("failed to flush key/value index to server");
-        return UNIFYFS_ERROR_IO;
+        return EIO;
     }
 
     /* flushed, clear buffer and refresh number of entries
@@ -488,7 +488,7 @@ static int unifyfs_logio_add_write_meta_to_index(unifyfs_filemeta_t* meta,
             if (ret != UNIFYFS_SUCCESS) {
                 /* something went wrong when trying to flush key/values */
                 LOGERR("failed to flush key/value index to server");
-                return UNIFYFS_ERROR_IO;
+                return EIO;
             }
         }
 
@@ -527,7 +527,7 @@ static int unifyfs_logio_chunk_write(
         chunk_meta->location != CHUNK_LOCATION_SPILLOVER) {
         /* unknown chunk type */
         LOGERR("unknown chunk type");
-        return UNIFYFS_ERROR_IO;
+        return EIO;
     }
 
     /* copy data into chunk and record its starting offset within the log */
@@ -564,7 +564,7 @@ static int unifyfs_logio_chunk_write(
                 bufpos, remaining, filepos);
             if (rc < 0)  {
                 LOGERR("pwrite failed: errno=%d (%s)", errno, strerror(errno));
-                return UNIFYFS_ERROR_IO;
+                return EIO;
             }
 
             /* wrote without an error, total up bytes written so far */
@@ -679,7 +679,7 @@ static int unifyfs_chunk_write(
     } else {
         /* unknown chunk type */
         LOGERR("unknown chunk type");
-        return UNIFYFS_ERROR_IO;
+        return EIO;
     }
 
     /* assume write was successful if we get to here */
@@ -705,7 +705,7 @@ int unifyfs_fid_store_fixed_extend(int fid, unifyfs_filemeta_t* meta,
             if (rc != UNIFYFS_SUCCESS) {
                 /* ran out of space to store data */
                 LOGERR("failed to allocate chunk");
-                return UNIFYFS_ERROR_NOSPC;
+                return ENOSPC;
             }
 
             /* increase chunk count and subtract bytes from the number we need */
@@ -796,7 +796,7 @@ int unifyfs_fid_store_fixed_write(int fid, unifyfs_filemeta_t* meta, off_t pos,
         chunk_id = meta->log_size >> unifyfs_chunk_bits;
         chunk_offset = meta->log_size & unifyfs_chunk_mask;
     } else {
-        return UNIFYFS_ERROR_IO;
+        return EIO;
     }
 
     /* determine how many bytes remain in the current chunk */
@@ -807,7 +807,7 @@ int unifyfs_fid_store_fixed_write(int fid, unifyfs_filemeta_t* meta, off_t pos,
             rc = unifyfs_logio_chunk_write(fid, pos, meta, chunk_id, chunk_offset,
                                            buf, count);
         } else {
-            return UNIFYFS_ERROR_IO;
+            return EIO;
         }
     } else {
         /* otherwise, fill up the remainder of the current chunk */
@@ -816,7 +816,7 @@ int unifyfs_fid_store_fixed_write(int fid, unifyfs_filemeta_t* meta, off_t pos,
             rc = unifyfs_logio_chunk_write(fid, pos, meta, chunk_id,
                 chunk_offset, (void*)ptr, remaining);
         } else {
-            return UNIFYFS_ERROR_IO;
+            return EIO;
         }
 
         ptr += remaining;
@@ -840,7 +840,7 @@ int unifyfs_fid_store_fixed_write(int fid, unifyfs_filemeta_t* meta, off_t pos,
                 rc = unifyfs_logio_chunk_write(fid, pos, meta, chunk_id, 0,
                                                (void*)ptr, num);
             } else {
-                return UNIFYFS_ERROR_IO;
+                return EIO;
             }
             ptr += num;
             pos += num;

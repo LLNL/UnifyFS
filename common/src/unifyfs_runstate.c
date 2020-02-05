@@ -19,13 +19,13 @@ int unifyfs_read_runstate(unifyfs_cfg_t* cfg,
 
     if (cfg == NULL) {
         LOGERR("NULL config");
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     if (runstate_path == NULL) {
         if (cfg->runstate_dir == NULL) {
             LOGERR("bad runstate dir config setting");
-            return (int)UNIFYFS_ERROR_APPCONFIG;
+            return (int)UNIFYFS_ERROR_BADCONFIG;
         }
         snprintf(runstate_fname, sizeof(runstate_fname),
                  "%s/%s.%d", cfg->runstate_dir, runstate_file, uid);
@@ -36,7 +36,7 @@ int unifyfs_read_runstate(unifyfs_cfg_t* cfg,
 
     if (unifyfs_config_process_ini_file(cfg, runstate_fname) != 0) {
         LOGERR("failed to process runstate file %s", runstate_fname);
-        rc = (int)UNIFYFS_ERROR_APPCONFIG;
+        rc = (int)UNIFYFS_ERROR_BADCONFIG;
     }
 
     return rc;
@@ -51,7 +51,7 @@ int unifyfs_write_runstate(unifyfs_cfg_t* cfg)
 
     if (cfg == NULL) {
         LOGERR("NULL config");
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     snprintf(runstate_fname, sizeof(runstate_fname),
@@ -59,8 +59,8 @@ int unifyfs_write_runstate(unifyfs_cfg_t* cfg)
 
     runstate_fp = fopen(runstate_fname, "w");
     if (runstate_fp == NULL) {
+        rc = errno;
         LOGERR("failed to create file %s", runstate_fname);
-        rc = (int)UNIFYFS_ERROR_FILE;
     } else {
         if ((unifyfs_log_stream != NULL) &&
             (unifyfs_log_level >= LOG_INFO)) {
@@ -81,7 +81,7 @@ int unifyfs_clean_runstate(unifyfs_cfg_t* cfg)
 
     if (cfg == NULL) {
         LOGERR("invalid config arg");
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     snprintf(runstate_fname, sizeof(runstate_fname),
@@ -89,8 +89,8 @@ int unifyfs_clean_runstate(unifyfs_cfg_t* cfg)
 
     rc = unlink(runstate_fname);
     if (rc != 0) {
+        rc = errno;
         LOGERR("failed to remove file %s", runstate_fname);
-        rc = (int)UNIFYFS_ERROR_FILE;
     }
 
     return rc;

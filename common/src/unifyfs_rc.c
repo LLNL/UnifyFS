@@ -34,21 +34,24 @@
  *  MIT License - See LICENSE.tedium
  */
 
-#include "err_enumerator.h"
-#include <string.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+
+#include "unifyfs_rc.h"
+
 
 /* c-strings for enum names */
 
-#define ENUMITEM(name, desc)                                            \
-    const char *UNIFYFS_ERROR_ ## name ## _NAME_STR = #name;
+#define ENUMITEM(name, desc) \
+    const char* UNIFYFS_ERROR_ ## name ## _NAME_STR = #name;
 UNIFYFS_ERROR_ENUMERATOR
 #undef ENUMITEM
 
-const char *unifyfs_error_enum_str(unifyfs_error_e e)
+const char* unifyfs_rc_enum_str(unifyfs_rc rc)
 {
-    switch (e) {
+    switch (rc) {
     case UNIFYFS_FAILURE:
         return "UNIFYFS_FAILURE";
     case UNIFYFS_SUCCESS:
@@ -56,7 +59,7 @@ const char *unifyfs_error_enum_str(unifyfs_error_e e)
 #define ENUMITEM(name, desc)                              \
     case UNIFYFS_ERROR_ ## name:                          \
         return UNIFYFS_ERROR_ ## name ## _NAME_STR;
-    UNIFYFS_ERROR_ENUMERATOR
+UNIFYFS_ERROR_ENUMERATOR
 #undef ENUMITEM
     default :
         break;
@@ -66,14 +69,16 @@ const char *unifyfs_error_enum_str(unifyfs_error_e e)
 
 /* c-strings for enum descriptions */
 
-#define ENUMITEM(name, desc)                                    \
-    const char *UNIFYFS_ERROR_ ## name ## _DESC_STR = #desc;
+#define ENUMITEM(name, desc) \
+    const char* UNIFYFS_ERROR_ ## name ## _DESC_STR = #desc;
 UNIFYFS_ERROR_ENUMERATOR
 #undef ENUMITEM
 
-const char *unifyfs_error_enum_description(unifyfs_error_e e)
+char posix_errstr[1024];
+
+const char* unifyfs_rc_enum_description(unifyfs_rc rc)
 {
-    switch (e) {
+    switch (rc) {
     case UNIFYFS_FAILURE:
         return "Failure";
     case UNIFYFS_SUCCESS:
@@ -81,33 +86,55 @@ const char *unifyfs_error_enum_description(unifyfs_error_e e)
 #define ENUMITEM(name, desc)                              \
     case UNIFYFS_ERROR_ ## name:                          \
         return UNIFYFS_ERROR_ ## name ## _DESC_STR;
-    UNIFYFS_ERROR_ENUMERATOR
+UNIFYFS_ERROR_ENUMERATOR
 #undef ENUMITEM
-    default :
-        break;
+    default:
+        /* assume it's a POSIX errno value */
+        snprintf(posix_errstr, sizeof(posix_errstr), "%s",
+                 strerror((int)rc));
+        return (const char*)posix_errstr;
     }
     return NULL;
 }
 
-unifyfs_error_e unifyfs_error_enum_from_str(const char *s)
+unifyfs_rc unifyfs_rc_enum_from_str(const char* s)
 {
-    if (0)
-        ;
+    if (strcmp(s, "Success") == 0) {
+        return UNIFYFS_SUCCESS;
+    } else if (strcmp(s, "Failure") == 0) {
+        return UNIFYFS_FAILURE;
+    }
 #define ENUMITEM(name, desc)                  \
-    else if (strcmp(s, #name) == 0)           \
-        return UNIFYFS_ERROR_ ## name;
-    UNIFYFS_ERROR_ENUMERATOR;
+    else if (strcmp(s, #name) == 0) {         \
+        return UNIFYFS_ERROR_ ## name;        \
+    }
+UNIFYFS_ERROR_ENUMERATOR
 #undef ENUMITEM
 
-    return UNIFYFS_INVALID_ERROR;
+    return UNIFYFS_INVALID_RC;
 }
 
 /* validity check */
-
-int check_valid_unifyfs_error_enum(unifyfs_error_e e)
+int check_valid_unifyfs_rc_enum(unifyfs_rc rc)
 {
-    return ((e > UNIFYFS_INVALID_ERROR) &&
-            (e < UNIFYFS_ERROR_MAX) &&
-            (unifyfs_error_enum_str(e) != NULL));
+    return ((rc > UNIFYFS_INVALID_RC) &&
+            (rc < UNIFYFS_END_ERRORS) &&
+            (unifyfs_rc_enum_str(rc) != NULL));
 }
 
+/* convert to an errno value */
+int unifyfs_rc_errno(unifyfs_rc rc)
+{
+    if (rc == UNIFYFS_SUCCESS) {
+        return 0;
+    } else if (rc == UNIFYFS_INVALID_RC) {
+        return EINVAL;
+    } else if ((rc == UNIFYFS_FAILURE) ||
+              ((rc > UNIFYFS_BEGIN_ERRORS) && (rc < UNIFYFS_END_ERRORS))) {
+        /* none of our custom errors have good errno counterparts, use EIO */
+        return EIO;
+    } else {
+        /* should be a normal errno value already */
+        return (int)rc;
+    }
+}

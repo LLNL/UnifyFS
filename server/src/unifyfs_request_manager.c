@@ -304,7 +304,7 @@ static int release_read_req(reqmgr_thrd_t* thrd_ctrl,
                thrd_ctrl->num_read_reqs, thrd_ctrl->next_rdreq_ndx);
         debug_print_read_req(rdreq);
     } else {
-        rc = UNIFYFS_ERROR_INVAL;
+        rc = EINVAL;
         LOGERR("NULL read_req");
     }
     RM_UNLOCK(thrd_ctrl);
@@ -360,7 +360,7 @@ int create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
         calloc((size_t)num_vals, sizeof(chunk_read_req_t));
     if (NULL == all_chunk_reads) {
         LOGERR("failed to allocate chunk-reads array");
-        return UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
 
     /* wait on lock before we attach new array to global variable */
@@ -408,7 +408,7 @@ int create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
     if (NULL == rdreq->remote_reads) {
         LOGERR("failed to allocate remote-reads array");
         RM_UNLOCK(thrd_ctrl);
-        return UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
 
     /* get pointer to start of chunk read request array */
@@ -660,7 +660,7 @@ static int truncate_delete_keys(
         (NULL == unifyfs_key_lens) ||
         (NULL == unifyfs_val_lens)) {
         LOGERR("failed to allocate memory for file extents");
-        ret = (int)UNIFYFS_ERROR_NOMEM;
+        ret = ENOMEM;
         goto truncate_delete_exit;
     }
 
@@ -758,7 +758,7 @@ static int truncate_rewrite_keys(
         (NULL == unifyfs_key_lens) ||
         (NULL == unifyfs_val_lens)) {
         LOGERR("failed to allocate memory for file extents");
-        ret = (int)UNIFYFS_ERROR_NOMEM;
+        ret = ENOMEM;
         goto truncate_rewrite_exit;
     }
 
@@ -1024,7 +1024,7 @@ int rm_cmd_laminate(
     mode_t mode = (mode_t) attr.mode;
     if ((mode & S_IFMT) != S_IFREG) {
         /* item is not a regular file */
-        return UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     /* lookup current file size */
@@ -1064,7 +1064,7 @@ int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl,
             free(keyvals);
             keyvals = NULL;
         }
-        return UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
 
     if (UNIFYFS_SUCCESS != rc) {
@@ -1286,7 +1286,7 @@ int rm_cmd_read(
     size_t slices = num_slices(offset, length);
     if (slices >= UNIFYFS_MAX_SPLIT_CNT) {
         LOGERR("Error allocating buffers");
-        return (int)UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
 
     /* allocate key storage */
@@ -1298,7 +1298,7 @@ int rm_cmd_read(
         // this is a fatal error
         // TODO: we need better error handling
         LOGERR("Error allocating buffers");
-        return (int)UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
 
     /* split range of read request at boundaries used for
@@ -1364,7 +1364,7 @@ int rm_cmd_mread(
     }
     if (slices >= UNIFYFS_MAX_SPLIT_CNT) {
         LOGERR("Error allocating buffers");
-        return (int)UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
 
     /* allocate key storage */
@@ -1376,7 +1376,7 @@ int rm_cmd_mread(
         // this is a fatal error
         // TODO: we need better error handling
         LOGERR("Error allocating buffers");
-        return (int)UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
 
     /* get chunks corresponding to requested client read extents */
@@ -1540,7 +1540,7 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
     }
     if (slices >= UNIFYFS_MAX_SPLIT_CNT) {
         LOGERR("Error allocating buffers");
-        return (int)UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
 
     /* pointers to memory we'll dynamically allocate for file extents */
@@ -1560,7 +1560,7 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
         (NULL == key_lens) ||
         (NULL == val_lens)) {
         LOGERR("failed to allocate memory for file extents");
-        ret = (int)UNIFYFS_ERROR_NOMEM;
+        ret = ENOMEM;
         goto rm_cmd_fsync_exit;
     }
 
@@ -1710,7 +1710,7 @@ static int rm_request_remote_chunks(reqmgr_thrd_t* thrd_ctrl)
                         ret = rc;
                         LOGERR("server request rpc to %d failed - %s",
                                del_rank,
-                               unifyfs_error_enum_str((unifyfs_error_e)rc));
+                               unifyfs_rc_enum_str((unifyfs_rc)rc));
                     }
                 }
             } else {
@@ -1924,10 +1924,10 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
     if (del_reads->status != READREQ_STARTED) {
         LOGERR("chunk read response for non-started req @ index=%d",
                rdreq->req_ndx);
-        ret = (int32_t)UNIFYFS_ERROR_INVAL;
+        ret = (int32_t)EINVAL;
     } else if (0 == del_reads->total_sz) {
         LOGERR("empty chunk read response for gfid=%d", gfid);
-        ret = (int32_t)UNIFYFS_ERROR_INVAL;
+        ret = (int32_t)EINVAL;
     } else {
         LOGDBG("handling chunk read responses from server %d: "
                "gfid=%d num_chunks=%d buf_size=%zu",
@@ -2283,14 +2283,14 @@ static void chunk_read_response_rpc(hg_handle_t handle)
          * don't think that should happen unless maybe
          * we had sent a read request list that was empty? */
         LOGERR("empty response buffer");
-        ret = (int32_t)UNIFYFS_ERROR_INVAL;
+        ret = (int32_t)EINVAL;
     } else {
         /* allocate a buffer to hold the incoming data */
         char* resp_buf = (char*) malloc(bulk_sz);
         if (NULL == resp_buf) {
             /* allocation failed, that's bad */
             LOGERR("failed to allocate chunk read responses buffer");
-            ret = (int32_t)UNIFYFS_ERROR_NOMEM;
+            ret = (int32_t)ENOMEM;
         } else {
             /* got a buffer, now pull response data */
             ret = (int32_t)UNIFYFS_SUCCESS;

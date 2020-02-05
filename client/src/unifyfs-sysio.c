@@ -103,7 +103,7 @@ int UNIFYFS_WRAP(mkdir)(const char* path, mode_t mode)
         if (ret != UNIFYFS_SUCCESS) {
             /* failed to create the directory,
              * set errno and return */
-            errno = unifyfs_err_map_to_errno(ret);
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
 
@@ -150,7 +150,7 @@ int UNIFYFS_WRAP(rmdir)(const char* path)
         if (ret != UNIFYFS_SUCCESS) {
             /* failed to remove the directory,
              * set errno and return */
-            errno = unifyfs_err_map_to_errno(ret);
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
 
@@ -241,7 +241,7 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
         int ret = unifyfs_sync(gfid);
         if (ret != UNIFYFS_SUCCESS) {
             /* sync failed for some reason, set errno and return error */
-            errno = unifyfs_err_map_to_errno(ret);
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
 
@@ -297,7 +297,7 @@ int UNIFYFS_WRAP(unlink)(const char* path)
         /* delete the file */
         int ret = unifyfs_fid_unlink(fid);
         if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(ret);
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
 
@@ -336,7 +336,7 @@ int UNIFYFS_WRAP(remove)(const char* path)
         /* delete the file */
         int ret = unifyfs_fid_unlink(fid);
         if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(ret);
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
 
@@ -627,25 +627,25 @@ int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count)
     /* get the file id for this file descriptor */
     int fid = unifyfs_get_fid_from_fd(fd);
     if (fid < 0) {
-        return UNIFYFS_ERROR_BADF;
+        return EBADF;
     }
 
     /* it's an error to write to a directory */
     if (unifyfs_fid_is_dir(fid)) {
-        return UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     /* check that file descriptor is open for write */
     unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(fd);
     if (!filedesc->write) {
-        return UNIFYFS_ERROR_BADF;
+        return EBADF;
     }
 
     /* TODO: is it safe to assume that off_t is bigger than size_t? */
     /* check that our write won't overflow the length */
     if (unifyfs_would_overflow_offt(pos, (off_t) count)) {
         /* TODO: want to return EFBIG here for streams */
-        return UNIFYFS_ERROR_OVERFLOW;
+        return EOVERFLOW;
     }
 
     /* get current log size before extending the log */
@@ -684,7 +684,7 @@ int UNIFYFS_WRAP(creat)(const char* path, mode_t mode)
         off_t pos;
         int rc = unifyfs_fid_open(path, O_WRONLY | O_CREAT | O_TRUNC, mode, &fid, &pos);
         if (rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(rc);
+            errno = unifyfs_rc_errno(rc);
             return -1;
         }
 
@@ -751,7 +751,7 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
         off_t pos;
         int rc = unifyfs_fid_open(path, flags, mode, &fid, &pos);
         if (rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(rc);
+            errno = unifyfs_rc_errno(rc);
             return -1;
         }
 
@@ -1055,7 +1055,7 @@ ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
         /* write data to file */
         int write_rc = unifyfs_fd_write(fd, pos, buf, count);
         if (write_rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(write_rc);
+            errno = unifyfs_rc_errno(write_rc);
             return (ssize_t)(-1);
         }
         ret = count;
@@ -1289,28 +1289,6 @@ static void delegator_signal(void)
 static int delegator_wait(void)
 {
     int rc = (int)UNIFYFS_SUCCESS;
-
-#if defined(UNIFYFS_USE_DOMAIN_SOCKET)
-    /* wait for signal on socket */
-    cmd_fd.events = POLLIN | POLLPRI;
-    cmd_fd.revents = 0;
-    rc = poll(&cmd_fd, 1, -1);
-
-    /* check that we got something good */
-    if (rc == 0) {
-        if (cmd_fd.revents != 0) {
-            if (cmd_fd.revents == POLLIN) {
-                return UNIFYFS_SUCCESS;
-            } else {
-                printf("poll returned %d; error: %s\n", rc,  strerror(errno));
-            }
-        } else {
-            printf("poll returned %d; error: %s\n", rc,  strerror(errno));
-        }
-    } else {
-        printf("poll returned %d; error: %s\n", rc,  strerror(errno));
-    }
-#endif
 
     /* specify time to sleep between checking flag in shared
      * memory indicating server has produced */
@@ -1674,7 +1652,7 @@ static void service_local_reqs(
                 if (rc != length) {
                     /* had a problem reading,
                      * set the request error code */
-                    req->errcode = UNIFYFS_ERROR_IO;
+                    req->errcode = EIO;
                 }
             }
 
@@ -1746,7 +1724,7 @@ int unifyfs_fd_logreadlist(read_req_t* in_reqs, int in_count)
         size_t reqs_size = 2 * in_count * sizeof(read_req_t);
         reqs = (read_req_t*) malloc(reqs_size);
         if (reqs == NULL) {
-            return UNIFYFS_ERROR_NOMEM;
+            return ENOMEM;
         }
 
         /* define pointers to space where we can build our list
@@ -2036,7 +2014,7 @@ ssize_t UNIFYFS_WRAP(pwrite)(int fd, const void* buf, size_t count,
         /* write data to file */
         int write_rc = unifyfs_fd_write(fd, offset, buf, count);
         if (write_rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(write_rc);
+            errno = unifyfs_rc_errno(write_rc);
             return (ssize_t)(-1);
         }
 
@@ -2089,7 +2067,7 @@ int UNIFYFS_WRAP(ftruncate)(int fd, off_t length)
         int ret = unifyfs_sync(gfid);
         if (ret != UNIFYFS_SUCCESS) {
             /* sync failed for some reason, set errno and return error */
-            errno = unifyfs_err_map_to_errno(ret);
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
 
@@ -2131,7 +2109,7 @@ int UNIFYFS_WRAP(fsync)(int fd)
         int ret = unifyfs_sync(gfid);
         if (ret != UNIFYFS_SUCCESS) {
             /* sync failed for some reason, set errno and return error */
-            errno = unifyfs_err_map_to_errno(ret);
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
 

@@ -37,7 +37,7 @@ int unifyfs_mpi_init(int* argc, char*** argv)
     rc = unifyfs_mount("/unifyfs", rank, (size_t)world_sz, app_id);
     if (UNIFYFS_SUCCESS != rc) {
         fprintf(stderr, "UNIFYFS ERROR: unifyfs_mount() failed with '%s'\n",
-                unifyfs_error_enum_description((unifyfs_error_e)rc));
+                unifyfs_rc_enum_description((unifyfs_rc)rc));
     }
 
     return ret;
@@ -66,7 +66,7 @@ int unifyfs_mpi_finalize(void)
     rc = unifyfs_unmount();
     if (UNIFYFS_SUCCESS != rc) {
         fprintf(stderr, "UNIFYFS ERROR: unifyfs_unmount() failed with '%s'\n",
-                unifyfs_error_enum_description((unifyfs_error_e)rc));
+                unifyfs_rc_enum_description((unifyfs_rc)rc));
     }
 
     //fprintf(stderr, "DEBUG: %s - before PMPI_Finalize()\n", __func__);

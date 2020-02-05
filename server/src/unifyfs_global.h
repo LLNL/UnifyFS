@@ -47,7 +47,6 @@
 #include "unifyfs_log.h"
 #include "unifyfs_meta.h"
 #include "unifyfs_shm.h"
-#include "unifyfs_sock.h"
 
 #include <margo.h>
 #include <pthread.h>
@@ -169,8 +168,6 @@ typedef struct {
 } app_config_t;
 
 typedef int fattr_key_t;
-
-int invert_sock_ids[MAX_NUM_CLIENTS];
 
 typedef struct {
     //char* hostname;

@@ -124,7 +124,7 @@ int sm_issue_chunk_reads(int src_rank,
     char* crbuf = (char*) calloc(1, buf_sz);
     if (NULL == crbuf) {
         LOGERR("failed to allocate chunk_read_reqs");
-        return UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
 
     /* the chunk read response array starts as the first
@@ -138,7 +138,7 @@ int sm_issue_chunk_reads(int src_rank,
         calloc(1, sizeof(remote_chunk_reads_t));
     if (NULL == rcr) {
         LOGERR("failed to allocate remote_chunk_reads");
-        return UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
 
     /* fill in chunk read request */
@@ -302,7 +302,7 @@ int svcmgr_init(void)
     sm = (svcmgr_state_t*)calloc(1, sizeof(svcmgr_state_t));
     if (NULL == sm) {
         LOGERR("failed to allocate service manager state!");
-        return (int)UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
 
     /* tracks how much data we process in each burst */
@@ -313,7 +313,7 @@ int svcmgr_init(void)
     if (sm->chunk_reads == NULL) {
         LOGERR("failed to allocate service manager chunk_reads!");
         svcmgr_fini();
-        return (int)UNIFYFS_ERROR_NOMEM;
+        return ENOMEM;
     }
 
     int rc = pthread_mutex_init(&(sm->sync), NULL);
@@ -615,7 +615,7 @@ static void server_request_rpc(hg_handle_t handle)
         /* allocate and register local target buffer for bulk access */
         reqbuf = malloc(bulk_sz);
         if (NULL == reqbuf) {
-            ret = (int32_t)UNIFYFS_ERROR_NOMEM;
+            ret = (int32_t)ENOMEM;
             goto request_out;
         }
         hret = margo_bulk_create(mid, 1, &reqbuf, &in.bulk_size,
@@ -632,7 +632,7 @@ static void server_request_rpc(hg_handle_t handle)
     switch (tag) {
       default: {
         LOGERR("invalid request tag %d", tag);
-        ret = (int32_t)UNIFYFS_ERROR_INVAL;
+        ret = (int32_t)EINVAL;
         break;
       }
     }
@@ -721,7 +721,7 @@ static void chunk_read_request_rpc(hg_handle_t handle)
     } else {
         LOGERR("invalid chunk read request command %d from server %d",
                reqcmd, src_rank);
-        ret = (int32_t)UNIFYFS_ERROR_INVAL;
+        ret = (int32_t)EINVAL;
     }
 
     /* fill output structure */

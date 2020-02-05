@@ -12,9 +12,7 @@ libunifyfsd_a_SOURCES = \
     unifyfs_request_manager.c \
     unifyfs_request_manager.h \
     unifyfs_service_manager.c \
-    unifyfs_service_manager.h \
-    unifyfs_sock.c \
-    unifyfs_sock.h
+    unifyfs_service_manager.h
 
 bin_PROGRAMS = unifyfsd
 
