@@ -140,9 +140,10 @@ AS_IF([test "x$enable_fortran" = "xyes"],[
     AC_LANG_POP
 ],[])
 
-AS_IF([test "$have_C_mpi" != "yes"],[
-    AC_MSG_ERROR(["Couldn't find MPI"])
-],[])
+AS_IF([test "$have_C_mpi" != "yes"],
+    AC_MSG_ERROR(["Couldn't find MPI"]),
+    []
+)
 
 # look for leveldb library, sets LEVELDB_CFLAGS/LDFLAGS/LIBS
 UNIFYFS_AC_LEVELDB
@@ -193,9 +194,6 @@ AC_CHECK_HEADERS(mntent.h sys/mount.h)
 # HDF found?
 AX_LIB_HDF5
 AM_CONDITIONAL([HAVE_HDF5], [test x$with_hdf5 = xyes])
-
-# Look for pthreads
-AX_PTHREAD([],[AC_MSG_ERROR([pthreads are required])])
 
 # libc functions wrapped by unifyfs
 
