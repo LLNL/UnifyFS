@@ -45,7 +45,8 @@ typedef enum {
     LOG_ERR   = 2,
     LOG_WARN  = 3,
     LOG_INFO  = 4,
-    LOG_DBG   = 5
+    LOG_DBG   = 5,
+    LOG_LEVEL_MAX
 } unifyfs_log_level_t;
 
 extern unifyfs_log_level_t unifyfs_log_level;
@@ -92,6 +93,9 @@ int unifyfs_log_open(const char* file);
 /* close our debug file stream,
  * returns UNIFYFS_SUCCESS on success */
 int unifyfs_log_close(void);
+
+/* set log level */
+void unifyfs_set_log_level(unifyfs_log_level_t lvl);
 
 #ifdef __cplusplus
 } // extern "C"
