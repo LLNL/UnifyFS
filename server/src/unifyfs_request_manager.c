@@ -580,6 +580,7 @@ int rm_cmd_filesize(
                                       &num_vals, &keyvals);
     if (UNIFYFS_SUCCESS != rc) {
         /* failed to look up extents, bail with error */
+        LOGERR("failed to retrieve extent metadata for gfid=%d", gfid);
         return UNIFYFS_FAILURE;
     }
 
@@ -620,6 +621,7 @@ int rm_cmd_filesize(
         filesize_meta = fattr.size;
     } else {
         /* failed to find file attributes for this file */
+        LOGERR("failed to retrieve attributes for gfid=%d", gfid);
         return UNIFYFS_FAILURE;
     }
 
@@ -1024,6 +1026,7 @@ int rm_cmd_laminate(
     mode_t mode = (mode_t) attr.mode;
     if ((mode & S_IFMT) != S_IFREG) {
         /* item is not a regular file */
+        LOGERR("ERROR: only regular files can be laminated (gfid=%d)", gfid);
         return EINVAL;
     }
 
@@ -1032,6 +1035,7 @@ int rm_cmd_laminate(
     ret = rm_cmd_filesize(app_id, client_id, gfid, &filesize);
     if (ret != UNIFYFS_SUCCESS) {
         /* failed to get file size for file */
+        LOGERR("lamination file size calculation failed (gfid=%d)", gfid);
         return ret;
     }
 
@@ -1041,6 +1045,9 @@ int rm_cmd_laminate(
 
     /* update metadata, set size and laminate */
     rc = unifyfs_set_file_attribute(1, 1, &attr);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("lamination metadata update failed (gfid=%d)", gfid);
+    }
 
     return rc;
 }

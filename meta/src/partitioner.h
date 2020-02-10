@@ -102,11 +102,13 @@ long double get_str_num(void *key, uint32_t key_len);
 uint64_t get_byte_num(void *key, uint32_t key_len);
 int get_slice_num(struct mdhim_t *md, struct index_t *index, void *key, int key_len);
 int is_float_key(int type);
-unsigned long * get_meta_pair(void *key, uint32_t key_len);
+
 rangesrv_list *get_range_servers_from_stats(struct mdhim_t *md, struct index_t *index, 
 					    void *key, int key_len, int op);
 rangesrv_list *get_range_servers_from_range(struct mdhim_t *md, struct index_t *index, 
 					    void *start_key, void *end_key, int key_len);
+
+void* copy_unifyfs_key(void* key, uint32_t key_len);
 
 #ifdef __cplusplus
 }

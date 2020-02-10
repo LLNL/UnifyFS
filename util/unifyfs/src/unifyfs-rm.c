@@ -474,7 +474,7 @@ static int jsrun_launch(unifyfs_resource_t* resource,
     char n_nodes[16];
 
     // full command: jsrun <jsrun args> <server args>
-    jsrun_argc = 9;
+    jsrun_argc = 13;
     snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
 
     server_argc = construct_server_argv(args, NULL);
@@ -486,11 +486,15 @@ static int jsrun_launch(unifyfs_resource_t* resource,
     argv[1] = strdup("--immediate");
     argv[2] = strdup("-e");
     argv[3] = strdup("individual");
-    argv[4] = strdup("--nrs");
-    argv[5] = strdup(n_nodes);
-    argv[6] = strdup("-r1");
-    argv[7] = strdup("-c1");
-    argv[8] = strdup("-a1");
+    argv[4] = strdup("--stdio_stderr");
+    argv[5] = strdup("unifyfsd.err.%h.%p");
+    argv[6] = strdup("--stdio_stdout");
+    argv[7] = strdup("unifyfsd.out.%h.%p");
+    argv[8] = strdup("--nrs");
+    argv[9] = strdup(n_nodes);
+    argv[10] = strdup("-r1");
+    argv[11] = strdup("-c1");
+    argv[12] = strdup("-a1");
     construct_server_argv(args, argv + jsrun_argc);
 
     execvp(argv[0], argv);

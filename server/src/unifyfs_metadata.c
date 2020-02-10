@@ -255,7 +255,6 @@ int unifyfs_set_file_attribute(
         NULL, NULL);
 
     if (!brm || brm->error) {
-        LOGERR("Error inserting file attribute into MDHIM");
         rc = (int)UNIFYFS_ERROR_MDHIM;
     }
 
@@ -263,6 +262,9 @@ int unifyfs_set_file_attribute(
         mdhim_full_release_msg(brm);
     }
 
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("failed to insert attributes for gfid=%d", gfid);
+    }
     return rc;
 }
 
@@ -286,7 +288,6 @@ int unifyfs_set_file_attributes(int num_entries,
 
     /* check for errors and free resources */
     if (!brm) {
-        LOGERR("Error inserting file attributes into MDHIM");
         rc = (int)UNIFYFS_ERROR_MDHIM;
     } else {
         /* step through linked list of messages,
@@ -294,8 +295,8 @@ int unifyfs_set_file_attributes(int num_entries,
         struct mdhim_brm_t* brmp = brm;
         while (brmp) {
             /* check current item for error */
-            if (brmp->error < 0) {
-                LOGERR("Error inserting file attributes into MDHIM");
+            if (brmp->error) {
+                LOGERR("MDHIM bulk put error=%d", brmp->error);
                 rc = (int)UNIFYFS_ERROR_MDHIM;
             }
 
@@ -308,6 +309,9 @@ int unifyfs_set_file_attributes(int num_entries,
         }
     }
 
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("failed to bulk insert file attributes");
+    }
     return rc;
 }
 
@@ -338,6 +342,9 @@ int unifyfs_get_file_attribute(
         mdhim_full_release_msg(bgrm);
     }
 
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("failed to retrieve attributes for gfid=%d", gfid);
+    }
     return rc;
 }
 
@@ -355,7 +362,6 @@ int unifyfs_delete_file_attribute(
 
     /* check for errors and free resources */
     if (!brm) {
-        LOGERR("Error deleting file attributes from MDHIM");
         rc = (int)UNIFYFS_ERROR_MDHIM;
     } else {
         /* step through linked list of messages,
@@ -363,8 +369,8 @@ int unifyfs_delete_file_attribute(
         struct mdhim_brm_t* brmp = brm;
         while (brmp) {
             /* check current item for error */
-            if (brmp->error < 0) {
-                LOGERR("Error deleting file attributes from MDHIM");
+            if (brmp->error) {
+                LOGERR("MDHIM delete error=%d", brmp->error);
                 rc = (int)UNIFYFS_ERROR_MDHIM;
             }
 
@@ -377,6 +383,9 @@ int unifyfs_delete_file_attribute(
         }
     }
 
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("failed to delete attributes for gfid=%d", gfid);
+    }
     return rc;
 }
 
@@ -411,9 +420,9 @@ int unifyfs_get_file_extents(int num_keys, unifyfs_key_t** keys,
     struct mdhim_bgetrm_t* ptr = bkvlist;
     while (ptr) {
         /* check that we don't have an error condition */
-        if (ptr->error < 0) {
+        if (ptr->error) {
             /* hit an error */
-            LOGERR("MDHIM Range Query error");
+            LOGERR("MDHIM range query error=%d", ptr->error);
             return (int)UNIFYFS_ERROR_MDHIM;
         }
 
@@ -429,7 +438,7 @@ int unifyfs_get_file_extents(int num_keys, unifyfs_key_t** keys,
         tot_num, sizeof(unifyfs_keyval_t));
     if (NULL == kvs) {
         LOGERR("failed to allocate keyvals");
-        return (int)UNIFYFS_ERROR_MDHIM;
+        return ENOMEM;
     }
 
     /* iterate over list and copy each key/value into output array */
@@ -486,7 +495,6 @@ int unifyfs_set_file_extents(int num_entries,
 
     /* check for errors and free resources */
     if (!brm) {
-        LOGERR("Error inserting file extents into MDHIM");
         rc = (int)UNIFYFS_ERROR_MDHIM;
     } else {
         /* step through linked list of messages,
@@ -494,8 +502,8 @@ int unifyfs_set_file_extents(int num_entries,
         struct mdhim_brm_t* brmp = brm;
         while (brmp) {
             /* check current item for error */
-            if (brmp->error < 0) {
-                LOGERR("Error inserting file extents into MDHIM");
+            if (brmp->error) {
+                LOGERR("MDHIM bulk put error=%d", brmp->error);
                 rc = (int)UNIFYFS_ERROR_MDHIM;
             }
 
@@ -508,6 +516,9 @@ int unifyfs_set_file_extents(int num_entries,
         }
     }
 
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("failed to bulk insert file extents");
+    }
     return rc;
 }
 
@@ -529,7 +540,6 @@ int unifyfs_delete_file_extents(
 
     /* check for errors and free resources */
     if (!brm) {
-        LOGERR("Error deleting file extents from MDHIM");
         rc = (int)UNIFYFS_ERROR_MDHIM;
     } else {
         /* step through linked list of messages,
@@ -537,8 +547,8 @@ int unifyfs_delete_file_extents(
         struct mdhim_brm_t* brmp = brm;
         while (brmp) {
             /* check current item for error */
-            if (brmp->error < 0) {
-                LOGERR("Error deleting file extents from MDHIM");
+            if (brmp->error) {
+                LOGERR("MDHIM bulk delete error=%d", brmp->error);
                 rc = (int)UNIFYFS_ERROR_MDHIM;
             }
 
@@ -551,5 +561,8 @@ int unifyfs_delete_file_extents(
         }
     }
 
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("failed to bulk delete file extents");
+    }
     return rc;
 }

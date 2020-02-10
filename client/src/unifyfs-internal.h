@@ -574,8 +574,6 @@ int unifyfs_fid_unlink(int fid);
 
 /* functions used in UnifyFS */
 
-int unifyfs_generate_gfid(const char* path);
-
 int unifyfs_set_global_file_meta_from_fid(
     int fid,
     int create);

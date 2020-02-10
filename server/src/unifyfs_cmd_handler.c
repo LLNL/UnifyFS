@@ -201,6 +201,8 @@ static void unifyfs_mount_rpc(hg_handle_t handle)
     /* fill in and insert a new entry for this app_id
      * if we don't already have one */
     if (tmp_config == NULL) {
+        LOGDBG("creating app_config for app_id=%d", app_id);
+
         /* don't have an app_config for this app_id,
          * so allocate and fill one in */
         tmp_config = (app_config_t*)malloc(sizeof(app_config_t));
