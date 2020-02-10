@@ -1747,7 +1747,7 @@ static int unifyfs_init(int rank)
         if (cfgval != NULL) {
             rc = configurator_int_val(cfgval, &l);
             if (rc == 0) {
-                unifyfs_log_level = (int)l;
+                unifyfs_set_log_level((unifyfs_log_level_t)l);
             }
         }
 

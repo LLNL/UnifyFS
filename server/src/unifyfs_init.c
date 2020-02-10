@@ -282,7 +282,7 @@ int main(int argc, char* argv[])
         long l;
         rc = configurator_int_val(server_cfg.log_verbosity, &l);
         if (0 == rc) {
-            unifyfs_log_level = (int)l;
+            unifyfs_set_log_level((unifyfs_log_level_t)l);
         }
     }
 

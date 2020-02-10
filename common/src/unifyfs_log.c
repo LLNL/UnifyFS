@@ -48,6 +48,7 @@ size_t unifyfs_log_source_base_len; // = 0
 static const char* this_file = __FILE__;
 
 /* open specified file as log file stream,
+ * or stderr if no file given.
  * returns UNIFYFS_SUCCESS on success */
 int unifyfs_log_open(const char* file)
 {
@@ -59,30 +60,40 @@ int unifyfs_log_open(const char* file)
         }
     }
 
-    FILE* logf = fopen(file, "a");
-    if (logf == NULL) {
-        /* failed to open file name, fall back to stderr */
-        unifyfs_log_stream = stderr;
-        return (int)UNIFYFS_ERROR_DBG;
-    } else {
-        unifyfs_log_stream = logf;
-        return UNIFYFS_SUCCESS;
+    /* stderr is our default log file stream */
+    unifyfs_log_stream = stderr;
+
+    if (NULL != file) {
+        FILE* logf = fopen(file, "a");
+        if (NULL != logf) {
+            unifyfs_log_stream = logf;
+        } else {
+            return EINVAL;
+        }
     }
+    return (int)UNIFYFS_SUCCESS;
 }
 
-/* close our log file stream,
+/* close our log file stream.
  * returns UNIFYFS_SUCCESS on success */
 int unifyfs_log_close(void)
 {
-    if (unifyfs_log_stream == NULL) {
-        /* nothing to close */
-        return (int)UNIFYFS_ERROR_DBG;
-    } else {
-        /* if stream is open, and its not stderr, close it */
-        if (unifyfs_log_stream != stderr &&
-            fclose(unifyfs_log_stream) == 0) {
-            return UNIFYFS_SUCCESS;
+    /* if stream is open, and its not stderr, close it */
+    if (NULL != unifyfs_log_stream) {
+        if (unifyfs_log_stream != stderr) {
+            fclose(unifyfs_log_stream);
+            unifyfs_log_stream = stderr;
         }
-        return (int)UNIFYFS_ERROR_DBG;
+    }
+    return (int)UNIFYFS_SUCCESS;
+}
+
+/* set log level */
+void unifyfs_set_log_level(unifyfs_log_level_t lvl)
+{
+    if (lvl < LOG_LEVEL_MAX) {
+        unifyfs_log_level = lvl;
+    } else {
+        LOGERR("invalid log level %d", (int)lvl);
     }
 }
