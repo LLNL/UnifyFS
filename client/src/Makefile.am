@@ -39,7 +39,7 @@ CLIENT_COMMON_LIBADD = \
   $(top_builddir)/common/src/libunifyfs_common.la \
   $(MARGO_LIBS) \
   $(FLATCC_LIBS) \
-  -lcrypto -lrt -lpthread
+  -lrt -lpthread
 
 CLIENT_COMMON_SOURCES = \
   margo_client.c \

@@ -46,7 +46,6 @@
 
 #include <time.h>
 #include <mpi.h>
-#include <openssl/md5.h>
 
 #ifdef UNIFYFS_GOTCHA
 #include "gotcha/gotcha_types.h"
@@ -594,22 +593,6 @@ int unifyfs_fid_is_dir(int fid)
         /* if it doesn't exist, then it's not a directory? */
         return 0;
     }
-}
-
-/*
- * hash a path to gfid
- * @param path: file path
- * return: gfid
- */
-int unifyfs_generate_gfid(const char* path)
-{
-    unsigned char digested[16] = { 0, };
-    unsigned long len = strlen(path);
-    int* ival = (int*) digested;
-
-    MD5((const unsigned char*) path, len, digested);
-
-    return abs(ival[0]);
 }
 
 int unifyfs_gfid_from_fid(const int fid)

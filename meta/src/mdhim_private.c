@@ -357,7 +357,6 @@ struct mdhim_bgetrm_t *_bget_records(struct mdhim_t *md, struct index_t *index,
 		if ((op == MDHIM_GET_EQ || op == MDHIM_GET_PRIMARY_EQ || op == MDHIM_RANGE_BGET) &&
 		    index->type != LOCAL_INDEX &&
 		    (rl = get_range_servers(md, index, keys[i], key_lens[i])) == NULL) {
-			printf("here\n"); fflush(stdout);
 			mlog(MDHIM_CLIENT_CRIT, "MDHIM Rank: %d - "
 			     "Error while determining range server in mdhimBget",
 			     md->mdhim_rank);

@@ -27,20 +27,6 @@
 extern "C" {
 #endif
 
-/**
- * Server commands
- */
-typedef enum {
-    COMM_MOUNT,
-    COMM_META_FSYNC,
-    COMM_META_GET,
-    COMM_META_SET,
-    COMM_READ,
-    COMM_UNMOUNT,
-    COMM_DIGEST,
-    COMM_SYNC_DEL,
-} cmd_lst_t;
-
 typedef struct {
     int gfid;
     char filename[UNIFYFS_MAX_FILENAME];
@@ -101,6 +87,36 @@ typedef struct {
     size_t length;  /* length of data */
     int gfid;       /* global file id */
 } unifyfs_index_t;
+
+/*
+ * Hash a file path to a uint64_t using MD5
+ * @param path absolute file path
+ * @return hash value
+ */
+uint64_t compute_path_md5(const char* path);
+
+/*
+ * Hash a file path to an integer gfid
+ * @param path absolute file path
+ * @return gfid
+ */
+static inline
+int unifyfs_generate_gfid(const char* path)
+{
+    /* until we support 64-bit gfids, use top 32 bits */
+    uint64_t hash64 = compute_path_md5(path);
+    uint32_t hash32 = (uint32_t)(hash64 >> 32);
+
+    /* TODO: Remove next statement once we get rid of MDHIM.
+     *
+     * MDHIM requires positive values for integer keys, due to the way
+     * slice servers are calculated. We use an integer key for the
+     * gfid -> file attributes index. To guarantee a positive value, we
+     * shift right one bit to make sure the top bit is zero. */
+    hash32 = hash32 >> 1;
+
+    return (int)hash32;
+}
 
 /* Header for read request reply in client shared memory region.
  * The associated data payload immediately follows the header in
