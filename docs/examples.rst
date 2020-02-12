@@ -141,3 +141,59 @@ One form of running this example could be:
 .. explicit external hyperlink targets
 
 .. _examples: https://github.com/LLNL/UnifyFS/tree/dev/examples/src
+
+<<<<<<< HEAD
+Transfer API
+------------
+
+UnifyFS has a transfer API to move files from UnifyFS to external storage (or from external storage into UnifyFS).  The transfer functionality can be invoked by using the "transfer" application in the examples directory as show in the following example:
+
+.. code-block:: Bash
+
+    $ srun -N4 -n4 transfer-static /unifyfs/file1 /scratch/mydir/file1
+
+(assuming that /unifyfs/file1 is a file you've written into UnifyFS from an application.)  To use the transfer API functions directly in a C program, use the following code fragment as a template:
+
+.. code-block:: C
+
+   if (parallel) {
+        // use the parallel case for files of any size for increased efficiency
+        ret = unifyfs_transfer_file_parallel(srcpath, dstpath);
+        if (ret) {
+            fprintf(stderr, "copy failed (%d: %s)", ret, strerror(ret));
+        }
+    } else {
+        // use the serial case only for small files
+        if (rank_worker >= total_ranks) {
+            test_print(rank, "%d is not a valid rank");
+            goto out;
+        }
+
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        if (rank == rank_worker) {
+            ret = unifyfs_transfer_file_serial(srcpath, dstpath);
+            if (ret) {
+                fprintf(stderr, "copy failed (%d: %s)", ret, strerror(ret));
+            }
+        }
+    }
+    ...
+    out:
+    MPI_Finalize();
+
+    return ret;
+
+This code fragment is from the code example.c in the UnifyFS examples directory.
+=======
+Transfer API
+------------
+
+UnifyFS has a transfer API to move files from the UnifyFS file space out to external storage (or from external storage into the UnifyFS file space).  This can be invoked using the function API by linking, or using the available "transfer" application availalbe in the examples directory.  The example code also serves as a template for using the C function API.
+
+.. code-block:: Bash
+
+    $ srun -N4 -n4 transfer-static /unifyfs/snapshot.bin /scratch/snaps/snapshot.bin
+
+(assuming that /unifyfs/snapshot.bin is a file you've written within the UnifyFS file space by an application.)
+>>>>>>> db74c39... Transfer API doc
