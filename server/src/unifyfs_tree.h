@@ -73,4 +73,38 @@ void state_filesize_free(unifyfs_state_filesize_t** pst);
 /* forward file size request to children */
 void filesize_request_forward(unifyfs_state_filesize_t* st);
 
+/* this structure tracks the state of an outstanding truncate
+ * bcast/reduce collective, it is allocated when a new operation
+ * is started and freed once the process compeltes its portion
+ * of the operation */
+typedef struct {
+  int root;            /* root of the tree (server making request) */
+  unifyfs_tree_t tree; /* tree structure for given root */
+  int gfid;            /* global file id of request */
+  int32_t parent_tag;  /* tag we use in our reply to our parent */
+  int32_t tag;         /* tag children will use in their replies to us */
+  int num_responses;   /* number of replies we have received from children */
+  size_t length;       /* target file size to truncate */
+  int err;             /* returns UNIFYFS_SUCCESS/ERROR code on operation */
+  ABT_mutex mutex;     /* argobots mutex to protect condition variable below */
+  ABT_cond cond;       /* argobots condition variable root server waits on */
+} unifyfs_state_truncate_t;
+
+/* allocate a structure defining the state for a truncate collective */
+unifyfs_state_truncate_t* state_truncate_alloc(
+    int root,      /* rank of server making request */
+    int gfid,      /* global file id of request */
+    size_t length, /* target file size to truncate */
+    int32_t ptag,  /* tag to use when sending replies to parent */
+    int32_t tag    /* tag out children should use when sending to us */
+);
+
+/* free structure allocated in call to state_truncate_alloc,
+ * caller should pass address of pointer to structure,
+ * which the call with set to NULL */
+void state_truncate_free(unifyfs_state_truncate_t** pst);
+
+/* forward truncate request to children */
+void truncate_request_forward(unifyfs_state_truncate_t* st);
+
 #endif /* UNIFYFS_TREE_H */

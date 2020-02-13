@@ -1045,6 +1045,62 @@ int rm_cmd_truncate(
         goto truncate_exit;
     }
 
+
+    /* hs; new truncate code */
+    /* allocate a new structure to track state of this filesize operation,
+     * we assign an integer tag to this structure which we pass to any process
+     * that will later send us a response, that process will include this tag
+     * in its response, and we use the tag value on that incoming message to
+     * lookup the structure using a tag2state map */
+    // TODO: protect these structures from concurrent rpcs with locking
+    int tag = unifyfs_stack_pop(glb_tag_stack);
+    if (tag < 0) {
+        // ERROR!
+    }
+    unifyfs_state_truncate_t* st = state_truncate_alloc(glb_pmi_rank,
+        gfid, newsize, -1, tag);
+    int2void_add(&glb_tag2state, st->tag, (void*)st);
+
+    /* lock structure until we can wait on it */
+    if (glb_pmi_size > 1) {
+        /* init mutex and lock before we use them,
+         * these are only needed on the root server */
+        ABT_mutex_create(&st->mutex);
+        ABT_cond_create(&st->cond);
+
+        /* lock the mutex */
+        ABT_mutex_lock(st->mutex);
+    }
+
+    /* start the reduction to get the file size */
+    truncate_request_forward(st);
+
+    /* wait on signal that reduction has completed */
+    if (glb_pmi_size > 1) {
+        ABT_cond_wait(st->cond, st->mutex);
+    }
+
+    /* have result at this point, get it */
+    //filesize = st->filesize;
+    printf("BUCKEYES got a response of %d (truncate)\n", st->err);
+    fflush(stdout);
+
+    /* set error code if file size operation failed */
+    if (st->err != UNIFYFS_SUCCESS) {
+        rc = st->err;
+    }
+
+    /* release lock and free state */
+    if (glb_pmi_size > 1) {
+        ABT_mutex_unlock(st->mutex);
+    }
+    // TODO: need to protect tag stack with locking
+    // TODO: delete tag-->state entry in tag2state map
+    int2void_delete(&glb_tag2state, st->tag);
+    unifyfs_stack_push(glb_tag_stack, st->tag);
+    state_truncate_free(&st);
+    /* hs; new truncate code */
+
 truncate_exit:
 
     /* free off key/value buffer returned from get_file_extents */
