@@ -18,6 +18,7 @@ if HAVE_LD_WRAP
   sysio-dir-static \
   sysio-stat-static \
   sysio-cp-static \
+  sysio-truncate-static \
   app-mpiio-static \
   app-btio-static \
   app-tileio-static \
@@ -42,6 +43,7 @@ if HAVE_GOTCHA
     sysio-dir-gotcha \
     sysio-stat-gotcha \
     sysio-cp-gotcha \
+    sysio-truncate-gotcha \
     app-mpiio-gotcha \
     app-btio-gotcha \
     app-tileio-gotcha \
@@ -176,6 +178,16 @@ sysio_cp_static_SOURCES  = sysio-cp.c
 sysio_cp_static_CPPFLAGS = $(test_cppflags)
 sysio_cp_static_LDADD    = $(test_static_ldadd)
 sysio_cp_static_LDFLAGS  = $(test_static_ldflags)
+
+sysio_truncate_gotcha_SOURCES  = sysio-truncate.c
+sysio_truncate_gotcha_CPPFLAGS = $(test_cppflags)
+sysio_truncate_gotcha_LDADD    = $(test_gotcha_ldadd)
+sysio_truncate_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+sysio_truncate_static_SOURCES  = sysio-truncate.c
+sysio_truncate_static_CPPFLAGS = $(test_cppflags)
+sysio_truncate_static_LDADD    = $(test_static_ldadd)
+sysio_truncate_static_LDFLAGS  = $(test_static_ldflags)
 
 cr_posix_SOURCES  = checkpoint-restart.c
 cr_posix_CPPFLAGS = $(test_posix_cppflags)

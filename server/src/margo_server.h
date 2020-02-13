@@ -23,6 +23,8 @@ typedef struct ServerRpcIds {
     hg_id_t chunk_read_response_id;
     hg_id_t filesize_request_id;
     hg_id_t filesize_response_id;
+    hg_id_t truncate_request_id;
+    hg_id_t truncate_response_id;
 } server_rpcs_t;
 
 typedef struct ServerRpcContext {
