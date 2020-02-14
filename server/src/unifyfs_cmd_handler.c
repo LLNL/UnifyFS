@@ -529,7 +529,7 @@ DEFINE_MARGO_RPC_HANDLER(unifyfs_truncate_rpc)
 static void unifyfs_unlink_rpc(hg_handle_t handle)
 {
     /* get input params */
-    unifyfs_truncate_in_t in;
+    unifyfs_unlink_in_t in;
     hg_return_t hret = margo_get_input(handle, &in);
     assert(hret == HG_SUCCESS);
 
@@ -537,7 +537,7 @@ static void unifyfs_unlink_rpc(hg_handle_t handle)
     int ret = rm_cmd_unlink(in.app_id, in.local_rank_idx, in.gfid);
 
     /* build our output values */
-    unifyfs_truncate_out_t out;
+    unifyfs_unlink_out_t out;
     out.ret = (int32_t) ret;
 
     /* return to caller */
