@@ -121,6 +121,27 @@ MERCURY_GEN_PROC(truncate_response_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(truncate_response_rpc)
 
+/* unlink_request_rpc (server => server)
+ *
+ * initiates unlink request operation */
+MERCURY_GEN_PROC(unlink_request_in_t,
+                 ((int32_t)(root))
+                 ((int32_t)(gfid))
+                 ((int32_t)(tag)))
+MERCURY_GEN_PROC(unlink_request_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unlink_request_rpc)
+
+/* unlink_response_rpc (server => server)
+ *
+ * response to unlink request */
+MERCURY_GEN_PROC(unlink_response_in_t,
+                 ((int32_t)(tag))
+                 ((int32_t)(err)))
+MERCURY_GEN_PROC(unlink_response_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unlink_response_rpc)
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
