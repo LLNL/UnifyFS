@@ -3,10 +3,12 @@
 #include <pthread.h>
 #include "tree.h"
 #include "extent_tree.h"
+#include "unifyfs_meta.h"
 
 struct gfid2ext_tree_node {
     RB_ENTRY(gfid2ext_tree_node) gfid2extentry;
     int gfid;                    /* global file id */
+    unifyfs_file_attr_t attr;    /* file attribute (stat) */
     struct extent_tree* extents; /* extents for given file */
 };
 
