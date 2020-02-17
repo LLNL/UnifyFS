@@ -25,6 +25,8 @@
 #include <mercury_proc_string.h>
 #include <mercury_types.h>
 
+#include "unifyfs_rpc_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -68,28 +70,15 @@ MERCURY_GEN_PROC(unifyfs_unmount_in_t,
 MERCURY_GEN_PROC(unifyfs_unmount_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_unmount_rpc)
 
-/* need to transfer timespec structs */
-typedef struct timespec sys_timespec_t;
-MERCURY_GEN_STRUCT_PROC(sys_timespec_t,
-                        ((uint64_t)(tv_sec))
-                        ((uint64_t)(tv_nsec)))
-
 /* unifyfs_metaset_rpc (client => server)
  *
  * given a global file id and a file name,
  * record key/value entry for this file */
 MERCURY_GEN_PROC(unifyfs_metaset_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(local_rank_idx))
                  ((int32_t)(create))
-                 ((hg_const_string_t)(filename))
-                 ((int32_t)(gfid))
-                 ((uint32_t)(mode))
-                 ((uint32_t)(uid))
-                 ((uint32_t)(gid))
-                 ((uint64_t)(size))
-                 ((sys_timespec_t)(atime))
-                 ((sys_timespec_t)(mtime))
-                 ((sys_timespec_t)(ctime))
-                 ((uint32_t)(is_laminated)))
+                 ((unifyfs_file_attr_t)(attr)))
 MERCURY_GEN_PROC(unifyfs_metaset_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_metaset_rpc)
 
@@ -101,16 +90,7 @@ MERCURY_GEN_PROC(unifyfs_metaget_in_t,
                  ((int32_t)(gfid)))
 MERCURY_GEN_PROC(unifyfs_metaget_out_t,
                  ((int32_t)(ret))
-                 ((hg_const_string_t)(filename))
-                 ((int32_t)(gfid))
-                 ((uint32_t)(mode))
-                 ((uint32_t)(uid))
-                 ((uint32_t)(gid))
-                 ((uint64_t)(size))
-                 ((sys_timespec_t)(atime))
-                 ((sys_timespec_t)(mtime))
-                 ((sys_timespec_t)(ctime))
-                 ((uint32_t)(is_laminated)))
+                 ((unifyfs_file_attr_t)(attr)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_metaget_rpc)
 
 /* unifyfs_sync_rpc (client => server)

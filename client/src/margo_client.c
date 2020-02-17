@@ -379,16 +379,7 @@ int invoke_client_metaget_rpc(int gfid, unifyfs_file_attr_t* file_meta)
     if (ret == (int32_t)UNIFYFS_SUCCESS) {
         /* fill in results  */
         memset(file_meta, 0, sizeof(unifyfs_file_attr_t));
-        strcpy(file_meta->filename, out.filename);
-        file_meta->gfid  = gfid;
-        file_meta->mode  = out.mode;
-        file_meta->uid   = out.uid;
-        file_meta->gid   = out.gid;
-        file_meta->size  = out.size;
-        file_meta->atime = out.atime;
-        file_meta->mtime = out.mtime;
-        file_meta->ctime = out.ctime;
-        file_meta->is_laminated = out.is_laminated;
+        *file_meta = out.attr;
     }
 
     /* free resources */

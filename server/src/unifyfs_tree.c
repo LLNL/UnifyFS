@@ -989,3 +989,268 @@ static void unlink_response_rpc(hg_handle_t handle)
     unlink_response_forward(st);
 }
 DEFINE_MARGO_RPC_HANDLER(unlink_response_rpc)
+
+/******************************************************************
+ * metaset 
+ ******************************************************************/
+
+static int rpc_invoke_metaset_request(int rank, unifyfs_coll_state_t* st)
+{
+    int rc = (int)UNIFYFS_SUCCESS;
+
+    /* get address for specified server rank */
+    hg_addr_t addr = glb_servers[rank].margo_svr_addr;
+
+    /* get handle to rpc function */
+    hg_handle_t handle;
+    hg_return_t hret = margo_create(unifyfsd_rpc_context->svr_mid, addr,
+        unifyfsd_rpc_context->rpcs.metaset_request_id, &handle);
+    assert(hret == HG_SUCCESS);
+
+    /* fill in input struct */
+    unifyfs_file_attr_t *attr = &st->attr;
+    metaset_request_in_t in;
+    in.root   = (int32_t)st->root;
+    in.tag    = (int32_t)st->tag;
+    in.create = (int32_t)st->create;
+    in.attr   = *attr;
+
+    /* call rpc function */
+    hret = margo_forward(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* wait for rpc output */
+    metaset_request_out_t out;
+    hret = margo_get_output(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* decode response */
+    rc = (int) out.ret;
+
+    /* free resources */
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+
+    return rc;
+}
+
+static int rpc_invoke_metaset_response(int rank, unifyfs_coll_state_t* st)
+{
+    int rc = (int)UNIFYFS_SUCCESS;
+
+    /* get address for specified server rank */
+    hg_addr_t addr = glb_servers[rank].margo_svr_addr;
+
+    /* get handle to rpc function */
+    hg_handle_t handle;
+    hg_return_t hret = margo_create(unifyfsd_rpc_context->svr_mid, addr,
+        unifyfsd_rpc_context->rpcs.metaset_response_id, &handle);
+    assert(hret == HG_SUCCESS);
+
+    /* fill in input struct */
+    metaset_response_in_t in;
+    in.tag      = (int32_t) st->parent_tag;
+    in.err      = (int32_t) st->err;
+
+    /* call rpc function */
+    hret = margo_forward(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* wait for rpc output */
+    metaset_response_out_t out;
+    hret = margo_get_output(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* decode response */
+    rc = (int) out.ret;
+
+    /* free resources */
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+
+    return rc;
+}
+
+static void metaset_response_forward(unifyfs_coll_state_t* st)
+{
+    printf("%d: BUCKEYES response_forward (metaset)\n", glb_pmi_rank);
+    fflush(stdout);
+    /* get tree we're using for this operation */
+    unifyfs_tree_t* t = &st->tree;
+
+    /* get info for tree */
+    int parent       = t->parent_rank;
+    int child_count  = t->child_count;
+    int* child_ranks = t->child_ranks;
+
+    /* send up to parent if we have gotten all replies */
+    if (st->num_responses == child_count) {
+        /* metaset the file */
+        int ret = gfid2ext_tree_metaset(&glb_gfid2ext, st->gfid, st->create,
+                                        &st->attr);
+
+        /* send result to parent if we have one */
+        if (parent != -1) {
+            printf("%d: BUCKEYES metaset=%d\n", glb_pmi_rank, ret);
+            fflush(stdout);
+            rpc_invoke_metaset_response(parent, st);
+
+            /* free state */
+            // TODO: need to protect this code with pthread/margo locks
+            int2void_delete(&glb_tag2state, st->tag);
+            unifyfs_stack_push(glb_tag_stack, st->tag);
+            unifyfs_coll_state_free(&st);
+        } else {
+            /* we're the root, deliver result back to client */
+            printf("BUCKEYES metaset=%d, all complete err=%d\n", ret, st->err);
+            fflush(stdout);
+
+            /* to wake up requesting thread,
+             * lock structure, signal condition variable, unlock */
+            if (glb_pmi_size > 1) {
+                /* if we had no children, then it's the main thread
+                 * calling this function and we skip the condition
+                 * variable to avoid deadlocking */
+                ABT_mutex_lock(st->mutex);
+                ABT_cond_signal(st->cond);
+                ABT_mutex_unlock(st->mutex);
+            }
+
+            /* the requesting thread will release state strucutre
+             * so we don't free it here */
+        }
+    }
+}
+
+void metaset_request_forward(unifyfs_coll_state_t* st)
+{
+    /* get tree we're using for this operation */
+    unifyfs_tree_t* t = &st->tree;
+
+    /* get info for tree */
+    int parent       = t->parent_rank;
+    int child_count  = t->child_count;
+    int* child_ranks = t->child_ranks;
+
+    printf("%d: BUCKEYES request_forward (metaset:%s)\n",
+           glb_pmi_rank, st->attr.filename);
+    fflush(stdout);
+
+
+    /* forward request down the tree */
+    int i;
+    for (i = 0; i < child_count; i++) {
+        /* get rank of this child */
+        int child = child_ranks[i];
+
+        /* invoke metaset request rpc on child */
+        rpc_invoke_metaset_request(child, st);
+    }
+
+    /* if we are a leaf, get metaset and forward back to parent */
+    if (child_count == 0) {
+        metaset_response_forward(st);
+    }
+}
+
+/* request a metaset operation to all servers for a given file
+ * from a given server */
+static void metaset_request_rpc(hg_handle_t handle)
+{
+    printf("%d: BUCKEYES request_rpc (metaset)\n", glb_pmi_rank);
+    fflush(stdout);
+
+    /* assume we'll succeed */
+    int32_t ret = UNIFYFS_SUCCESS;
+
+    /* get input params */
+    metaset_request_in_t in;
+    hg_return_t hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* get root of tree and global file id to lookup metaset
+     * record tag calling process wants us to include in our
+     * later response */
+    int root      = (int) in.root;
+    int32_t ptag  = (int32_t) in.tag;
+    int create    = (int) in.create;
+
+    unifyfs_file_attr_t fattr = { 0, };
+    fattr = in.attr;
+
+    /* build our output values */
+    metaset_request_out_t out;
+    out.ret = ret;
+
+    /* send output back to caller */
+    hret = margo_respond(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* free margo resources */
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+
+    // TODO: protect these structures from concurrent rpcs with locking
+    int32_t tag = unifyfs_stack_pop(glb_tag_stack);
+    if (tag < 0) {
+        // ERROR!
+    }
+    unifyfs_coll_state_t* st = unifyfs_coll_state_alloc(root, fattr.gfid, ptag,
+                                                        tag);
+    st->create = create;
+    st->attr = fattr;
+
+    int2void_add(&glb_tag2state, st->tag, (void*)st);
+
+    /* forward request to children if needed */
+    metaset_request_forward(st);
+}
+DEFINE_MARGO_RPC_HANDLER(metaset_request_rpc)
+
+/* allreduce of max metaset from each child */
+static void metaset_response_rpc(hg_handle_t handle)
+{
+    printf("%d: BUCKEYES response_rpc (metaset)\n", glb_pmi_rank);
+    fflush(stdout);
+
+    /* assume we'll succeed */
+    int32_t ret = UNIFYFS_SUCCESS;
+
+    /* get input params */
+    metaset_response_in_t in;
+    hg_return_t hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* get tag which points to structure desribing the collective
+     * this message is for, then get the metaset from this child */
+    int32_t tag     = (int32_t) in.tag;
+    int err         = (int32_t) in.err;
+
+    /* build our output values */
+    metaset_response_out_t out;
+    out.ret = ret;
+
+    /* send output back to caller */
+    hret = margo_respond(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* free margo resources */
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+
+    /* lookup state structure corresponding to this incoming rpc */
+    unifyfs_coll_state_t* st = get_coll_state(tag);
+
+    /* bubble up error code to parent if child hit an error */
+    if (err != UNIFYFS_SUCCESS) {
+        st->err = err;
+    }
+
+    /* bump up number of replies we have gotten */
+    st->num_responses++;
+
+    /* send reseponse if it's ready */
+    metaset_response_forward(st);
+}
+DEFINE_MARGO_RPC_HANDLER(metaset_response_rpc)
+

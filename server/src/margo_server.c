@@ -127,6 +127,16 @@ static void register_server_server_rpcs(margo_instance_id mid)
                        truncate_response_in_t, truncate_response_out_t,
                        truncate_response_rpc);
 
+    unifyfsd_rpc_context->rpcs.metaset_request_id =
+        MARGO_REGISTER(mid, "metaset_request_rpc",
+                       metaset_request_in_t, metaset_request_out_t,
+                       metaset_request_rpc);
+
+    unifyfsd_rpc_context->rpcs.metaset_response_id =
+        MARGO_REGISTER(mid, "metaset_response_rpc",
+                       metaset_response_in_t, metaset_response_out_t,
+                       metaset_response_rpc);
+
     unifyfsd_rpc_context->rpcs.unlink_request_id =
         MARGO_REGISTER(mid, "unlink_request_rpc",
                        unlink_request_in_t, unlink_request_out_t,

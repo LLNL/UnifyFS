@@ -104,6 +104,10 @@ int rm_cmd_read(int app_id, int client_id, int gfid,
 
 int rm_cmd_filesize(int app_id, int client_id, int gfid, size_t* outsize);
 
+/* create a file or update attribute */
+int rm_cmd_metaset(int app_id, int client_id, int gfid, int create,
+                   unifyfs_file_attr_t* attr);
+
 /* truncate file to specified size */
 int rm_cmd_truncate(int app_id, int client_id, int gfid, size_t size);
 

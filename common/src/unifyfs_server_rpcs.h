@@ -5,10 +5,13 @@
  * Declarations for server-server margo RPCs
  */
 
+#include <time.h>
 #include <margo.h>
 #include <mercury.h>
 #include <mercury_proc_string.h>
 #include <mercury_types.h>
+
+#include "unifyfs_rpc_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -120,6 +123,50 @@ MERCURY_GEN_PROC(truncate_response_in_t,
 MERCURY_GEN_PROC(truncate_response_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(truncate_response_rpc)
+
+/* metaset_request_rpc (server => server)
+ *
+ * initiates metaset request operation */
+MERCURY_GEN_PROC(metaset_request_in_t,
+                 ((int32_t)(root))
+                 ((int32_t)(tag))
+                 ((int32_t)(create))
+                 ((unifyfs_file_attr_t)(attr)))
+MERCURY_GEN_PROC(metaset_request_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(metaset_request_rpc)
+
+/* metaset_response_rpc (server => server)
+ *
+ * response to metaset request */
+MERCURY_GEN_PROC(metaset_response_in_t,
+                 ((int32_t)(tag))
+                 ((int32_t)(err)))
+MERCURY_GEN_PROC(metaset_response_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(metaset_response_rpc)
+
+/* metaget_request_rpc (server => server)
+ *
+ * initiates metaget request operation */
+MERCURY_GEN_PROC(metaget_request_in_t,
+                 ((int32_t)(root))
+                 ((int32_t)(tag))
+                 ((int32_t)(gfid)))
+MERCURY_GEN_PROC(metaget_request_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(metaget_request_rpc)
+
+/* metaget_response_rpc (server => server)
+ *
+ * response to metaget request */
+MERCURY_GEN_PROC(metaget_response_in_t,
+                 ((int32_t)(tag))
+                 ((int32_t)(err)))
+MERCURY_GEN_PROC(metaget_response_out_t,
+                 ((int32_t)(ret))
+                 ((unifyfs_file_attr_t)(attr)))
+DECLARE_MARGO_RPC_HANDLER(metaget_response_rpc)
 
 /* unlink_request_rpc (server => server)
  *
