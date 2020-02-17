@@ -219,21 +219,13 @@ static void unifyfs_metaget_rpc(hg_handle_t handle)
     /* given the global file id, look up file attributes
      * from key/value store */
     unifyfs_file_attr_t attr_val;
-    int ret = unifyfs_get_file_attribute(in.gfid, &attr_val);
+    //int ret = unifyfs_get_file_attribute(in.gfid, &attr_val);
+    int ret = gfid2ext_tree_metaget(&glb_gfid2ext, in.gfid, &attr_val);
 
     /* build our output values */
     unifyfs_metaget_out_t out;
-    out.gfid         = attr_val.gfid;
-    out.mode         = attr_val.mode;
-    out.uid          = attr_val.uid;
-    out.gid          = attr_val.gid;
-    out.size         = attr_val.size;
-    out.atime        = attr_val.atime;
-    out.mtime        = attr_val.mtime;
-    out.ctime        = attr_val.ctime;
-    out.filename     = attr_val.filename;
-    out.is_laminated = attr_val.is_laminated;
-    out.ret          = ret;
+    out.attr = attr_val;
+    out.ret  = ret;
 
     /* send output back to caller */
     hret = margo_respond(handle, &out);
@@ -256,7 +248,6 @@ static void unifyfs_metaset_rpc(hg_handle_t handle)
 
     /* store file name for given global file id */
     unifyfs_file_attr_t fattr;
-    memset(&fattr, 0, sizeof(fattr));
     int create         = (int) in.create;
     fattr.gfid         = in.gfid;
     strlcpy(fattr.filename, in.filename, sizeof(fattr.filename));
@@ -271,7 +262,10 @@ static void unifyfs_metaset_rpc(hg_handle_t handle)
 
     /* if we're creating the file,
      * we initialize both the size and laminate flags */
-    int ret = unifyfs_set_file_attribute(create, create, &fattr);
+    //int ret = unifyfs_set_file_attribute(create, create, &fattr);
+
+    /* use the new collective for file creation */
+    int ret = rm_cmd_metaset(in.app_id, in.local_rank_idx, fattr.gfid, create, &fattr);
 
     /* build our output values */
     unifyfs_metaset_out_t out;
@@ -302,7 +296,7 @@ static void unifyfs_sync_rpc(hg_handle_t handle)
     int ret = rm_cmd_sync(in.app_id, in.client_id);
 
     /* build our output values */
-    unifyfs_metaset_out_t out;
+    unifyfs_fsync_out_t out;
     out.ret = ret;
 
     /* return to caller */

@@ -329,12 +329,32 @@ int main(int argc, char** argv)
 
     if (pattern == IO_PATTERN_NN) {
         sprintf(&targetfile[strlen(targetfile)], "-%d", rank);
-    }
 
-    fd = open(targetfile, O_RDWR | O_CREAT | O_TRUNC, 0600);
-    if (fd < 0) {
-        test_print(rank, "open failed");
-        exit(-1);
+        fd = open(targetfile, O_RDWR | O_CREAT | O_TRUNC, 0600);
+        if (fd < 0) {
+            test_print(rank, "open failed");
+            exit(-1);
+        }
+    } else {
+        if (rank == 0) {
+            fd = open(targetfile, O_RDWR | O_CREAT | O_TRUNC, 0600);
+            if (fd < 0) {
+                test_print(rank, "open failed");
+                exit(-1);
+            }
+        }
+
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        if (rank > 0) {
+            fd = open(targetfile, O_RDWR, 0600);
+            if (fd < 0) {
+                test_print(rank, "open failed");
+                exit(-1);
+            }
+        }
+
+        MPI_Barrier(MPI_COMM_WORLD);
     }
 
     ret = do_write();

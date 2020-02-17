@@ -53,8 +53,10 @@ typedef struct {
   ABT_cond cond;       /* argobots condition variable root server waits on */
 
   /* operation specific information */
-  int gfid;            /* global file id of request */
-  size_t filesize;     /* running max of file size */
+  int gfid;                  /* global file id of request */
+  size_t filesize;           /* running max of file size */
+  int create;                /* is this for creating a new entry? */
+  unifyfs_file_attr_t attr;  /* file attribute */
 } unifyfs_coll_state_t;
 
 /* allocate a structure defining the state for a file size collective */
@@ -73,6 +75,7 @@ void unifyfs_coll_state_free(unifyfs_coll_state_t** pst);
 /* forward request to children */
 void filesize_request_forward(unifyfs_coll_state_t* st);
 void truncate_request_forward(unifyfs_coll_state_t* st);
+void metaset_request_forward(unifyfs_coll_state_t* st);
 void unlink_request_forward(unifyfs_coll_state_t* st);
 
 #endif /* UNIFYFS_TREE_H */
