@@ -1,5 +1,6 @@
 #ifndef __GFID2EXT_TREE_H__
 #define __GFID2EXT_TREE_H__
+#include <assert.h>
 #include <pthread.h>
 #include "tree.h"
 #include "extent_tree.h"
@@ -9,6 +10,7 @@ struct gfid2ext_tree_node {
     RB_ENTRY(gfid2ext_tree_node) gfid2extentry;
     int gfid;                    /* global file id */
     unifyfs_file_attr_t attr;    /* file attribute (stat) */
+    pthread_rwlock_t rwlock;     /* rw lock for accessing @attr */
     struct extent_tree* extents; /* extents for given file */
 };
 
@@ -34,7 +36,23 @@ void gfid2ext_tree_destroy(struct gfid2ext_tree* tree);
 /*
  * Add an entry to the range tree.  Returns 0 on success, nonzero otherwise.
  */
-int gfid2ext_tree_add(
+int gfid2ext_tree_metaset(
+    struct gfid2ext_tree* tree, /* tree to add new extent item */
+    int gfid,                   /* global file id */
+    int create,                 /* is this creating a new entry? */
+    unifyfs_file_attr_t *attr   /* initial file attribute */
+);
+
+int gfid2ext_tree_metaget(
+    struct gfid2ext_tree* tree, /* tree to add new extent item */
+    int gfid,                   /* global file id */
+    unifyfs_file_attr_t *attr   /* initial file attribute */
+);
+
+/*
+ * Add an entry to the range tree.  Returns 0 on success, nonzero otherwise.
+ */
+int gfid2ext_tree_add_extent(
     struct gfid2ext_tree* tree, /* tree to add new extent item */
     int gifd,                   /* global file id */
     struct extent_tree* extents /* extent tree for given gfid */
@@ -127,5 +145,23 @@ void gfid2ext_tree_wrlock(struct gfid2ext_tree* tree);
  * own locking.
  */
 void gfid2ext_tree_unlock(struct gfid2ext_tree* tree);
+
+static inline
+void gfid2ext_tree_node_rdlock(struct gfid2ext_tree_node* n)
+{
+    assert(pthread_rwlock_rdlock(&n->rwlock) == 0);
+}
+
+static inline
+void gfid2ext_tree_node_wrlock(struct gfid2ext_tree_node* n)
+{
+    assert(pthread_rwlock_wrlock(&n->rwlock) == 0);
+}
+
+static inline
+void gfid2ext_tree_node_unlock(struct gfid2ext_tree_node* n)
+{
+    assert(pthread_rwlock_unlock(&n->rwlock) == 0);
+}
 
 #endif /* __GFID2EXT_TREE_H__ */

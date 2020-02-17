@@ -79,6 +79,7 @@ void gfid2ext_tree_destroy(struct gfid2ext_tree* tree)
 /* Allocate a node for the tree.  Free node with free() when finished */
 static struct gfid2ext_tree_node* gfid2ext_tree_node_alloc(
     int gfid,                    /* global file id */
+    unifyfs_file_attr_t* attr,   /* initial file attribute */
     struct extent_tree* extents) /* extents for gfid */
 {
     /* allocate a new node structure */
@@ -91,43 +92,160 @@ static struct gfid2ext_tree_node* gfid2ext_tree_node_alloc(
     /* record file id and pointer to extent tree */
     node->gfid    = gfid;
     node->extents = extents;
+    pthread_rwlock_init(&node->rwlock, NULL);
 
     return node;
 }
 
+static int gfid2ext_tree_add_node(
+    struct gfid2ext_tree* tree, /* tree on which to add new entry */
+    int gfid,                   /* global file id */
+    unifyfs_file_attr_t* attr)  /* initial file attribute */
+{
+    int ret = 0;
+    struct gfid2ext_tree_node* node = NULL;
+    struct gfid2ext_tree_node* existing = NULL;
+
+    node = gfid2ext_tree_node_alloc(gfid, attr, NULL);
+    if (!node) {
+        return ENOMEM;
+    }
+    node->attr = *attr;
+
+    gfid2ext_tree_wrlock(tree);
+
+    /* check if the node already exists */
+    existing = RB_FIND(gfid2exttree, &tree->head, node);
+    if (existing) {
+        free(node);
+        ret = EEXIST;
+        goto out_unlock;
+    }
+
+    RB_INSERT(gfid2exttree, &tree->head, node);
+
+out_unlock:
+    gfid2ext_tree_unlock(tree);
+
+    return ret;
+}
+
+static inline void gfid2ext_tree_node_update_attr(
+    struct gfid2ext_tree_node* node,
+    unifyfs_file_attr_t* attr)
+{
+    gfid2ext_tree_node_wrlock(node);
+    /* FIXME: we need to selectively update the attr for any metadata update
+     * operations, e.g., chmod, chown, ...
+     * Possibly, we could initialize each member of the @attr to be -1, then
+     * only update for members having >=0 values.
+     */
+    node->attr = *attr;
+    gfid2ext_tree_node_unlock(node);
+}
+
+static int gfid2ext_tree_update_node(
+    struct gfid2ext_tree* tree, /* tree on which to add new entry */
+    int gfid,                   /* global file id */
+    unifyfs_file_attr_t* attr)  /* initial file attribute */
+{
+    int ret = 0;
+    struct gfid2ext_tree_node* existing = NULL;
+    struct gfid2ext_tree_node node = { 0, };
+
+    node.gfid = gfid;
+
+    gfid2ext_tree_rdlock(tree);
+
+    /* check if the node already exists */
+    existing = RB_FIND(gfid2exttree, &tree->head, &node);
+    if (!existing) {
+        ret = ENOENT;
+        goto unlock_tree;
+    }
+
+    gfid2ext_tree_node_update_attr(existing, attr);
+
+unlock_tree:
+    gfid2ext_tree_unlock(tree);
+
+    return ret;
+}
+
+int gfid2ext_tree_metaset(
+    struct gfid2ext_tree* tree, /* tree to add new extent item */
+    int gfid,                   /* global file id */
+    int create,                 /* is this creating a new entry? */
+    unifyfs_file_attr_t *attr)  /* initial file attribute */
+{
+    int ret = 0;
+
+    if (!tree || !attr)
+        return EINVAL;
+
+    if (create)
+        ret = gfid2ext_tree_add_node(tree, gfid, attr);
+    else
+        ret = gfid2ext_tree_update_node(tree, gfid, attr);
+
+    return ret;
+}
+
+int gfid2ext_tree_metaget(
+    struct gfid2ext_tree* tree, /* tree to add new extent item */
+    int gfid,                   /* global file id */
+    unifyfs_file_attr_t *attr)  /* initial file attribute */
+{
+    int ret = 0;
+    struct gfid2ext_tree_node* node = NULL;
+    struct gfid2ext_tree_node tmp = { .gfid = gfid, };
+
+    if (!tree || !attr)
+        return EINVAL;
+
+    gfid2ext_tree_rdlock(tree);
+
+    node = RB_FIND(gfid2exttree, &tree->head, &tmp);
+    if (node) {
+        *attr = node->attr;
+    } else {
+        ret = ENOENT;
+    }
+
+    gfid2ext_tree_unlock(tree);
+
+    return ret;
+}
+
+
 /* Add an entry to the gfid2exts tree.
  * Returns 0 on success, nonzero otherwise. */
-int gfid2ext_tree_add(
+int gfid2ext_tree_add_extent(
     struct gfid2ext_tree* tree, /* tree on which to add new entry */
     int gfid,                      /* global file id */
     struct extent_tree* extents)   /* extents for gfid */
 {
-    /* Create our range */
-    struct gfid2ext_tree_node* node = gfid2ext_tree_node_alloc(
-        gfid, extents);
+    int ret = 0;
+    struct gfid2ext_tree_node tmp = { 0, };
+    struct gfid2ext_tree_node* node = NULL;
+
+    memset(&tmp, 0, sizeof(tmp));
+    tmp.gfid = gfid;
+
+    gfid2ext_tree_rdlock(tree);
+
+    node = RB_FIND(gfid2exttree, &tree->head, &tmp);
     if (!node) {
-        return ENOMEM;
+        ret = ENOENT;
+        goto out_unlock;
     }
 
-    /* lock the tree so we can modify it */
-    gfid2ext_tree_wrlock(tree);
+    node->extents = extents;
 
-    /* check that entry for gfid dodes not already exist */
-    struct gfid2ext_tree_node* existing;
-    existing = RB_FIND(gfid2exttree, &tree->head, node);
-    if (existing) {
-        /* Found existing entry for given file id */
-        gfid2ext_tree_unlock(tree);
-        return EEXIST;
-    }
-
-    /* otherwise, insert new entry into gfid-to-extents tree for gfid */
-    RB_INSERT(gfid2exttree, &tree->head, node);
-
-    /* done modifying the tree */
+out_unlock:
     gfid2ext_tree_unlock(tree);
 
-    return 0;
+    return ret;
 }
 
 /* Search for and return entry for given gfid on specified tree.
@@ -137,17 +255,12 @@ struct gfid2ext_tree_node* gfid2ext_tree_find(
     int gfid)                   /* global file id to find */
 {
     /* Create our range */
-    struct gfid2ext_tree_node* node = gfid2ext_tree_node_alloc(
-        gfid, NULL);
-    if (!node) {
-        return NULL;
-    }
+    struct gfid2ext_tree_node node = { 0, };
+    node.gfid = gfid;
 
     /* check that entry for gfid dodes not already exist */
     struct gfid2ext_tree_node* existing = RB_FIND(
-        gfid2exttree, &tree->head, node);
-
-    free(node);
+        gfid2exttree, &tree->head, &node);
 
     return existing;
 }
@@ -213,15 +326,12 @@ int gfid2ext_tree_unlink(
     gfid2ext_tree_wrlock(tree);
 
     /* Create our range */
-    struct gfid2ext_tree_node* node = gfid2ext_tree_node_alloc(
-        gfid, NULL);
-    if (!node) {
-        return ENOMEM;
-    }
+    struct gfid2ext_tree_node node = { 0, };
+    node.gfid = gfid;
 
     /* check that entry for gfid dodes not already exist */
     struct gfid2ext_tree_node* existing;
-    existing = RB_FIND(gfid2exttree, &tree->head, node);
+    existing = RB_FIND(gfid2exttree, &tree->head, &node);
     if (existing) {
         /* found a node for this gfid, remove it from the tree */
         RB_REMOVE(gfid2exttree, &tree->head, existing);
@@ -237,9 +347,6 @@ int gfid2ext_tree_unlink(
         /* failed to find entry for given gfid */
         rc = EEXIST;
     }
-
-    /* free the temporary node we used to search for the gfid entry */
-    free(node);
 
     /* done modifying the tree */
     gfid2ext_tree_unlock(tree);

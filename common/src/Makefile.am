@@ -29,6 +29,7 @@ BASE_SRCS = \
   unifyfs_meta.h \
   unifyfs_rpc_util.h \
   unifyfs_rpc_util.c \
+  unifyfs_rpc_types.h \
   unifyfs_client_rpcs.h \
   unifyfs_server_rpcs.h \
   unifyfs_runstate.h \
