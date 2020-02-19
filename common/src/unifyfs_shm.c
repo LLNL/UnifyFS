@@ -13,22 +13,24 @@
  */
 #include <config.h>
 
-#include <unistd.h>
-#include <stdlib.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <fcntl.h>
 
-#include "unifyfs_log.h"
 #include "unifyfs_const.h"
+#include "unifyfs_log.h"
+#include "unifyfs_shm.h"
 
-/* Creates a shared memory of given size under specified name.
- * Returns address of new shared memory if successful.
- * Returns NULL on error. */
-void* unifyfs_shm_alloc(const char* name, size_t size)
+/* Allocate a shared memory region with given name and size,
+ * and map it into memory.
+ * Returns a pointer to shm_context for region if successful,
+ * or NULL on error */
+shm_context* unifyfs_shm_alloc(const char* name, size_t size)
 {
     int ret;
 
@@ -81,66 +83,84 @@ void* unifyfs_shm_alloc(const char* name, size_t size)
     errno = 0;
     ret = close(fd);
     if (ret == -1) {
-        /* failed to open shared memory */
-        LOGERR("Failed to mmap shared memory %s (%s)",
-               name, strerror(errno));
+        /* failed to close shared memory */
+        LOGERR("Failed to close shared memory fd %d (%s)",
+               fd, strerror(errno));
 
         /* not fatal, so keep going */
     }
 
-    /* return address */
-    return addr;
+    /* return pointer to new shm_context */
+    shm_context* ctx = (shm_context*) calloc(1, sizeof(shm_context));
+    if (NULL != ctx) {
+        snprintf(ctx->name, sizeof(ctx->name), "%s", name);
+        ctx->addr = addr;
+        ctx->size = size;
+    }
+    return ctx;
 }
 
-/* Unmaps shared memory region from memory.
- * Caller should provide the address of a pointer to the region
- * in paddr.  Sets paddr to NULL on return.
- * Returns UNIFYFS_SUCCESS on success. */
-int unifyfs_shm_free(const char* name, size_t size, void** paddr)
+/* Unmaps shared memory region and frees its context.
+ * The shm_context pointer is set to NULL on success.
+ * Returns UNIFYFS_SUCCESS on success, or error code */
+int unifyfs_shm_free(shm_context** pctx)
 {
     /* check that we got an address (to something) */
-    if (paddr == NULL) {
+    if (pctx == NULL) {
+        return EINVAL;
+    }
+
+    shm_context* ctx = *pctx;
+    if (ctx == NULL) {
         return EINVAL;
     }
 
     /* get address of shared memory region */
-    void* addr = *paddr;
+    void* addr = ctx->addr;
 
-    /* if we have a pointer, munmap the region, when all procs
-     * have unmapped the region, the OS will free the memory */
+    /* if we have a pointer, try to munmap it */
     if (addr != NULL) {
         /* unmap shared memory from memory space */
         errno = 0;
-        int rc = munmap(addr, size);
+        int rc = munmap(addr, ctx->size);
         if (rc == -1) {
             /* failed to unmap shared memory */
+            int err = errno;
             LOGERR("Failed to unmap shared memory %s (%s)",
-                   name, strerror(errno));
+                   ctx->name, strerror(err));
 
             /* not fatal, so keep going */
         }
     }
 
+    /* free shmem context structure */
+    free(ctx);
+
     /* set caller's pointer to NULL */
-    *paddr = NULL;
+    *pctx = NULL;
 
     return UNIFYFS_SUCCESS;
 }
 
 /* Unlinks file used to attach to a shared memory region.
  * Once unlinked, no other processes may attach.
- * Returns UNIFYFS_SUCCESS on success. */
-int unifyfs_shm_unlink(const char* name)
+ * Returns UNIFYFS_SUCCESS on success, or error code. */
+int unifyfs_shm_unlink(shm_context* ctx)
 {
-    /* delete associated file if told to unlink */
+    /* check context pointer */
+    if (ctx == NULL) {
+        return EINVAL;
+    }
+
+    /* unlink file naming the shared memory region */
     errno = 0;
-    int rc = shm_unlink(name);
+    int rc = shm_unlink(ctx->name);
     if (rc == -1) {
         int err = errno;
         if (ENOENT != err) {
             /* failed to remove shared memory */
             LOGERR("Failed to unlink shared memory %s (%s)",
-                   name, strerror(err));
+                   ctx->name, strerror(err));
         }
         /* not fatal, so keep going */
     }

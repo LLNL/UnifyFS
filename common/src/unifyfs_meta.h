@@ -18,7 +18,6 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <pthread.h>
 #include <unistd.h>
 
 #include "unifyfs_const.h"
@@ -27,6 +26,21 @@
 extern "C" {
 #endif
 
+/* structure used to detect clients/servers colocated on a host */
+typedef struct {
+    char hostname[UNIFYFS_MAX_HOSTNAME];
+    int rank;
+} name_rank_pair_t;
+
+/* write-log metadata index structure */
+typedef struct {
+    off_t file_pos; /* start offset of data in file */
+    off_t log_pos;  /* start offset of data in write log */
+    size_t length;  /* length of data */
+    int gfid;       /* global file id */
+} unifyfs_index_t;
+
+/* UnifyFS file attributes */
 typedef struct {
     int gfid;
     char filename[UNIFYFS_MAX_FILENAME];
@@ -81,12 +95,50 @@ void unifyfs_file_attr_to_stat(unifyfs_file_attr_t* fattr, struct stat* sb)
     }
 }
 
-typedef struct {
-    off_t file_pos; /* starting logical offset of data in file */
-    off_t log_pos;  /* starting physical offset of data in log */
-    size_t length;  /* length of data */
-    int gfid;       /* global file id */
-} unifyfs_index_t;
+/* given an input mode, mask it with umask and return.
+ * set perms=0 to request all read/write bits */
+static inline
+mode_t unifyfs_getmode(mode_t perms)
+{
+    /* perms == 0 is shorthand for all read and write bits */
+    if (perms == 0) {
+        perms = 0666;
+    }
+
+    /* get current user mask */
+    mode_t mask = umask(0);
+    umask(mask);
+
+    /* mask off bits from desired permissions */
+    mode_t ret = (perms & 0777) & ~mask;
+    return ret;
+}
+
+/* qsort comparison function for name_rank_pair_t */
+static inline
+int compare_name_rank_pair(const void* a, const void* b)
+{
+    const name_rank_pair_t* pair_a = (const name_rank_pair_t*) a;
+    const name_rank_pair_t* pair_b = (const name_rank_pair_t*) b;
+
+    /* compare the hostnames */
+    int cmp = strcmp(pair_a->hostname, pair_b->hostname);
+    if (0 == cmp) {
+        /* if hostnames are the same, compare the rank */
+        cmp = pair_a->rank - pair_b->rank;
+    }
+    return cmp;
+}
+
+/* qsort comparison function for int */
+static inline
+int compare_int(const void* a, const void* b)
+{
+    int aval = *(const int*)a;
+    int bval = *(const int*)b;
+    return aval - bval;
+}
+
 
 /*
  * Hash a file path to a uint64_t using MD5
@@ -117,39 +169,6 @@ int unifyfs_generate_gfid(const char* path)
 
     return (int)hash32;
 }
-
-/* Header for read request reply in client shared memory region.
- * The associated data payload immediately follows the header in
- * the shmem region.
- *   offset  - offset within file
- *   length  - data size
- *   gfid    - global file id
- *   errcode - read error code (zero on success) */
-typedef struct {
-    size_t offset;
-    size_t length;
-    int gfid;
-    int errcode;
-} shm_meta_t;
-
-/* State values for client shared memory region */
-typedef enum {
-    SHMEM_REGION_EMPTY = 0,        // set by client to indicate drain complete
-    SHMEM_REGION_DATA_READY = 1,   // set by server to initiate client drain
-    SHMEM_REGION_DATA_COMPLETE = 2 // set by server when done writing data
-} shm_region_state_e;
-
-/* Header for client shared memory region.
- *   sync     - for synchronizing updates/access by server threads
- *   meta_cnt - number of shm_meta_t (i.e., read replies) currently in shmem
- *   bytes    - total bytes of shmem region in use (shm_meta_t + payloads)
- *   state    - region state variable used for client-server coordination */
- typedef struct {
-    pthread_mutex_t sync;
-    volatile size_t meta_cnt;
-    volatile size_t bytes;
-    volatile shm_region_state_e state;
-} shm_header_t;
 
 #ifdef __cplusplus
 } // extern "C"

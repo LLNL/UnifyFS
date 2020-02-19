@@ -13,10 +13,15 @@ BASE_SRCS = \
   rm_enumerator.c \
   flatbuffers_common_builder.h \
   flatbuffers_common_reader.h \
-  ucr_read_builder.h \
-  ucr_read_reader.h \
+  seg_tree.h \
+  seg_tree.c \
+  slotmap.h \
+  slotmap.c \
   tinyexpr.h \
   tinyexpr.c \
+  tree.h \
+  ucr_read_builder.h \
+  ucr_read_reader.h \
   unifyfs_const.h \
   unifyfs_configurator.h \
   unifyfs_configurator.c \
@@ -24,6 +29,8 @@ BASE_SRCS = \
   unifyfs_keyval.c \
   unifyfs_log.h \
   unifyfs_log.c \
+  unifyfs_logio.h \
+  unifyfs_logio.c \
   unifyfs_meta.h \
   unifyfs_meta.c \
   unifyfs_rpc_util.h \
@@ -35,10 +42,7 @@ BASE_SRCS = \
   unifyfs_runstate.h \
   unifyfs_runstate.c \
   unifyfs_shm.h \
-  unifyfs_shm.c \
-  tree.h \
-  seg_tree.h \
-  seg_tree.c
+  unifyfs_shm.c
 
 OPT_FLAGS =
 OPT_LIBS =
@@ -69,6 +73,6 @@ libunifyfs_common_la_LDFLAGS = \
   -version-info $(LIBUNIFYFS_LT_VERSION)
 
 libunifyfs_common_la_LIBADD = \
-  $(OPT_LIBS) -lm -lrt -lcrypto
+  $(OPT_LIBS) -lm -lrt -lcrypto -lpthread
 
 AM_CFLAGS = -Wall -Wno-strict-aliasing

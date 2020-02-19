@@ -479,8 +479,8 @@ int create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
 
 /* signal the client process for it to start processing read
  * data in shared memory */
-static int client_signal(shm_header_t* hdr,
-                         shm_region_state_e flag)
+static int client_signal(shm_data_header* hdr,
+                         shm_data_state_e flag)
 {
     if (flag == SHMEM_REGION_DATA_READY) {
         LOGDBG("setting data-ready");
@@ -498,7 +498,7 @@ static int client_signal(shm_header_t* hdr,
 }
 
 /* wait until client has processed all read data in shared memory */
-static int client_wait(shm_header_t* hdr)
+static int client_wait(shm_data_header* hdr)
 {
     int rc = (int)UNIFYFS_SUCCESS;
 
@@ -1493,15 +1493,13 @@ int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl)
 }
 
 /*
- * synchronize all the indices
- * to the key-value store
+ * store all writes from app-client's index in the global metadata
  *
  * @param app_id: the application id
- * @param client_side_id: client rank in app
- * @param gfid: global file id
+ * @param client_id: client rank in app
  * @return success/error code
  */
-int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
+int rm_cmd_sync(int app_id, int client_id)
 {
     size_t i;
 
@@ -1516,7 +1514,12 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
         arraylist_get(app_config_list, app_id);
 
     /* get pointer to superblock for this client and app */
-    char* superblk = app_config->shm_superblocks[client_side_id];
+    shm_context* super_ctx = app_config->shm_superblocks[client_id];
+    if (NULL == super_ctx) {
+        LOGERR("bad client id");
+        return EINVAL;
+    }
+    char* superblk = (char*)(super_ctx->addr);
 
     /* get pointer to start of key/value region in superblock */
     char* meta = superblk + app_config->meta_offset;
@@ -1585,7 +1588,7 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
         int used = split_index(
             &keys[count], &vals[count], &key_lens[count], &val_lens[count],
             gfid, offset, length, logpos,
-            glb_pmi_rank, app_id, client_side_id);
+            glb_pmi_rank, app_id, client_id);
 
         /* count up the number of keys we used for this index */
         count += used;
@@ -1769,11 +1772,14 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
         } else if ((req->num_remote_reads == 0) &&
                    (req->status == READREQ_STARTED)) {
             /* look up client shared memory region */
+            int app_id = req->app_id;
+            int client_id = req->client_id;
             app_config_t* app_config =
-                (app_config_t*) arraylist_get(app_config_list, req->app_id);
+                (app_config_t*) arraylist_get(app_config_list, app_id);
             assert(NULL != app_config);
-            shm_header_t* client_shm =
-                (shm_header_t*) app_config->shm_recv_bufs[req->client_id];
+            shm_context* client_shm = app_config->shm_recv_bufs[client_id];
+            assert(NULL != client_shm);
+            shm_data_header* shm_hdr = (shm_data_header*) client_shm->addr;
 
             RM_LOCK(thrd_ctrl);
 
@@ -1781,10 +1787,10 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
             req->status = READREQ_COMPLETE;
 
             /* signal client that we're now done writing data */
-            client_signal(client_shm, SHMEM_REGION_DATA_COMPLETE);
+            client_signal(shm_hdr, SHMEM_REGION_DATA_COMPLETE);
 
             /* wait for client to read data */
-            client_wait(client_shm);
+            client_wait(shm_hdr);
 
             rc = release_read_req(thrd_ctrl, req);
             if (rc != (int)UNIFYFS_SUCCESS) {
@@ -1799,19 +1805,20 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
     return ret;
 }
 
-static shm_meta_t* reserve_shmem_meta(app_config_t* app_config,
-                                      shm_header_t* hdr,
-                                      size_t data_sz)
+static shm_data_meta* reserve_shmem_meta(app_config_t* app_config,
+                                         shm_data_header* hdr,
+                                         size_t data_sz)
 {
-    shm_meta_t* meta = NULL;
+    shm_data_meta* meta = NULL;
     if (NULL == hdr) {
         LOGERR("invalid header");
     } else {
         pthread_mutex_lock(&(hdr->sync));
-        LOGDBG("shm_header(cnt=%zu, bytes=%zu)", hdr->meta_cnt, hdr->bytes);
+        LOGDBG("shm_data_header(cnt=%zu, bytes=%zu)",
+               hdr->meta_cnt, hdr->bytes);
         size_t remain_size = app_config->recv_buf_sz -
-                             (sizeof(shm_header_t) + hdr->bytes);
-        size_t meta_size = sizeof(shm_meta_t) + data_sz;
+                             (sizeof(shm_data_header) + hdr->bytes);
+        size_t meta_size = sizeof(shm_data_meta) + data_sz;
         if (meta_size > remain_size) {
             /* client-side receive buffer is full,
              * inform client to start reading */
@@ -1822,13 +1829,14 @@ static shm_meta_t* reserve_shmem_meta(app_config_t* app_config,
             int rc = client_wait(hdr);
             if (rc != (int)UNIFYFS_SUCCESS) {
                 LOGERR("wait for client recv buffer space failed");
+                pthread_mutex_unlock(&(hdr->sync));
                 return NULL;
             }
         }
         size_t shm_offset = hdr->bytes;
-        char* shm_buf = ((char*)hdr) + sizeof(shm_header_t);
-        meta = (shm_meta_t*)(shm_buf + shm_offset);
-        LOGDBG("reserved shm_meta[%zu] and %zu payload bytes",
+        char* shm_buf = ((char*)hdr) + sizeof(shm_data_header);
+        meta = (shm_data_meta*)(shm_buf + shm_offset);
+        LOGDBG("reserved shm_data_meta[%zu] and %zu payload bytes",
                hdr->meta_cnt, data_sz);
         hdr->meta_cnt++;
         hdr->bytes += meta_size;
@@ -1908,8 +1916,9 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
     int ret = (int)UNIFYFS_SUCCESS;
     app_config_t* app_config = NULL;
     chunk_read_resp_t* responses = NULL;
-    shm_header_t* client_shm = NULL;
-    shm_meta_t* shm_meta = NULL;
+    shm_context* client_shm = NULL;
+    shm_data_header* shm_hdr = NULL;
+    shm_data_meta* meta = NULL;
     void* shm_buf = NULL;
     char* data_buf = NULL;
     size_t data_sz, offset;
@@ -1922,7 +1931,8 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
     /* look up client shared memory region */
     app_config = (app_config_t*) arraylist_get(app_config_list, rdreq->app_id);
     assert(NULL != app_config);
-    client_shm = (shm_header_t*) app_config->shm_recv_bufs[rdreq->client_id];
+    client_shm = (shm_context*) app_config->shm_recv_bufs[rdreq->client_id];
+    shm_hdr = (shm_data_header*) client_shm->addr;
 
     RM_LOCK(thrd_ctrl);
 
@@ -1955,13 +1965,13 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
             LOGDBG("chunk response for offset=%zu: sz=%zu", offset, data_sz);
 
             /* allocate and register local target buffer for bulk access */
-            shm_meta = reserve_shmem_meta(app_config, client_shm, data_sz);
-            if (NULL != shm_meta) {
-                shm_meta->offset = offset;
-                shm_meta->length = data_sz;
-                shm_meta->gfid = gfid;
-                shm_meta->errcode = errcode;
-                shm_buf = (void*)((char*)shm_meta + sizeof(shm_meta_t));
+            meta = reserve_shmem_meta(app_config, shm_hdr, data_sz);
+            if (NULL != meta) {
+                meta->offset = offset;
+                meta->length = data_sz;
+                meta->gfid = gfid;
+                meta->errcode = errcode;
+                shm_buf = (void*)((char*)meta + sizeof(shm_data_meta));
                 if (data_sz) {
                     memcpy(shm_buf, data_buf, data_sz);
                 }
@@ -1991,10 +2001,10 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
             rdreq->status = READREQ_COMPLETE;
 
             /* signal client that we're now done writing data */
-            client_signal(client_shm, SHMEM_REGION_DATA_COMPLETE);
+            client_signal(shm_hdr, SHMEM_REGION_DATA_COMPLETE);
 
             /* wait for client to read data */
-            client_wait(client_shm);
+            client_wait(shm_hdr);
 
             rc = release_read_req(thrd_ctrl, rdreq);
             if (rc != (int)UNIFYFS_SUCCESS) {

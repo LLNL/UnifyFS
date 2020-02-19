@@ -49,8 +49,8 @@ int unifyfs_get_file_extents_test(void)
     unifyfs_key_t keys[16];
     unifyfs_keyval_t keyval[16];
 
-    rc = unifyfs_get_file_extents(num_keys, &keys, key_lens,
-                                  &num_values, &keyval);
+    rc = unifyfs_get_file_extents(num_keys, (unifyfs_key_t**)&keys, key_lens,
+                                  &num_values, (unifyfs_keyval_t**)&keyval);
     ok(UNIFYFS_SUCCESS == rc,
         "Retrieved file extents (rc = %d)", rc
     );

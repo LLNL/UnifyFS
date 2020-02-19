@@ -49,12 +49,7 @@
 #define UNIFYFS_MAX_FILENAME KIB
 #define UNIFYFS_MAX_HOSTNAME 64
 
-// Metadata
-#define MAX_FILE_CNT_PER_NODE KIB
-
 // Request Manager
-#define RECV_BUF_CNT 4               /* number of remote read buffers */
-#define SENDRECV_BUF_LEN (8 * MIB)   /* remote read buffer size */
 #define MAX_META_PER_SEND (4 * KIB)  /* max read request count per server */
 #define REQ_BUF_LEN (MAX_META_PER_SEND * 64) /* chunk read reqs buffer size */
 #define SHM_WAIT_INTERVAL 1000       /* unit: ns */
@@ -70,21 +65,18 @@
 // Request and Service Managers, Command Handler
 #define MAX_NUM_CLIENTS 64 /* app processes per server */
 
-// Client and Command Handler
-#define CMD_BUF_SIZE (2 * KIB)
-
 // Client
 #define UNIFYFS_MAX_FILES 128
 #define UNIFYFS_MAX_FILEDESCS UNIFYFS_MAX_FILES
 #define UNIFYFS_STREAM_BUFSIZE MIB
-#define UNIFYFS_CHUNK_BITS 24
-#define UNIFYFS_CHUNK_MEM (256 * MIB)
-#define UNIFYFS_SPILLOVER_SIZE (KIB * MIB)
-#define UNIFYFS_SUPERBLOCK_KEY 4321
-#define UNIFYFS_SHMEM_REQ_SIZE (8 * MIB)
-#define UNIFYFS_SHMEM_RECV_SIZE (32 * MIB)
+#define UNIFYFS_DATA_RECV_SIZE (32 * MIB)
 #define UNIFYFS_INDEX_BUF_SIZE  (20 * MIB)
 #define UNIFYFS_MAX_READ_CNT KIB
+
+// Log-based I/O
+#define UNIFYFS_LOGIO_CHUNK_SIZE (4 * MIB)
+#define UNIFYFS_LOGIO_SHMEM_SIZE (256 * MIB)
+#define UNIFYFS_LOGIO_SPILL_SIZE (GIB)
 
 /* NOTE: max read size = UNIFYFS_MAX_SPLIT_CNT * META_DEFAULT_RANGE_SZ */
 #define UNIFYFS_MAX_SPLIT_CNT (4 * KIB)

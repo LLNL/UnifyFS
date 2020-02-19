@@ -55,9 +55,9 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
                        unifyfs_laminate_out_t,
                        NULL);
 
-    ctx->rpcs.fsync_id = MARGO_REGISTER(mid, "unifyfs_fsync_rpc",
-                       unifyfs_fsync_in_t,
-                       unifyfs_fsync_out_t,
+    ctx->rpcs.sync_id = MARGO_REGISTER(mid, "unifyfs_sync_rpc",
+                       unifyfs_sync_in_t,
+                       unifyfs_sync_out_t,
                        NULL);
 
     ctx->rpcs.read_id = MARGO_REGISTER(mid, "unifyfs_read_rpc",
@@ -262,8 +262,8 @@ int invoke_client_unmount_rpc(void)
 
     /* fill in input struct */
     unifyfs_unmount_in_t in;
-    in.app_id         = app_id;
-    in.local_rank_idx = local_rank_idx;
+    in.app_id    = (int32_t) app_id;
+    in.client_id = (int32_t) local_rank_idx;
 
     /* call rpc function */
     LOGDBG("invoking the unmount rpc function in client");
@@ -307,7 +307,7 @@ int invoke_client_metaset_rpc(int create, unifyfs_file_attr_t* f_meta)
     /* fill in input struct */
     unifyfs_metaset_in_t in;
     in.create       = (int32_t) create;
-    in.gfid         = f_meta->gfid;
+    in.gfid         = (int32_t) f_meta->gfid;
     in.filename     = f_meta->filename;
     in.mode         = f_meta->mode;
     in.uid          = f_meta->uid;
@@ -397,9 +397,9 @@ int invoke_client_filesize_rpc(int gfid, size_t* outsize)
 
     /* fill in input struct */
     unifyfs_filesize_in_t in;
-    in.app_id         = (int32_t)app_id;
-    in.local_rank_idx = (int32_t)local_rank_idx;
-    in.gfid           = (int32_t)gfid;
+    in.app_id    = (int32_t) app_id;
+    in.client_id = (int32_t) local_rank_idx;
+    in.gfid      = (int32_t) gfid;
 
     /* call rpc function */
     LOGDBG("invoking the filesize rpc function in client");
@@ -435,10 +435,10 @@ int invoke_client_truncate_rpc(int gfid, size_t filesize)
 
     /* fill in input struct */
     unifyfs_truncate_in_t in;
-    in.app_id         = (int32_t)app_id;
-    in.local_rank_idx = (int32_t)local_rank_idx;
-    in.gfid           = (int32_t)gfid;
-    in.filesize       = (hg_size_t)filesize;
+    in.app_id    = (int32_t) app_id;
+    in.client_id = (int32_t) local_rank_idx;
+    in.gfid      = (int32_t) gfid;
+    in.filesize  = (hg_size_t) filesize;
 
     /* call rpc function */
     LOGDBG("invoking the truncate rpc function in client");
@@ -471,9 +471,9 @@ int invoke_client_unlink_rpc(int gfid)
 
     /* fill in input struct */
     unifyfs_unlink_in_t in;
-    in.app_id         = (int32_t)app_id;
-    in.local_rank_idx = (int32_t)local_rank_idx;
-    in.gfid           = (int32_t)gfid;
+    in.app_id    = (int32_t) app_id;
+    in.client_id = (int32_t) local_rank_idx;
+    in.gfid      = (int32_t) gfid;
 
     /* call rpc function */
     LOGDBG("invoking the unlink rpc function in client");
@@ -506,9 +506,9 @@ int invoke_client_laminate_rpc(int gfid)
 
     /* fill in input struct */
     unifyfs_unlink_in_t in;
-    in.app_id         = (int32_t)app_id;
-    in.local_rank_idx = (int32_t)local_rank_idx;
-    in.gfid           = (int32_t)gfid;
+    in.app_id    = (int32_t) app_id;
+    in.client_id = (int32_t) local_rank_idx;
+    in.gfid      = (int32_t) gfid;
 
     /* call rpc function */
     LOGDBG("invoking the laminate rpc function in client");
@@ -528,8 +528,8 @@ int invoke_client_laminate_rpc(int gfid)
     return (int)ret;
 }
 
-/* invokes the client fsync rpc function */
-int invoke_client_fsync_rpc(int gfid)
+/* invokes the client sync rpc function */
+int invoke_client_sync_rpc(void)
 {
     /* check that we have initialized margo */
     if (NULL == client_rpc_context) {
@@ -537,21 +537,20 @@ int invoke_client_fsync_rpc(int gfid)
     }
 
     /* get handle to rpc function */
-    hg_handle_t handle = create_handle(client_rpc_context->rpcs.fsync_id);
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.sync_id);
 
     /* fill in input struct */
-    unifyfs_fsync_in_t in;
-    in.app_id         = (int32_t)app_id;
-    in.local_rank_idx = (int32_t)local_rank_idx;
-    in.gfid           = (int32_t)gfid;
+    unifyfs_sync_in_t in;
+    in.app_id    = (int32_t) app_id;
+    in.client_id = (int32_t) local_rank_idx;
 
     /* call rpc function */
-    LOGDBG("invoking the fsync rpc function in client");
+    LOGDBG("invoking the sync rpc function in client");
     hg_return_t hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 
     /* decode response */
-    unifyfs_fsync_out_t out;
+    unifyfs_sync_out_t out;
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
     int32_t ret = out.ret;
@@ -576,11 +575,11 @@ int invoke_client_read_rpc(int gfid, size_t offset, size_t length)
 
     /* fill in input struct */
     unifyfs_read_in_t in;
-    in.app_id         = (int32_t)app_id;
-    in.local_rank_idx = (int32_t)local_rank_idx;
-    in.gfid           = (int32_t)gfid;
-    in.offset         = (hg_size_t)offset;
-    in.length         = (hg_size_t)length;
+    in.app_id    = (int32_t) app_id;
+    in.client_id = (int32_t) local_rank_idx;
+    in.gfid      = (int32_t) gfid;
+    in.offset    = (hg_size_t) offset;
+    in.length    = (hg_size_t) length;
 
     /* call rpc function */
     LOGDBG("invoking the read rpc function in client");
@@ -618,10 +617,10 @@ int invoke_client_mread_rpc(int read_count, size_t size, void* buffer)
     assert(hret == HG_SUCCESS);
 
     /* fill in input struct */
-    in.app_id         = (int32_t)app_id;
-    in.local_rank_idx = (int32_t)local_rank_idx;
-    in.read_count     = (int32_t)read_count;
-    in.bulk_size      = (hg_size_t)size;
+    in.app_id     = (int32_t) app_id;
+    in.client_id  = (int32_t) local_rank_idx;
+    in.read_count = (int32_t) read_count;
+    in.bulk_size  = (hg_size_t) size;
 
     /* call rpc function */
     LOGDBG("invoking the read rpc function in client");

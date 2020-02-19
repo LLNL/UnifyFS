@@ -45,42 +45,19 @@
 
 #include "unifyfs-internal.h"
 
-/* if length is greater than reserved space,
- * reserve space up to length */
-int unifyfs_fid_store_fixed_extend(
-    int fid,                 /* file id to reserve space for */
-    unifyfs_filemeta_t* meta, /* meta data for file */
-    off_t length             /* number of bytes to reserve for file */
-);
-
-/* if length is shorter than reserved space,
- * give back space down to length */
-int unifyfs_fid_store_fixed_shrink(
-    int fid,                 /* file id to free space for */
-    unifyfs_filemeta_t* meta, /* meta data for file */
-    off_t length             /* number of bytes to reserve for file */
-);
-
-/* read data from file stored as fixed-size chunks,
- * returns UNIFYFS error code */
-int unifyfs_fid_store_fixed_read(
-    int fid,                 /* file id to read from */
-    unifyfs_filemeta_t* meta, /* meta data for file */
-    off_t pos,               /* position within file to read from */
-    void* buf,               /* user buffer to store data in */
-    size_t count             /* number of bytes to read */
-);
-
-/* write data to file stored as fixed-size chunks,
- * returns UNIFYFS error code */
-int unifyfs_fid_store_fixed_write(
-    int fid,                 /* file id to write to */
-    unifyfs_filemeta_t* meta, /* meta data for file */
-    off_t pos,               /* position within file to write to */
-    const void* buf,         /* user buffer holding data */
-    size_t count             /* number of bytes to write */
-);
-
+/* rewrite client's index of all file write extents */
 void unifyfs_rewrite_index_from_seg_tree(void);
+
+/* sync all writes from client's index with local server */
 int unifyfs_sync(int gfid);
+
+/* write data to file using log-based I/O */
+int unifyfs_fid_logio_write(
+    int fid,                  /* file id to write to */
+    unifyfs_filemeta_t* meta, /* meta data for file */
+    off_t pos,                /* file position to start writing at */
+    const void* buf,          /* user buffer holding data */
+    size_t count              /* number of bytes to write */
+);
+
 #endif /* UNIFYFS_FIXED_H */

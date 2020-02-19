@@ -124,13 +124,9 @@ int rm_cmd_laminate(int app_id, int client_id, int gfid);
  * returns UNIFYFS_SUCCESS on success */
 int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl);
 
-/*
- * synchronize all the indices and file attributes
- * to the key-value store
- * @param sock_id: the connection id in poll_set of the delegator
- * @return success/error code
- */
-int rm_cmd_fsync(int app_id, int client_side_id, int gfid);
+/* retrieve all write index entries for app-client and
+ * store them in global metadata */
+int rm_cmd_sync(int app_id, int client_side_id);
 
 /* update state for remote chunk reads with received response data */
 int rm_post_chunk_read_responses(int app_id,
