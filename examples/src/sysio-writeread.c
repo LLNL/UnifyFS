@@ -151,7 +151,7 @@ int main(int argc, char* argv[])
 #ifndef DISABLE_UNIFYFS
     if (use_unifyfs) {
         ret = unifyfs_mount(mntpt, rank, num_rank, 0);
-        if (UNIFYFS_SUCCESS != ret) {
+        if (0 != ret) {
             MPI_Abort(MPI_COMM_WORLD, ret);
         }
         MPI_Barrier(MPI_COMM_WORLD);

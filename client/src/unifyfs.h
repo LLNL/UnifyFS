@@ -43,32 +43,12 @@
 #ifndef UNIFYFS_H
 #define UNIFYFS_H
 
-#include <limits.h>
-#include <stddef.h>      // size_t
-#include <sys/types.h>   // off_t
-
-#include "unifyfs_const.h"
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* linked list of chunk information given to an external library wanting
- * to RDMA out a file from UNIFYFS */
-typedef struct {
-    off_t chunk_id;
-    int location;
-    void* chunk_mr;
-    off_t spillover_offset;
-    struct chunk_list_t* next;
-} chunk_list_t;
-
-/*data structures defined for unifyfs********************/
-
-typedef struct {
-    char hostname[UNIFYFS_MAX_HOSTNAME];
-    int rank;
-} name_rank_pair_t;
 
 int unifyfs_mount(const char prefix[], int rank, size_t size,
                   int l_app_id);

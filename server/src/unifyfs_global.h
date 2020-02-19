@@ -45,6 +45,7 @@
 #include "arraylist.h"
 #include "unifyfs_const.h"
 #include "unifyfs_log.h"
+#include "unifyfs_logio.h"
 #include "unifyfs_meta.h"
 #include "unifyfs_shm.h"
 
@@ -131,9 +132,6 @@ typedef struct {
     size_t superblock_sz; /* size of memory region used to store data */
     size_t meta_offset;   /* superblock offset to index metadata */
     size_t meta_size;     /* size of index metadata region in bytes */
-    size_t data_offset;   /* superblock offset to data log */
-    size_t data_size;     /* size of data log in bytes */
-    size_t req_buf_sz;    /* buffer size for client to issue read requests */
     size_t recv_buf_sz;   /* buffer size for read replies to client */
 
     /* number of clients on the node */
@@ -144,24 +142,15 @@ typedef struct {
     int thrd_idxs[MAX_NUM_CLIENTS];    /* map to thread id */
     int dbg_ranks[MAX_NUM_CLIENTS];    /* map to client rank */
 
-    /* file descriptors */
-    int spill_log_fds[MAX_NUM_CLIENTS];       /* spillover data */
-    int spill_index_log_fds[MAX_NUM_CLIENTS]; /* spillover index */
+    /* shared memory context pointers */
+    shm_context* shm_superblocks[MAX_NUM_CLIENTS]; /* superblock data */
+    shm_context* shm_recv_bufs[MAX_NUM_CLIENTS];   /* read reply shm */
 
-    /* shared memory pointers */
-    char* shm_superblocks[MAX_NUM_CLIENTS]; /* superblock data */
-    char* shm_req_bufs[MAX_NUM_CLIENTS];    /* read request shm */
-    char* shm_recv_bufs[MAX_NUM_CLIENTS];   /* read reply shm */
+    /* log-based I/O context pointers */
+    logio_context* logio[MAX_NUM_CLIENTS];
 
     /* client address for rpc invocation */
     hg_addr_t client_addr[MAX_NUM_CLIENTS];
-
-    /* file names */
-    char super_buf_name[MAX_NUM_CLIENTS][UNIFYFS_MAX_FILENAME];
-    char req_buf_name[MAX_NUM_CLIENTS][UNIFYFS_MAX_FILENAME];
-    char recv_buf_name[MAX_NUM_CLIENTS][UNIFYFS_MAX_FILENAME];
-    char spill_log_name[MAX_NUM_CLIENTS][UNIFYFS_MAX_FILENAME];
-    char spill_index_log_name[MAX_NUM_CLIENTS][UNIFYFS_MAX_FILENAME];
 
     /* directory holding spill over files */
     char external_spill_dir[UNIFYFS_MAX_FILENAME];

@@ -169,15 +169,15 @@ int sm_issue_chunk_reads(int src_rank,
         chunk_read_resp_t* rresp = resp + i;
 
         /* get size and log offset of data we are to read */
-        size_t size   = rreq->nbytes;
-        size_t offset = rreq->log_offset;
+        size_t nbytes = rreq->nbytes;
+        size_t log_offset = rreq->log_offset;
 
         /* record request metadata in response */
         rresp->read_rc = 0;
-        rresp->nbytes  = size;
+        rresp->nbytes  = nbytes;
         rresp->offset  = rreq->offset;
         LOGDBG("reading chunk(offset=%zu, size=%zu)",
-            rreq->offset, size);
+               rreq->offset, nbytes);
 
         /* get app id and corresponding app_config struct */
         int app_id = rreq->log_app_id;
@@ -195,71 +195,29 @@ int sm_issue_chunk_reads(int src_rank,
         /* client id for this read task */
         int cli_id = rreq->log_client_id;
 
-        /* get size of data region for this
-         * app_id and client_id */
-        size_t data_size = app_config->data_size;
-
-        /* prepare read opertions based on data location */
-        size_t sz_from_mem   = 0;
-        size_t sz_from_spill = 0;
-        if ((offset + size) <= data_size) {
-            /* requested data is totally in shared memory */
-            sz_from_mem = size;
-        } else if (offset < data_size) {
-            /* part of the requested data is in shared memory */
-            sz_from_mem   = data_size - offset;
-            sz_from_spill = size - sz_from_mem;
-        } else {
-            /* all requested data is in spillover file */
-            sz_from_spill = size;
-        }
-
         /* get pointer to next position in buffer to store read data */
         char* buf_ptr = databuf + buf_cursor;
 
-        /* read data from shared memory */
-        if (sz_from_mem > 0) {
-            /* start of data within in superblock */
-            char* super_addr = app_config->shm_superblocks[cli_id];
-            char* data_addr  = super_addr + app_config->data_offset;
-            char* data_ptr   = data_addr + offset;
-
-            /* copy data from superblock into read reply buffer */
-            memcpy(buf_ptr, data_ptr, sz_from_mem);
-
-            /* we assume memcpy copied everything */
-            rresp->read_rc = sz_from_mem;
-        }
-
-        /* read data from spillover file */
-        if (sz_from_spill > 0) {
-            /* file descriptor for open spillover file for this
-             * app/client */
-            int spill_fd = app_config->spill_log_fds[cli_id];
-
-            /* offset within spill over file, need to subtract off
-             * range of offsets that land in data region of
-             * superblock */
-            off_t spill_offset = (off_t)(offset - data_size +
-                sz_from_mem);
-
-            /* read data from the spillover file */
-            ssize_t nread = pread(spill_fd, (buf_ptr + sz_from_mem),
-                                  sz_from_spill, spill_offset);
-            if (-1 == nread) {
-                /* pread hit an error, return error code */
-                rresp->read_rc = (ssize_t)(-errno);
+        /* read data from log */
+        logio_context* logio_ctx = app_config->logio[cli_id];
+        if (NULL != logio_ctx) {
+            size_t nread = 0;
+            int rc = unifyfs_logio_read(logio_ctx, log_offset, nbytes,
+                                        buf_ptr, &nread);
+            if (UNIFYFS_SUCCESS == rc) {
+                rresp->read_rc = nread;
             } else {
-                /* add to byte counts we may have started from memcpy */
-                rresp->read_rc += nread;
+                rresp->read_rc = (ssize_t)(-rc);
             }
+        } else {
+            rresp->read_rc = (ssize_t)(-UNIFYFS_FAILURE);
         }
 
         /* update to point to next slot in read reply buffer */
-        buf_cursor += size;
+        buf_cursor += nbytes;
 
         /* update accounting for burst size */
-        sm->burst_data_sz += size;
+        sm->burst_data_sz += nbytes;
     }
 
     if (src_rank != glb_pmi_rank) {

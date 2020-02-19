@@ -10,10 +10,11 @@ TESTS = \
 	0500-sysio-static.t \
 	0600-stdio-static.t \
 	9005-unifyfs-unmount.t \
-	9006-seg-tree-test.t \
 	9010-stop-unifyfsd.t \
 	9020-mountpoint-empty.t \
 	9100-metadata-api.t \
+	9200-seg-tree-test.t \
+	9201-slotmap-test.t \
 	9999-cleanup.t
 
 check_SCRIPTS = \
@@ -23,10 +24,11 @@ check_SCRIPTS = \
 	0500-sysio-static.t \
 	0600-stdio-static.t \
 	9005-unifyfs-unmount.t \
-	9006-seg-tree-test.t \
 	9010-stop-unifyfsd.t \
 	9020-mountpoint-empty.t \
 	9100-metadata-api.t \
+	9200-seg-tree-test.t \
+	9201-slotmap-test.t \
 	9999-cleanup.t
 
 EXTRA_DIST = \
@@ -41,20 +43,30 @@ clean-local:
 	rm -fr trash-directory.* test-results *.log test_run_env.sh
 
 libexec_PROGRAMS = \
-	sys/sysio-gotcha.t \
-	std/stdio-gotcha.t \
-	sys/sysio-static.t \
-	std/stdio-static.t \
+	common/seg_tree_test.t \
+	common/slotmap_test.t \
 	server/metadata.t \
-	unifyfs_unmount.t \
-	seg_tree_test.t
+	std/stdio-gotcha.t \
+	std/stdio-static.t \
+	sys/sysio-gotcha.t \
+	sys/sysio-static.t \
+	unifyfs_unmount.t
 
+
+test_common_ldadd = \
+	$(top_builddir)/t/lib/libtap.la \
+	$(top_builddir)/t/lib/libtestutil.la \
+	$(top_builddir)/common/src/libunifyfs_common.la
+
+test_common_ldflags = \
+    -static $(AM_LDFLAGS)
 
 test_ldadd = \
 	$(top_builddir)/t/lib/libtap.la \
 	$(top_builddir)/t/lib/libtestutil.la \
 	$(top_builddir)/client/src/libunifyfs_gotcha.la \
-        $(MPI_CLDFLAGS) $(FLATCC_LDFLAGS) $(FLATCC_LIBS)
+    $(MPI_CLDFLAGS) \
+	$(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 
 test_static_ldadd = \
 	$(top_builddir)/t/lib/libtap.la \
@@ -62,9 +74,10 @@ test_static_ldadd = \
 	$(top_builddir)/client/src/libunifyfs.la
 
 test_static_ldflags = \
-	-static \
-	$(CP_WRAPPERS) $(AM_LDFLAGS) $(MPI_CLDFLAGS) $(FLATCC_LDFLAGS) \
-        $(FLATCC_LIBS)
+	-static $(AM_LDFLAGS) \
+	$(CP_WRAPPERS) \
+	$(MPI_CLDFLAGS) \
+	$(FLATCC_LDFLAGS) $(FLATCC_LIBS)
 
 test_metadata_ldadd = \
 	$(top_builddir)/t/lib/libtap.la \
@@ -79,6 +92,12 @@ test_metadata_ldadd = \
 	$(MARGO_LDFLAGS) $(MARGO_LIBS) \
 	$(FLATCC_LDFLAGS) $(FLATCC_LIBS) \
 	-lpthread -lm -lstdc++ -lrt
+
+test_common_cppflags = \
+	-I$(top_srcdir) \
+	-I$(top_srcdir)/common/src \
+	-D_GNU_SOURCE \
+	$(AM_CPPFLAGS)
 
 test_meta_cppflags = \
 	-I$(top_srcdir) \
@@ -96,6 +115,7 @@ test_cppflags = \
 	-D_GNU_SOURCE \
 	$(AM_CPPFLAGS) \
 	$(MPI_CFLAGS)
+
 
 sys_sysio_gotcha_t_SOURCES = sys/sysio_suite.h \
                              sys/sysio_suite.c \
@@ -165,7 +185,12 @@ unifyfs_unmount_t_CPPFLAGS = $(test_cppflags)
 unifyfs_unmount_t_LDADD = $(test_static_ldadd)
 unifyfs_unmount_t_LDFLAGS = $(test_static_ldflags)
 
-seg_tree_test_t_SOURCES = seg_tree_test.c
-seg_tree_test_t_CPPFLAGS = $(test_cppflags)
-seg_tree_test_t_LDADD = $(test_static_ldadd)
-seg_tree_test_t_LDFLAGS = $(test_static_ldflags)
+common_seg_tree_test_t_SOURCES = common/seg_tree_test.c
+common_seg_tree_test_t_CPPFLAGS = $(test_common_cppflags)
+common_seg_tree_test_t_LDADD = $(test_common_ldadd)
+common_seg_tree_test_t_LDFLAGS = $(test_common_ldflags)
+
+common_slotmap_test_t_SOURCES = common/slotmap_test.c
+common_slotmap_test_t_CPPFLAGS = $(test_common_cppflags)
+common_slotmap_test_t_LDADD = $(test_common_ldadd)
+common_slotmap_test_t_LDFLAGS = $(test_common_ldflags)

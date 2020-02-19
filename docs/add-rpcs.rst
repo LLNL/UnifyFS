@@ -31,7 +31,7 @@ Common
 .. code-block:: C
   MERCURY_GEN_PROC(unifyfs_mount_in_t,
                    ((int32_t)(app_id))
-                   ((int32_t)(local_rank_idx))
+                   ((int32_t)(client_id))
                    ((int32_t)(dbg_rank))
                    ((int32_t)(num_procs_per_node))
                    ((hg_const_string_t)(client_addr_str))

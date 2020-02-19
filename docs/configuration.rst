@@ -50,26 +50,28 @@ a given section and key.
 .. table:: ``[unifyfs]`` section - main configuration settings
    :widths: auto
 
-   =============  ======  =====================================================
+   =============  ======  ===============================================
    Key            Type    Description
-   =============  ======  =====================================================
+   =============  ======  ===============================================
    cleanup        BOOL    cleanup storage on server exit (default: off)
    configfile     STRING  path to custom configuration file
    consistency    STRING  consistency model [ LAMINATED | POSIX | NONE ]
    daemonize      BOOL    enable server daemonization (default: off)
    mountpoint     STRING  mountpoint path prefix (default: /unifyfs)
-   =============  ======  =====================================================
+   =============  ======  ===============================================
 
 .. table:: ``[client]`` section - client settings
    :widths: auto
 
-   ==============  ======  =================================================================
-   Key             Type    Description
-   ==============  ======  =================================================================
-   max_files       INT     maximum number of open files per client process
-   flatten_writes  BOOL    enable flattening writes (optimization for overwrite-heavy codes)
-   local_extents   BOOL    service reads from local data if possible (default: off)
-   ==============  ======  =================================================================
+   ================  ======  =================================================================
+   Key               Type    Description
+   ================  ======  =================================================================
+   max_files         INT     maximum number of open files per client process (default: 128)
+   flatten_writes    BOOL    enable flattening writes (optimization for overwrite-heavy codes)
+   local_extents     BOOL    service reads from local data if possible (default: off)
+   recv_data_size    INT     maximum size (B) of memory buffer for receiving data from server
+   write_index_size  INT     maximum size (B) of memory buffer for storing write log metadata
+   ================  ======  =================================================================
 
 Enabling the ``local_extents`` optimization may significantly improve read
 performance.  However, it should not be used by applications
@@ -80,15 +82,27 @@ files.
 .. table:: ``[log]`` section - logging settings
    :widths: auto
 
-   =============  ======  =====================================================
-   Key            Type    Description
-   =============  ======  =====================================================
-   dir            STRING  path to directory to contain server log file
-   file           STRING  server log file base name (rank will be appended)
-   verbosity      INT     server logging verbosity level [0-5] (default: 0)
-   =============  ======  =====================================================
+   ==========  ======  ==================================================
+   Key         Type    Description
+   ==========  ======  ==================================================
+   dir         STRING  path to directory to contain server log file
+   file        STRING  log file base name (rank will be appended)
+   verbosity   INT     logging verbosity level [0-5] (default: 0)
+   ==========  ======  ==================================================
 
-.. table:: ``[meta]`` section - metadata settings
+.. table:: ``[logio]`` section - log-based write data storage settings
+   :widths: auto
+
+   ===========  ======  ============================================================
+   Key          Type    Description
+   ===========  ======  ============================================================
+   chunk_size   INT     data chunk size (B) (default: 4 MiB)
+   shmem_size   INT     maximum size (B) of data in shared memory (default: 256 MiB)
+   spill_size   INT     maximum size (B) of data in spillover file (default: 1 GiB)
+   spill_dir    STRING  path to spillover data directory
+   ===========  ======  ============================================================
+
+.. table:: ``[meta]`` section - MDHIM metadata settings
    :widths: auto
 
    =============  ======  =====================================================
@@ -103,54 +117,29 @@ files.
 .. table:: ``[runstate]`` section - server runstate settings
    :widths: auto
 
-   =============  ======  =====================================================
-   Key            Type    Description
-   =============  ======  =====================================================
-   dir            STRING  path to directory to contain server runstate file
-   =============  ======  =====================================================
+   ========  ======  ==================================================
+   Key       Type    Description
+   ========  ======  ==================================================
+   dir       STRING  path to directory to contain server runstate file
+   ========  ======  ==================================================
 
 .. table:: ``[server]`` section - server settings
    :widths: auto
 
-   =============  ======  =====================================================
-   Key            Type    Description
-   =============  ======  =====================================================
-   hostfile       STRING  path to server hostfile
-   =============  ======  =====================================================
+   ==========  ======  ========================
+   Key         Type    Description
+   ==========  ======  ========================
+   hostfile    STRING  path to server hostfile
+   ==========  ======  ========================
 
 .. table:: ``[sharedfs]`` section - server shared files settings
    :widths: auto
 
-   =============  ======  =====================================================
-   Key            Type    Description
-   =============  ======  =====================================================
-   dir            STRING  path to directory to contain server shared files
-   =============  ======  =====================================================
-
-.. table:: ``[shmem]`` section - shared memory segment usage settings
-   :widths: auto
-
-   =============  ======  =====================================================
-   Key            Type    Description
-   =============  ======  =====================================================
-   chunk_bits     INT     data chunk size (bits), size = 2^bits (default: 24)
-   chunk_mem      INT     segment size (B) for data chunks (default: 256 MiB)
-   recv_size      INT     segment size (B) for receiving data from local server
-   req_size       INT     segment size (B) for sending requests to local server
-   single         BOOL    use one memory region for all clients (default: off)
-   =============  ======  =====================================================
-
-.. table:: ``[spillover]`` section - local data storage spillover settings
-   :widths: auto
-
-   =============  ======  =====================================================
-   Key            Type    Description
-   =============  ======  =====================================================
-   enabled        BOOL    use local storage for data spillover (default: on)
-   data_dir       STRING  path to spillover data directory
-   meta_dir       STRING  path to spillover metadata directory
-   size           INT     maximum size (B) of spillover data (default: 1 GiB)
-   =============  ======  =====================================================
+   ========  ======  =================================================
+   Key       Type    Description
+   ========  ======  =================================================
+   dir       STRING  path to directory to contain server shared files
+   ========  ======  =================================================
 
 
 -----------------------

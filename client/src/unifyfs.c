@@ -70,7 +70,6 @@ unifyfs_index_buf_t unifyfs_indices;
 static size_t unifyfs_index_buf_size;    /* size of metadata log */
 static size_t unifyfs_fattr_buf_size;
 unsigned long unifyfs_max_index_entries; /* max metadata log entries */
-int unifyfs_spillmetablock;
 
 /* tracks total number of unsync'd segments for all files */
 unsigned long unifyfs_segment_count;
@@ -79,33 +78,16 @@ int global_rank_cnt;  /* count of world ranks */
 int local_rank_cnt;
 int local_rank_idx;
 
-int local_del_cnt = 1;
-int client_sockfd = -1;
-struct pollfd cmd_fd;
-
-/* shared memory buffer to transfer read requests
- * from client to server */
-static char   shm_req_name[GEN_STR_LEN]  = {0};
-static size_t shm_req_size = UNIFYFS_SHMEM_REQ_SIZE;
-void* shm_req_buf;
+int local_del_cnt = 1; /* count of local servers */
 
 /* shared memory buffer to transfer read replies
  * from server to client */
-static char   shm_recv_name[GEN_STR_LEN] = {0};
-static size_t shm_recv_size = UNIFYFS_SHMEM_RECV_SIZE;
-void* shm_recv_buf;
+static size_t shm_recv_size = UNIFYFS_DATA_RECV_SIZE;
+shm_context* shm_recv_ctx; // = NULL
 
 int client_rank;
 int app_id;
 size_t unifyfs_key_slice_range;
-
-/* whether chunks should be allocated to
- * store file contents in memory */
-int unifyfs_use_memfs = 1;
-
-/* whether chunks should be allocated to
- * store file contents on spill over device */
-int unifyfs_use_spillover = 1;
 
 static int unifyfs_use_single_shm = 0;
 static int unifyfs_page_size      = 0;
@@ -119,40 +101,23 @@ static off_t unifyfs_min_long;
 int    unifyfs_max_files;  /* maximum number of files to store */
 bool   unifyfs_flatten_writes; /* flatten our writes (true = enabled) */
 bool   unifyfs_local_extents;  /* track data extents in client to read local */
-size_t unifyfs_chunk_mem;  /* number of bytes in memory to be used for chunk storage */
-int    unifyfs_chunk_bits; /* we set chunk size = 2^unifyfs_chunk_bits */
-off_t  unifyfs_chunk_size; /* chunk size in bytes */
-off_t  unifyfs_chunk_mask; /* mask applied to logical offset to determine physical offset within chunk */
-long   unifyfs_max_chunks; /* maximum number of chunks that fit in memory */
 
-/* number of bytes in spillover to be used for chunk storage */
-static size_t unifyfs_spillover_size;
-
-/* maximum number of chunks that fit in spillover storage */
-long unifyfs_spillover_max_chunks;
-
-extern pthread_mutex_t unifyfs_stack_mutex;
+/* log-based I/O context */
+logio_context* logio_ctx;
 
 /* keep track of what we've initialized */
 int unifyfs_initialized = 0;
 
-/* shared memory for superblock */
-static char   shm_super_name[GEN_STR_LEN] = {0};
-static size_t shm_super_size;
+/* superblock - persistent shared memory region (metadata + data) */
+static shm_context* shm_super_ctx;
 
-/* global persistent memory block (metadata + data) */
-void* shm_super_buf;
+/* per-file metadata */
 static void* free_fid_stack;
-void* free_chunk_stack;
-void* free_spillchunk_stack;
 unifyfs_filename_t* unifyfs_filelist;
 static unifyfs_filemeta_t* unifyfs_filemetas;
 
-unifyfs_chunkmeta_t* unifyfs_chunkmetas;
-
-char* unifyfs_chunks;
-int unifyfs_spilloverblock = 0;
-int unifyfs_spillmetablock = 0; /*used for log-structured i/o*/
+/* TODO: metadata spillover is not currently supported */
+int unifyfs_spillmetablock = -1;
 
 /* array of file descriptors */
 unifyfs_fd_t unifyfs_fds[UNIFYFS_MAX_FILEDESCS];
@@ -187,15 +152,9 @@ void* unifyfs_dirstream_stack;
 /* mount point information */
 char*  unifyfs_mount_prefix;
 size_t unifyfs_mount_prefixlen = 0;
-static key_t  unifyfs_mount_shmget_key = 0;
 
 /* mutex to lock stack operations */
 pthread_mutex_t unifyfs_stack_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-/* path of external storage's mount point*/
-
-char external_data_dir[UNIFYFS_MAX_FILENAME] = {0};
-char external_meta_dir[UNIFYFS_MAX_FILENAME] = {0};
 
 /* single function to route all unsupported wrapper calls through */
 int unifyfs_vunsupported(
@@ -297,24 +256,6 @@ inline int unifyfs_would_overflow_long(long a, long b)
      * then adding them together will produce a result closer to 0
      * or at least no further away than either value already is */
     return 0;
-}
-
-/* given an input mode, mask it with umask and return, can specify
- * an input mode==0 to specify all read/write bits */
-mode_t unifyfs_getmode(mode_t perms)
-{
-    /* perms == 0 is shorthand for all read and write bits */
-    if (perms == 0) {
-        perms = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-    }
-
-    /* get current user mask */
-    mode_t mask = umask(0);
-    umask(mask);
-
-    /* mask off bits from desired permissions */
-    mode_t ret = perms & ~mask & 0777;
-    return ret;
 }
 
 /* lock access to shared data structures in superblock */
@@ -997,11 +938,9 @@ int unifyfs_fid_create_directory(const char* path)
     return UNIFYFS_SUCCESS;
 }
 
-/* write count bytes from buf into file starting at offset pos,
- * all bytes are assumed to be allocated to file, so file should
- * be extended before calling this routine.
+/* Write count bytes from buf into file starting at offset pos.
  *
- * Returns a UNIFYFS_ERROR on error, 0 on success.
+ * Returns UNIFYFS_SUCCESS, or an error code
  */
 int unifyfs_fid_write(int fid, off_t pos, const void* buf, size_t count)
 {
@@ -1018,88 +957,13 @@ int unifyfs_fid_write(int fid, off_t pos, const void* buf, size_t count)
     /* determine storage type to write file data */
     if (meta->storage == FILE_STORAGE_LOGIO) {
         /* file stored in fixed-size chunks */
-        rc = unifyfs_fid_store_fixed_write(fid, meta, pos, buf, count);
+        rc = unifyfs_fid_logio_write(fid, meta, pos, buf, count);
     } else {
         /* unknown storage type */
         rc = EIO;
     }
 
     return rc;
-}
-
-/* given a file id, write zero bytes to region of specified offset
- * and length, assumes space is already reserved */
-int unifyfs_fid_write_zero(int fid, off_t pos, off_t count)
-{
-    int rc = UNIFYFS_SUCCESS;
-
-    /* allocate an aligned chunk of memory */
-    size_t buf_size = 1024 * 1024;
-    void* buf = (void*) malloc(buf_size);
-    if (buf == NULL) {
-        return EIO;
-    }
-
-    /* set values in this buffer to zero */
-    memset(buf, 0, buf_size);
-
-    /* write zeros to file */
-    off_t written = 0;
-    off_t curpos = pos;
-    while (written < count) {
-        /* compute number of bytes to write on this iteration */
-        size_t num = buf_size;
-        off_t remaining = count - written;
-        if (remaining < (off_t) buf_size) {
-            num = (size_t) remaining;
-        }
-
-        /* write data to file */
-        int write_rc = unifyfs_fid_write(fid, curpos, buf, num);
-        if (write_rc != UNIFYFS_SUCCESS) {
-            rc = EIO;
-            break;
-        }
-
-        /* update the number of bytes written */
-        curpos  += (off_t) num;
-        written += (off_t) num;
-    }
-
-    /* free the buffer */
-    free(buf);
-
-    return rc;
-}
-
-/* increase size of file if length is greater than current size,
- * and allocate additional chunks as needed to reserve space for
- * length bytes */
-int unifyfs_fid_extend(int fid, off_t length)
-{
-    int rc;
-
-    /* get meta data for this file */
-    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-
-    /* determine file storage type */
-    if (meta->storage == FILE_STORAGE_LOGIO) {
-        /* file stored in fixed-size chunks */
-        rc = unifyfs_fid_store_fixed_extend(fid, meta, length);
-    } else {
-        /* unknown storage type */
-        rc = EIO;
-    }
-
-    return rc;
-}
-
-/* if length is less than reserved space, give back space down to length */
-int unifyfs_fid_shrink(int fid, off_t length)
-{
-    /* TODO: implement this function */
-
-    return EIO;
 }
 
 /* truncate file id to given length, frees resources if length is
@@ -1263,10 +1127,8 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         }
 
         LOGDBG("Creating a new entry for %s.", path);
-        LOGDBG("shm_super_buf = %p; free_fid_stack = %p; "
-               "free_chunk_stack = %p; unifyfs_filelist = %p; "
-               "chunks = %p", shm_super_buf, free_fid_stack,
-               free_chunk_stack, unifyfs_filelist, unifyfs_chunks);
+        LOGDBG("superblock addr = %p; free_fid_stack = %p; filelist = %p",
+               shm_super_ctx->addr, free_fid_stack, unifyfs_filelist);
 
         /* allocate a file id slot for this new file */
         fid = unifyfs_fid_create_file(path);
@@ -1413,33 +1275,6 @@ static size_t unifyfs_superblock_size(void)
     /* file metadata struct array */
     sb_size += unifyfs_max_files * sizeof(unifyfs_filemeta_t);
 
-    if (unifyfs_use_memfs) {
-        /* memory chunk metadata struct array for each file,
-         * enables a file to use all space in memory */
-        sb_size += unifyfs_max_files * unifyfs_max_chunks *
-                   sizeof(unifyfs_chunkmeta_t);
-    }
-    if (unifyfs_use_spillover) {
-        /* spillover chunk metadata struct array for each file,
-         * enables a file to use all space in spillover file */
-        sb_size += unifyfs_max_files * unifyfs_spillover_max_chunks *
-                   sizeof(unifyfs_chunkmeta_t);
-    }
-
-    /* free chunk stack */
-    if (unifyfs_use_memfs) {
-        sb_size += unifyfs_stack_bytes(unifyfs_max_chunks);
-    }
-    if (unifyfs_use_spillover) {
-        sb_size += unifyfs_stack_bytes(unifyfs_spillover_max_chunks);
-    }
-
-    /* space for memory chunks */
-    if (unifyfs_use_memfs) {
-        sb_size += unifyfs_page_size;
-        sb_size += unifyfs_max_chunks * unifyfs_chunk_size;
-    }
-
     /* index region size */
     sb_size += unifyfs_page_size;
     sb_size += unifyfs_max_index_entries * sizeof(unifyfs_index_t);
@@ -1482,37 +1317,6 @@ static void* unifyfs_init_pointers(void* superblock)
     unifyfs_filemetas = (unifyfs_filemeta_t*)ptr;
     ptr += unifyfs_max_files * sizeof(unifyfs_filemeta_t);
 
-    /* array of chunk meta data strucutres for each file */
-    unifyfs_chunkmetas = (unifyfs_chunkmeta_t*)ptr;
-    if (unifyfs_use_memfs) {
-        ptr += unifyfs_max_files * unifyfs_max_chunks *
-               sizeof(unifyfs_chunkmeta_t);
-    }
-    if (unifyfs_use_spillover) {
-        ptr += unifyfs_max_files * unifyfs_spillover_max_chunks *
-               sizeof(unifyfs_chunkmeta_t);
-    }
-
-    /* stack to manage free memory data chunks */
-    if (unifyfs_use_memfs) {
-        free_chunk_stack = ptr;
-        ptr += unifyfs_stack_bytes(unifyfs_max_chunks);
-    }
-    if (unifyfs_use_spillover) {
-        free_spillchunk_stack = ptr;
-        ptr += unifyfs_stack_bytes(unifyfs_spillover_max_chunks);
-    }
-
-    /* Only set this up if we're using memfs */
-    if (unifyfs_use_memfs) {
-        /* pointer to start of memory data chunks */
-        ptr = next_page_align(ptr);
-        unifyfs_chunks = ptr;
-        ptr += unifyfs_max_chunks * unifyfs_chunk_size;
-    } else {
-        unifyfs_chunks = NULL;
-    }
-
     /* record pointer to number of index entries */
     unifyfs_indices.ptr_num_entries = (size_t*)ptr;
 
@@ -1524,7 +1328,7 @@ static void* unifyfs_init_pointers(void* superblock)
     /* compute size of memory we're using and check that
      * it matches what we allocated */
     size_t ptr_size = (size_t)(ptr - (char*)superblock);
-    if (ptr_size > shm_super_size) {
+    if (ptr_size > shm_super_ctx->size) {
         LOGERR("Data structures in superblock extend beyond its size");
     }
 
@@ -1534,15 +1338,6 @@ static void* unifyfs_init_pointers(void* superblock)
 /* initialize data structures for first use */
 static int unifyfs_init_structures()
 {
-    /* compute total number of storage chunks available */
-    int numchunks = 0;
-    if (unifyfs_use_memfs) {
-        numchunks += unifyfs_max_chunks;
-    }
-    if (unifyfs_use_spillover) {
-        numchunks += unifyfs_spillover_max_chunks;
-    }
-
     int i;
     for (i = 0; i < unifyfs_max_files; i++) {
         /* indicate that file id is not in use by setting flag to 0 */
@@ -1550,23 +1345,10 @@ static int unifyfs_init_structures()
 
         /* set pointer to array of chunkmeta data structures */
         unifyfs_filemeta_t* filemeta = &unifyfs_filemetas[i];
-
-        /* compute offset to start of chunk meta list for this file */
-        filemeta->chunkmeta_idx = numchunks * i;
     }
 
     /* initialize stack of free file ids */
     unifyfs_stack_init(free_fid_stack, unifyfs_max_files);
-
-    /* initialize list of free memory chunks */
-    if (unifyfs_use_memfs) {
-        unifyfs_stack_init(free_chunk_stack, unifyfs_max_chunks);
-    }
-
-    /* initialize list of free spillover chunks */
-    if (unifyfs_use_spillover) {
-        unifyfs_stack_init(free_spillchunk_stack, unifyfs_spillover_max_chunks);
-    }
 
     /* initialize count of key/value entries */
     *(unifyfs_indices.ptr_num_entries) = 0;
@@ -1605,21 +1387,21 @@ static int unifyfs_get_spillblock(size_t size, const char* path)
 
 /* create superblock of specified size and name, or attach to existing
  * block if available */
-static void* unifyfs_superblock_shmget(size_t size, key_t key)
+static int unifyfs_superblock_shmget(size_t super_sz)
 {
-    /* define name for superblock shared memory region */
-    snprintf(shm_super_name, sizeof(shm_super_name), "%d-super-%d",
-             app_id, key);
-    LOGDBG("Key for superblock = %x", key);
+    char shm_name[SHMEM_NAME_LEN] = {0};
 
-    /* open shared memory file */
-    void* addr = unifyfs_shm_alloc(shm_super_name, size);
-    if (addr == NULL) {
-        LOGERR("Failed to create superblock");
-        return NULL;
+    /* attach shmem region for client's superblock */
+    sprintf(shm_name, SHMEM_SUPER_FMTSTR, app_id, local_rank_idx);
+    shm_context* shm_ctx = unifyfs_shm_alloc(shm_name, super_sz);
+    if (NULL == shm_ctx) {
+        LOGERR("Failed to attach to shmem superblock region %s", shm_name);
+        return UNIFYFS_ERROR_SHMEM;
     }
+    shm_super_ctx = shm_ctx;
 
     /* init our global variables to point to spots in superblock */
+    void* addr = shm_ctx->addr;
     unifyfs_init_pointers(addr);
 
     /* initialize structures in superblock if it's newly allocated,
@@ -1636,7 +1418,7 @@ static void* unifyfs_superblock_shmget(size_t size, key_t key)
     }
 
     /* return starting memory address of super block */
-    return addr;
+    return UNIFYFS_SUCCESS;
 }
 
 static int unifyfs_init(int rank)
@@ -1696,27 +1478,6 @@ static int unifyfs_init(int rank)
         unifyfs_max_long = LONG_MAX;
         unifyfs_min_long = LONG_MIN;
 
-        /* will we use spillover to store the files? */
-        unifyfs_use_spillover = 1;
-        cfgval = client_cfg.spillover_enabled;
-        if (cfgval != NULL) {
-            rc = configurator_bool_val(cfgval, &b);
-            if ((rc == 0) && !b) {
-                unifyfs_use_spillover = 0;
-            }
-        }
-        LOGDBG("are we using spillover? %d", unifyfs_use_spillover);
-
-        /* determine maximum number of bytes of spillover for chunk storage */
-        unifyfs_spillover_size = UNIFYFS_SPILLOVER_SIZE;
-        cfgval = client_cfg.spillover_size;
-        if (cfgval != NULL) {
-            rc = configurator_int_val(cfgval, &l);
-            if (rc == 0) {
-                unifyfs_spillover_size = (size_t)l;
-            }
-        }
-
         /* determine max number of files to store in file system */
         unifyfs_max_files = UNIFYFS_MAX_FILES;
         cfgval = client_cfg.client_max_files;
@@ -1748,39 +1509,10 @@ static int unifyfs_init(int rank)
             }
         }
 
-        /* determine number of bits for chunk size */
-        unifyfs_chunk_bits = UNIFYFS_CHUNK_BITS;
-        cfgval = client_cfg.shmem_chunk_bits;
-        if (cfgval != NULL) {
-            rc = configurator_int_val(cfgval, &l);
-            if (rc == 0) {
-                unifyfs_chunk_bits = (int)l;
-            }
-        }
-
-        /* determine maximum number of bytes of memory for chunk storage */
-        unifyfs_chunk_mem = UNIFYFS_CHUNK_MEM;
-        cfgval = client_cfg.shmem_chunk_mem;
-        if (cfgval != NULL) {
-            rc = configurator_int_val(cfgval, &l);
-            if (rc == 0) {
-                unifyfs_chunk_mem = (size_t)l;
-            }
-        }
-
-        /* set chunk size, set chunk offset mask, and set total number
-         * of chunks */
-        unifyfs_chunk_size = 1 << unifyfs_chunk_bits;
-        unifyfs_chunk_mask = unifyfs_chunk_size - 1;
-        unifyfs_max_chunks = unifyfs_chunk_mem >> unifyfs_chunk_bits;
-
-        /* set number of chunks in spillover device */
-        unifyfs_spillover_max_chunks = unifyfs_spillover_size >> unifyfs_chunk_bits;
-
         /* define size of buffer used to cache key/value pairs for
          * data offsets before passing them to the server */
         unifyfs_index_buf_size = UNIFYFS_INDEX_BUF_SIZE;
-        cfgval = client_cfg.logfs_index_buf_size;
+        cfgval = client_cfg.client_write_index_size;
         if (cfgval != NULL) {
             rc = configurator_int_val(cfgval, &l);
             if (rc == 0) {
@@ -1836,68 +1568,23 @@ static int unifyfs_init(int rank)
         unifyfs_stack_init(unifyfs_dirstream_stack, num_dirstreams);
 
         /* determine the size of the superblock */
-        shm_super_size = unifyfs_superblock_size();
+        size_t shm_super_size = unifyfs_superblock_size();
 
         /* get a superblock of shared memory and initialize our
          * global variables for this block */
-        shm_super_buf = unifyfs_superblock_shmget(
-                            shm_super_size, unifyfs_mount_shmget_key);
-        if (shm_super_buf == NULL) {
+        rc = unifyfs_superblock_shmget(shm_super_size);
+        if (rc != UNIFYFS_SUCCESS) {
             LOGERR("unifyfs_superblock_shmget() failed");
-            return UNIFYFS_FAILURE;
+            return rc;
         }
 
-        /* initialize spillover store */
-        if (unifyfs_use_spillover) {
-            /* get directory in which to create spill over files */
-            cfgval = client_cfg.spillover_data_dir;
-            if (cfgval != NULL) {
-                strncpy(external_data_dir, cfgval, sizeof(external_data_dir));
-            } else {
-                LOGERR("UNIFYFS_SPILLOVER_DATA_DIR not set, must be an existing"
-                       " writable path (e.g., /mnt/ssd):");
-                return UNIFYFS_FAILURE;
-            }
-
-            /* define path to the spill over file for data chunks */
-            char spillfile_prefix[UNIFYFS_MAX_FILENAME];
-            snprintf(spillfile_prefix, sizeof(spillfile_prefix),
-                     "%s/spill_%d_%d.log",
-                     external_data_dir, app_id, local_rank_idx);
-
-            /* create the spill over file */
-            unifyfs_spilloverblock =
-                unifyfs_get_spillblock(unifyfs_spillover_size,
-                                       spillfile_prefix);
-            if (unifyfs_spilloverblock < 0) {
-                LOGERR("unifyfs_get_spillblock() failed!");
-                return UNIFYFS_FAILURE;
-            }
-
-            /* get directory in which to create spill over files
-             * for key/value pairs */
-            cfgval = client_cfg.spillover_meta_dir;
-            if (cfgval != NULL) {
-                strncpy(external_meta_dir, cfgval, sizeof(external_meta_dir));
-            } else {
-                LOGERR("UNIFYFS_SPILLOVER_META_DIR not set, must be an existing"
-                       " writable path (e.g., /mnt/ssd):");
-                return UNIFYFS_FAILURE;
-            }
-
-            /* define path to the spill over file for key/value pairs */
-            snprintf(spillfile_prefix, sizeof(spillfile_prefix),
-                     "%s/spill_index_%d_%d.log",
-                     external_meta_dir, app_id, local_rank_idx);
-
-            /* create the spill over file for key value data */
-            unifyfs_spillmetablock =
-                unifyfs_get_spillblock(unifyfs_index_buf_size,
-                                       spillfile_prefix);
-            if (unifyfs_spillmetablock < 0) {
-                LOGERR("unifyfs_get_spillmetablock failed!");
-                return UNIFYFS_FAILURE;
-            }
+        /* initialize log-based I/O context */
+        rc = unifyfs_logio_init_client(app_id, local_rank_idx, &client_cfg,
+                                       &logio_ctx);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to initialize log-based I/O (rc = %s)",
+                   unifyfs_rc_enum_str(rc));
+            return rc;
         }
 
         /* remember that we've now initialized the library */
@@ -1915,25 +1602,21 @@ static int unifyfs_init(int rank)
 void fill_client_mount_info(unifyfs_mount_in_t* in)
 {
     size_t meta_offset = (char*)unifyfs_indices.ptr_num_entries -
-                         (char*)shm_super_buf;
+                         (char*)shm_super_ctx->addr;
     size_t meta_size   = unifyfs_max_index_entries
                          * sizeof(unifyfs_index_t);
 
-    size_t data_offset = (char*)unifyfs_chunks - (char*)shm_super_buf;
-    size_t data_size   = (size_t)unifyfs_max_chunks * unifyfs_chunk_size;
-
     in->app_id             = app_id;
-    in->local_rank_idx     = local_rank_idx;
+    in->client_id          = local_rank_idx;
     in->dbg_rank           = client_rank;
     in->num_procs_per_node = local_rank_cnt;
-    in->req_buf_sz         = shm_req_size;
     in->recv_buf_sz        = shm_recv_size;
-    in->superblock_sz      = shm_super_size;
+    in->superblock_sz      = shm_super_ctx->size;
     in->meta_offset        = meta_offset;
     in->meta_size          = meta_size;
-    in->data_offset        = data_offset;
-    in->data_size          = data_size;
-    in->external_spill_dir = strdup(external_data_dir);
+    in->logio_mem_size     = logio_ctx->shmem->size;
+    in->logio_spill_size   = logio_ctx->spill_sz;
+    in->external_spill_dir = strdup(client_cfg.logio_spill_dir);
 }
 
 /**
@@ -1941,8 +1624,10 @@ void fill_client_mount_info(unifyfs_mount_in_t* in)
  */
 static int unifyfs_init_recv_shm(int local_rank_idx, int app_id)
 {
+    char shm_recv_name[SHMEM_NAME_LEN] = {0};
+
     /* get size of shared memory region from configuration */
-    char* cfgval = client_cfg.shmem_recv_size;
+    char* cfgval = client_cfg.client_recv_data_size;
     if (cfgval != NULL) {
         long l;
         int rc = configurator_int_val(cfgval, &l);
@@ -1953,84 +1638,16 @@ static int unifyfs_init_recv_shm(int local_rank_idx, int app_id)
 
     /* define file name to shared memory file */
     snprintf(shm_recv_name, sizeof(shm_recv_name),
-             "%d-recv-%d", app_id, local_rank_idx);
+             SHMEM_DATA_FMTSTR, app_id, local_rank_idx);
 
     /* allocate memory for shared memory receive buffer */
-    shm_recv_buf = unifyfs_shm_alloc(shm_recv_name, shm_recv_size);
-    if (shm_recv_buf == NULL) {
+    shm_recv_ctx = unifyfs_shm_alloc(shm_recv_name, shm_recv_size);
+    if (NULL == shm_recv_ctx) {
         LOGERR("Failed to create buffer for read replies");
         return UNIFYFS_FAILURE;
     }
 
     return UNIFYFS_SUCCESS;
-}
-
-/**
- * Initialize the shared request memory, which
- * is used to buffer the list of read requests
- * to be transferred to the delegator on the
- * server side.
- * @param local_rank_idx: local process id
- * @param app_id: which application this
- *  process is from
- * @return success/error code
- */
-static int unifyfs_init_req_shm(int local_rank_idx, int app_id)
-{
-    /* get size of shared memory region from configuration */
-    char* cfgval = client_cfg.shmem_req_size;
-    if (cfgval != NULL) {
-        long l;
-        int rc = configurator_int_val(cfgval, &l);
-        if (rc == 0) {
-            shm_req_size = l;
-        }
-    }
-
-    /* define name of shared memory region for request buffer */
-    snprintf(shm_req_name, sizeof(shm_req_name),
-             "%d-req-%d", app_id, local_rank_idx);
-
-    /* allocate memory for shared memory receive buffer */
-    shm_req_buf = unifyfs_shm_alloc(shm_req_name, shm_req_size);
-    if (shm_req_buf == NULL) {
-        LOGERR("Failed to create buffer for read requests");
-        return UNIFYFS_FAILURE;
-    }
-
-    return UNIFYFS_SUCCESS;
-}
-
-static int compare_int(const void* a, const void* b)
-{
-    const int* ptr_a = a;
-    const int* ptr_b = b;
-
-    if (*ptr_a - *ptr_b > 0) {
-        return 1;
-    }
-
-    if (*ptr_a - *ptr_b < 0) {
-        return -1;
-    }
-
-    return 0;
-}
-
-static int compare_name_rank_pair(const void* a, const void* b)
-{
-    const name_rank_pair_t* pair_a = a;
-    const name_rank_pair_t* pair_b = b;
-
-    if (strcmp(pair_a->hostname, pair_b->hostname) > 0) {
-        return 1;
-    }
-
-    if (strcmp(pair_a->hostname, pair_b->hostname) < 0) {
-        return -1;
-    }
-
-    return 0;
 }
 
 /**
@@ -2273,23 +1890,6 @@ int unifyfs_mount(const char prefix[], int rank, size_t size,
     unifyfs_mount_prefix = strdup(prefix);
     unifyfs_mount_prefixlen = strlen(unifyfs_mount_prefix);
 
-    /*
-     * unifyfs_mount_shmget_key marks the start of
-     * the superblock shared memory of each rank
-     * each process has three types of shared memory:
-     * request memory, recv memory and superblock
-     * memory. We set unifyfs_mount_shmget_key in
-     * this way to avoid different ranks conflicting
-     * on the same name in shm_open.
-     */
-    cfgval = client_cfg.shmem_single;
-    if (cfgval != NULL) {
-        rc = configurator_bool_val(cfgval, &b);
-        if ((rc == 0) && b) {
-            unifyfs_use_single_shm = 1;
-        }
-    }
-
     /* compute our local rank on the node,
      * the following call initializes local_rank_{cnt,ndx} */
     rc = CountTasksPerNode(rank, size);
@@ -2297,10 +1897,6 @@ int unifyfs_mount(const char prefix[], int rank, size_t size,
         LOGERR("cannot get the local rank list.");
         return -1;
     }
-
-    /* use our local rank on the node in shared memory and file
-     * names to avoid conflicting with other procs on our node */
-    unifyfs_mount_shmget_key = local_rank_idx;
 
     /* initialize our library, creates superblock and spillover files */
     int ret = unifyfs_init(rank);
@@ -2315,18 +1911,10 @@ int unifyfs_mount(const char prefix[], int rank, size_t size,
         return ret;
     }
 
-    /* create shared memory region for read requests */
-    rc = unifyfs_init_req_shm(local_rank_idx, app_id);
-    if (rc < 0) {
-        LOGERR("failed to init shared request memory");
-        return UNIFYFS_FAILURE;
-    }
-
     /* create shared memory region for holding data for read replies */
     rc = unifyfs_init_recv_shm(local_rank_idx, app_id);
     if (rc < 0) {
         LOGERR("failed to init shared receive memory");
-        unifyfs_shm_unlink(shm_req_name);
         return UNIFYFS_FAILURE;
     }
 
@@ -2341,21 +1929,18 @@ int unifyfs_mount(const char prefix[], int rank, size_t size,
         /* TODO: need more clean up here, but this at least deletes
          * some files we would otherwise leave behind */
 
-        /* Delete file for shared memory regions for
-         * read requests and read replies */
-        unifyfs_shm_unlink(shm_req_name);
-        unifyfs_shm_unlink(shm_recv_name);
+        /* Delete file for read reply shared memory region */
+        unifyfs_shm_unlink(shm_recv_ctx);
 
         return ret;
     }
 
     /* Once we return from mount, we know the server has attached to our
-     * shared memory regions for read requests and read replies, so we
-     * can safely remove these files.  The memory regions will stay active
-     * until both client and server unmap them.  We keep the superblock file
-     * around so that a future client can reattach to it. */
-    unifyfs_shm_unlink(shm_req_name);
-    unifyfs_shm_unlink(shm_recv_name);
+     * shared memory region for read replies, so we can safely remove the
+     * file. The memory region will stay active until both client and server
+     * unmap them. We keep the superblock file around so that a future client
+     * can reattach to it. */
+    unifyfs_shm_unlink(shm_recv_ctx);
 
     /* add mount point as a new directory in the file list */
     if (unifyfs_get_fid_from_path(prefix) < 0) {
@@ -2388,18 +1973,14 @@ static int unifyfs_finalize(void)
     }
 
     /* close spillover files */
-    if (unifyfs_spilloverblock != 0) {
-        close(unifyfs_spilloverblock);
-        unifyfs_spilloverblock = 0;
-    }
-
-    if (unifyfs_spillmetablock != 0) {
+    unifyfs_logio_close(logio_ctx);
+    if (unifyfs_spillmetablock != -1) {
         close(unifyfs_spillmetablock);
-        unifyfs_spillmetablock = 0;
+        unifyfs_spillmetablock = -1;
     }
 
     /* detach from superblock */
-    unifyfs_shm_free(shm_super_name, shm_super_size, &shm_super_buf);
+    unifyfs_shm_free(&shm_super_ctx);
 
     /* free directory stream stack */
     if (unifyfs_dirstream_stack != NULL) {
@@ -2445,18 +2026,7 @@ int unifyfs_unmount(void)
      ************************/
 
     /* detach from shared memory regions */
-    unifyfs_shm_free(shm_req_name,  shm_req_size,  &shm_req_buf);
-    unifyfs_shm_free(shm_recv_name, shm_recv_size, &shm_recv_buf);
-
-    /* close socket to server */
-    if (client_sockfd >= 0) {
-        errno = 0;
-        rc = close(client_sockfd);
-        if (rc != 0) {
-            LOGERR("Failed to close() socket to server errno=%d (%s)",
-                   errno, strerror(errno));
-        }
-    }
+    unifyfs_shm_free(&shm_recv_ctx);
 
     /* invoke unmount rpc to tell server we're disconnecting */
     LOGDBG("calling unmount");

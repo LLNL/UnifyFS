@@ -163,9 +163,9 @@ static void register_client_server_rpcs(margo_instance_id mid)
                    unifyfs_metaset_in_t, unifyfs_metaset_out_t,
                    unifyfs_metaset_rpc);
 
-    MARGO_REGISTER(mid, "unifyfs_fsync_rpc",
-                   unifyfs_fsync_in_t, unifyfs_fsync_out_t,
-                   unifyfs_fsync_rpc);
+    MARGO_REGISTER(mid, "unifyfs_sync_rpc",
+                   unifyfs_sync_in_t, unifyfs_sync_out_t,
+                   unifyfs_sync_rpc);
 
     MARGO_REGISTER(mid, "unifyfs_filesize_rpc",
                    unifyfs_filesize_in_t, unifyfs_filesize_out_t,

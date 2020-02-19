@@ -46,12 +46,6 @@
 #include "ucr_read_builder.h"
 #include "seg_tree.h"
 
-/* -------------------
- * define external variables
- * --------------------*/
-
-extern int unifyfs_spilloverblock;
-extern int unifyfs_use_spillover;
 
 #define MAX(a, b) (a > b ? a : b)
 
@@ -653,12 +647,6 @@ int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count)
 
     /* compute size log will be after we append data */
     off_t newlogsize = logsize + count;
-
-    /* allocate storage space to hold data for this write */
-    int extend_rc = unifyfs_fid_extend(fid, newlogsize);
-    if (extend_rc != UNIFYFS_SUCCESS) {
-        return extend_rc;
-    }
 
     /* finally write specified data to file */
     int write_rc = unifyfs_fid_write(fid, pos, buf, count);
@@ -1278,7 +1266,7 @@ static void delegator_signal(void)
     LOGDBG("receive buffer now empty");
 
     /* set shm flag to signal delegator we're done */
-    shm_header_t* hdr = (shm_header_t*)shm_recv_buf;
+    shm_data_header* hdr = (shm_data_header*)(shm_recv_ctx->addr);
     hdr->state = SHMEM_REGION_EMPTY;
 
     /* TODO: MEM_FLUSH */
@@ -1297,7 +1285,7 @@ static int delegator_wait(void)
     shm_wait_tm.tv_nsec = SHM_WAIT_INTERVAL;
 
     /* get pointer to flag in shared memory */
-    shm_header_t* hdr = (shm_header_t*)shm_recv_buf;
+    shm_data_header* hdr = (shm_data_header*)(shm_recv_ctx->addr);
 
     /* wait for server to set flag to non-zero */
     int max_sleep = 5000000; // 5s
@@ -1326,8 +1314,8 @@ static int process_read_data(read_req_t* read_reqs, int count, int* done)
     int rc = UNIFYFS_SUCCESS;
 
     /* get pointer to start of shared memory buffer */
-    shm_header_t* shm_hdr = (shm_header_t*)shm_recv_buf;
-    char* shmptr = ((char*)shm_hdr) + sizeof(shm_header_t);
+    shm_data_header* shm_hdr = (shm_data_header*)(shm_recv_ctx->addr);
+    char* shmptr = ((char*)shm_hdr) + sizeof(shm_data_header);
 
     /* get number of read replies in shared memory */
     size_t num = shm_hdr->meta_cnt;
@@ -1336,8 +1324,8 @@ static int process_read_data(read_req_t* read_reqs, int count, int* done)
     size_t i;
     for (i = 0; i < num; i++) {
         /* get pointer to current read reply header */
-        shm_meta_t* rep = (shm_meta_t*)shmptr;
-        shmptr += sizeof(shm_meta_t);
+        shm_data_meta* rep = (shm_data_meta*)shmptr;
+        shmptr += sizeof(shm_data_meta);
 
         /* get pointer to data */
         char* rep_buf = shmptr;
@@ -1558,13 +1546,13 @@ static void service_local_reqs(
          * again search for a starting extent using a range
          * of just the very first byte that we need */
         next = first;
-        while (next != NULL && next->start < req_end) {
+        while ((next != NULL) && (next->start < req_end)) {
             /* get start and end of this extent (reply) */
             size_t rep_start = next->start;
             size_t rep_end   = next->end + 1;
 
             /* get the offset into the log */
-            size_t pos = next->ptr;
+            size_t rep_log_pos = next->ptr;
 
             /* start of overlapping segment is the maximum of
              * reply and request start offsets */
@@ -1596,71 +1584,26 @@ static void service_local_reqs(
                 memset(req_ptr, 0, gap_length);
             }
 
-            /* copy data from reply buffer into request buffer */
+            /* copy data from local write log into request buffer */
             char* req_ptr = req->buf + req_offset;
-
-            /* compute total size of shared memory data region */
-            size_t chunk_mem_size = unifyfs_max_chunks * unifyfs_chunk_size;
-
-            /* compute number of bytes we'll read from shared memory */
-            size_t mem_length = 0;
-            if (pos < chunk_mem_size) {
-                /* we need to start from memory, assume we'll get it all */
-                mem_length = length;
-                if (pos + length > chunk_mem_size) {
-                    /* amount to read extends past end of memory segment,
-                     * compute the number of bytes in memory */
-                    mem_length = chunk_mem_size - pos;
+            off_t log_offset = rep_log_pos + rep_offset;
+            size_t nread = 0;
+            int rc = unifyfs_logio_read(logio_ctx, log_offset, length,
+                                        req_ptr, &nread);
+            if (rc == UNIFYFS_SUCCESS) {
+                if (nread < length) {
+                    /* account for short read by updating end offset */
+                    end -= (length - nread);
                 }
-            }
-
-            /* any remainder comes from the spill over file */
-            size_t spill_length = length - mem_length;
-
-            /* copy data from memory into request buffer */
-            if (mem_length > 0) {
-                /* pointer to data is starting address of superblock
-                 * data region (unify_chunks) + offset within the
-                 * superblock to the start of the segment in
-                 * reply (pos) + any offset from start of that segment
-                 * until the first byte we are asking for (rep_offset) */
-                char* mem_ptr = unifyfs_chunks + pos + rep_offset;
-                memcpy(req_ptr, mem_ptr, mem_length);
-            }
-
-            /* copy data from spill over into request buffer */
-            if (spill_length > 0) {
-                /* advance in user buffer past any bytes we copied in
-                 * from memory */
-                char* reqbuf = req_ptr + mem_length;
-
-                /* offset to start of data in spill over file is
-                 * position within log (pos) + offset from start of
-                 * segment to the first byte in segment that overlaps
-                 * with request (rep_offset) + any bytes copied from
-                 * memory (mem_length) - the size of the data region
-                 * in memory */
-                off_t spill_offset = pos + rep_offset + mem_length
-                    - chunk_mem_size;
-
-                /* TODO: loop on this if we get a short read
-                 * or EIO/EAGAIN */
-
-                /* read data from file into request buffer */
-                ssize_t rc = pread(unifyfs_spilloverblock,
-                    reqbuf, spill_length, spill_offset);
-                if (rc != length) {
-                    /* had a problem reading,
-                     * set the request error code */
-                    req->errcode = EIO;
+                /* update max number of bytes we have filled in the req buf */
+                size_t req_nread = end - req_start;
+                if (req_nread > req->nread) {
+                    req->nread = req_nread;
                 }
-            }
-
-            /* update max number of bytes we have written to in the
-             * request buffer */
-            size_t nread = end - req_start;
-            if (nread > req->nread) {
-                req->nread = nread;
+            } else {
+                LOGERR("local log read failed for offset=%zu size=%zu",
+                       (size_t)log_offset, length);
+                req->errcode = EIO;
             }
 
             /* get the next element in the tree */
@@ -1921,7 +1864,7 @@ int unifyfs_fd_logreadlist(read_req_t* in_reqs, int in_count)
         /* copy sever completed requests back into user's array */
         if (count > 0) {
             /* skip past any items we copied in from the local requests */
-            char* in_ptr = in_reqs + local_count * sizeof(read_req_t);
+            read_req_t* in_ptr = in_reqs + local_count;
             memcpy(in_ptr, read_reqs, count * sizeof(read_req_t));
         }
 

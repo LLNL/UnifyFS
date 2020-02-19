@@ -64,17 +64,6 @@ static int unifyfs_exit(void);
 int* local_rank_lst;
 int local_rank_cnt;
 
-/*
- * structure that records the information of
- * each application launched by srun.
- * */
-typedef struct {
-    char hostname[UNIFYFS_MAX_HOSTNAME];
-    int rank;
-} name_rank_pair_t;
-
-static int compare_name_rank_pair(const void* a, const void* b);
-static int compare_int(const void* a, const void* b);
 static int CountTasksPerNode(int rank, int numTasks);
 static int find_rank_idx(int my_rank);
 #endif
@@ -563,20 +552,6 @@ static int find_rank_idx(int my_rank)
     return -1;
 }
 
-static int compare_name_rank_pair(const void* a, const void* b)
-{
-    const name_rank_pair_t* pair_a = a;
-    const name_rank_pair_t* pair_b = b;
-    return strcmp(pair_a->hostname, pair_b->hostname);
-}
-
-static int compare_int(const void* a, const void* b)
-{
-    int aval = *(const int*)a;
-    int bval = *(const int*)b;
-    return aval - bval;
-}
-
 #endif // UNIFYFS_MULTIPLE_DELEGATORS
 #endif // UNIFYFSD_USE_MPI
 
@@ -623,43 +598,20 @@ static int unifyfs_exit(void)
 
         /* free resources allocate for each client */
         for (j = 0; j < MAX_NUM_CLIENTS; j++) {
-            /* Release request buffer shared memory region.  Client
-             * should have deleted file already, but will not hurt
-             * to do this again. */
-            if (app->shm_req_bufs[j] != NULL) {
-                unifyfs_shm_free(app->req_buf_name[j], app->req_buf_sz,
-                                 (void**)&(app->shm_req_bufs[j]));
-                unifyfs_shm_unlink(app->req_buf_name[j]);
-            }
-
             /* Release receive buffer shared memory region.  Client
              * should have deleted file already, but will not hurt
              * to do this again. */
             if (app->shm_recv_bufs[j] != NULL) {
-                unifyfs_shm_free(app->recv_buf_name[j], app->recv_buf_sz,
-                                 (void**)&(app->shm_recv_bufs[j]));
-                unifyfs_shm_unlink(app->recv_buf_name[j]);
+                unifyfs_shm_unlink(app->shm_recv_bufs[j]);
+                unifyfs_shm_free(&(app->shm_recv_bufs[j]));
             }
 
             /* Release super block shared memory region.
              * Server is responsible for deleting superblock shared
              * memory file that was created by the client. */
             if (app->shm_superblocks[j] != NULL) {
-                unifyfs_shm_free(app->super_buf_name[j], app->superblock_sz,
-                                 (void**)&(app->shm_superblocks[j]));
-                unifyfs_shm_unlink(app->super_buf_name[j]);
-            }
-
-            /* close spill log file and delete it */
-            if (app->spill_log_fds[j] > 0) {
-                close(app->spill_log_fds[j]);
-                unlink(app->spill_log_name[j]);
-            }
-
-            /* close spill log index file and delete it */
-            if (app->spill_index_log_fds[j] > 0) {
-                close(app->spill_index_log_fds[j]);
-                unlink(app->spill_index_log_name[j]);
+                unifyfs_shm_unlink(app->shm_superblocks[j]);
+                unifyfs_shm_free(&(app->shm_superblocks[j]));
             }
         }
     }

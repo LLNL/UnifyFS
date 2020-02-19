@@ -72,10 +72,15 @@
     UNIFYFS_CFG(client, max_files, INT, UNIFYFS_MAX_FILES, "client max file count", NULL) \
     UNIFYFS_CFG(client, flatten_writes, BOOL, on, "flatten writes", NULL) \
     UNIFYFS_CFG(client, local_extents, BOOL, off, "track extents to service reads of local data", NULL) \
+    UNIFYFS_CFG(client, recv_data_size, INT, UNIFYFS_DATA_RECV_SIZE, "shared memory segment size in bytes for receiving data from server", NULL) \
+    UNIFYFS_CFG(client, write_index_size, INT, UNIFYFS_INDEX_BUF_SIZE, "write metadata index buffer size", NULL) \
     UNIFYFS_CFG_CLI(log, verbosity, INT, 0, "log verbosity level", NULL, 'v', "specify logging verbosity level") \
     UNIFYFS_CFG_CLI(log, file, STRING, unifyfsd.log, "log file name", NULL, 'l', "specify log file name") \
     UNIFYFS_CFG_CLI(log, dir, STRING, LOGDIR, "log file directory", configurator_directory_check, 'L', "specify full path to directory to contain log file") \
-    UNIFYFS_CFG(logfs, index_buf_size, INT, UNIFYFS_INDEX_BUF_SIZE, "log file system index buffer size", NULL) \
+    UNIFYFS_CFG(logio, chunk_size, INT, UNIFYFS_LOGIO_CHUNK_SIZE, "log-based I/O data chunk size", NULL) \
+    UNIFYFS_CFG(logio, shmem_size, INT, UNIFYFS_LOGIO_SHMEM_SIZE, "log-based I/O shared memory region size", NULL) \
+    UNIFYFS_CFG(logio, spill_size, INT, UNIFYFS_LOGIO_SPILL_SIZE, "log-based I/O spillover file size", NULL) \
+    UNIFYFS_CFG(logio, spill_dir, STRING, NULLSTRING, "spillover directory", configurator_directory_check) \
     UNIFYFS_CFG(margo, tcp, BOOL, on, "use TCP for server-server margo RPCs", NULL) \
     UNIFYFS_CFG(meta, db_name, STRING, META_DEFAULT_DB_NAME, "metadata database name", NULL) \
     UNIFYFS_CFG(meta, db_path, STRING, RUNDIR, "metadata database path", configurator_directory_check) \
@@ -84,15 +89,7 @@
     UNIFYFS_CFG_CLI(runstate, dir, STRING, RUNDIR, "runstate file directory", configurator_directory_check, 'R', "specify full path to directory to contain server runstate file") \
     UNIFYFS_CFG_CLI(server, hostfile, STRING, NULLSTRING, "server hostfile name", NULL, 'H', "specify full path to server hostfile") \
     UNIFYFS_CFG_CLI(sharedfs, dir, STRING, NULLSTRING, "shared file system directory", configurator_directory_check, 'S', "specify full path to directory to contain server shared files") \
-    UNIFYFS_CFG(shmem, chunk_bits, INT, UNIFYFS_CHUNK_BITS, "shared memory data chunk size in bits (i.e., size=2^bits)", NULL) \
-    UNIFYFS_CFG(shmem, chunk_mem, INT, UNIFYFS_CHUNK_MEM, "shared memory segment size for data chunks", NULL) \
-    UNIFYFS_CFG(shmem, recv_size, INT, UNIFYFS_SHMEM_RECV_SIZE, "shared memory segment size in bytes for receiving data from delegators", NULL) \
-    UNIFYFS_CFG(shmem, req_size, INT, UNIFYFS_SHMEM_REQ_SIZE, "shared memory segment size in bytes for sending requests to delegators", NULL) \
-    UNIFYFS_CFG(shmem, single, BOOL, off, "use single shared memory region for all clients", NULL) \
-    UNIFYFS_CFG(spillover, enabled, BOOL, on, "use local device for data chunk spillover", NULL) \
-    UNIFYFS_CFG(spillover, data_dir, STRING, NULLSTRING, "spillover data directory", configurator_directory_check) \
-    UNIFYFS_CFG(spillover, meta_dir, STRING, NULLSTRING, "spillover metadata directory", configurator_directory_check) \
-    UNIFYFS_CFG(spillover, size, INT, UNIFYFS_SPILLOVER_SIZE, "spillover max data size in bytes", NULL) \
+
 
 #ifdef __cplusplus
 extern "C" {

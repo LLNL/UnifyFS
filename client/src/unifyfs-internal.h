@@ -94,6 +94,7 @@
 #include "unifyfs_const.h"
 #include "unifyfs_keyval.h"
 #include "unifyfs_log.h"
+#include "unifyfs_logio.h"
 #include "unifyfs_meta.h"
 #include "unifyfs_shm.h"
 #include "seg_tree.h"
@@ -327,7 +328,6 @@ typedef struct {
 
 extern unifyfs_index_buf_t unifyfs_indices;
 extern unsigned long unifyfs_max_index_entries;
-extern long unifyfs_spillover_max_chunks;
 
 /* tracks total number of unsync'd segments for all files */
 extern unsigned long unifyfs_segment_count;
@@ -335,10 +335,12 @@ extern unsigned long unifyfs_segment_count;
 extern int local_rank_cnt;
 extern int local_rank_idx;
 extern int local_del_cnt;
-extern int client_sockfd;
-extern struct pollfd cmd_fd;
-extern void* shm_req_buf;
-extern void* shm_recv_buf;
+
+/* shmem context for read-request replies data region */
+extern shm_context* shm_recv_ctx;
+
+/* log-based I/O context */
+extern logio_context* logio_ctx;
 
 extern int app_id;
 extern size_t unifyfs_key_slice_range;
@@ -390,26 +392,12 @@ extern void* unifyfs_stream_stack;
  * each is an index into unifyfs_dirstreams array */
 extern void* unifyfs_dirstream_stack;
 
-extern int unifyfs_use_memfs;
-extern int unifyfs_use_spillover;
+/* mutex to lock stack operations */
+extern pthread_mutex_t unifyfs_stack_mutex;
 
 extern int    unifyfs_max_files;  /* maximum number of files to store */
 extern bool   unifyfs_flatten_writes; /* enable write flattening */
 extern bool   unifyfs_local_extents;  /* enable tracking of local extents */
-extern size_t
-unifyfs_chunk_mem;  /* number of bytes in memory to be used for chunk storage */
-extern int    unifyfs_chunk_bits; /* we set chunk size = 2^unifyfs_chunk_bits */
-extern off_t  unifyfs_chunk_size; /* chunk size in bytes */
-extern off_t
-unifyfs_chunk_mask; /* mask applied to logical offset to determine physical offset within chunk */
-extern long
-unifyfs_max_chunks; /* maximum number of chunks that fit in memory */
-
-extern void* free_chunk_stack;
-extern void* free_spillchunk_stack;
-extern char* unifyfs_chunks;
-extern unifyfs_chunkmeta_t* unifyfs_chunkmetas;
-extern int unifyfs_spilloverblock;
 
 /* -------------------------------
  * Common functions
@@ -426,10 +414,6 @@ int unifyfs_would_overflow_offt(off_t a, off_t b);
 /* returns 1 if two input parameters will overflow their type when
  * added together */
 int unifyfs_would_overflow_long(long a, long b);
-
-/* given an input mode, mask it with umask and return, can specify
- * an input mode==0 to specify all read/write bits */
-mode_t unifyfs_getmode(mode_t perms);
 
 int unifyfs_stack_lock();
 
@@ -536,24 +520,8 @@ int unifyfs_fid_create_file(const char* path);
  * returns the new fid, or a negative value on error */
 int unifyfs_fid_create_directory(const char* path);
 
-/* read count bytes from file starting from pos and store into buf,
- * all bytes are assumed to exist, so checks on file size should be
- * done before calling this routine */
-int unifyfs_fid_read(int fid, off_t pos, void* buf, size_t count);
-
-/* write count bytes from buf into file starting at offset pos,
- * all bytes are assumed to be allocated to file, so file should
- * be extended before calling this routine */
+/* write count bytes from buf into file starting at offset pos */
 int unifyfs_fid_write(int fid, off_t pos, const void* buf, size_t count);
-
-/* given a file id, write zero bytes to region of specified offset
- * and length, assumes space is already reserved */
-int unifyfs_fid_write_zero(int fid, off_t pos, off_t count);
-
-/* increase size of file if length is greater than current size,
- * and allocate additional chunks as needed to reserve space for
- * length bytes */
-int unifyfs_fid_extend(int fid, off_t length);
 
 /* truncate file id to given length, frees resources if length is
  * less than size and allocates and zero-fills new bytes if length
