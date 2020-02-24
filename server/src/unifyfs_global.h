@@ -51,7 +51,7 @@
 #include "unifyfs_sock.h"
 #include "unifyfs_tree.h"
 #include "extent_tree.h"
-#include "gfid2ext_tree.h"
+#include "unifyfs_inode_tree.h"
 #include "int2void.h"
 #include "unifyfs-stack.h"
 
@@ -69,7 +69,8 @@ extern char glb_host[UNIFYFS_MAX_HOSTNAME];
 extern int glb_pmi_rank, glb_pmi_size;
 
 /* maps a global file id to its extent map */
-extern struct gfid2ext_tree glb_gfid2ext;
+//extern struct gfid2ext_tree glb_gfid2ext;
+extern struct unifyfs_inode_tree* global_inode_tree;
 
 /* stack to manage free communication tags */
 void* glb_tag_stack;

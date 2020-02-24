@@ -175,39 +175,6 @@ static unifyfs_coll_state_t* get_coll_state(int32_t tag)
  * filesize 
  ******************************************************************/
 
-/* function to lookup local max write offset for given file id */
-static size_t get_max_offset(int gfid)
-{
-    gfid2ext_tree_rdlock(&glb_gfid2ext);
-
-    struct extent_tree* extents = gfid2ext_tree_extents(&glb_gfid2ext, gfid);
-
-    /* TODO: if we don't have any extents for this file,
-     * we should return an invalid file size */
-    if (NULL == extents) {
-        gfid2ext_tree_unlock(&glb_gfid2ext);
-        return 0;
-    }
-
-    /* otherwise we have some actual extents,
-     * return the max offset */
-    size_t filesize = extent_tree_max(extents);
-
-    /* the max value here is the offset of the last byte actually written
-     * to, we want the filesize here, which would be one more than the last
-     * offset since offsets are zero-based.  However, we can't just add one
-     * because the above function also returns in the case where there are
-     * no extents, thus we only add one if we have at least one extent */
-    int segments = extent_tree_count(extents);
-    if (segments > 0) {
-        filesize += 1;
-    }
-
-    gfid2ext_tree_unlock(&glb_gfid2ext);
-
-    return filesize;
-}
-
 static int rpc_invoke_filesize_request(int rank, unifyfs_coll_state_t* st)
 {
     int rc = (int)UNIFYFS_SUCCESS;
@@ -298,17 +265,17 @@ static void filesize_response_forward(unifyfs_coll_state_t* st)
     /* send up to parent if we have gotten all replies */
     if (st->num_responses == child_count) {
         /* lookup max file offset we have for this file id */
-        size_t filesize = get_max_offset(st->gfid);
+        size_t filesize = 0;
+        int ret = unifyfs_inode_get_extent_size(st->gfid, &filesize);
+
+        if (ret) {
+            /* TODO: handle ENOENT */
+        }
 
         /* update filesize in state struct if ours is bigger */
         if (filesize > st->filesize) {
             st->filesize = filesize;
         }
-
-        /* TODO: mark error if file size lookup failed */
-        //if (lookup != UNIFYFS_SUCCESS) {
-        //    st->err = UNIFYFS_ERROR_IO;
-        //}
 
         /* send result to parent if we have one */
         if (parent != -1) {
@@ -575,7 +542,11 @@ static void truncate_response_forward(unifyfs_coll_state_t* st)
     /* send up to parent if we have gotten all replies */
     if (st->num_responses == child_count) {
         /* truncate the file */
-        int ret = gfid2ext_tree_truncate(&glb_gfid2ext, st->gfid, st->filesize);
+        int ret = unifyfs_inode_truncate(st->gfid, st->filesize);
+        if (ret) {
+            /* TODO: handle error */
+            st->err = ret;
+        }
 
         /* send result to parent if we have one */
         if (parent != -1) {
@@ -832,7 +803,12 @@ static void unlink_response_forward(unifyfs_coll_state_t* st)
     /* send up to parent if we have gotten all replies */
     if (st->num_responses == child_count) {
         /* unlink the file */
-        int ret = gfid2ext_tree_unlink(&glb_gfid2ext, st->gfid);
+        int ret = unifyfs_inode_unlink(st->gfid);
+
+        if (ret) {
+            /* TODO: handle error */
+            st->err = ret;
+        }
 
         /* send result to parent if we have one */
         if (parent != -1) {
@@ -1086,8 +1062,12 @@ static void metaset_response_forward(unifyfs_coll_state_t* st)
     /* send up to parent if we have gotten all replies */
     if (st->num_responses == child_count) {
         /* metaset the file */
-        int ret = gfid2ext_tree_metaset(&glb_gfid2ext, st->gfid, st->create,
-                                        &st->attr);
+        int ret = unifyfs_inode_metaset(st->gfid, st->create, &st->attr);
+
+        if (ret) {
+            /* TODO: handle error */
+            st->err = ret;
+        }
 
         /* send result to parent if we have one */
         if (parent != -1) {

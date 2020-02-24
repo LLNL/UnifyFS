@@ -673,7 +673,8 @@ int rm_cmd_filesize(
     /* given the global file id, look up file attributes
      * from key/value store */
     unifyfs_file_attr_t fattr;
-    int ret = unifyfs_get_file_attribute(gfid, &fattr);
+    //int ret = unifyfs_get_file_attribute(gfid, &fattr);
+    ret = unifyfs_inode_metaget(gfid, &fattr);
     if (ret == UNIFYFS_SUCCESS) {
         /* found file attribute for this file, now get its size */
         filesize_meta = fattr.size;
@@ -724,7 +725,7 @@ int rm_cmd_filesize(
     /* have result at this point, get it */
     //filesize = st->filesize;
     printf("BUCKEYES got a filesize of %llu\n",
-        (unsigned long long) st->filesize);
+           (unsigned long long) st->filesize);
     fflush(stdout);
 
     /* set error code if file size operation failed */
@@ -732,7 +733,11 @@ int rm_cmd_filesize(
         rc = st->err;
     }
     else {
-        *outsize = st->filesize;
+        /* get the size in the inode attribute */
+        unifyfs_file_attr_t attr = { 0, };
+        unifyfs_inode_metaget(gfid, &attr);
+
+        *outsize = attr.size > st->filesize ? attr.size : st->filesize;
     }
 
     /* release lock and free state */
@@ -1405,7 +1410,8 @@ int get_local_keyvals(
         /* look up any entries we can find in our local extent map */
         int num_local = 0;
         struct extent_tree* extent_tree;
-        extent_tree = gfid2ext_tree_extents(&glb_gfid2ext, gfid);
+        //extent_tree = gfid2ext_tree_extents(&glb_gfid2ext, gfid);
+        extent_tree = unifyfs_inode_get_extent_tree(gfid);
         if (extent_tree != NULL) {
             extent_tree_span(extent_tree, gfid, start, end,
                 UNIFYFS_MAX_SPLIT_CNT, tmpkeys, tmpvals, &num_local);
@@ -2137,7 +2143,8 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
         /* TODO: need to lock/unlock gfid2ext tree */
         /* get extent map for this gfid */
         struct extent_tree* extent_tree;
-        extent_tree = gfid2ext_tree_extents(&glb_gfid2ext, gfid);
+        //extent_tree = gfid2ext_tree_extents(&glb_gfid2ext, gfid);
+        extent_tree = unifyfs_inode_get_extent_tree(gfid);
         if (NULL == extent_tree) {
             /* map does not have an entry for this gfid,
              * allocate a new extent tree */
@@ -2152,7 +2159,8 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
             extent_tree_init(extent_tree);
 
             /* insert emtpy tree into gfid-to-extent map */
-            gfid2ext_tree_add_extent(&glb_gfid2ext, gfid, extent_tree);
+            //gfid2ext_tree_add_extent(&glb_gfid2ext, gfid, extent_tree);
+            unifyfs_inode_add_extent(gfid, extent_tree);
         }
 
         /* insert entry for this extent into extent map for given gfid */

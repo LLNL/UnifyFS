@@ -225,7 +225,7 @@ int main(int argc, char** argv)
         ret = truncate(filename, targetlen);
         if (ret < 0) {
             test_print(rank, "truncate failed on \"%s\": (errno=%d: %s)",
-                       errno, strerror(errno), filename);
+                       filename, errno, strerror(errno));
         }
 
         /* try stat the file again after truncate */
