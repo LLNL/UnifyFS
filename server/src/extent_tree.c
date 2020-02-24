@@ -317,18 +317,21 @@ int extent_tree_truncate(
     struct extent_tree* tree, /* tree to truncate */
     unsigned long size)       /* size to truncate extents to */
 {
+    unsigned long target_offset = size - 1;
+
     /* lock the tree for reading */
     extent_tree_wrlock(tree);
 
     /* iterate from node with maximum extent backwards until
      * we find an extent below the truncated size */
     struct extent_tree_node* node = RB_MAX(inttree, &tree->head);
-    while (node != NULL && node->end >= size) {
+
+    while (node != NULL && node->end >= target_offset) {
         /* found an extent whose ending offset is equal to or
          * extends beyond the truncated size,
          * check whether the full extent is beyond the truncated
          * size or whether the new size falls within this extent */
-        if (node->start > size) {
+        if (node->start > target_offset) {
             /* the start offset is also beyond the truncated size,
              * meaning the entire range is beyond the truncated size,
              * get pointer to next previous extent in tree */
@@ -344,7 +347,7 @@ int extent_tree_truncate(
         } else {
             /* the range of this node overlaps with the truncated size
              * so just update its end to be the new size */
-            node->end = size;
+            node->end = target_offset;
             break;
         }
     }
@@ -355,7 +358,7 @@ int extent_tree_truncate(
         tree->max = node->end;
     } else {
         /* no extents left in the tree, set max back to 0 */
-        tree->max = 0;
+        tree->max = -1;
     }
 
     /* done reading the tree */
@@ -472,7 +475,7 @@ void extent_tree_clear(struct extent_tree* extent_tree)
     }
 
     extent_tree->count = 0;
-    extent_tree->max   = 0;
+    extent_tree->max   = -1;
     extent_tree_unlock(extent_tree);
 }
 
@@ -490,6 +493,15 @@ unsigned long extent_tree_max(struct extent_tree* extent_tree)
 {
     extent_tree_rdlock(extent_tree);
     unsigned long max = extent_tree->max;
+    extent_tree_unlock(extent_tree);
+    return max;
+}
+
+/* Returns the size of the local extents (local file size) */
+unsigned long extent_tree_get_size(struct extent_tree* extent_tree)
+{
+    extent_tree_rdlock(extent_tree);
+    unsigned long max = extent_tree->max + 1;
     extent_tree_unlock(extent_tree);
     return max;
 }
