@@ -146,28 +146,6 @@ MERCURY_GEN_PROC(metaset_response_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(metaset_response_rpc)
 
-/* metaget_request_rpc (server => server)
- *
- * initiates metaget request operation */
-MERCURY_GEN_PROC(metaget_request_in_t,
-                 ((int32_t)(root))
-                 ((int32_t)(tag))
-                 ((int32_t)(gfid)))
-MERCURY_GEN_PROC(metaget_request_out_t,
-                 ((int32_t)(ret)))
-DECLARE_MARGO_RPC_HANDLER(metaget_request_rpc)
-
-/* metaget_response_rpc (server => server)
- *
- * response to metaget request */
-MERCURY_GEN_PROC(metaget_response_in_t,
-                 ((int32_t)(tag))
-                 ((int32_t)(err)))
-MERCURY_GEN_PROC(metaget_response_out_t,
-                 ((int32_t)(ret))
-                 ((unifyfs_file_attr_t)(attr)))
-DECLARE_MARGO_RPC_HANDLER(metaget_response_rpc)
-
 /* unlink_request_rpc (server => server)
  *
  * initiates unlink request operation */

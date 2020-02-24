@@ -18,8 +18,10 @@ libunifyfsd_a_SOURCES = \
     unifyfs_tree.h \
     extent_tree.c \
     extent_tree.h \
-    gfid2ext_tree.c \
-    gfid2ext_tree.h \
+	unifyfs_inode.c \
+	unifyfs_inode.h \
+	unifyfs_inode_tree.c \
+	unifyfs_inode_tree.h \
     int2void.c \
     int2void.h
 

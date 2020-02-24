@@ -57,7 +57,9 @@ size_t glb_num_servers;     // size of glb_servers array
 server_info_t* glb_servers; // array of server_info_t
 
 /* maps a global file id to its extent map */
-struct gfid2ext_tree glb_gfid2ext;
+//struct gfid2ext_tree glb_gfid2ext;
+static struct unifyfs_inode_tree _global_inode_tree;
+struct unifyfs_inode_tree *global_inode_tree = &_global_inode_tree;
 
 /* stack to manage free communication tags */
 void* glb_tag_stack;
@@ -409,7 +411,7 @@ int main(int argc, char* argv[])
     }
 
     /* initialize our tree that maps a gfid to its extent tree */
-    gfid2ext_tree_init(&glb_gfid2ext);
+    unifyfs_inode_tree_init(global_inode_tree);
 
     /* create a stack to manage free tag values to use with
      * outstanding server communication operations, on incoming
@@ -454,7 +456,7 @@ int main(int argc, char* argv[])
     }
 
     /* tear down gfid-to-extents tree */
-    gfid2ext_tree_destroy(&glb_gfid2ext);
+    unifyfs_inode_tree_destroy(global_inode_tree);
 
     LOGDBG("stopping service manager thread");
     rc = svcmgr_fini();

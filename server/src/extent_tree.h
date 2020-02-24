@@ -94,6 +94,9 @@ unsigned long extent_tree_count(struct extent_tree* extent_tree);
 /* Return the maximum ending logical offset in the tree */
 unsigned long extent_tree_max(struct extent_tree* extent_tree);
 
+/* Returns the size of the local extents (local file size) */
+unsigned long extent_tree_get_size(struct extent_tree* extent_tree);
+
 /*
  * Locking functions for use with extent_tree_iter().  They allow you to
  * lock the tree to iterate over it:

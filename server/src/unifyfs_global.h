@@ -52,7 +52,7 @@
 #include "unifyfs_shm.h"
 #include "unifyfs_tree.h"
 #include "extent_tree.h"
-#include "gfid2ext_tree.h"
+#include "unifyfs_inode_tree.h"
 #include "int2void.h"
 #include "unifyfs-stack.h"
 
@@ -86,7 +86,8 @@ extern server_info_t* glb_servers; /* array of server info structs */
 extern size_t glb_num_servers; /* number of entries in glb_servers array */
 
 /* maps a global file id to its extent map */
-extern struct gfid2ext_tree glb_gfid2ext;
+//extern struct gfid2ext_tree glb_gfid2ext;
+extern struct unifyfs_inode_tree* global_inode_tree;
 
 /* stack to manage free communication tags */
 void* glb_tag_stack;

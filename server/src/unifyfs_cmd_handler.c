@@ -211,7 +211,8 @@ static void unifyfs_metaget_rpc(hg_handle_t handle)
      * from key/value store */
     unifyfs_file_attr_t attr_val;
     //int ret = unifyfs_get_file_attribute(in.gfid, &attr_val);
-    int ret = gfid2ext_tree_metaget(&glb_gfid2ext, in.gfid, &attr_val);
+//    int ret = gfid2ext_tree_metaget(&glb_gfid2ext, in.gfid, &attr_val);
+    int ret = unifyfs_inode_metaget(in.gfid, &attr_val);
 
     /* build our output values */
     unifyfs_metaget_out_t out;
@@ -253,10 +254,11 @@ static void unifyfs_metaset_rpc(hg_handle_t handle)
 
     /* if we're creating the file,
      * we initialize both the size and laminate flags */
-    //int ret = unifyfs_set_file_attribute(create, create, &fattr);
+    int ret = unifyfs_set_file_attribute(create, create, &fattr);
 
     /* use the new collective for file creation */
-    int ret = rm_cmd_metaset(in.app_id, in.local_rank_idx, fattr.gfid, create, &fattr);
+    ret = rm_cmd_metaset(in.app_id, in.local_rank_idx, fattr.gfid,create,
+                         &fattr);
 
     /* build our output values */
     unifyfs_metaset_out_t out;

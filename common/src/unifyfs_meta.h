@@ -16,6 +16,9 @@
 #define UNIFYFS_META_H
 
 #include <stdint.h>
+#include <stdio.h>
+#include <errno.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -65,6 +68,83 @@ enum {
     UNIFYFS_STAT_DEFAULT_FILE_MODE = S_IFREG | 0644,
     UNIFYFS_STAT_DEFAULT_DIR_MODE = S_IFDIR | 0755,
 };
+
+static inline int unifyfs_file_attr_set_invalid(unifyfs_file_attr_t *attr)
+{
+    if (!attr) {
+        return EINVAL;
+    }
+
+    attr->gfid = -1;
+    attr->mode = -1;
+    attr->uid = -1;
+    attr->gid = -1;
+    attr->size = (uint64_t) -1;
+    attr->atime.tv_sec = (uint64_t) -1;
+    attr->mtime.tv_sec = (uint64_t) -1;
+    attr->ctime.tv_sec = (uint64_t) -1;
+    attr->is_laminated = -1;
+
+    attr->filename[0] = '\0';
+
+    return 0;
+}
+
+/*
+ * updates @dst with new values from @src. 
+ * ignores fields from @src with negative values.
+ */
+static inline int
+unifyfs_file_attr_update(unifyfs_file_attr_t* dst, unifyfs_file_attr_t* src)
+{
+    if (!dst || !src) {
+        return EINVAL;
+    }
+
+    if (dst->gfid != src->gfid) {
+        return EINVAL;
+    }
+
+    /* update fields only with >=0 values */
+    if (src->mode >= 0) {
+        dst->mode = src->mode;
+    }
+
+    if (src->uid >= 0) {
+        dst->uid = src->uid;
+    }
+
+    if (src->gid >= 0) {
+        dst->gid = src->gid;
+    }
+
+    if (src->size != (uint64_t) -1) {
+        dst->size = src->size;
+    }
+
+    if (src->atime.tv_sec != (uint64_t) -1) {
+        dst->atime = src->atime;
+    }
+
+    if (src->mtime.tv_sec != (uint64_t) -1) {
+        dst->mtime = src->mtime;
+    }
+
+    if (src->ctime.tv_sec != (uint64_t) -1) {
+        dst->ctime = src->ctime;
+    }
+
+    if (src->is_laminated >= 0) {
+        dst->is_laminated = src->is_laminated;
+    }
+
+    /* FIXME: is this necessary? */
+    if (src->filename && !strcmp(dst->filename, src->filename)) {
+        sprintf(dst->filename, "%s", src->filename);
+    }
+
+    return 0;
+}
 
 static inline
 void unifyfs_file_attr_to_stat(unifyfs_file_attr_t* fattr, struct stat* sb)
