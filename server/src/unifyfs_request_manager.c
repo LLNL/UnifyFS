@@ -1410,7 +1410,6 @@ int get_local_keyvals(
         /* look up any entries we can find in our local extent map */
         int num_local = 0;
         struct extent_tree* extent_tree;
-        //extent_tree = gfid2ext_tree_extents(&glb_gfid2ext, gfid);
         extent_tree = unifyfs_inode_get_extent_tree(gfid);
         if (extent_tree != NULL) {
             extent_tree_span(extent_tree, gfid, start, end,
@@ -2140,10 +2139,9 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
         /* count up the number of keys we used for this index */
         count += used;
 
-        /* TODO: need to lock/unlock gfid2ext tree */
+        /* TODO: need to lock/unlock inode tree */
         /* get extent map for this gfid */
         struct extent_tree* extent_tree;
-        //extent_tree = gfid2ext_tree_extents(&glb_gfid2ext, gfid);
         extent_tree = unifyfs_inode_get_extent_tree(gfid);
         if (NULL == extent_tree) {
             /* map does not have an entry for this gfid,
@@ -2159,7 +2157,6 @@ int rm_cmd_fsync(int app_id, int client_side_id, int gfid)
             extent_tree_init(extent_tree);
 
             /* insert emtpy tree into gfid-to-extent map */
-            //gfid2ext_tree_add_extent(&glb_gfid2ext, gfid, extent_tree);
             unifyfs_inode_add_extent(gfid, extent_tree);
         }
 

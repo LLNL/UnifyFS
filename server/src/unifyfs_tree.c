@@ -270,6 +270,7 @@ static void filesize_response_forward(unifyfs_coll_state_t* st)
 
         if (ret) {
             /* TODO: handle ENOENT */
+            st->err = ret;
         }
 
         /* update filesize in state struct if ours is bigger */
