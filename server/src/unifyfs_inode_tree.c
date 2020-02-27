@@ -79,7 +79,10 @@ int unifyfs_inode_tree_init(
 void unifyfs_inode_tree_destroy(
     struct unifyfs_inode_tree* tree)
 {
-    unifyfs_inode_tree_clear(tree);
+    if (tree) {
+        unifyfs_inode_tree_clear(tree);
+        pthread_rwlock_destroy(&tree->rwlock);
+    }
 }
 
 int unifyfs_inode_tree_insert(

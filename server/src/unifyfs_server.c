@@ -56,7 +56,6 @@ size_t glb_num_servers;     // size of glb_servers array
 server_info_t* glb_servers; // array of server_info_t
 
 /* maps a global file id to its extent map */
-//struct gfid2ext_tree glb_gfid2ext;
 static struct unifyfs_inode_tree _global_inode_tree;
 struct unifyfs_inode_tree *global_inode_tree = &_global_inode_tree;
 
