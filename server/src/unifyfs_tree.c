@@ -122,6 +122,7 @@ unifyfs_coll_state_t* unifyfs_coll_state_alloc(
     int32_t tag)
 {
     unifyfs_coll_state_t* st = (unifyfs_coll_state_t*) calloc(1, sizeof(*st));
+
     st->root          = root;
     st->gfid          = gfid;
     st->parent_tag    = ptag;
@@ -267,9 +268,9 @@ static void filesize_response_forward(unifyfs_coll_state_t* st)
         /* lookup max file offset we have for this file id */
         size_t filesize = 0;
         int ret = unifyfs_inode_get_extent_size(st->gfid, &filesize);
-
         if (ret) {
             /* TODO: handle ENOENT */
+            st->err = ret;
         }
 
         /* update filesize in state struct if ours is bigger */
@@ -505,8 +506,8 @@ static int rpc_invoke_truncate_response(int rank, unifyfs_coll_state_t* st)
 
     /* fill in input struct */
     truncate_response_in_t in;
-    in.tag      = (int32_t) st->parent_tag;
-    in.err      = (int32_t) st->err;
+    in.tag = (int32_t) st->parent_tag;
+    in.err = (int32_t) st->err;
 
     /* call rpc function */
     hret = margo_forward(handle, &in);
@@ -678,8 +679,8 @@ static void truncate_response_rpc(hg_handle_t handle)
 
     /* get tag which points to structure desribing the collective
      * this message is for, then get the truncate from this child */
-    int32_t tag     = (int32_t) in.tag;
-    int err         = (int32_t) in.err;
+    int32_t tag = (int32_t) in.tag;
+    int err     = (int32_t) in.err;
 
     /* build our output values */
     truncate_response_out_t out;
@@ -728,9 +729,9 @@ static int rpc_invoke_unlink_request(int rank, unifyfs_coll_state_t* st)
 
     /* fill in input struct */
     unlink_request_in_t in;
-    in.root   = (int32_t)st->root;
-    in.tag    = (int32_t)st->tag;
-    in.gfid   = (int32_t)st->gfid;
+    in.root = (int32_t) st->root;
+    in.tag  = (int32_t) st->tag;
+    in.gfid = (int32_t) st->gfid;
 
     /* call rpc function */
     hret = margo_forward(handle, &in);
@@ -766,8 +767,8 @@ static int rpc_invoke_unlink_response(int rank, unifyfs_coll_state_t* st)
 
     /* fill in input struct */
     unlink_response_in_t in;
-    in.tag      = (int32_t) st->parent_tag;
-    in.err      = (int32_t) st->err;
+    in.tag = (int32_t) st->parent_tag;
+    in.err = (int32_t) st->err;
 
     /* call rpc function */
     hret = margo_forward(handle, &in);
@@ -804,7 +805,6 @@ static void unlink_response_forward(unifyfs_coll_state_t* st)
     if (st->num_responses == child_count) {
         /* unlink the file */
         int ret = unifyfs_inode_unlink(st->gfid);
-
         if (ret) {
             /* TODO: handle error */
             st->err = ret;
@@ -890,9 +890,9 @@ static void unlink_request_rpc(hg_handle_t handle)
     /* get root of tree and global file id to lookup unlink
      * record tag calling process wants us to include in our
      * later response */
-    int root      = (int) in.root;
-    int gfid      = (int) in.gfid;
-    int32_t ptag  = (int32_t) in.tag;
+    int root     = (int) in.root;
+    int gfid     = (int) in.gfid;
+    int32_t ptag = (int32_t) in.tag;
 
     /* build our output values */
     unlink_request_out_t out;
@@ -935,8 +935,8 @@ static void unlink_response_rpc(hg_handle_t handle)
 
     /* get tag which points to structure desribing the collective
      * this message is for, then get the unlink from this child */
-    int32_t tag     = (int32_t) in.tag;
-    int err         = (int32_t) in.err;
+    int32_t tag = (int32_t) in.tag;
+    int err     = (int32_t) in.err;
 
     /* build our output values */
     unlink_response_out_t out;
@@ -986,9 +986,9 @@ static int rpc_invoke_metaset_request(int rank, unifyfs_coll_state_t* st)
     /* fill in input struct */
     unifyfs_file_attr_t *attr = &st->attr;
     metaset_request_in_t in;
-    in.root   = (int32_t)st->root;
-    in.tag    = (int32_t)st->tag;
-    in.create = (int32_t)st->create;
+    in.root   = (int32_t) st->root;
+    in.tag    = (int32_t) st->tag;
+    in.create = (int32_t) st->create;
     in.attr   = *attr;
 
     /* call rpc function */
@@ -1025,8 +1025,8 @@ static int rpc_invoke_metaset_response(int rank, unifyfs_coll_state_t* st)
 
     /* fill in input struct */
     metaset_response_in_t in;
-    in.tag      = (int32_t) st->parent_tag;
-    in.err      = (int32_t) st->err;
+    in.tag = (int32_t) st->parent_tag;
+    in.err = (int32_t) st->err;
 
     /* call rpc function */
     hret = margo_forward(handle, &in);
@@ -1063,7 +1063,6 @@ static void metaset_response_forward(unifyfs_coll_state_t* st)
     if (st->num_responses == child_count) {
         /* metaset the file */
         int ret = unifyfs_inode_metaset(st->gfid, st->create, &st->attr);
-
         if (ret) {
             /* TODO: handle error */
             st->err = ret;
@@ -1151,9 +1150,9 @@ static void metaset_request_rpc(hg_handle_t handle)
     /* get root of tree and global file id to lookup metaset
      * record tag calling process wants us to include in our
      * later response */
-    int root      = (int) in.root;
-    int32_t ptag  = (int32_t) in.tag;
-    int create    = (int) in.create;
+    int root     = (int) in.root;
+    int32_t ptag = (int32_t) in.tag;
+    int create   = (int) in.create;
 
     unifyfs_file_attr_t fattr = { 0, };
     fattr = in.attr;
@@ -1203,8 +1202,8 @@ static void metaset_response_rpc(hg_handle_t handle)
 
     /* get tag which points to structure desribing the collective
      * this message is for, then get the metaset from this child */
-    int32_t tag     = (int32_t) in.tag;
-    int err         = (int32_t) in.err;
+    int32_t tag = (int32_t) in.tag;
+    int err     = (int32_t) in.err;
 
     /* build our output values */
     metaset_response_out_t out;

@@ -61,9 +61,8 @@ int extent_tree_init(struct extent_tree* extent_tree)
     memset(extent_tree, 0, sizeof(*extent_tree));
     pthread_rwlock_init(&extent_tree->rwlock, NULL);
     RB_INIT(&extent_tree->head);
-
     return 0;
-};
+}
 
 /*
  * Remove and free all nodes in the extent_tree.
@@ -71,7 +70,8 @@ int extent_tree_init(struct extent_tree* extent_tree)
 void extent_tree_destroy(struct extent_tree* extent_tree)
 {
     extent_tree_clear(extent_tree);
-};
+    pthread_rwlock_destroy(&extent_tree->rwlock);
+}
 
 /* Allocate a node for the range tree.  Free node with free() when finished */
 static struct extent_tree_node* extent_tree_node_alloc(
@@ -83,8 +83,7 @@ static struct extent_tree_node* extent_tree_node_alloc(
     unsigned long pos)   /* physical offset of data in log */
 {
     /* allocate a new node structure */
-    struct extent_tree_node* node;
-    node = calloc(1, sizeof(*node));
+    struct extent_tree_node* node = calloc(1, sizeof(*node));
     if (!node) {
         return NULL;
     }
@@ -317,21 +316,20 @@ int extent_tree_truncate(
     struct extent_tree* tree, /* tree to truncate */
     unsigned long size)       /* size to truncate extents to */
 {
-    unsigned long target_offset = size - 1;
-
     /* lock the tree for reading */
     extent_tree_wrlock(tree);
 
-    /* iterate from node with maximum extent backwards until
-     * we find an extent below the truncated size */
+    /* lookup node with the extent that has the maximum offset */
     struct extent_tree_node* node = RB_MAX(inttree, &tree->head);
 
-    while (node != NULL && node->end >= target_offset) {
+    /* iterate backwards until we find an extent below
+     * the truncated size */
+    while (node != NULL && node->end >= size) {
         /* found an extent whose ending offset is equal to or
          * extends beyond the truncated size,
          * check whether the full extent is beyond the truncated
          * size or whether the new size falls within this extent */
-        if (node->start > target_offset) {
+        if (node->start >= size) {
             /* the start offset is also beyond the truncated size,
              * meaning the entire range is beyond the truncated size,
              * get pointer to next previous extent in tree */
@@ -347,17 +345,17 @@ int extent_tree_truncate(
         } else {
             /* the range of this node overlaps with the truncated size
              * so just update its end to be the new size */
-            node->end = target_offset;
+            node->end = size - 1;
             break;
         }
     }
 
     /* update maximum offset in tree */
     if (node != NULL) {
-        /* got at least one extent, update maximum field */
+        /* got at least one extent left, update maximum field */
         tree->max = node->end;
     } else {
-        /* no extents left in the tree, set max back to 0 */
+        /* no extents left in the tree, set max back to -1 */
         tree->max = -1;
     }
 

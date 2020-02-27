@@ -51,6 +51,11 @@ static inline int unifyfs_inode_destroy(struct unifyfs_inode* ino)
     int ret = 0;
 
     if (ino) {
+        if (ino->extents) {
+            extent_tree_destroy(ino->extents);
+            free(ino->extents);
+        }
+
         pthread_rwlock_destroy(&ino->rwlock);
         free(ino);
     } else {
@@ -108,7 +113,7 @@ int unifyfs_inode_update_attr(int gfid, unifyfs_file_attr_t* attr)
         unifyfs_inode_unlock(ino);
     }
 out_unlock_tree:
-    unifyfs_inode_tree_wrlock(global_inode_tree);
+    unifyfs_inode_tree_unlock(global_inode_tree);
 
     return ret;
 }
@@ -149,13 +154,7 @@ int unifyfs_inode_unlink(int gfid)
     if (ret)
         goto out;
 
-    unifyfs_inode_wrlock(ino);
-    {
-        if (ino->extents) {
-            extent_tree_destroy(ino->extents);
-        }
-    }
-    unifyfs_inode_unlock(ino);
+    ret = unifyfs_inode_destroy(ino);
 out:
     return ret;
 }
@@ -173,7 +172,7 @@ int unifyfs_inode_truncate(int gfid, unsigned long size)
             goto out_unlock_tree;
         }
 
-        unifyfs_inode_rdlock(ino);
+        unifyfs_inode_wrlock(ino);
         {
             ret = extent_tree_truncate(ino->extents, size);
             if (ret == 0) {
@@ -200,7 +199,7 @@ struct extent_tree* unifyfs_inode_get_extent_tree(int gfid)
             goto out_unlock_tree;
         }
 
-        unifyfs_inode_wrlock(ino);
+        unifyfs_inode_rdlock(ino);
         {
             extent_tree = ino->extents;
         }
@@ -240,10 +239,8 @@ out_unlock_tree:
 int unifyfs_inode_get_extent_size(int gfid, size_t* offset)
 {
     int ret = 0;
-    int segments = 0;
     size_t filesize = 0;
     struct unifyfs_inode* ino = NULL;
-    struct extent_tree* extent_tree = NULL;
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
     {
@@ -255,29 +252,8 @@ int unifyfs_inode_get_extent_size(int gfid, size_t* offset)
 
         unifyfs_inode_rdlock(ino);
         {
-#if 0
-            extent_tree = ino->extents;
-            if (!extent_tree) {
-                filesize = 0;
-                goto out_unlock_inode;
-            }
-
-            filesize = extent_tree_max(extent_tree);
-            segments = extent_tree_count(extent_tree);
-
-            /* the max value here is the offset of the last byte actually
-             * written to, we want the filesize here, which would be one more
-             * than the last offset since offsets are zero-based.  However, we
-             * can't just add one because the above function also returns in
-             * the case where there are no extents, thus we only add one if we
-             * have at least one extent */
-            if (segments > 0) {
-                filesize += 1;
-            }
-#endif
             filesize = extent_tree_get_size(ino->extents);
         }
-out_unlock_inode:
         unifyfs_inode_unlock(ino);
 
         *offset = filesize;

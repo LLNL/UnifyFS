@@ -210,8 +210,6 @@ static void unifyfs_metaget_rpc(hg_handle_t handle)
     /* given the global file id, look up file attributes
      * from key/value store */
     unifyfs_file_attr_t attr_val;
-    //int ret = unifyfs_get_file_attribute(in.gfid, &attr_val);
-//    int ret = gfid2ext_tree_metaget(&glb_gfid2ext, in.gfid, &attr_val);
     int ret = unifyfs_inode_metaget(in.gfid, &attr_val);
 
     /* build our output values */
