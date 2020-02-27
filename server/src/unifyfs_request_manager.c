@@ -2164,7 +2164,6 @@ int rm_cmd_sync_mdhim(int app_id, int client_id)
     }
 
     /* distribute the extend tree */
-    //ret = unifyfs_distribute_extend_tree(gfid);
     ret = unifyfs_broadcast_extent_tree(gfid_wrong);
     if (UNIFYFS_SUCCESS != ret) {
         LOGERR("Error distributing extend tree");

@@ -7,18 +7,18 @@ libunifyfsd_a_SOURCES = \
     unifyfs_global.h \
     unifyfs_metadata.c \
     unifyfs_metadata.h \
-	unifyfs_inode.h \
-	unifyfs_inode.c \
-	unifyfs_inode_tree.h \
-	unifyfs_inode_tree.c \
-	unifyfs_tree.h \
-	unifyfs_tree.c \
-	unifyfs_fops.h \
-	unifyfs_fops.c \
-	unifyfs_fops_mdhim.c \
-	unifyfs_fops_rpc.c \
-	unifyfs_group_rpc.h \
-	unifyfs_group_rpc.c \
+    unifyfs_inode.h \
+    unifyfs_inode.c \
+    unifyfs_inode_tree.h \
+    unifyfs_inode_tree.c \
+    unifyfs_tree.h \
+    unifyfs_tree.c \
+    unifyfs_fops.h \
+    unifyfs_fops.c \
+    unifyfs_fops_mdhim.c \
+    unifyfs_fops_rpc.c \
+    unifyfs_group_rpc.h \
+    unifyfs_group_rpc.c \
     unifyfs_request_manager.c \
     unifyfs_request_manager.h \
     unifyfs_service_manager.c \
@@ -28,12 +28,12 @@ libunifyfsd_a_SOURCES = \
     unifyfs_tree.h \
     extent_tree.c \
     extent_tree.h \
-	unifyfs_inode.c \
-	unifyfs_inode.h \
-	unifyfs_inode_tree.c \
-	unifyfs_inode_tree.h \
-	unifyfs_group_rpc.c \
-	unifyfs_group_rpc.h \
+    unifyfs_inode.c \
+    unifyfs_inode.h \
+    unifyfs_inode_tree.c \
+    unifyfs_inode_tree.h \
+    unifyfs_group_rpc.c \
+    unifyfs_group_rpc.h \
     int2void.c \
     int2void.h
 

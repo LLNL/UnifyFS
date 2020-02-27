@@ -12,8 +12,15 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
+/** @file
+ * 
+ */
+
 #ifndef UNIFYFS_TREE_H
 #define UNIFYFS_TREE_H
+
+#include <abt.h>
+#include "unifyfs_meta.h"
 
 /* define tree structure */
 typedef struct {
