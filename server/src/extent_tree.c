@@ -265,24 +265,55 @@ int extent_tree_add(
      * we just inserted is larger */
     extent_tree->max = MAX(extent_tree->max, end);
 
-    /* check whether we can coalesce this extent with any preceding extent */
-    struct extent_tree_node* prev = RB_PREV(inttree, &extent_tree->head, node);
-    if (prev != NULL && prev->end + 1 == node->start) {
+    /* get temporary pointer to the node we just added */
+    struct extent_tree_node* target = node;
+
+    /* check whether we can coalesce new extent with any preceding extent */
+    struct extent_tree_node* prev = RB_PREV(
+        inttree, &extent_tree->head, target);
+    if (prev != NULL && prev->end + 1 == target->start) {
         /* found a extent that ends just before the new extent starts,
          * check whether they are also contiguous in the log */
         unsigned long pos_end = prev->pos + (prev->end - prev->start + 1);
-        if (prev->svr_rank == node->svr_rank &&
-            prev->cli_id   == node->cli_id   &&
-            prev->app_id   == node->app_id   &&
-            pos_end        == node->pos) {
+        if (prev->svr_rank == target->svr_rank &&
+            prev->cli_id   == target->cli_id   &&
+            prev->app_id   == target->app_id   &&
+            pos_end        == target->pos) {
             /* the preceding extent describes a log position adjacent to
-             * the extent we just added, we can merge them,
+             * the extent we just added, so we can merge them,
              * append entry to previous by extending end of previous */
-            prev->end = node->end;
+            prev->end = target->end;
 
             /* delete new extent from the tree and free it */
-            RB_REMOVE(inttree, &extent_tree->head, node);
-            free(node);
+            RB_REMOVE(inttree, &extent_tree->head, target);
+            free(target);
+            extent_tree->count--;
+
+            /* update target to point at previous extent since we just
+             * merged our new extent into it */
+            target = prev;
+        }
+    }
+
+    /* check whether we can coalesce new extent with any trailing extent */
+    struct extent_tree_node* next = RB_NEXT(
+        inttree, &extent_tree->head, target);
+    if (next != NULL && target->end + 1 == next->start) {
+        /* found a extent that starts just after the new extent ends,
+         * check whether they are also contiguous in the log */
+        unsigned long pos_end = target->pos + (target->end - target->start + 1);
+        if (target->svr_rank == next->svr_rank &&
+            target->cli_id   == next->cli_id   &&
+            target->app_id   == next->app_id   &&
+            pos_end          == next->pos) {
+            /* the target extent describes a log position adjacent to
+             * the next extent, so we can merge them,
+             * append entry to target by extending end of to cover next */
+            target->end = next->end;
+
+            /* delete next extent from the tree and free it */
+            RB_REMOVE(inttree, &extent_tree->head, next);
+            free(next);
             extent_tree->count--;
         }
     }
