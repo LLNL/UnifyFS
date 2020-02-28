@@ -156,8 +156,12 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
     struct seg_tree_node* remaining;
     struct seg_tree_node* resized;
     struct seg_tree_node* overlap;
+    struct seg_tree_node* target;
+    struct seg_tree_node* prev;
+    struct seg_tree_node* next;
     long new_start;
     long new_end;
+    unsigned long ptr_end;
     int ret;
 
     /* Create our range */
@@ -262,6 +266,61 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
      * is larger.
      */
     seg_tree->max = MAX(seg_tree->max, end);
+
+    /* Get temporary pointer to the node we just added. */
+    target = node;
+
+    /* Check whether we can coalesce new extent with any preceding extent. */
+    prev = RB_PREV(inttree, &seg_tree->head, target);
+    if (prev != NULL && prev->end + 1 == target->start) {
+        /*
+         * We found a extent that ends just before the new extent starts.
+         * Check whether they are also contiguous in the log.
+         */
+        ptr_end = prev->ptr + (prev->end - prev->start + 1);
+        if (ptr_end == target->ptr) {
+            /*
+             * The preceding extent describes a log position adjacent to
+             * the extent we just added, so we can merge them.
+             * Append entry to previous by extending end of previous.
+             */
+            prev->end = target->end;
+
+            /* Delete new extent from the tree and free it. */
+            RB_REMOVE(inttree, &seg_tree->head, target);
+            free(target);
+            seg_tree->count--;
+
+            /*
+             * Update target to point at previous extent since we just
+             * merged our new extent into it.
+             */
+            target = prev;
+        }
+    }
+
+    /* Check whether we can coalesce new extent with any trailing extent. */
+    next = RB_NEXT(inttree, &seg_tree->head, target);
+    if (next != NULL && target->end + 1 == next->start) {
+        /*
+         * We found a extent that starts just after the new extent ends.
+         * Check whether they are also contiguous in the log.
+         */
+        ptr_end = target->ptr + (target->end - target->start + 1);
+        if (ptr_end == next->ptr) {
+            /*
+             * The target extent describes a log position adjacent to
+             * the next extent, so we can merge them.
+             * Append entry to target by extending end of to cover next.
+             */
+            target->end = next->end;
+
+            /* Delete next extent from the tree and free it. */
+            RB_REMOVE(inttree, &seg_tree->head, next);
+            free(next);
+            seg_tree->count--;
+        }
+    }
 
 release_add:
 
