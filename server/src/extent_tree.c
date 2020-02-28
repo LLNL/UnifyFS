@@ -268,20 +268,19 @@ int extent_tree_add(
     /* check whether we can coalesce this extent with any preceding extent */
     struct extent_tree_node* prev = RB_PREV(inttree, &extent_tree->head, node);
     if (prev != NULL && prev->end + 1 == node->start) {
-        /* found a extent that ends just before the new node start,
+        /* found a extent that ends just before the new extent starts,
          * check whether they are also contiguous in the log */
         unsigned long pos_end = prev->pos + (prev->end - prev->start + 1);
         if (prev->svr_rank == node->svr_rank &&
             prev->cli_id   == node->cli_id   &&
             prev->app_id   == node->app_id   &&
             pos_end        == node->pos) {
-            /* the preceding node describes a log position that is immediately
-             * before the node we just added, let's append this extent
-             * we just added to the preceding extent and then remove the
-             * new extent we just added */
+            /* the preceding extent describes a log position adjacent to
+             * the extent we just added, we can merge them,
+             * append entry to previous by extending end of previous */
             prev->end = node->end;
 
-            /* delete new node from the tree and free it */
+            /* delete new extent from the tree and free it */
             RB_REMOVE(inttree, &extent_tree->head, node);
             free(node);
             extent_tree->count--;
