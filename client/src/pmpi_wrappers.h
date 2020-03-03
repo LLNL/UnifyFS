@@ -15,6 +15,8 @@
 #ifndef UNIFYFS_PMPI_WRAPPERS_H
 #define UNIFYFS_PMPI_WRAPPERS_H
 
+#include <mpi.h>
+
 /* MPI_Init PMPI wrapper */
 int unifyfs_mpi_init(int* argc, char*** argv);
 int MPI_Init(int* argc, char*** argv);
