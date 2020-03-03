@@ -14,7 +14,6 @@
 
 #include "pmpi_wrappers.h"
 #include "unifyfs.h"
-#include <mpi.h>
 #include <stdio.h>
 
 int unifyfs_mpi_init(int* argc, char*** argv)
