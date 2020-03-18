@@ -23,9 +23,9 @@
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
 
-/* Get global, local, or log sizes (or all) */
+/* Get global or log sizes (or all) */
 static
-void get_size(char* path, size_t* global, size_t* local, size_t* log)
+void get_size(char* path, size_t* global, size_t* log)
 {
     struct stat sb = {0};
     int rc;
@@ -39,12 +39,8 @@ void get_size(char* path, size_t* global, size_t* local, size_t* log)
         *global = sb.st_size;
     }
 
-    if (local) {
-        *local = sb.st_rdev & 0xFFFFFFFF;
-    }
-
     if (log) {
-        *log = (sb.st_rdev >> 32) & 0xFFFFFFFF;
+        *log = sb.st_rdev;
     }
 }
 
@@ -65,7 +61,7 @@ int write_read_hole_test(char* unifyfs_root)
     char path[64];
     int rc;
     int fd;
-    size_t global, local, log;
+    size_t global, log;
 
     size_t bufsize = 1024*1024;
     char* buf = (char*) malloc(bufsize);
@@ -102,12 +98,10 @@ int write_read_hole_test(char* unifyfs_root)
     ok(rc == bufsize, "%s:%d write() (rc=%d): %s",
         __FILE__, __LINE__, rc, strerror(errno));
 
-    /* Check global and local size on our un-laminated file */
-    get_size(path, &global, &local, &log);
+    /* Check global size on our un-laminated file */
+    get_size(path, &global, &log);
     ok(global == 0, "%s:%d global size is %d: %s",
         __FILE__, __LINE__, global, strerror(errno));
-    ok(local == 3*bufsize, "%s:%d local size is %d: %s",
-        __FILE__, __LINE__, local, strerror(errno));
     ok(log == 2*bufsize, "%s:%d log size is %d: %s",
         __FILE__, __LINE__, log, strerror(errno));
 
@@ -116,12 +110,10 @@ int write_read_hole_test(char* unifyfs_root)
     ok(rc == 0, "%s:%d fsync() (rc=%d): %s",
         __FILE__, __LINE__, rc, strerror(errno));
 
-    /* Check global and local size on our un-laminated file */
-    get_size(path, &global, &local, &log);
+    /* Check global size on our un-laminated file */
+    get_size(path, &global, &log);
     ok(global == 3*bufsize, "%s:%d global size is %d: %s",
         __FILE__, __LINE__, global, strerror(errno));
-    ok(local == 3*bufsize, "%s:%d local size is %d: %s",
-        __FILE__, __LINE__, local, strerror(errno));
     ok(log == 2*bufsize, "%s:%d log size is %d: %s",
         __FILE__, __LINE__, log, strerror(errno));
 
@@ -136,12 +128,10 @@ int write_read_hole_test(char* unifyfs_root)
     ok(rc == 0, "%s:%d chmod(0444) (rc=%d): %s",
         __FILE__, __LINE__, rc, strerror(errno));
 
-    /* Check global and local size on our un-laminated file */
-    get_size(path, &global, &local, &log);
+    /* Check global size on our un-laminated file */
+    get_size(path, &global, &log);
     ok(global == 4*bufsize, "%s:%d global size is %d: %s",
         __FILE__, __LINE__, global, strerror(errno));
-    ok(local == 4*bufsize, "%s:%d local size is %d: %s",
-        __FILE__, __LINE__, local, strerror(errno));
     ok(log == 2*bufsize, "%s:%d log size is %d: %s",
         __FILE__, __LINE__, log, strerror(errno));
 
