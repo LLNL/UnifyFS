@@ -25,13 +25,13 @@
 #include "t/lib/testutil.h"
 
 /*
- * Test correctness of local and global file size.  Also, test opening a file
+ * Test correctness of global file size.  Also, test opening a file
  * for append, and test file positioning (fseek, ftell, etc).
  */
 
-/* Get global, local, or log sizes (or all) */
+/* Get global or log sizes (or all) */
 static
-void get_size(char* path, size_t* global, size_t* local, size_t* log)
+void get_size(char* path, size_t* global, size_t* log)
 {
     struct stat sb = {0};
     int rc;
@@ -45,12 +45,8 @@ void get_size(char* path, size_t* global, size_t* local, size_t* log)
         *global = sb.st_size;
     }
 
-    if (local) {
-        *local = sb.st_rdev & 0xFFFFFFFF;
-    }
-
     if (log) {
-        *log = (sb.st_rdev >> 32) & 0xFFFFFFFF;
+        *log = sb.st_rdev;
     }
 }
 
@@ -61,7 +57,7 @@ int size_test(char* unifyfs_root)
     FILE* fp = NULL;
     int rc;
     char* tmp;
-    size_t global, local, log;
+    size_t global, log;
 
     errno = 0;
 
@@ -77,10 +73,8 @@ int size_test(char* unifyfs_root)
     rc = fclose(fp);
     ok(rc == 0, "%s: fclose() (rc=%d): %s", __FILE__, rc, strerror(errno));
 
-    get_size(path, &global, &local, &log);
+    get_size(path, &global, &log);
     ok(global == 12, "%s: global size is %d: %s",  __FILE__, global,
-        strerror(errno));
-    ok(local == 12, "%s: local size is %d: %s",  __FILE__, local,
         strerror(errno));
     ok(log == 12, "%s: log size is %d: %s",  __FILE__, log,
         strerror(errno));
@@ -118,10 +112,8 @@ int size_test(char* unifyfs_root)
     rc = fclose(fp);
     ok(rc == 0, "%s: fclose() (rc=%d): %s", __FILE__, rc, strerror(errno));
 
-    get_size(path, &global, &local, &log);
+    get_size(path, &global, &log);
     ok(global == 30, "%s: global size is %d: %s",  __FILE__, global,
-        strerror(errno));
-    ok(local == 30, "%s: local size is %d: %s",  __FILE__, local,
         strerror(errno));
     ok(log == 30, "%s: log size is %d: %s",  __FILE__, log,
         strerror(errno));
@@ -140,11 +132,9 @@ int size_test(char* unifyfs_root)
     rc = chmod(path, 0444);
     ok(rc == 0, "%s: chmod(0444) (rc=%d): %s", __FILE__, rc, strerror(errno));
 
-    /* Both local and global size should be correct */
-    get_size(path, &global, &local, &log);
+    /* Global size should be correct */
+    get_size(path, &global, &log);
     ok(global == 30, "%s: global size is %d: %s",  __FILE__, global,
-        strerror(errno));
-    ok(local == 30, "%s: local size is %d: %s",  __FILE__, local,
         strerror(errno));
     ok(log == 30, "%s: log size is %d: %s",  __FILE__, log,
         strerror(errno));

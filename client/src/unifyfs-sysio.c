@@ -410,14 +410,13 @@ static int __stat(const char* path, struct stat* buf)
     if (fid >= 0) { /* If we have a local file */
         /*
          * For debugging and testing purposes, we hijack st_rdev to store our
-         * local size and log size.  We also assume the stat struct is
+         * log size.  We also assume the stat struct is
          * the 64-bit variant.  The values are stored as:
          *
-         * st_rdev = log_size << 32 | local_size;
+         * st_rdev = log_size
          *
          */
-        buf->st_rdev  = (unifyfs_fid_log_size(fid) << 32);
-        buf->st_rdev |= (unifyfs_fid_local_size(fid) & 0xFFFFFFFF);
+        buf->st_rdev = unifyfs_fid_log_size(fid);
     }
 
     return 0;
@@ -639,7 +638,6 @@ int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count)
     if (write_rc == 0) {
         unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
         meta->needs_sync = 1;
-        meta->local_size = MAX(meta->local_size, pos + count);
         meta->log_size = newlogsize;
     }
     return write_rc;

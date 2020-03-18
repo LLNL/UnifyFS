@@ -617,17 +617,6 @@ off_t unifyfs_fid_global_size(int fid)
     return (off_t)-1;
 }
 
-/* Return the log size of the file */
-off_t unifyfs_fid_local_size(int fid)
-{
-    /* get meta data for this file */
-    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    if (NULL != meta) {
-        return meta->local_size;
-    }
-    return (off_t)-1;
-}
-
 /*
  * Return the size of the file.  If the file is laminated, return the
  * laminated size.  If the file is not laminated, return the local
@@ -639,14 +628,7 @@ off_t unifyfs_fid_logical_size(int fid)
     if (unifyfs_fid_is_laminated(fid)) {
         return unifyfs_fid_global_size(fid);
     } else {
-        /* TODO: move this to a runtime configurable? */
-        int use_local_size = 0;
-        if (use_local_size) {
-            return unifyfs_fid_local_size(fid);
-        }
-
-        /* otherwise, we invoke an rpc to ask the server
-         * what the file size is */
+        /* invoke an rpc to ask the server what the file size is */
 
         /* get gfid for this file */
         int gfid = unifyfs_gfid_from_fid(fid);
@@ -715,7 +697,6 @@ int unifyfs_fid_update_file_meta(int fid, unifyfs_file_attr_t* gfattr)
         if (meta->is_laminated) {
             /* update file size */
             meta->global_size = (off_t)gfattr->size;
-            meta->local_size = meta->global_size;
             LOGDBG("laminated file size is %zu bytes",
                    (size_t)meta->global_size);
         }
@@ -880,7 +861,6 @@ int unifyfs_fid_create_file(const char* path)
     /* initialize meta data */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     meta->global_size  = 0;
-    meta->local_size   = 0;
     meta->log_size     = 0;
     meta->flock_status = UNLOCKED;
     meta->storage      = FILE_STORAGE_NULL;
@@ -1033,10 +1013,9 @@ int unifyfs_fid_truncate(int fid, off_t length)
             return rc;
         }
 
-        /* truncate succeeded, update global and local size to
+        /* truncate succeeded, update global size to
          * reflect truncated size, note log size is not affected */
         meta->global_size = length;
-        meta->local_size  = length;
     } else {
         /* unknown storage type */
         return EIO;

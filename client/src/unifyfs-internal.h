@@ -268,7 +268,6 @@ typedef struct {
 
 typedef struct {
     off_t global_size;            /* Global size of the file */
-    off_t local_size;             /* Local size of the file */
     off_t log_size;               /* Log size.  This is the sum of all the
                                    * write counts. */
     pthread_spinlock_t fspinlock; /* file lock variable */
@@ -489,9 +488,6 @@ int unifyfs_fid_is_dir_empty(const char* path);
 
 /* Return current global size of given file id */
 off_t unifyfs_fid_global_size(int fid);
-
-/* Return current local size of given file id */
-off_t unifyfs_fid_local_size(int fid);
 
 /* Return current local size of given file id */
 off_t unifyfs_fid_log_size(int fid);
