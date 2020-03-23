@@ -81,6 +81,8 @@ int main(int argc, char* argv[])
 
     open64_test(unifyfs_root);
 
+    lseek_test(unifyfs_root);
+
     write_read_test(unifyfs_root);
 
     write_read_hole_test(unifyfs_root);

@@ -873,7 +873,7 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
         unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(fd);
 
         /* get current file position */
-        off_t current_pos = filedesc->pos;
+        off_t logical_eof, current_pos = filedesc->pos;
 
         /* TODO: support SEEK_DATA and SEEK_HOLE? */
 
@@ -881,15 +881,28 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
         switch (whence) {
         case SEEK_SET:
             /* seek to offset */
+            if (offset < 0) {
+                errno = EINVAL;
+                return (off_t)(-1);
+            }
             current_pos = offset;
             break;
         case SEEK_CUR:
             /* seek to current position + offset */
+            if (current_pos + offset < 0) {
+                errno = EINVAL;
+                return (off_t)(-1);
+            }
             current_pos += offset;
             break;
         case SEEK_END:
             /* seek to EOF + offset */
-            current_pos = unifyfs_fid_logical_size(fid);
+            logical_eof = unifyfs_fid_logical_size(fid);
+            if (logical_eof + offset < 0) {
+                errno = EINVAL;
+                return (off_t)(-1);
+            }
+            current_pos = logical_eof + offset;
             break;
         default:
             errno = EINVAL;

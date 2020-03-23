@@ -124,6 +124,7 @@ sys_sysio_gotcha_t_SOURCES = sys/sysio_suite.h \
                              sys/mkdir-rmdir.c \
                              sys/open.c \
                              sys/open64.c \
+                             sys/lseek.c \
                              sys/write-read.c \
                              sys/write-read-hole.c \
                              sys/truncate.c \
@@ -140,6 +141,7 @@ sys_sysio_static_t_SOURCES = sys/sysio_suite.h \
                              sys/mkdir-rmdir.c \
                              sys/open.c \
                              sys/open64.c \
+                             sys/lseek.c \
                              sys/write-read.c \
                              sys/write-read-hole.c \
                              sys/truncate.c \
