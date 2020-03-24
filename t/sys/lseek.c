@@ -36,15 +36,15 @@ int lseek_test(char* unifyfs_root)
 
     char path[64];
     int file_mode = 0600;
-    int fd, rc;
+    int fd;
     off_t ret;
 
-    /* Create a random file and dir name at the mountpoint path to test on */
+    /* Create a random file at the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifyfs_root);
 
     /* Open a file and write to it to test lseek() */
     fd = open(path, O_RDWR | O_CREAT | O_TRUNC, file_mode);
-    rc = write(fd, "hello world", 12);
+    write(fd, "hello world", 12);
 
     /* lseek with invalid whence fails with errno=EINVAL. */
     errno = 0;
@@ -60,6 +60,12 @@ int lseek_test(char* unifyfs_root)
     ok(ret == -1 && errno == EINVAL,
        "%s: lseek to negative offset w/ SEEK_SET fails (ret=%d, errno=%d): %s",
        __FILE__, ret, errno, strerror(errno));
+
+    /* lseek to valid offset with SEEK_SET succeeds */
+    errno = 0;
+    ret = lseek(fd, 7, SEEK_SET);
+    ok(ret == 7, "%s: lseek to valid offset w/ SEEK_SET (ret=%d): %s",
+       __FILE__, ret, strerror(errno));
 
     /* lseek beyond end of file with SEEK_SET succeeds */
     errno = 0;
@@ -128,9 +134,8 @@ int lseek_test(char* unifyfs_root)
 
     /* lseek() with SEEK_DATA tests */
     /* Write beyond end of file to create a hole */
-    rc = write(fd, "hello universe", 15);
+    write(fd, "hello universe", 15);
 
-    todo("SEEK_DATA and SEEK_HOLE not yet implemented");
     /* lseek to negative offset with SEEK_DATA should fail with errno=ENXIO */
     errno = 0;
     ret = lseek(fd, -1, SEEK_DATA);
@@ -144,7 +149,7 @@ int lseek_test(char* unifyfs_root)
     ok(ret == 0, "%s: lseek to beginning of file w/ SEEK_DATA (ret=%d): %s",
        __FILE__, ret, strerror(errno));
 
-    /* lseek to data after hole with SEEK_DATA returs current offset or offset
+    /* lseek to data after hole with SEEK_DATA returns current offset or offset
      * of first set of data */
     errno = 0;
     ret = lseek(fd, 15, SEEK_DATA);
@@ -154,7 +159,7 @@ int lseek_test(char* unifyfs_root)
 
     /* lseek beyond end of file with SEEK_DATA should fail with errno=ENXIO */
     errno = 0;
-    ret = lseek(fd, -1, SEEK_DATA);
+    ret = lseek(fd, 75, SEEK_DATA);
     ok(ret == -1 && errno == ENXIO,
        "%s: lseek beyond end of file w/ SEEK_DATA fails (ret=%d, errno=%d): %s",
        __FILE__, ret, errno, strerror(errno));
@@ -196,9 +201,7 @@ int lseek_test(char* unifyfs_root)
        "%s: lseek beyond end of file w/ SEEK_HOLE fails (ret=%d, errno=%d): %s",
        __FILE__, ret, errno, strerror(errno));
 
-    end_todo;
-
-    rc = close(fd);
+    close(fd);
 
     /* lseek in non-open file descriptor should fail with errno=EBADF */
     errno = 0;

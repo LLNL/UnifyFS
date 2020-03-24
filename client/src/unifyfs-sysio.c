@@ -885,15 +885,15 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
         unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(fd);
 
         /* get current file position */
-        off_t logical_eof, current_pos = filedesc->pos;
-
-        /* TODO: support SEEK_DATA and SEEK_HOLE? */
+        off_t current_pos = filedesc->pos;
+        off_t logical_eof;
 
         /* compute final file position */
         switch (whence) {
         case SEEK_SET:
             /* seek to offset */
             if (offset < 0) {
+                /* negative offset is invalid */
                 errno = EINVAL;
                 return (off_t)(-1);
             }
@@ -902,6 +902,7 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
         case SEEK_CUR:
             /* seek to current position + offset */
             if (current_pos + offset < 0) {
+                /* offset is negative and will result in negative position */
                 errno = EINVAL;
                 return (off_t)(-1);
             }
@@ -911,10 +912,31 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
             /* seek to EOF + offset */
             logical_eof = unifyfs_fid_logical_size(fid);
             if (logical_eof + offset < 0) {
+                /* offset is negative and will result in negative position */
                 errno = EINVAL;
                 return (off_t)(-1);
             }
             current_pos = logical_eof + offset;
+            break;
+        case SEEK_DATA:
+            /* Using fallback approach: always return offset */
+            logical_eof = unifyfs_fid_logical_size(fid);
+            if (offset < 0 || offset > logical_eof) {
+                /* negative offset and offset beyond EOF are invalid */
+                errno = ENXIO;
+                return (off_t)(-1);
+            }
+            current_pos = offset;
+            break;
+        case SEEK_HOLE:
+            /* Using fallback approach: always return offset for EOF */
+            logical_eof = unifyfs_fid_logical_size(fid);
+            if (offset < 0 || offset > logical_eof) {
+                /* negative offset and offset beyond EOF are invalid */
+                errno = ENXIO;
+                return (off_t)(-1);
+            }
+            current_pos = logical_eof;
             break;
         default:
             errno = EINVAL;
@@ -938,7 +960,7 @@ off64_t UNIFYFS_WRAP(lseek64)(int fd, off64_t offset, int whence)
     if (unifyfs_intercept_fd(&fd)) {
         if (sizeof(off_t) == sizeof(off64_t)) {
             /* off_t and off64_t are the same size,
-             * delegate to lseek warpper */
+             * delegate to lseek wrapper */
             off64_t ret = (off64_t)UNIFYFS_WRAP(lseek)(
                               origfd, (off_t) offset, whence);
             return ret;

@@ -20,7 +20,8 @@ endif
 
 CLIENT_COMMON_CPPFLAGS = \
   -I$(top_builddir)/client \
-  -I$(top_srcdir)/common/src
+  -I$(top_srcdir)/common/src \
+  -D_GNU_SOURCE
 
 CLIENT_COMMON_CFLAGS = \
   $(MPI_CFLAGS) \
