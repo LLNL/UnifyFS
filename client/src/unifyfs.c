@@ -633,6 +633,16 @@ off_t unifyfs_fid_logical_size(int fid)
         /* get gfid for this file */
         int gfid = unifyfs_gfid_from_fid(fid);
 
+        /* sync any writes to disk before requesting file size */
+        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+        if (meta->needs_sync) {
+            /* we have some changes to sync for this file */
+            unifyfs_sync(gfid);
+
+            /* just synced writes for this file */
+            meta->needs_sync = 0;
+        }
+
         /* get file size for this file */
         size_t filesize;
         int ret = invoke_client_filesize_rpc(gfid, &filesize);
