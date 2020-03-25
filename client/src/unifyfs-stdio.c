@@ -892,6 +892,11 @@ static int unifyfs_fseek(FILE* stream, off_t offset, int whence)
     switch (whence) {
     case SEEK_SET:
         /* seek to offset */
+        if (offset < 0) {
+            /* negative offset is invalid */
+            errno = EINVAL;
+            return -1;
+        }
         current_pos = offset;
         break;
     case SEEK_CUR:
@@ -901,8 +906,12 @@ static int unifyfs_fseek(FILE* stream, off_t offset, int whence)
             errno  = EOVERFLOW;
             return -1;
         }
+        if (current_pos + offset < 0) {
+            /* offset is negative and will result in a negative position */
+            errno = EINVAL;
+            return -1;
+        }
         current_pos += offset;
-
         break;
     case SEEK_END:
         /* seek to EOF + offset */
@@ -910,6 +919,11 @@ static int unifyfs_fseek(FILE* stream, off_t offset, int whence)
         if (unifyfs_would_overflow_offt(filesize, offset)) {
             s->err = 1;
             errno  = EOVERFLOW;
+            return -1;
+        }
+        if (filesize + offset < 0) {
+            /* offset is negative and will result in negative position */
+            errno = EINVAL;
             return -1;
         }
         current_pos = filesize + offset;
@@ -1559,7 +1573,11 @@ void UNIFYFS_WRAP(rewind)(FILE* stream)
         /* lookup stream */
         unifyfs_stream_t* s = (unifyfs_stream_t*) stream;
 
-        /* TODO: check that stream is active */
+        /* check that stream is active */
+        if (s->fd < 0) {
+            errno = EBADF;
+            return;
+        }
 
         /* seek to front of file */
         int rc = unifyfs_fseek(stream, (off_t) 0L, SEEK_SET);

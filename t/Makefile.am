@@ -154,6 +154,7 @@ sys_sysio_static_t_LDFLAGS = $(test_static_ldflags)
 std_stdio_gotcha_t_SOURCES = std/stdio_suite.h \
                              std/stdio_suite.c \
                              std/fopen-fclose.c \
+                             std/fseek-ftell.c \
                              std/fwrite-fread.c \
                              std/fflush.c \
                              std/size.c
@@ -165,6 +166,7 @@ std_stdio_gotcha_t_LDFLAGS = $(AM_LDFLAGS)
 std_stdio_static_t_SOURCES = std/stdio_suite.h \
                              std/stdio_suite.c \
                              std/fopen-fclose.c \
+                             std/fseek-ftell.c \
                              std/fwrite-fread.c \
                              std/fflush.c \
                              std/size.c
