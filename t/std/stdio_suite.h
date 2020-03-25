@@ -32,8 +32,17 @@
 
 /* Tests for UNIFYFS_WRAP(fopen) and UNIFYFS_WRAP(fclose) */
 int fopen_fclose_test(char* unifyfs_root);
+
+/* Tests for UNIFYFS_WRAP(fseek/ftell/rewind) */
+int fseek_ftell_test(char* unifyfs_root);
+
+/* Tests for UNIFYFS_WRAP(fwrite) and UNIFYFS_WRAP(fread) */
 int fwrite_fread_test(char* unifyfs_root);
+
+/* Tests for UNIFYFS_WRAP(fflush) */
 int fflush_test(char* unifyfs_root);
+
+/* Tests for UNIFYFS_WRAP(size) */
 int size_test(char* unifyfs_root);
 
 #endif /* STDIO_SUITE_H */
