@@ -23,7 +23,6 @@ if HAVE_LD_WRAP
   app-tileio-static \
   transfer-static \
   size-static \
-  simul-static \
   chmod-static \
   multi-write-static
 endif
@@ -46,7 +45,6 @@ if HAVE_GOTCHA
     app-tileio-gotcha \
     transfer-gotcha \
     size-gotcha \
-	simul-gotcha \
     chmod-gotcha \
 	multi-write-gotcha
 endif
@@ -303,16 +301,6 @@ size_static_SOURCES  = size.c testutil.c
 size_static_CPPFLAGS = $(test_cppflags)
 size_static_LDADD    = $(test_static_ldadd)
 size_static_LDFLAGS  = $(test_static_ldflags)
-
-simul_gotcha_SOURCES  = simul.c
-simul_gotcha_CPPFLAGS = $(test_cppflags)
-simul_gotcha_LDADD    = $(test_gotcha_ldadd)
-simul_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
-
-simul_static_SOURCES  = simul.c
-simul_static_CPPFLAGS = $(test_cppflags)
-simul_static_LDADD    = $(test_static_ldadd)
-simul_static_LDFLAGS  = $(test_static_ldflags)
 
 chmod_gotcha_SOURCES  = chmod.c testutil.c
 chmod_gotcha_CPPFLAGS = $(test_cppflags)
