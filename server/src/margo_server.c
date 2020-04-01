@@ -147,6 +147,10 @@ static margo_instance_id setup_local_target(void)
 /* register client-server RPCs */
 static void register_client_server_rpcs(margo_instance_id mid)
 {
+    MARGO_REGISTER(mid, "unifyfs_attach_rpc",
+                   unifyfs_attach_in_t, unifyfs_attach_out_t,
+                   unifyfs_attach_rpc);
+
     MARGO_REGISTER(mid, "unifyfs_mount_rpc",
                    unifyfs_mount_in_t, unifyfs_mount_out_t,
                    unifyfs_mount_rpc);
@@ -244,6 +248,18 @@ int margo_server_rpc_finalize(void)
         unifyfsd_rpc_context = NULL;
 
         rpc_clean_local_server_addr();
+
+        /* free global server addresses */
+        for (int i = 0; i < glb_num_servers; i++) {
+            if (glb_servers[i].margo_svr_addr != HG_ADDR_NULL) {
+                margo_addr_free(ctx->svr_mid, glb_servers[i].margo_svr_addr);
+                glb_servers[i].margo_svr_addr = HG_ADDR_NULL;
+            }
+            if (NULL != glb_servers[i].margo_svr_addr_str) {
+                free(glb_servers[i].margo_svr_addr_str);
+                glb_servers[i].margo_svr_addr_str = NULL;
+            }
+        }
 
         /* shut down margo */
         margo_finalize(ctx->svr_mid);

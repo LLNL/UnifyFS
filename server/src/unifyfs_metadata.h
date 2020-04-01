@@ -35,6 +35,13 @@
 
 #define MANIFEST_FILE_NAME "mdhim_manifest_"
 
+
+/* extent slice size used for metadata */
+extern size_t meta_slice_sz;
+
+/* Key for file attributes */
+typedef int fattr_key_t;
+
 /**
  * Key for a file extent
  */

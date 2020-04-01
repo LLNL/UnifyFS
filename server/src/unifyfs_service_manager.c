@@ -159,8 +159,7 @@ int sm_issue_chunk_reads(int src_rank,
     size_t buf_cursor = 0;
 
     int i;
-    int last_app = -1;
-    app_config_t* app_config = NULL;
+    app_client* app_clnt = NULL;
     for (i = 0; i < num_chks; i++) {
         /* pointer to next read request */
         chunk_read_req_t* rreq = reqs + i;
@@ -179,38 +178,29 @@ int sm_issue_chunk_reads(int src_rank,
         LOGDBG("reading chunk(offset=%zu, size=%zu)",
                rreq->offset, nbytes);
 
-        /* get app id and corresponding app_config struct */
-        int app_id = rreq->log_app_id;
-        if (app_id != last_app) {
-            /* look up app config for given app id */
-            app_config = (app_config_t*)
-                arraylist_get(app_config_list, app_id);
-            assert(app_config);
-
-            /* remember the current app_id to skip lookup if the next
-             * request is for the same app_id */
-            last_app = app_id;
-        }
-
-        /* client id for this read task */
-        int cli_id = rreq->log_client_id;
-
         /* get pointer to next position in buffer to store read data */
         char* buf_ptr = databuf + buf_cursor;
 
-        /* read data from log */
-        logio_context* logio_ctx = app_config->logio[cli_id];
-        if (NULL != logio_ctx) {
-            size_t nread = 0;
-            int rc = unifyfs_logio_read(logio_ctx, log_offset, nbytes,
-                                        buf_ptr, &nread);
-            if (UNIFYFS_SUCCESS == rc) {
-                rresp->read_rc = nread;
+        /* read data from client log */
+        int app_id = rreq->log_app_id;
+        int cli_id = rreq->log_client_id;
+        app_clnt = get_app_client(app_id, cli_id);
+        if (NULL != app_clnt) {
+            logio_context* logio_ctx = app_clnt->logio;
+            if (NULL != logio_ctx) {
+                size_t nread = 0;
+                int rc = unifyfs_logio_read(logio_ctx, log_offset, nbytes,
+                                            buf_ptr, &nread);
+                if (UNIFYFS_SUCCESS == rc) {
+                    rresp->read_rc = nread;
+                } else {
+                    rresp->read_rc = (ssize_t)(-rc);
+                }
             } else {
-                rresp->read_rc = (ssize_t)(-rc);
+                rresp->read_rc = (ssize_t)(-EINVAL);
             }
         } else {
-            rresp->read_rc = (ssize_t)(-UNIFYFS_FAILURE);
+            rresp->read_rc = (ssize_t)(-EINVAL);
         }
 
         /* update to point to next slot in read reply buffer */

@@ -16,7 +16,7 @@ libunifyfsd_a_SOURCES = \
 
 bin_PROGRAMS = unifyfsd
 
-unifyfsd_SOURCES = unifyfs_init.c
+unifyfsd_SOURCES = unifyfs_server.c
 
 unifyfsd_LDFLAGS = -static \
   $(LEVELDB_LDFLAGS) \

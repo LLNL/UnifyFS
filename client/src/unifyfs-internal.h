@@ -258,15 +258,6 @@ enum flock_enum {
 
 enum {FILE_STORAGE_NULL = 0, FILE_STORAGE_LOGIO};
 
-/* TODO: make this an enum */
-#define CHUNK_LOCATION_NULL      0
-#define CHUNK_LOCATION_MEMFS     1
-#define CHUNK_LOCATION_SPILLOVER 2
-
-typedef struct {
-    int location; /* CHUNK_LOCATION type */
-    off_t id;     /* physical id of chunk in its respective storage */
-} unifyfs_chunkmeta_t;
 
 typedef struct {
     off_t global_size;            /* Global size of the file */
@@ -281,7 +272,6 @@ typedef struct {
     int needs_sync;               /* have unsynced writes */
 
     off_t chunks;                 /* number of chunks allocated to file */
-    off_t chunkmeta_idx;          /* starting index in unifyfs_chunkmeta */
     int is_laminated;             /* Is this file laminated */
     uint32_t mode;                /* st_mode bits.  This has file
                                    * permission info and will tell you if this
@@ -343,7 +333,8 @@ extern shm_context* shm_recv_ctx;
 /* log-based I/O context */
 extern logio_context* logio_ctx;
 
-extern int app_id;
+extern int unifyfs_app_id;
+extern int unifyfs_client_id;
 extern size_t unifyfs_key_slice_range;
 
 /* -------------------------------

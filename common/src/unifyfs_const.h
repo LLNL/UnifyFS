@@ -49,21 +49,22 @@
 #define UNIFYFS_MAX_FILENAME KIB
 #define UNIFYFS_MAX_HOSTNAME 64
 
-// Request Manager
+// Server - Request Manager
 #define MAX_META_PER_SEND (4 * KIB)  /* max read request count per server */
 #define REQ_BUF_LEN (MAX_META_PER_SEND * 64) /* chunk read reqs buffer size */
 #define SHM_WAIT_INTERVAL 1000       /* unit: ns */
 #define RM_MAX_ACTIVE_REQUESTS 64    /* number of concurrent read requests */
 
-// Service Manager
+// Server - Service Manager
 #define LARGE_BURSTY_DATA (512 * MIB)
 #define MAX_BURSTY_INTERVAL 10000 /* unit: us */
 #define MIN_SLEEP_INTERVAL 100    /* unit: us */
 #define SLEEP_INTERVAL 500        /* unit: us */
 #define SLEEP_SLICE_PER_UNIT 50   /* unit: us */
 
-// Request and Service Managers, Command Handler
-#define MAX_NUM_CLIENTS 64 /* app processes per server */
+// Server - General
+#define MAX_NUM_APPS 64    /* max # apps supported by a single server */
+#define MAX_APP_CLIENTS 64 /* app processes per server */
 
 // Client
 #define UNIFYFS_MAX_FILES 128

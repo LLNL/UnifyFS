@@ -74,18 +74,18 @@ unsigned long unifyfs_max_index_entries; /* max metadata log entries */
 unsigned long unifyfs_segment_count;
 
 int global_rank_cnt;  /* count of world ranks */
-int local_rank_cnt;
-int local_rank_idx;
+int local_rank_cnt;   /* count of app ranks on local host */
+int local_rank_idx;   /* index within local ranks */
+int client_rank;      /* client-provided rank (for debugging) */
 
 int local_del_cnt = 1; /* count of local servers */
 
 /* shared memory buffer to transfer read replies
  * from server to client */
-static size_t shm_recv_size = UNIFYFS_DATA_RECV_SIZE;
 shm_context* shm_recv_ctx; // = NULL
 
-int client_rank;
-int app_id;
+int unifyfs_app_id;
+int unifyfs_client_id;
 size_t unifyfs_key_slice_range;
 
 static int unifyfs_use_single_shm = 0;
@@ -484,7 +484,7 @@ int unifyfs_fd_is_laminated(int fd)
  * --------------------------------------- */
 
 /* allocate and initialize data management resource for file */
-static int unifyfs_fid_store_alloc(int fid)
+static int fid_store_alloc(int fid)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
@@ -496,7 +496,7 @@ static int unifyfs_fid_store_alloc(int fid)
 }
 
 /* free data management resource for file */
-static int unifyfs_fid_store_free(int fid)
+static int fid_store_free(int fid)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
@@ -517,9 +517,9 @@ static int unifyfs_fid_store_free(int fid)
     return UNIFYFS_SUCCESS;
 }
 
-/* ---------------------------------------
+/* =======================================
  * Operations on file ids
- * --------------------------------------- */
+ * ======================================= */
 
 /* checks to see if fid is a directory
  * returns 1 for yes
@@ -1116,7 +1116,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         }
 
         /* initialize local storage for this file */
-        ret = unifyfs_fid_store_alloc(fid);
+        ret = fid_store_alloc(fid);
         if (ret != UNIFYFS_SUCCESS) {
             LOGERR("failed to allocate storage space for file %s (fid=%d)",
                    path, fid);
@@ -1171,7 +1171,7 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         }
 
         /* initialize the storage for the file */
-        int store_rc = unifyfs_fid_store_alloc(fid);
+        int store_rc = fid_store_alloc(fid);
         if (store_rc != UNIFYFS_SUCCESS) {
             LOGERR("Failed to create storage for file %s", path);
             return EIO;
@@ -1221,7 +1221,7 @@ int unifyfs_fid_unlink(int fid)
     }
 
     /* finalize the storage we're using for this file */
-    rc = unifyfs_fid_store_free(fid);
+    rc = fid_store_free(fid);
     if (rc != UNIFYFS_SUCCESS) {
         /* released strorage for file, but failed to release
          * structures tracking storage, again bail out to keep
@@ -1247,9 +1247,13 @@ int unifyfs_fid_unlink(int fid)
     return UNIFYFS_SUCCESS;
 }
 
-/* ---------------------------------------
- * Operations to mount file system
- * --------------------------------------- */
+/* =======================================
+ * Operations to mount/unmount file system
+ * ======================================= */
+
+/* -------------
+ * static APIs
+ * ------------- */
 
 /* The super block is a region of shared memory that is used to
  * persist file system data.  It contains both room for data
@@ -1290,8 +1294,8 @@ int unifyfs_fid_unlink(int fid)
 
 /* compute memory size of superblock in bytes,
  * critical to keep this consistent with
- * unifyfs_init_pointers */
-static size_t unifyfs_superblock_size(void)
+ * init_superblock_pointers */
+static size_t get_superblock_size(void)
 {
     size_t sb_size = 0;
 
@@ -1330,7 +1334,7 @@ char* next_page_align(char* ptr)
 }
 
 /* initialize our global pointers into the given superblock */
-static void* unifyfs_init_pointers(void* superblock)
+static void init_superblock_pointers(void* superblock)
 {
     char* ptr = (char*)superblock;
 
@@ -1364,12 +1368,10 @@ static void* unifyfs_init_pointers(void* superblock)
     if (ptr_size > shm_super_ctx->size) {
         LOGERR("Data structures in superblock extend beyond its size");
     }
-
-    return ptr;
 }
 
 /* initialize data structures for first use */
-static int unifyfs_init_structures()
+static int init_superblock_structures(void)
 {
     int i;
     for (i = 0; i < unifyfs_max_files; i++) {
@@ -1390,12 +1392,12 @@ static int unifyfs_init_structures()
 
 /* create superblock of specified size and name, or attach to existing
  * block if available */
-static int unifyfs_superblock_shmget(size_t super_sz)
+static int init_superblock_shm(size_t super_sz)
 {
     char shm_name[SHMEM_NAME_LEN] = {0};
 
     /* attach shmem region for client's superblock */
-    sprintf(shm_name, SHMEM_SUPER_FMTSTR, app_id, local_rank_idx);
+    sprintf(shm_name, SHMEM_SUPER_FMTSTR, unifyfs_app_id, unifyfs_client_id);
     shm_context* shm_ctx = unifyfs_shm_alloc(shm_name, super_sz);
     if (NULL == shm_ctx) {
         LOGERR("Failed to attach to shmem superblock region %s", shm_name);
@@ -1405,229 +1407,32 @@ static int unifyfs_superblock_shmget(size_t super_sz)
 
     /* init our global variables to point to spots in superblock */
     void* addr = shm_ctx->addr;
-    unifyfs_init_pointers(addr);
+    init_superblock_pointers(addr);
 
     /* initialize structures in superblock if it's newly allocated,
      * we depend on shm_open setting all bytes to 0 to know that
      * it is not initialized */
-    int32_t initialized = *(int32_t*)addr;
+    uint32_t initialized = *(uint32_t*)addr;
     if (initialized == 0) {
         /* not yet initialized, so initialize values within superblock */
-        unifyfs_init_structures();
+        init_superblock_structures();
 
         /* superblock structure has been initialized,
          * so set flag to indicate that fact */
-        *(int32_t*)addr = 0xDEADBEEF;
+        *(uint32_t*)addr = (uint32_t)0xDEADBEEF;
     }
 
     /* return starting memory address of super block */
     return UNIFYFS_SUCCESS;
 }
 
-static int unifyfs_init(int rank)
-{
-    int rc;
-    int i;
-    bool b;
-    long l;
-    unsigned long long bits;
-    char* cfgval;
-
-    if (!unifyfs_initialized) {
-        /* unifyfs default log level is LOG_ERR */
-        cfgval = client_cfg.log_verbosity;
-        if (cfgval != NULL) {
-            rc = configurator_int_val(cfgval, &l);
-            if (rc == 0) {
-                unifyfs_set_log_level((unifyfs_log_level_t)l);
-            }
-        }
-
-#ifdef UNIFYFS_GOTCHA
-        /* insert our I/O wrappers using gotcha */
-        enum gotcha_error_t result;
-        result = gotcha_wrap(wrap_unifyfs_list, GOTCHA_NFUNCS, "unifyfs");
-        if (result != GOTCHA_SUCCESS) {
-            LOGERR("gotcha_wrap returned %d", (int) result);
-        }
-
-        /* check for an errors when registering functions with gotcha */
-        for (i = 0; i < GOTCHA_NFUNCS; i++) {
-            if (*(void**)(wrap_unifyfs_list[i].function_address_pointer) == 0) {
-                LOGERR("This function name failed to be wrapped: %s",
-                       wrap_unifyfs_list[i].name);
-
-            }
-        }
-#endif
-
-        /* as a hack to support fgetpos/fsetpos, we store the value of
-         * a void* in an fpos_t so check that there's room and at least
-         * print a message if this won't work */
-        if (sizeof(fpos_t) < sizeof(void*)) {
-            LOGERR("fgetpos/fsetpos will not work correctly");
-            unifyfs_fpos_enabled = 0;
-        }
-
-        /* look up page size for buffer alignment */
-        unifyfs_page_size = getpagesize();
-
-        /* compute min and max off_t values */
-        bits = sizeof(off_t) * 8;
-        unifyfs_max_offt = (off_t)((1ULL << (bits - 1ULL)) - 1ULL);
-        unifyfs_min_offt = (off_t)(-(1ULL << (bits - 1ULL)));
-
-        /* compute min and max long values */
-        unifyfs_max_long = LONG_MAX;
-        unifyfs_min_long = LONG_MIN;
-
-        /* determine max number of files to store in file system */
-        unifyfs_max_files = UNIFYFS_MAX_FILES;
-        cfgval = client_cfg.client_max_files;
-        if (cfgval != NULL) {
-            rc = configurator_int_val(cfgval, &l);
-            if (rc == 0) {
-                unifyfs_max_files = (int)l;
-            }
-        }
-
-        /* Determine if we should flatten writes or not */
-        unifyfs_flatten_writes = 1;
-        cfgval = client_cfg.client_flatten_writes;
-        if (cfgval != NULL) {
-            rc = configurator_bool_val(cfgval, &b);
-            if (rc == 0) {
-                unifyfs_flatten_writes = (bool)b;
-            }
-        }
-
-        /* Determine if we should track all write extents and use them
-         * to service read requests if all data is local */
-        unifyfs_local_extents = 0;
-        cfgval = client_cfg.client_local_extents;
-        if (cfgval != NULL) {
-            rc = configurator_bool_val(cfgval, &b);
-            if (rc == 0) {
-                unifyfs_local_extents = (bool)b;
-            }
-        }
-
-        /* define size of buffer used to cache key/value pairs for
-         * data offsets before passing them to the server */
-        unifyfs_index_buf_size = UNIFYFS_INDEX_BUF_SIZE;
-        cfgval = client_cfg.client_write_index_size;
-        if (cfgval != NULL) {
-            rc = configurator_int_val(cfgval, &l);
-            if (rc == 0) {
-                unifyfs_index_buf_size = (size_t)l;
-            }
-        }
-        unifyfs_max_index_entries =
-            unifyfs_index_buf_size / sizeof(unifyfs_index_t);
-
-        /* record the max fd for the system */
-        /* RLIMIT_NOFILE specifies a value one greater than the maximum
-         * file descriptor number that can be opened by this process */
-        struct rlimit r_limit;
-
-        if (getrlimit(RLIMIT_NOFILE, &r_limit) < 0) {
-            LOGERR("getrlimit failed: errno=%d (%s)", errno, strerror(errno));
-            return UNIFYFS_FAILURE;
-        }
-        unifyfs_fd_limit = r_limit.rlim_cur;
-        LOGDBG("FD limit for system = %ld", unifyfs_fd_limit);
-
-        /* initialize file descriptor structures */
-        int num_fds = UNIFYFS_MAX_FILEDESCS;
-        for (i = 0; i < num_fds; i++) {
-            unifyfs_fd_init(i);
-        }
-
-        /* initialize file stream structures */
-        int num_streams = UNIFYFS_MAX_FILEDESCS;
-        for (i = 0; i < num_streams; i++) {
-            unifyfs_stream_init(i);
-        }
-
-        /* initialize directory stream structures */
-        int num_dirstreams = UNIFYFS_MAX_FILEDESCS;
-        for (i = 0; i < num_dirstreams; i++) {
-            unifyfs_dirstream_init(i);
-        }
-
-        /* initialize stack of free fd values */
-        size_t free_fd_size = unifyfs_stack_bytes(num_fds);
-        unifyfs_fd_stack = malloc(free_fd_size);
-        unifyfs_stack_init(unifyfs_fd_stack, num_fds);
-
-        /* initialize stack of free stream values */
-        size_t free_stream_size = unifyfs_stack_bytes(num_streams);
-        unifyfs_stream_stack = malloc(free_stream_size);
-        unifyfs_stack_init(unifyfs_stream_stack, num_streams);
-
-        /* initialize stack of free directory stream values */
-        size_t free_dirstream_size = unifyfs_stack_bytes(num_dirstreams);
-        unifyfs_dirstream_stack = malloc(free_dirstream_size);
-        unifyfs_stack_init(unifyfs_dirstream_stack, num_dirstreams);
-
-        /* determine the size of the superblock */
-        size_t shm_super_size = unifyfs_superblock_size();
-
-        /* get a superblock of shared memory and initialize our
-         * global variables for this block */
-        rc = unifyfs_superblock_shmget(shm_super_size);
-        if (rc != UNIFYFS_SUCCESS) {
-            LOGERR("unifyfs_superblock_shmget() failed");
-            return rc;
-        }
-
-        /* initialize log-based I/O context */
-        rc = unifyfs_logio_init_client(app_id, local_rank_idx, &client_cfg,
-                                       &logio_ctx);
-        if (rc != UNIFYFS_SUCCESS) {
-            LOGERR("failed to initialize log-based I/O (rc = %s)",
-                   unifyfs_rc_enum_str(rc));
-            return rc;
-        }
-
-        /* remember that we've now initialized the library */
-        unifyfs_initialized = 1;
-    }
-
-    return UNIFYFS_SUCCESS;
-}
-
-/* ---------------------------------------
- * APIs exposed to external libraries
- * --------------------------------------- */
-
-/* Fill mount rpc input struct with client-side context info */
-void fill_client_mount_info(unifyfs_mount_in_t* in)
-{
-    size_t meta_offset = (char*)unifyfs_indices.ptr_num_entries -
-                         (char*)shm_super_ctx->addr;
-    size_t meta_size   = unifyfs_max_index_entries
-                         * sizeof(unifyfs_index_t);
-
-    in->app_id             = app_id;
-    in->client_id          = local_rank_idx;
-    in->dbg_rank           = client_rank;
-    in->num_procs_per_node = local_rank_cnt;
-    in->recv_buf_sz        = shm_recv_size;
-    in->superblock_sz      = shm_super_ctx->size;
-    in->meta_offset        = meta_offset;
-    in->meta_size          = meta_size;
-    in->logio_mem_size     = logio_ctx->shmem->size;
-    in->logio_spill_size   = logio_ctx->spill_sz;
-    in->external_spill_dir = strdup(client_cfg.logio_spill_dir);
-}
-
 /**
  * Initialize the shared recv memory buffer to receive data from the delegators
  */
-static int unifyfs_init_recv_shm(int local_rank_idx, int app_id)
+static int init_recv_shm(void)
 {
     char shm_recv_name[SHMEM_NAME_LEN] = {0};
+    size_t shm_recv_size = UNIFYFS_DATA_RECV_SIZE;
 
     /* get size of shared memory region from configuration */
     char* cfgval = client_cfg.client_recv_data_size;
@@ -1635,13 +1440,13 @@ static int unifyfs_init_recv_shm(int local_rank_idx, int app_id)
         long l;
         int rc = configurator_int_val(cfgval, &l);
         if (rc == 0) {
-            shm_recv_size = l;
+            shm_recv_size = (size_t) l;
         }
     }
 
     /* define file name to shared memory file */
     snprintf(shm_recv_name, sizeof(shm_recv_name),
-             SHMEM_DATA_FMTSTR, app_id, local_rank_idx);
+             SHMEM_DATA_FMTSTR, unifyfs_app_id, unifyfs_client_id);
 
     /* allocate memory for shared memory receive buffer */
     shm_recv_ctx = unifyfs_shm_alloc(shm_recv_name, shm_recv_size);
@@ -1814,154 +1619,181 @@ static int CountTasksPerNode(int rank, int numTasks)
     return 0;
 }
 
-/**
- * mount a file system at a given prefix
- * subtype: 0-> log-based file system;
- * 1->striping based file system, not implemented yet.
- * @param prefix: directory prefix
- * @param size: the number of ranks
- * @param l_app_id: application ID
- * @return success/error code
- */
-int unifyfs_mount(const char prefix[], int rank, size_t size,
-                  int l_app_id)
+static int unifyfs_init(void)
 {
     int rc;
-    int kv_rank, kv_nranks;
+    int i;
+    bool b;
+    long l;
+    unsigned long long bits;
+    char* cfgval;
 
-    if (-1 != unifyfs_mounted) {
-        if (l_app_id != unifyfs_mounted) {
-            LOGERR("multiple mount support not yet implemented");
-            return UNIFYFS_FAILURE;
-        } else {
-            LOGDBG("already mounted");
-            return UNIFYFS_SUCCESS;
+    if (!unifyfs_initialized) {
+
+#ifdef UNIFYFS_GOTCHA
+        /* insert our I/O wrappers using gotcha */
+        enum gotcha_error_t result;
+        result = gotcha_wrap(wrap_unifyfs_list, GOTCHA_NFUNCS, "unifyfs");
+        if (result != GOTCHA_SUCCESS) {
+            LOGERR("gotcha_wrap returned %d", (int) result);
         }
-    }
 
-    /* record our rank for debugging messages,
-     * record the value we should use for an app_id */
-    app_id = l_app_id;
-    client_rank = rank;
-    global_rank_cnt = (int)size;
+        /* check for an errors when registering functions with gotcha */
+        for (i = 0; i < GOTCHA_NFUNCS; i++) {
+            if (*(void**)(wrap_unifyfs_list[i].function_address_pointer) == 0) {
+                LOGERR("This function name failed to be wrapped: %s",
+                       wrap_unifyfs_list[i].name);
 
-    /* print log messages to stderr */
-    unifyfs_log_open(NULL);
+            }
+        }
+#endif
 
-    /************************
-     * read configuration values
-     ************************/
+        /* as a hack to support fgetpos/fsetpos, we store the value of
+         * a void* in an fpos_t so check that there's room and at least
+         * print a message if this won't work */
+        if (sizeof(fpos_t) < sizeof(void*)) {
+            LOGERR("fgetpos/fsetpos will not work correctly");
+            unifyfs_fpos_enabled = 0;
+        }
 
-    // initialize configuration
-    rc = unifyfs_config_init(&client_cfg, 0, NULL);
-    if (rc) {
-        LOGERR("failed to initialize configuration.");
-        return UNIFYFS_FAILURE;
-    }
-    client_cfg.ptype = UNIFYFS_CLIENT;
+        /* look up page size for buffer alignment */
+        unifyfs_page_size = getpagesize();
 
-    // update configuration from runstate file
-    rc = unifyfs_read_runstate(&client_cfg, NULL);
-    if (rc) {
-        LOGERR("failed to update configuration from runstate.");
-        return UNIFYFS_FAILURE;
-    }
+        /* compute min and max off_t values */
+        bits = sizeof(off_t) * 8;
+        unifyfs_max_offt = (off_t)((1ULL << (bits - 1ULL)) - 1ULL);
+        unifyfs_min_offt = (off_t)(-(1ULL << (bits - 1ULL)));
 
-    // initialize k-v store access
-    kv_rank = client_rank;
-    kv_nranks = size;
-    rc = unifyfs_keyval_init(&client_cfg, &kv_rank, &kv_nranks);
-    if (rc) {
-        LOGERR("failed to update configuration from runstate.");
-        return UNIFYFS_FAILURE;
-    }
-    if ((client_rank != kv_rank) || (size != kv_nranks)) {
-        LOGDBG("mismatch on mount vs kvstore rank/size");
-    }
+        /* compute min and max long values */
+        unifyfs_max_long = LONG_MAX;
+        unifyfs_min_long = LONG_MIN;
 
-    /************************
-     * record our mount point, and initialize structures to
-     * store data
-     ************************/
+        /* determine max number of files to store in file system */
+        unifyfs_max_files = UNIFYFS_MAX_FILES;
+        cfgval = client_cfg.client_max_files;
+        if (cfgval != NULL) {
+            rc = configurator_int_val(cfgval, &l);
+            if (rc == 0) {
+                unifyfs_max_files = (int)l;
+            }
+        }
 
-    /* record a copy of the prefix string defining the mount point
-     * we should intercept */
-    unifyfs_mount_prefix = strdup(prefix);
-    unifyfs_mount_prefixlen = strlen(unifyfs_mount_prefix);
+        /* Determine if we should flatten writes or not */
+        unifyfs_flatten_writes = 1;
+        cfgval = client_cfg.client_flatten_writes;
+        if (cfgval != NULL) {
+            rc = configurator_bool_val(cfgval, &b);
+            if (rc == 0) {
+                unifyfs_flatten_writes = (bool)b;
+            }
+        }
 
-    /* compute our local rank on the node,
-     * the following call initializes local_rank_{cnt,ndx} */
-    rc = CountTasksPerNode(rank, size);
-    if (rc < 0) {
-        LOGERR("cannot get the local rank list.");
-        return -1;
-    }
+        /* Determine if we should track all write extents and use them
+         * to service read requests if all data is local */
+        unifyfs_local_extents = 0;
+        cfgval = client_cfg.client_local_extents;
+        if (cfgval != NULL) {
+            rc = configurator_bool_val(cfgval, &b);
+            if (rc == 0) {
+                unifyfs_local_extents = (bool)b;
+            }
+        }
 
-    /* initialize our library, creates superblock and spillover files */
-    int ret = unifyfs_init(rank);
-    if (ret != UNIFYFS_SUCCESS) {
-        return ret;
-    }
+        /* define size of buffer used to cache key/value pairs for
+         * data offsets before passing them to the server */
+        unifyfs_index_buf_size = UNIFYFS_INDEX_BUF_SIZE;
+        cfgval = client_cfg.client_write_index_size;
+        if (cfgval != NULL) {
+            rc = configurator_int_val(cfgval, &l);
+            if (rc == 0) {
+                unifyfs_index_buf_size = (size_t)l;
+            }
+        }
+        unifyfs_max_index_entries =
+            unifyfs_index_buf_size / sizeof(unifyfs_index_t);
 
-    /* open rpc connection to server */
-    ret = unifyfs_client_rpc_init();
-    if (ret != UNIFYFS_SUCCESS) {
-        LOGERR("Failed to initialize client RPC");
-        return ret;
-    }
+        /* record the max fd for the system */
+        /* RLIMIT_NOFILE specifies a value one greater than the maximum
+         * file descriptor number that can be opened by this process */
+        struct rlimit r_limit;
 
-    /* create shared memory region for holding data for read replies */
-    rc = unifyfs_init_recv_shm(local_rank_idx, app_id);
-    if (rc < 0) {
-        LOGERR("failed to init shared receive memory");
-        return UNIFYFS_FAILURE;
-    }
-
-    /* Call client mount rpc function
-     * to register our shared memory and files with server */
-    LOGDBG("calling mount");
-    ret = invoke_client_mount_rpc();
-    if (ret != UNIFYFS_SUCCESS) {
-        /* If we fail to connect to the server, bail with an error */
-        LOGERR("Failed to mount to server");
-
-        /* TODO: need more clean up here, but this at least deletes
-         * some files we would otherwise leave behind */
-
-        /* Delete file for read reply shared memory region */
-        unifyfs_shm_unlink(shm_recv_ctx);
-
-        return ret;
-    }
-
-    /* Once we return from mount, we know the server has attached to our
-     * shared memory region for read replies, so we can safely remove the
-     * file. The memory region will stay active until both client and server
-     * unmap them. We keep the superblock file around so that a future client
-     * can reattach to it. */
-    unifyfs_shm_unlink(shm_recv_ctx);
-
-    /* add mount point as a new directory in the file list */
-    if (unifyfs_get_fid_from_path(prefix) < 0) {
-        /* no entry exists for mount point, so create one */
-        int fid = unifyfs_fid_create_directory(prefix);
-        if (fid < 0) {
-            /* if there was an error, return it */
-            LOGERR("failed to create directory entry for mount point: `%s'",
-                   prefix);
+        if (getrlimit(RLIMIT_NOFILE, &r_limit) < 0) {
+            LOGERR("getrlimit failed: errno=%d (%s)", errno, strerror(errno));
             return UNIFYFS_FAILURE;
         }
-    }
+        unifyfs_fd_limit = r_limit.rlim_cur;
+        LOGDBG("FD limit for system = %ld", unifyfs_fd_limit);
 
-    /* record client state as mounted for specific app_id */
-    unifyfs_mounted = app_id;
+        /* initialize file descriptor structures */
+        int num_fds = UNIFYFS_MAX_FILEDESCS;
+        for (i = 0; i < num_fds; i++) {
+            unifyfs_fd_init(i);
+        }
+
+        /* initialize file stream structures */
+        int num_streams = UNIFYFS_MAX_FILEDESCS;
+        for (i = 0; i < num_streams; i++) {
+            unifyfs_stream_init(i);
+        }
+
+        /* initialize directory stream structures */
+        int num_dirstreams = UNIFYFS_MAX_FILEDESCS;
+        for (i = 0; i < num_dirstreams; i++) {
+            unifyfs_dirstream_init(i);
+        }
+
+        /* initialize stack of free fd values */
+        size_t free_fd_size = unifyfs_stack_bytes(num_fds);
+        unifyfs_fd_stack = malloc(free_fd_size);
+        unifyfs_stack_init(unifyfs_fd_stack, num_fds);
+
+        /* initialize stack of free stream values */
+        size_t free_stream_size = unifyfs_stack_bytes(num_streams);
+        unifyfs_stream_stack = malloc(free_stream_size);
+        unifyfs_stack_init(unifyfs_stream_stack, num_streams);
+
+        /* initialize stack of free directory stream values */
+        size_t free_dirstream_size = unifyfs_stack_bytes(num_dirstreams);
+        unifyfs_dirstream_stack = malloc(free_dirstream_size);
+        unifyfs_stack_init(unifyfs_dirstream_stack, num_dirstreams);
+
+        /* determine the size of the superblock */
+        size_t shm_super_size = get_superblock_size();
+
+        /* get a superblock of shared memory and initialize our
+         * global variables for this block */
+        rc = init_superblock_shm(shm_super_size);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to initialize superblock shmem");
+            return rc;
+        }
+
+        /* create shared memory region for holding data for read replies */
+        rc = init_recv_shm();
+        if (rc < 0) {
+            LOGERR("failed to initialize data recv shmem");
+            return UNIFYFS_FAILURE;
+        }
+
+        /* initialize log-based I/O context */
+        rc = unifyfs_logio_init_client(unifyfs_app_id, unifyfs_client_id,
+                                       &client_cfg, &logio_ctx);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to initialize log-based I/O (rc = %s)",
+                   unifyfs_rc_enum_str(rc));
+            return rc;
+        }
+
+        /* remember that we've now initialized the library */
+        unifyfs_initialized = 1;
+    }
 
     return UNIFYFS_SUCCESS;
 }
 
-/* free resources allocated during unifyfs_init,
- * generally we do this in reverse order that
- * things were initailized in */
+/* free resources allocated during unifyfs_init().
+ * generally, we do this in reverse order with respect to
+ * how things were initialized */
 static int unifyfs_finalize(void)
 {
     int rc = UNIFYFS_SUCCESS;
@@ -1978,8 +1810,13 @@ static int unifyfs_finalize(void)
         unifyfs_spillmetablock = -1;
     }
 
-    /* detach from superblock */
+    /* detach from superblock shmem, but don't unlink the file so that
+     * a later client can reattach. */
     unifyfs_shm_free(&shm_super_ctx);
+
+    /* unlink and detach from data receive shmem */
+    unifyfs_shm_unlink(shm_recv_ctx);
+    unifyfs_shm_free(&shm_recv_ctx);
 
     /* free directory stream stack */
     if (unifyfs_dirstream_stack != NULL) {
@@ -2005,6 +1842,186 @@ static int unifyfs_finalize(void)
     return rc;
 }
 
+
+/* ---------------
+ * external APIs
+ * --------------- */
+
+/* Fill mount rpc input struct with client-side context info */
+void fill_client_mount_info(unifyfs_mount_in_t* in)
+{
+    in->dbg_rank = client_rank;
+    in->mount_prefix = strdup(client_cfg.unifyfs_mountpoint);
+}
+
+/* Fill attach rpc input struct with client-side context info */
+void fill_client_attach_info(unifyfs_attach_in_t* in)
+{
+    size_t meta_offset = (char*)unifyfs_indices.ptr_num_entries -
+                         (char*)shm_super_ctx->addr;
+    size_t meta_size   = unifyfs_max_index_entries
+                         * sizeof(unifyfs_index_t);
+
+    in->app_id            = unifyfs_app_id;
+    in->client_id         = unifyfs_client_id;
+    in->shmem_data_size   = shm_recv_ctx->size;
+    in->shmem_super_size  = shm_super_ctx->size;
+    in->meta_offset       = meta_offset;
+    in->meta_size         = meta_size;
+    in->logio_mem_size    = logio_ctx->shmem->size;
+    in->logio_spill_size  = logio_ctx->spill_sz;
+    in->logio_spill_dir   = strdup(client_cfg.logio_spill_dir);
+}
+
+/**
+ * mount a file system at a given prefix
+ * subtype: 0-> log-based file system;
+ * 1->striping based file system, not implemented yet.
+ * @param prefix: directory prefix
+ * @param size: the number of ranks
+ * @param l_app_id: application ID
+ * @return success/error code
+ */
+int unifyfs_mount(const char prefix[], int rank, size_t size,
+                  int l_app_id)
+{
+    int rc;
+    int kv_rank, kv_nranks;
+
+    if (-1 != unifyfs_mounted) {
+        if (l_app_id != unifyfs_mounted) {
+            LOGERR("multiple mount support not yet implemented");
+            return UNIFYFS_FAILURE;
+        } else {
+            LOGDBG("already mounted");
+            return UNIFYFS_SUCCESS;
+        }
+    }
+
+    // record our rank for debugging messages
+    client_rank = rank;
+    global_rank_cnt = (int)size;
+
+    // print log messages to stderr
+    unifyfs_log_open(NULL);
+
+    // initialize configuration
+    rc = unifyfs_config_init(&client_cfg, 0, NULL);
+    if (rc) {
+        LOGERR("failed to initialize configuration.");
+        return UNIFYFS_FAILURE;
+    }
+    client_cfg.ptype = UNIFYFS_CLIENT;
+
+    // set log level from config
+    char* cfgval = client_cfg.log_verbosity;
+    if (cfgval != NULL) {
+        long l;
+        rc = configurator_int_val(cfgval, &l);
+        if (rc == 0) {
+            unifyfs_set_log_level((unifyfs_log_level_t)l);
+        }
+    }
+
+    // record mountpoint prefix string
+    unifyfs_mount_prefix = strdup(prefix);
+    unifyfs_mount_prefixlen = strlen(unifyfs_mount_prefix);
+    client_cfg.unifyfs_mountpoint = unifyfs_mount_prefix;
+
+    // generate app_id from mountpoint prefix
+    unifyfs_app_id = unifyfs_generate_gfid(unifyfs_mount_prefix);
+    if (l_app_id != 0) {
+        LOGDBG("ignoring passed app_id=%d, using mountpoint app_id=%d",
+               l_app_id, unifyfs_app_id);
+    }
+
+    // update configuration from runstate file
+    rc = unifyfs_read_runstate(&client_cfg, NULL);
+    if (rc) {
+        LOGERR("failed to update configuration from runstate.");
+        return UNIFYFS_FAILURE;
+    }
+
+    // initialize k-v store access
+    kv_rank = client_rank;
+    kv_nranks = size;
+    rc = unifyfs_keyval_init(&client_cfg, &kv_rank, &kv_nranks);
+    if (rc) {
+        LOGERR("failed to update configuration from runstate.");
+        return UNIFYFS_FAILURE;
+    }
+    if ((client_rank != kv_rank) || (size != kv_nranks)) {
+        LOGDBG("mismatch on mount vs kvstore rank/size");
+    }
+
+    /* compute our local rank on the node,
+     * the following call initializes local_rank_{cnt,ndx} */
+    rc = CountTasksPerNode(client_rank, size);
+    if (rc < 0) {
+        LOGERR("cannot get the local rank list.");
+        return -1;
+    }
+
+    /* open rpc connection to server */
+    rc = unifyfs_client_rpc_init();
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("failed to initialize client RPC");
+        return rc;
+    }
+
+    /* Call client mount rpc function to get client id */
+    LOGDBG("calling mount rpc");
+    rc = invoke_client_mount_rpc();
+    if (rc != UNIFYFS_SUCCESS) {
+        /* If we fail to connect to the server, bail with an error */
+        LOGERR("failed to mount to server");
+        return rc;
+    }
+
+    /* initialize our library using assigned client id, creates shared memory
+     * regions (e.g., superblock and data recv) and inits log-based I/O */
+    rc = unifyfs_init();
+    if (rc != UNIFYFS_SUCCESS) {
+        return rc;
+    }
+
+    /* Call client attach rpc function to register our newly created shared
+     * memory and files with server */
+    LOGDBG("calling attach rpc");
+    rc = invoke_client_attach_rpc();
+    if (rc != UNIFYFS_SUCCESS) {
+        /* If we fail, bail with an error */
+        LOGERR("failed to attach to server");
+        unifyfs_finalize();
+        return rc;
+    }
+
+    /* Once we return from attach, we know the server has attached to our
+     * shared memory region for read replies, so we can safely remove the
+     * file. The memory region will stay active until both client and server
+     * unmap them. We keep the superblock file around so that a future client
+     * can reattach to it. */
+    unifyfs_shm_unlink(shm_recv_ctx);
+
+    /* add mount point as a new directory in the file list */
+    if (unifyfs_get_fid_from_path(prefix) < 0) {
+        /* no entry exists for mount point, so create one */
+        int fid = unifyfs_fid_create_directory(prefix);
+        if (fid < 0) {
+            /* if there was an error, return it */
+            LOGERR("failed to create directory entry for mount point: `%s'",
+                   prefix);
+            unifyfs_finalize();
+            return UNIFYFS_FAILURE;
+        }
+    }
+
+    /* record client state as mounted for specific app_id */
+    unifyfs_mounted = unifyfs_app_id;
+
+    return UNIFYFS_SUCCESS;
+}
+
 /**
  * unmount the mounted file system
  * TODO: Add support for unmounting more than
@@ -2023,9 +2040,6 @@ int unifyfs_unmount(void)
     /************************
      * tear down connection to server
      ************************/
-
-    /* detach from shared memory regions */
-    unifyfs_shm_free(&shm_recv_ctx);
 
     /* invoke unmount rpc to tell server we're disconnecting */
     LOGDBG("calling unmount");
@@ -2051,6 +2065,7 @@ int unifyfs_unmount(void)
         free(unifyfs_mount_prefix);
         unifyfs_mount_prefix = NULL;
         unifyfs_mount_prefixlen = 0;
+        client_cfg.unifyfs_mountpoint = NULL;
     }
 
     /************************

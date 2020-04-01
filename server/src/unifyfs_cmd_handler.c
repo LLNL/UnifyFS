@@ -42,62 +42,6 @@
 #include "unifyfs_rpc_util.h"
 #include "unifyfs_misc.h"
 
-/**
- * attach to the client-side shared memory
- * @param app_config: application information
- * @param app_id: the server-side
- * @param sock_id: position in poll_set in unifyfs_sock.h
- * @return success/error code
- */
-static int attach_to_shm(app_config_t* app_config,
-                         int app_id,
-                         int client_id)
-{
-    char shm_name[SHMEM_NAME_LEN] = {0};
-
-    /* attach shared superblock, a superblock is created by each
-     * client to store the raw file data.
-     * The overflowed data are spilled to SSD. */
-
-    /* define name of superblock region for this client */
-    sprintf(shm_name, SHMEM_SUPER_FMTSTR, app_id, client_id);
-
-    /* attach to superblock */
-    shm_context* ctx = unifyfs_shm_alloc(shm_name, app_config->superblock_sz);
-    if (NULL == ctx) {
-        LOGERR("Failed to attach to superblock %s", shm_name);
-        return (int)UNIFYFS_ERROR_SHMEM;
-    }
-    app_config->shm_superblocks[client_id] = ctx;
-
-    /* initialize shared receive buffer, a request buffer is created
-     * by each client for the delegator to temporarily buffer the
-     * received data for this client */
-
-    /* define name of receive buffer region for this client */
-    memset(shm_name, 0, sizeof(shm_name));
-    sprintf(shm_name, SHMEM_DATA_FMTSTR, app_id, client_id);
-
-    /* attach to request buffer region */
-    ctx = unifyfs_shm_alloc(shm_name, app_config->recv_buf_sz);
-    if (NULL == ctx) {
-        LOGERR("Failed to attach to receive buffer %s", shm_name);
-        return (int)UNIFYFS_ERROR_SHMEM;
-    }
-    app_config->shm_recv_bufs[client_id] = ctx;
-    shm_data_header* shm_hdr = (shm_data_header*)(ctx->addr);
-    int rc = pthread_mutex_init(&(shm_hdr->sync), NULL);
-    if (rc) {
-        int err = errno;
-        LOGERR("shm_data_header mutex initialization failed (%s)",
-               strerror(err));
-    }
-    shm_hdr->meta_cnt = 0;
-    shm_hdr->bytes = 0;
-    shm_hdr->state = SHMEM_REGION_EMPTY;
-
-    return UNIFYFS_SUCCESS;
-}
 
 /* BEGIN MARGO CLIENT-SERVER RPC HANDLER FUNCTIONS */
 
@@ -123,105 +67,49 @@ static void unifyfs_mount_rpc(hg_handle_t handle)
     assert(hret == HG_SUCCESS);
 
     /* read app_id and client_id from input */
-    int app_id    = in.app_id;
-    int client_id = in.client_id;
+    int app_id = unifyfs_generate_gfid(in.mount_prefix);
+    int client_id = -1;
 
     /* lookup app_config for given app_id */
-    app_config_t* app_cfg =
-        (app_config_t*) arraylist_get(app_config_list, app_id);
-
-    /* fill in and insert a new entry for this app_id
-     * if we don't already have one */
+    app_config* app_cfg = get_application(app_id);
     if (app_cfg == NULL) {
-        LOGDBG("creating app_config for app_id=%d", app_id);
-
         /* don't have an app_config for this app_id,
-         * so allocate and fill one in */
-        app_cfg = (app_config_t*) malloc(sizeof(app_config_t));
+         * so allocate and fill a new one */
+        app_cfg = (app_config*) calloc(1, sizeof(app_config));
+        app_cfg->app_id = app_id;
 
-        /* record size of shared memory regions */
-        app_cfg->recv_buf_sz   = in.recv_buf_sz;
-        app_cfg->superblock_sz = in.superblock_sz;
-
-        /* record offset and size of index entries */
-        app_cfg->meta_offset = in.meta_offset;
-        app_cfg->meta_size   = in.meta_size;
-
-        /* record directory holding spill over files */
-        strcpy(app_cfg->external_spill_dir, in.external_spill_dir);
-
-        /* record number of clients on this node */
-        app_cfg->num_procs_per_node = in.num_procs_per_node;
-
-        /* initialize per-client fields */
-        int i;
-        for (i = 0; i < MAX_NUM_CLIENTS; i++) {
-            app_cfg->client_ranks[i]        = -1;
-            app_cfg->shm_recv_bufs[i]       = NULL;
-            app_cfg->shm_superblocks[i]     = NULL;
-            app_cfg->client_addr[i]         = HG_ADDR_NULL;
-        }
-
-        /* insert new app_config into our list, indexed by app_id */
-        rc = arraylist_insert(app_config_list, app_id, app_cfg);
-        if (rc != 0) {
+        /* insert new app_config into our app_configs array */
+        LOGDBG("creating new application");
+        rc = new_application(app_cfg);
+        if (rc != UNIFYFS_SUCCESS) {
             ret = rc;
+            free(app_cfg);
+            app_cfg = NULL;
         }
     } else {
         LOGDBG("using existing app_config for app_id=%d", app_id);
     }
 
-    /* convert client_addr_str sent in input struct to margo hg_addr_t,
-     * which is the address type needed to call rpc functions, etc */
-    hret = margo_addr_lookup(unifyfsd_rpc_context->shm_mid,
-                             in.client_addr_str,
-                             &(app_cfg->client_addr[client_id]));
-
-    /* record client id of process on this node */
-    app_cfg->client_ranks[client_id] = client_id;
-
-    /* record global rank of client process for debugging */
-    app_cfg->dbg_ranks[client_id] = in.dbg_rank;
-
-    /* attach to shared memory regions of this client */
-    rc = attach_to_shm(app_cfg, app_id, client_id);
-    if (rc != UNIFYFS_SUCCESS) {
-        LOGERR("failed to attach shmem regions for app=%d client=%d rc=%d",
-               app_id, client_id, rc);
-        ret = rc;
-    }
-
-    /* initialize log-based I/O context for this client */
-    size_t logio_shmem_sz = in.logio_mem_size;
-    size_t logio_spill_sz = in.logio_spill_size;
-    rc = unifyfs_logio_init_server(app_id, client_id,
-                                   logio_shmem_sz, logio_spill_sz,
-                                   app_cfg->external_spill_dir,
-                                   &(app_cfg->logio[client_id]));
-    if (rc != UNIFYFS_SUCCESS) {
-        LOGERR("failed to initialize log-based I/O for app=%d client=%d rc=%d",
-               app_id, client_id, rc);
-        ret = rc;
-    }
-
-    /* create request manager thread */
-    reqmgr_thrd_t* rm_thrd = unifyfs_rm_thrd_create(app_id, client_id);
-    if (rm_thrd != NULL) {
-        /* TODO: seems like it would be cleaner to avoid thread_list
-         * and instead just record address to struct */
-        /* remember id for thread control for this client */
-        app_cfg->thrd_idxs[client_id] = rm_thrd->thrd_ndx;
-    } else {
-        /* failed to create request manager thread */
-        LOGERR("unifyfs_rm_thrd_create() failed for app_id=%d client_id=%d",
-               app_id, client_id);
-        ret = UNIFYFS_FAILURE;
+    if (NULL != app_cfg) {
+        LOGDBG("creating new client");
+        app_client* client = create_app_client(app_cfg,
+                                               in.client_addr_str,
+                                               in.dbg_rank);
+        if (NULL == client) {
+            LOGERR("create_app_client() failed for app_id=%d dbg_rank=%d",
+                   app_id, (int)in.dbg_rank);
+            ret = (int)UNIFYFS_FAILURE;
+        } else {
+            client_id = client->client_id;
+        }
     }
 
     /* build output structure to return to caller */
     unifyfs_mount_out_t out;
+    out.meta_slice_sz = meta_slice_sz;
+    out.app_id = (int32_t) app_id;
+    out.client_id = (int32_t) client_id;
     out.ret = ret;
-    out.max_recs_per_slice = max_recs_per_slice;
 
     /* send output back to caller */
     hret = margo_respond(handle, &out);
@@ -232,6 +120,57 @@ static void unifyfs_mount_rpc(hg_handle_t handle)
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(unifyfs_mount_rpc)
+
+/* server attaches to client shared memory regions, opens files
+ * holding spillover data */
+static void unifyfs_attach_rpc(hg_handle_t handle)
+{
+    int ret = (int)UNIFYFS_SUCCESS;
+
+    /* get input params */
+    unifyfs_attach_in_t in;
+    hg_return_t hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* read app_id and client_id from input */
+    int app_id = in.app_id;
+    int client_id = in.client_id;
+
+    /* lookup client structure and attach it */
+    app_client* client = get_app_client(app_id, client_id);
+    if (NULL != client) {
+        LOGDBG("attaching client (app_id=%d, client_id=%d)",
+               app_id, client_id);
+        ret = attach_app_client(client,
+                                in.logio_spill_dir,
+                                in.logio_spill_size,
+                                in.logio_mem_size,
+                                in.shmem_data_size,
+                                in.shmem_super_size,
+                                in.meta_offset,
+                                in.meta_size);
+        if (ret != UNIFYFS_SUCCESS) {
+            LOGERR("attach_app_client() failed");
+        }
+    } else {
+        LOGERR("client not found (app_id=%d, client_id=%d)",
+               app_id, client_id);
+        ret = (int)UNIFYFS_FAILURE;
+    }
+
+    /* build output structure to return to caller */
+    unifyfs_attach_out_t out;
+    out.ret = ret;
+
+    /* send output back to caller */
+    hret = margo_respond(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* free margo resources */
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(unifyfs_attach_rpc)
 
 static void unifyfs_unmount_rpc(hg_handle_t handle)
 {
@@ -244,9 +183,19 @@ static void unifyfs_unmount_rpc(hg_handle_t handle)
     int app_id    = in.app_id;
     int client_id = in.client_id;
 
+    /* disconnect app client */
+    int ret = UNIFYFS_SUCCESS;
+    app_client* clnt = get_app_client(app_id, client_id);
+    if (NULL != clnt) {
+        ret = disconnect_app_client(clnt);
+    } else {
+        LOGERR("application client not found");
+        ret = EINVAL;
+    }
+
     /* build output structure to return to caller */
     unifyfs_unmount_out_t out;
-    out.ret = UNIFYFS_SUCCESS;
+    out.ret = ret;
 
     /* send output back to caller */
     hret = margo_respond(handle, &out);
@@ -255,28 +204,6 @@ static void unifyfs_unmount_rpc(hg_handle_t handle)
     /* free margo resources */
     margo_free_input(handle, &in);
     margo_destroy(handle);
-
-    /* lookup app_config for given app_id */
-    app_config_t* app_config =
-        (app_config_t*) arraylist_get(app_config_list, app_id);
-
-    /* get thread id for this client */
-    int thrd_id = app_config->thrd_idxs[client_id];
-
-    /* look up thread control structure */
-    reqmgr_thrd_t* thrd_ctrl = rm_get_thread(thrd_id);
-
-    /* shutdown the delegator thread */
-    rm_cmd_exit(thrd_ctrl);
-
-    /* detach from the read shared memory buffer */
-    if (NULL != app_config->shm_recv_bufs[client_id]) {
-        unifyfs_shm_free(&(app_config->shm_recv_bufs[client_id]));
-    }
-
-    /* free margo hg_addr_t client addresses in app_config struct */
-    margo_addr_free(unifyfsd_rpc_context->shm_mid,
-                    app_config->client_addr[client_id]);
 }
 DEFINE_MARGO_RPC_HANDLER(unifyfs_unmount_rpc)
 

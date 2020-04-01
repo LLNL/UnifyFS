@@ -15,6 +15,11 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
     /* shorter name for our margo instance id */
     margo_instance_id mid = ctx->mid;
 
+    ctx->rpcs.attach_id = MARGO_REGISTER(mid, "unifyfs_attach_rpc",
+                       unifyfs_attach_in_t,
+                       unifyfs_attach_out_t,
+                       NULL);
+
     ctx->rpcs.mount_id = MARGO_REGISTER(mid, "unifyfs_mount_rpc",
                        unifyfs_mount_in_t,
                        unifyfs_mount_out_t,
@@ -182,8 +187,7 @@ int unifyfs_client_rpc_finalize(void)
         /* shut down margo */
         margo_finalize(ctx->mid);
 
-        /* free memory allocated for context structure,
-         * and set caller's pointer to NULL */
+        /* free memory allocated for context structure */
         free(ctx->client_addr_str);
         free(ctx);
     }
@@ -205,7 +209,43 @@ static hg_handle_t create_handle(hg_id_t id)
     return handle;
 }
 
-/* invokes the mount rpc function by calling unifyfs_sync_to_del */
+/* invokes the attach rpc function */
+int invoke_client_attach_rpc(void)
+{
+    /* check that we have initialized margo */
+    if (NULL == client_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* get handle to rpc function */
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.attach_id);
+
+    /* fill in input struct */
+    unifyfs_attach_in_t in;
+    fill_client_attach_info(&in);
+
+    /* call rpc function */
+    LOGDBG("invoking the attach rpc function in client");
+    hg_return_t hret = margo_forward(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* free memory on input struct */
+    free((void*)in.logio_spill_dir);
+
+    /* decode response */
+    unifyfs_attach_out_t out;
+    hret = margo_get_output(handle, &out);
+    assert(hret == HG_SUCCESS);
+    int32_t ret = out.ret;
+    LOGDBG("Got response ret=%" PRIi32, ret);
+
+    /* free resources */
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+    return (int)ret;
+}
+
+/* invokes the mount rpc function */
 int invoke_client_mount_rpc(void)
 {
     /* check that we have initialized margo */
@@ -229,7 +269,7 @@ int invoke_client_mount_rpc(void)
     assert(hret == HG_SUCCESS);
 
     /* free memory on input struct */
-    free((void*)in.external_spill_dir);
+    free((void*)in.mount_prefix);
     free((void*)in.client_addr_str);
 
     /* decode response */
@@ -240,8 +280,16 @@ int invoke_client_mount_rpc(void)
     LOGDBG("Got response ret=%" PRIi32, ret);
 
     /* get slice size for write index key/value store */
-    unifyfs_key_slice_range = out.max_recs_per_slice;
+    unifyfs_key_slice_range = out.meta_slice_sz;
     LOGDBG("set unifyfs_key_slice_range=%zu", unifyfs_key_slice_range);
+
+    /* get assigned client id, and verify app_id */
+    unifyfs_client_id = (int) out.client_id;
+    int srvr_app_id = (int) out.app_id;
+    if (unifyfs_app_id != srvr_app_id) {
+        LOGWARN("mismatch on app_id - using %d, server returned %d",
+                unifyfs_app_id, srvr_app_id);
+    }
 
     /* free resources */
     margo_free_output(handle, &out);
@@ -262,8 +310,8 @@ int invoke_client_unmount_rpc(void)
 
     /* fill in input struct */
     unifyfs_unmount_in_t in;
-    in.app_id    = (int32_t) app_id;
-    in.client_id = (int32_t) local_rank_idx;
+    in.app_id    = (int32_t) unifyfs_app_id;
+    in.client_id = (int32_t) unifyfs_client_id;
 
     /* call rpc function */
     LOGDBG("invoking the unmount rpc function in client");
@@ -397,8 +445,8 @@ int invoke_client_filesize_rpc(int gfid, size_t* outsize)
 
     /* fill in input struct */
     unifyfs_filesize_in_t in;
-    in.app_id    = (int32_t) app_id;
-    in.client_id = (int32_t) local_rank_idx;
+    in.app_id    = (int32_t) unifyfs_app_id;
+    in.client_id = (int32_t) unifyfs_client_id;
     in.gfid      = (int32_t) gfid;
 
     /* call rpc function */
@@ -435,8 +483,8 @@ int invoke_client_truncate_rpc(int gfid, size_t filesize)
 
     /* fill in input struct */
     unifyfs_truncate_in_t in;
-    in.app_id    = (int32_t) app_id;
-    in.client_id = (int32_t) local_rank_idx;
+    in.app_id    = (int32_t) unifyfs_app_id;
+    in.client_id = (int32_t) unifyfs_client_id;
     in.gfid      = (int32_t) gfid;
     in.filesize  = (hg_size_t) filesize;
 
@@ -471,8 +519,8 @@ int invoke_client_unlink_rpc(int gfid)
 
     /* fill in input struct */
     unifyfs_unlink_in_t in;
-    in.app_id    = (int32_t) app_id;
-    in.client_id = (int32_t) local_rank_idx;
+    in.app_id    = (int32_t) unifyfs_app_id;
+    in.client_id = (int32_t) unifyfs_client_id;
     in.gfid      = (int32_t) gfid;
 
     /* call rpc function */
@@ -506,8 +554,8 @@ int invoke_client_laminate_rpc(int gfid)
 
     /* fill in input struct */
     unifyfs_unlink_in_t in;
-    in.app_id    = (int32_t) app_id;
-    in.client_id = (int32_t) local_rank_idx;
+    in.app_id    = (int32_t) unifyfs_app_id;
+    in.client_id = (int32_t) unifyfs_client_id;
     in.gfid      = (int32_t) gfid;
 
     /* call rpc function */
@@ -541,8 +589,8 @@ int invoke_client_sync_rpc(void)
 
     /* fill in input struct */
     unifyfs_sync_in_t in;
-    in.app_id    = (int32_t) app_id;
-    in.client_id = (int32_t) local_rank_idx;
+    in.app_id    = (int32_t) unifyfs_app_id;
+    in.client_id = (int32_t) unifyfs_client_id;
 
     /* call rpc function */
     LOGDBG("invoking the sync rpc function in client");
@@ -575,8 +623,8 @@ int invoke_client_read_rpc(int gfid, size_t offset, size_t length)
 
     /* fill in input struct */
     unifyfs_read_in_t in;
-    in.app_id    = (int32_t) app_id;
-    in.client_id = (int32_t) local_rank_idx;
+    in.app_id    = (int32_t) unifyfs_app_id;
+    in.client_id = (int32_t) unifyfs_client_id;
     in.gfid      = (int32_t) gfid;
     in.offset    = (hg_size_t) offset;
     in.length    = (hg_size_t) length;
@@ -617,8 +665,8 @@ int invoke_client_mread_rpc(int read_count, size_t size, void* buffer)
     assert(hret == HG_SUCCESS);
 
     /* fill in input struct */
-    in.app_id     = (int32_t) app_id;
-    in.client_id  = (int32_t) local_rank_idx;
+    in.app_id     = (int32_t) unifyfs_app_id;
+    in.client_id  = (int32_t) unifyfs_client_id;
     in.read_count = (int32_t) read_count;
     in.bulk_size  = (hg_size_t) size;
 

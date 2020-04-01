@@ -56,13 +56,27 @@
 # include <mpi.h>
 #endif
 
-extern arraylist_t* app_config_list;
-extern arraylist_t* rm_thrd_list;
 
+
+/* Some global variables/structures used throughout the server code */
+
+/* PMI server rank and server count */
+extern int glb_pmi_rank;
+extern int glb_pmi_size;
+
+/* hostname for this server */
 extern char glb_host[UNIFYFS_MAX_HOSTNAME];
-extern int glb_pmi_rank, glb_pmi_size;
 
-extern size_t max_recs_per_slice;
+typedef struct {
+    //char* hostname;
+    char* margo_svr_addr_str;
+    hg_addr_t margo_svr_addr;
+    int pmi_rank;
+} server_info_t;
+
+extern server_info_t* glb_servers; /* array of server info structs */
+extern size_t glb_num_servers; /* number of entries in glb_servers array */
+
 
 /* defines commands for messages sent to service manager threads */
 typedef enum {
@@ -114,60 +128,73 @@ typedef struct {
     int errcode;    /* request completion status */
 } client_read_req_t;
 
-/* one of these structures is created for each app id,
- * it contains info for each client like names, file descriptors,
- * and memory locations of file data
- *
- * file data stored in the superblock is in memory,
- * this is mapped as a shared memory region by the delegator
- * process, this data can be accessed by service manager threads
- * using memcpy()
- *
- * when the super block is full, file data is written
- * to the spillover file, data here can be accessed by
- * service manager threads via read() calls */
-typedef struct {
-    /* global values which are identical across all clients,
-     * for this given app id */
-    size_t superblock_sz; /* size of memory region used to store data */
-    size_t meta_offset;   /* superblock offset to index metadata */
-    size_t meta_size;     /* size of index metadata region in bytes */
-    size_t recv_buf_sz;   /* buffer size for read replies to client */
+// forward declaration of reqmgr_thrd
+struct reqmgr_thrd;
 
-    /* number of clients on the node */
-    int num_procs_per_node;
+/**
+ * Structure to maintain application client state, including
+ * logio and shared memory contexts, margo rpc address, etc.
+ */
+typedef struct app_client {
+    int app_id;              /* index of associated app in app_configs */
+    int client_id;           /* this client's index in app's clients array */
+    int dbg_rank;            /* client debug rank - NOT CURRENTLY USED */
+    int connected;           /* is client currently connected? */
 
-    /* map from socket id to other values */
-    int client_ranks[MAX_NUM_CLIENTS]; /* map to client id */
-    int thrd_idxs[MAX_NUM_CLIENTS];    /* map to thread id */
-    int dbg_ranks[MAX_NUM_CLIENTS];    /* map to client rank */
+    hg_addr_t margo_addr;    /* client Margo address */
 
-    /* shared memory context pointers */
-    shm_context* shm_superblocks[MAX_NUM_CLIENTS]; /* superblock data */
-    shm_context* shm_recv_bufs[MAX_NUM_CLIENTS];   /* read reply shm */
+    struct reqmgr_thrd* reqmgr; /* this client's request manager thread */
 
-    /* log-based I/O context pointers */
-    logio_context* logio[MAX_NUM_CLIENTS];
+    logio_context* logio;    /* logio context for write data */
 
-    /* client address for rpc invocation */
-    hg_addr_t client_addr[MAX_NUM_CLIENTS];
+    shm_context* shmem_data;  /* shmem context for read data */
 
-    /* directory holding spill over files */
-    char external_spill_dir[UNIFYFS_MAX_FILENAME];
-} app_config_t;
+    shm_context* shmem_super; /* shmem context for superblock region */
+    size_t super_meta_offset; /* superblock offset to index metadata */
+    size_t super_meta_size;   /* size of index metadata region in bytes */
+} app_client;
 
-typedef int fattr_key_t;
+/**
+ * Structure to maintain application configuration state
+ * and track connected clients.
+ */
+typedef struct app_config {
+    /* application id - MD5(mount_prefix) */
+    int app_id;
 
-typedef struct {
-    //char* hostname;
-    char* margo_svr_addr_str;
-    hg_addr_t margo_svr_addr;
-    int pmi_rank;
-} server_info_t;
+    /* mount prefix for application's UnifyFS files */
+    char mount_prefix[UNIFYFS_MAX_FILENAME];
 
-extern char glb_host[UNIFYFS_MAX_HOSTNAME];
-extern size_t glb_num_servers;
-extern server_info_t* glb_servers;
+    /* array of clients associated with this app */
+    size_t num_clients;
+    app_client* clients[MAX_APP_CLIENTS];
+} app_config;
+
+extern app_config* app_configs[MAX_NUM_APPS]; /* list of apps */
+
+app_config* get_application(int app_id);
+
+unifyfs_rc new_application(app_config* new_app);
+
+app_client* get_app_client(int app_id,
+                           int client_id);
+
+app_client* create_app_client(app_config* app,
+                              const char* margo_addr_str,
+                              const int dbg_rank);
+
+unifyfs_rc attach_app_client(app_client* client,
+                             const char* logio_spill_dir,
+                             const size_t logio_spill_size,
+                             const size_t logio_shmem_size,
+                             const size_t shmem_data_size,
+                             const size_t shmem_super_size,
+                             const size_t super_meta_offset,
+                             const size_t super_meta_size);
+
+unifyfs_rc disconnect_app_client(app_client* clnt);
+
+unifyfs_rc cleanup_app_client(app_client* clnt);
 
 
 #endif // UNIFYFS_GLOBAL_H
