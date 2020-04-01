@@ -53,7 +53,7 @@ struct mdhim_t* md;
 #define IDX_FILE_ATTR    (1)
 struct index_t* unifyfs_indexes[2];
 
-size_t max_recs_per_slice;
+size_t meta_slice_sz;
 
 void debug_log_key_val(const char* ctx,
                        unifyfs_key_t* key,
@@ -141,7 +141,7 @@ int meta_init_store(unifyfs_cfg_t* cfg)
     if (rc != 0) {
         return -1;
     }
-    max_recs_per_slice = (size_t) range_sz;
+    meta_slice_sz = (size_t) range_sz;
     mdhim_options_set_max_recs_per_slice(db_opts, (uint64_t)range_sz);
 
     md = mdhimInit(&comm, db_opts);

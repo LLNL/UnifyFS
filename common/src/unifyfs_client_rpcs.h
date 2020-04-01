@@ -15,25 +15,34 @@
 extern "C" {
 #endif
 
-/* unifyfs_mount_rpc (client => server)
+/* unifyfs_attach_rpc (client => server)
  *
- * connect application client to the server, and
- * initialize shared memory state */
-MERCURY_GEN_PROC(unifyfs_mount_in_t,
+ * initialize server access to client's shared memory and file state */
+MERCURY_GEN_PROC(unifyfs_attach_in_t,
                  ((int32_t)(app_id))
                  ((int32_t)(client_id))
-                 ((int32_t)(dbg_rank))
-                 ((int32_t)(num_procs_per_node))
-                 ((hg_const_string_t)(client_addr_str))
-                 ((hg_size_t)(recv_buf_sz))
-                 ((hg_size_t)(superblock_sz))
+                 ((hg_size_t)(shmem_data_size))
+                 ((hg_size_t)(shmem_super_size))
                  ((hg_size_t)(meta_offset))
                  ((hg_size_t)(meta_size))
                  ((hg_size_t)(logio_mem_size))
                  ((hg_size_t)(logio_spill_size))
-                 ((hg_const_string_t)(external_spill_dir)))
+                 ((hg_const_string_t)(logio_spill_dir)))
+MERCURY_GEN_PROC(unifyfs_attach_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_attach_rpc)
+
+/* unifyfs_mount_rpc (client => server)
+ *
+ * connect application client to the server */
+MERCURY_GEN_PROC(unifyfs_mount_in_t,
+                 ((int32_t)(dbg_rank))
+                 ((hg_const_string_t)(mount_prefix))
+                 ((hg_const_string_t)(client_addr_str)))
 MERCURY_GEN_PROC(unifyfs_mount_out_t,
-                 ((hg_size_t)(max_recs_per_slice))
+                 ((hg_size_t)(meta_slice_sz))
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_mount_rpc)
 
@@ -41,8 +50,8 @@ DECLARE_MARGO_RPC_HANDLER(unifyfs_mount_rpc)
  *
  * disconnect client from server */
 MERCURY_GEN_PROC(unifyfs_unmount_in_t,
-    ((int32_t)(app_id))
-    ((int32_t)(client_id)))
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id)))
 MERCURY_GEN_PROC(unifyfs_unmount_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_unmount_rpc)
 

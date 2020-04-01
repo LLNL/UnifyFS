@@ -47,7 +47,7 @@ typedef struct {
  * manager thread, contains shared data structures where main thread
  * issues read requests and request manager processes them, contains
  * condition variable and lock for coordination between threads */
-typedef struct {
+typedef struct reqmgr_thrd {
     /* request manager thread */
     pthread_t thrd;
 
@@ -84,18 +84,12 @@ typedef struct {
 
     /* client_id this thread is serving */
     int client_id;
-
-    /* index within rm_thrd_list */
-    int thrd_ndx;
 } reqmgr_thrd_t;
 
 
 /* create Request Manager thread for application client */
 reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id,
                                       int client_id);
-
-/* lookup Request Manager thread by index */
-reqmgr_thrd_t* rm_get_thread(int thrd_id);
 
 /* Request Manager pthread main */
 void* rm_delegate_request_thread(void* arg);

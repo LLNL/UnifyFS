@@ -45,6 +45,7 @@
 // margo rpcs
 #include "margo_server.h"
 
+/* PMI information */
 int glb_pmi_rank; /* = 0 */
 int glb_pmi_size = 1; // for standalone server tests
 
@@ -54,9 +55,9 @@ size_t glb_host_ndx;        // index of localhost in glb_servers
 size_t glb_num_servers;     // size of glb_servers array
 server_info_t* glb_servers; // array of server_info_t
 
-arraylist_t* app_config_list;
-
 unifyfs_cfg_t server_cfg;
+
+app_config* app_configs[MAX_NUM_APPS]; /* list of apps */
 
 static int unifyfs_exit(void);
 
@@ -281,17 +282,8 @@ int main(int argc, char* argv[])
     rc = sigaction(SIGQUIT, &sa, NULL);
     rc = sigaction(SIGTERM, &sa, NULL);
 
-    app_config_list = arraylist_create();
-    if (app_config_list == NULL) {
-        LOGERR("%s", unifyfs_rc_enum_description(ENOMEM));
-        exit(1);
-    }
-
-    rm_thrd_list = arraylist_create();
-    if (rm_thrd_list == NULL) {
-        LOGERR("%s", unifyfs_rc_enum_description(ENOMEM));
-        exit(1);
-    }
+    // initialize empty app_configs[]
+    memset(app_configs, 0, sizeof(app_configs));
 
 #if defined(UNIFYFSD_USE_MPI)
     init_MPI();
@@ -558,63 +550,40 @@ static int find_rank_idx(int my_rank)
 
 static int unifyfs_exit(void)
 {
-    int rc = UNIFYFS_SUCCESS;
+    int ret = UNIFYFS_SUCCESS;
 
-    /* shutdown rpc service */
-    LOGDBG("stopping rpc service");
-    margo_server_rpc_finalize();
+    /* iterate over each active application and free resources */
+    for (int i = 0; i < MAX_NUM_APPS; i++) {
+        /* get pointer to app config for this app_id */
+        app_config* app = app_configs[i];
+        if (NULL == app) {
+            /* skip to next app_id if this slot is empty */
+            continue;
+        }
+
+        /* free resources allocated for each client */
+        int app_id = app->app_id;
+        for (int j = 1; j <= MAX_APP_CLIENTS; j++) {
+            app_client* client = get_app_client(app_id, j);
+            if (NULL != client) {
+                int rc = cleanup_app_client(client);
+                if (rc != UNIFYFS_SUCCESS) {
+                    ret = rc;
+                }
+            }
+        }
+    }
+
+    /* TODO: notify the service threads to exit */
 
     /* finalize kvstore service*/
     LOGDBG("finalizing kvstore service");
     unifyfs_keyval_fini();
 
-    /* TODO: notify the service threads to exit */
-
-    /* notify the request manager threads to exit*/
-    LOGDBG("stopping request manager threads");
-    int i, j;
-    for (i = 0; i < arraylist_size(rm_thrd_list); i++) {
-        /* request and wait for request manager thread exit */
-        reqmgr_thrd_t* thrd_ctrl =
-            (reqmgr_thrd_t*) arraylist_get(rm_thrd_list, i);
-        rm_cmd_exit(thrd_ctrl);
-    }
-    arraylist_free(rm_thrd_list);
-
-    /* sanitize the shared memory and delete the log files
-     * */
-    int app_sz = arraylist_size(app_config_list);
-
-    /* iterate over each active application and free resources */
-    for (i = 0; i < app_sz; i++) {
-        /* get pointer to app config for this app_id */
-        app_config_t* app =
-            (app_config_t*)arraylist_get(app_config_list, i);
-
-        /* skip to next app_id if this is empty */
-        if (app == NULL) {
-            continue;
-        }
-
-        /* free resources allocate for each client */
-        for (j = 0; j < MAX_NUM_CLIENTS; j++) {
-            /* Release receive buffer shared memory region.  Client
-             * should have deleted file already, but will not hurt
-             * to do this again. */
-            if (app->shm_recv_bufs[j] != NULL) {
-                unifyfs_shm_unlink(app->shm_recv_bufs[j]);
-                unifyfs_shm_free(&(app->shm_recv_bufs[j]));
-            }
-
-            /* Release super block shared memory region.
-             * Server is responsible for deleting superblock shared
-             * memory file that was created by the client. */
-            if (app->shm_superblocks[j] != NULL) {
-                unifyfs_shm_unlink(app->shm_superblocks[j]);
-                unifyfs_shm_free(&(app->shm_superblocks[j]));
-            }
-        }
-    }
+    /* shutdown rpc service
+     * (note: this needs to happen after app-client cleanup above) */
+    LOGDBG("stopping rpc service");
+    margo_server_rpc_finalize();
 
     /* shutdown the metadata service*/
     LOGDBG("stopping metadata service");
@@ -628,5 +597,292 @@ static int unifyfs_exit(void)
     LOGDBG("all done!");
     unifyfs_log_close();
 
-    return rc;
+    return ret;
+}
+
+/* get pointer to app config for this app_id */
+app_config* get_application(int app_id)
+{
+    for (int i = 0; i < MAX_NUM_APPS; i++) {
+        app_config* app_cfg = app_configs[i];
+        if ((NULL != app_cfg) && (app_cfg->app_id == app_id)) {
+            return app_cfg;
+        }
+    }
+    return NULL;
+}
+
+/* insert a new app config in app_configs[] */
+unifyfs_rc new_application(app_config* new_app)
+{
+    if (NULL == new_app) {
+        LOGERR("NULL app_config pointer");
+        return EINVAL;
+    }
+
+    /* check for existing app structure with given app_id */
+    int app_id = new_app->app_id;
+    app_config* existing = get_application(app_id);
+    if (NULL != existing) {
+        LOGERR("application with app_id %d already exists", app_id);
+        return EINVAL;
+    }
+
+    /* insert the given app_config in an empty slot */
+    for (int i = 0; i < MAX_NUM_APPS; i++) {
+        existing = app_configs[i];
+        if (NULL == existing) {
+            app_configs[i] = new_app;
+            return UNIFYFS_SUCCESS;
+        }
+    }
+    LOGERR("insert into app_configs[] failed");
+    return UNIFYFS_FAILURE;
+}
+
+app_client* get_app_client(int app_id,
+                           int client_id)
+{
+    /* get pointer to app structure for this app id */
+    app_config* app_cfg = get_application(app_id);
+    if ((NULL == app_cfg) ||
+        (client_id <= 0) ||
+        (client_id > MAX_APP_CLIENTS)) {
+        return NULL;
+    }
+
+    /* clients array index is (id - 1) */
+    int client_ndx = client_id - 1;
+    return app_cfg->clients[client_ndx];
+}
+
+/**
+ * Attach to the server-side of client shared memory regions.
+ * @param client: client information
+ * @return success|error code
+ */
+static unifyfs_rc attach_to_client_shmem(app_client* client,
+                                         size_t shmem_data_sz,
+                                         size_t shmem_super_sz)
+{
+    shm_context* shm_ctx;
+    char shm_name[SHMEM_NAME_LEN] = {0};
+
+    if (NULL == client) {
+        LOGERR("NULL client");
+        return EINVAL;
+    }
+
+    int app_id = client->app_id;
+    int client_id = client->client_id;
+
+    /* initialize shmem region for client's superblock */
+    sprintf(shm_name, SHMEM_SUPER_FMTSTR, app_id, client_id);
+    shm_ctx = unifyfs_shm_alloc(shm_name, shmem_super_sz);
+    if (NULL == shm_ctx) {
+        LOGERR("Failed to attach to shmem superblock region %s", shm_name);
+        return UNIFYFS_ERROR_SHMEM;
+    }
+    client->shmem_super = shm_ctx;
+
+    /* initialize shmem region for read data */
+    sprintf(shm_name, SHMEM_DATA_FMTSTR, app_id, client_id);
+    shm_ctx = unifyfs_shm_alloc(shm_name, shmem_data_sz);
+    if (NULL == shm_ctx) {
+        LOGERR("Failed to attach to shmem data region %s", shm_name);
+        return UNIFYFS_ERROR_SHMEM;
+    }
+    client->shmem_data = shm_ctx;
+
+    /* initialize shmem header in data region */
+    shm_data_header* shm_hdr = (shm_data_header*) client->shmem_data->addr;
+    pthread_mutex_init(&(shm_hdr->sync), NULL);
+    shm_hdr->meta_cnt = 0;
+    shm_hdr->bytes = 0;
+    shm_hdr->state = SHMEM_REGION_EMPTY;
+
+    return UNIFYFS_SUCCESS;
+}
+
+/**
+ * Initialize client state using passed values.
+ *
+ * Sets up logio and shmem region contexts, request manager thread,
+ * margo rpc address, etc.
+ */
+app_client* create_app_client(app_config* app,
+                              const char* margo_addr_str,
+                              const int debug_rank)
+{
+    if ((NULL == app) || (NULL == margo_addr_str)) {
+        return NULL;
+    }
+
+    if (app->num_clients == MAX_APP_CLIENTS) {
+        LOGERR("reached maximum number of application clients");
+        return NULL;
+    }
+
+    int app_id = app->app_id;
+    int client_id = app->num_clients + 1; /* next client id */
+    int client_ndx = client_id - 1;       /* clients array index is (id - 1) */
+
+    app_client* client = (app_client*) calloc(1, sizeof(app_client));
+    if (NULL != client) {
+        int failure = 0;
+        client->app_id = app_id;
+        client->client_id = client_id;
+        client->dbg_rank = debug_rank;
+
+        /* convert client_addr_str to margo hg_addr_t */
+        hg_return_t hret = margo_addr_lookup(unifyfsd_rpc_context->shm_mid,
+                                             margo_addr_str,
+                                             &(client->margo_addr));
+        if (hret != HG_SUCCESS) {
+            failure = 1;
+        }
+
+        /* create a request manager thread for this client */
+        client->reqmgr = unifyfs_rm_thrd_create(app_id, client_id);
+        if (NULL == client->reqmgr) {
+            failure = 1;
+        }
+
+        if (failure) {
+            LOGERR("failed to initialize application client");
+            cleanup_app_client(client);
+            client = NULL;
+        } else {
+            app->num_clients++;
+            app->clients[client_ndx] = client;
+        }
+    }
+
+    return client;
+}
+
+/**
+ * Attaches server to shared client state (e.g., logio and shmem regions)
+ */
+unifyfs_rc attach_app_client(app_client* client,
+                             const char* logio_spill_dir,
+                             const size_t logio_spill_size,
+                             const size_t logio_shmem_size,
+                             const size_t shmem_data_size,
+                             const size_t shmem_super_size,
+                             const size_t super_meta_offset,
+                             const size_t super_meta_size)
+{
+    if ((NULL == client) || (NULL == logio_spill_dir)) {
+        return EINVAL;
+    }
+
+    int app_id = client->app_id;
+    int client_id = client->client_id;
+    int failure = 0;
+
+    /* initialize server-side logio for this client */
+    int rc = unifyfs_logio_init_server(app_id, client_id,
+                                       logio_shmem_size,
+                                       logio_spill_size,
+                                       logio_spill_dir,
+                                       &(client->logio));
+    if (rc != UNIFYFS_SUCCESS) {
+        failure = 1;
+    }
+
+    /* attach server-side shmem regions for this client */
+    rc = attach_to_client_shmem(client, shmem_data_size, shmem_super_size);
+    if (rc != UNIFYFS_SUCCESS) {
+        failure = 1;
+    }
+
+    if (failure) {
+        LOGERR("failed to attach application client");
+        cleanup_app_client(client);
+        return UNIFYFS_FAILURE;
+    }
+
+    client->super_meta_offset = super_meta_offset;
+    client->super_meta_size = super_meta_size;
+    client->connected = 1;
+
+    return UNIFYFS_SUCCESS;
+}
+
+/**
+ * Disconnect ephemeral client state, while maintaining access to any data
+ * the client wrote.
+ */
+unifyfs_rc disconnect_app_client(app_client* client)
+{
+    if (NULL == client) {
+        return EINVAL;
+    }
+
+    client->connected = 0;
+
+    /* stop client request manager thread */
+    if (NULL != client->reqmgr) {
+        rm_cmd_exit(client->reqmgr);
+        free(client->reqmgr);
+        client->reqmgr = NULL;
+    }
+
+    /* free margo client address */
+    margo_addr_free(unifyfsd_rpc_context->shm_mid,
+                    client->margo_addr);
+
+    /* release client shared memory regions */
+    if (NULL != client->shmem_data) {
+        /* Release read buffer shared memory region.
+         * Client should have deleted file already, but will not hurt
+         * to do this again. */
+        unifyfs_shm_unlink(client->shmem_data);
+        unifyfs_shm_free(&(client->shmem_data));
+    }
+    if (NULL != client->shmem_super) {
+        /* Release superblock shared memory region.
+         * Server is responsible for deleting superblock shared
+         * memory file that was created by the client. */
+        unifyfs_shm_unlink(client->shmem_super);
+        unifyfs_shm_free(&(client->shmem_super));
+    }
+
+    return UNIFYFS_SUCCESS;
+}
+
+/**
+ * Cleanup any client state that has been setup in preparation for
+ * server exit.
+ *
+ * This function may be called due to a failed initialization, so we can't
+ * assume any particular state is valid, other than app_id and client_id.
+ */
+unifyfs_rc cleanup_app_client(app_client* client)
+{
+    if (NULL == client) {
+        return EINVAL;
+    }
+
+    disconnect_app_client(client);
+
+    /* close client logio context */
+    if (NULL != client->logio) {
+        unifyfs_logio_close(client->logio);
+    }
+
+    /* reset app->clients array index if set */
+    app_config* app = get_application(client->app_id);
+    if (NULL != app) {
+        int client_ndx = client->client_id - 1; /* client ids start at 1 */
+        if (client == app->clients[client_ndx]) {
+            app->clients[client_ndx] = NULL;
+        }
+    }
+
+    /* free client structure */
+    free(client);
+
+    return UNIFYFS_SUCCESS;
 }

@@ -18,9 +18,9 @@ Common
 
    The struct definition macro `MERCURY_GEN_PROC()` is used to define
    both input and output parameters. For client-server RPCs, the
-   definitions should be placed in `common/src/unifyfs_clientcalls_rpc.h`,
+   definitions should be placed in `common/src/unifyfs_client_rpcs.h`,
    while server-server RPC structs are defined in
-   `common/src/unifyfs_servercalls_rpc.h`.
+   `common/src/unifyfs_server_rpcs.h`.
 
    The input parameters struct should contain all values the client needs
    to pass to the server handler function.
@@ -30,23 +30,21 @@ Common
 
 .. code-block:: C
   MERCURY_GEN_PROC(unifyfs_mount_in_t,
-                   ((int32_t)(app_id))
                    ((int32_t)(client_id))
                    ((int32_t)(dbg_rank))
-                   ((int32_t)(num_procs_per_node))
-                   ((hg_const_string_t)(client_addr_str))
-                   ((hg_size_t)(req_buf_sz))
-                   ((hg_size_t)(recv_buf_sz))
-                   ((hg_size_t)(superblock_sz))
+                   ((hg_size_t)(shmem_data_size))
+                   ((hg_size_t)(shmem_super_size))
                    ((hg_size_t)(meta_offset))
                    ((hg_size_t)(meta_size))
-                   ((hg_size_t)(fmeta_offset))
-                   ((hg_size_t)(fmeta_size))
-                   ((hg_size_t)(data_offset))
-                   ((hg_size_t)(data_size))
-                   ((hg_const_string_t)(external_spill_dir)))
+                   ((hg_size_t)(logio_mem_size))
+                   ((hg_size_t)(logio_spill_size))
+                   ((hg_const_string_t)(logio_spill_dir))
+                   ((hg_const_string_t)(mount_prefix))
+                   ((hg_const_string_t)(client_addr_str)))
   MERCURY_GEN_PROC(unifyfs_mount_out_t,
-                   ((hg_size_t)(max_recs_per_slice))
+                   ((hg_size_t)(meta_slice_sz))
+                   ((int32_t)(app_id))
+                   ((int32_t)(client_id))
                    ((int32_t)(ret)))
 
 .. note::
@@ -66,8 +64,7 @@ Server
    This is the function that will be invoked on the client and executed on
    the server. Client-server RPC handler functions are implemented in
    `server/src/unifyfs_cmd_handler.c`, while server-server RPC handlers go
-   in `server/src/unifyfs_service_manager.c`. The RPC handler input and output
-   parameters structs are defined in `common/src/unifyfs_clientcalls_rpc.h`.
+   in `server/src/unifyfs_service_manager.c`.
 
    All the RPC handler functions follow the same protoype, which is passed
    a Mercury handle as the only argument. The handler function should use

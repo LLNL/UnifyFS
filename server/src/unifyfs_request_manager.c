@@ -51,17 +51,16 @@
 
 #define RM_LOCK(rm) \
 do { \
-    LOGDBG("locking RM[%d] state", rm->thrd_ndx); \
+    LOGDBG("locking RM[%d:%d] state", rm->app_id, rm->client_id); \
     pthread_mutex_lock(&(rm->thrd_lock)); \
 } while (0)
 
 #define RM_UNLOCK(rm) \
 do { \
-    LOGDBG("unlocking RM[%d] state", rm->thrd_ndx); \
+    LOGDBG("unlocking RM[%d:%d] state", rm->app_id, rm->client_id); \
     pthread_mutex_unlock(&(rm->thrd_lock)); \
 } while (0)
 
-arraylist_t* rm_thrd_list;
 
 /* One request manager thread is created for each client that a
  * delegator serves.  The main thread of the delegator assigns
@@ -143,18 +142,6 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
     thrd_ctrl->has_waiting_delegator  = 0;
     thrd_ctrl->has_waiting_dispatcher = 0;
 
-    /* insert our thread control structure into our list of
-     * active request manager threads, important to do this before
-     * launching thread since it uses list to lookup its structure */
-    rc = arraylist_add(rm_thrd_list, thrd_ctrl);
-    if (rc != 0) {
-        pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
-        pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
-        free(thrd_ctrl);
-        return NULL;
-    }
-    thrd_ctrl->thrd_ndx = arraylist_size(rm_thrd_list) - 1;
-
     /* launch request manager thread */
     rc = pthread_create(&(thrd_ctrl->thrd), NULL,
                         rm_delegate_request_thread, (void*)thrd_ctrl);
@@ -169,12 +156,6 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
     }
 
     return thrd_ctrl;
-}
-
-/* Lookup RM thread control structure */
-reqmgr_thrd_t* rm_get_thread(int thrd_id)
-{
-    return (reqmgr_thrd_t*) arraylist_get(rm_thrd_list, thrd_id);
 }
 
 /* order keyvals by gfid, then host delegator rank */
@@ -1114,8 +1095,8 @@ int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl,
 /* return number of slice ranges needed to cover range */
 static size_t num_slices(size_t offset, size_t length)
 {
-    size_t start = offset / max_recs_per_slice;
-    size_t end   = (offset + length - 1) / max_recs_per_slice;
+    size_t start = offset / meta_slice_sz;
+    size_t end   = (offset + length - 1) / meta_slice_sz;
     size_t count = end - start + 1;
     return count;
 }
@@ -1148,8 +1129,8 @@ static int split_request(
          * assume that's the last byte of the same segment
          * containing start, unless that happens to be
          * beyond the last byte of the actual request */
-        size_t start_slice = start / max_recs_per_slice;
-        size_t end = (start_slice + 1) * max_recs_per_slice - 1;
+        size_t start_slice = start / meta_slice_sz;
+        size_t end = (start_slice + 1) * meta_slice_sz - 1;
         if (end > last_offset) {
             end = last_offset;
         }
@@ -1178,7 +1159,7 @@ static int split_request(
 
 /* given an extent corresponding to a write index, create new key/value
  * pairs for that extent, splitting into multiple keys at the slice
- * range boundaries (max_recs_per_slice), it returns the number of
+ * range boundaries (meta_slice_sz), it returns the number of
  * newly created key/values inserted into the given key and value
  * arrays */
 static int split_index(
@@ -1217,8 +1198,8 @@ static int split_index(
          * assume that's the last byte of the same slice
          * containing start, unless that happens to be
          * beyond the last byte of the actual request */
-        size_t start_slice = start / max_recs_per_slice;
-        size_t end = (start_slice + 1) * max_recs_per_slice - 1;
+        size_t start_slice = start / meta_slice_sz;
+        size_t end = (start_slice + 1) * meta_slice_sz - 1;
         if (end > last_offset) {
             end = last_offset;
         }
@@ -1267,15 +1248,14 @@ int rm_cmd_read(
     size_t offset, /* logical file offset of read request */
     size_t length) /* number of bytes to read */
 {
-    /* get pointer to app structure for this app id */
-    app_config_t* app_config =
-        (app_config_t*)arraylist_get(app_config_list, app_id);
+    /* get application client */
+    app_client* client = get_app_client(app_id, client_id);
+    if (NULL == client) {
+        return (int)UNIFYFS_FAILURE;
+    }
 
-    /* get thread id for this client */
-    int thrd_id = app_config->thrd_idxs[client_id];
-
-    /* look up thread control structure */
-    reqmgr_thrd_t* thrd_ctrl = rm_get_thread(thrd_id);
+    /* get thread control structure */
+    reqmgr_thrd_t* thrd_ctrl = client->reqmgr;
 
     /* get chunks corresponding to requested client read extent
      *
@@ -1338,18 +1318,14 @@ int rm_cmd_mread(
 {
     int rc = UNIFYFS_SUCCESS;
 
-    /* get pointer to app structure for this app id */
-    app_config_t* app_config =
-        (app_config_t*)arraylist_get(app_config_list, app_id);
+    /* get application client */
+    app_client* client = get_app_client(app_id, client_id);
+    if (NULL == client) {
+        return (int)UNIFYFS_FAILURE;
+    }
 
-    /* get thread id for this client */
-    int thrd_id = app_config->thrd_idxs[client_id];
-
-    /* look up thread control structure */
-    reqmgr_thrd_t* thrd_ctrl = rm_get_thread(thrd_id);
-
-    /* get debug rank for this client */
-    int cli_rank = app_config->dbg_ranks[client_id];
+    /* get thread control structure */
+    reqmgr_thrd_t* thrd_ctrl = client->reqmgr;
 
      /* get the locations of all the read requests from the key-value store */
     unifyfs_ReadRequest_table_t readRequest =
@@ -1509,20 +1485,22 @@ int rm_cmd_sync(int app_id, int client_id)
     /* get memory page size on this machine */
     int page_sz = getpagesize();
 
-    /* get app config struct for this client */
-    app_config_t* app_config = (app_config_t*)
-        arraylist_get(app_config_list, app_id);
+    /* get application client */
+    app_client* client = get_app_client(app_id, client_id);
+    if (NULL == client) {
+        return EINVAL;
+    }
 
     /* get pointer to superblock for this client and app */
-    shm_context* super_ctx = app_config->shm_superblocks[client_id];
+    shm_context* super_ctx = client->shmem_super;
     if (NULL == super_ctx) {
-        LOGERR("bad client id");
-        return EINVAL;
+        LOGERR("missing client superblock");
+        return EIO;
     }
     char* superblk = (char*)(super_ctx->addr);
 
     /* get pointer to start of key/value region in superblock */
-    char* meta = superblk + app_config->meta_offset;
+    char* meta = superblk + client->super_meta_offset;
 
     /* get number of file extent index values client has for us,
      * stored as a size_t value in meta region of shared memory */
@@ -1771,26 +1749,26 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
             }
         } else if ((req->num_remote_reads == 0) &&
                    (req->status == READREQ_STARTED)) {
+            RM_LOCK(thrd_ctrl);
+
             /* look up client shared memory region */
             int app_id = req->app_id;
             int client_id = req->client_id;
-            app_config_t* app_config =
-                (app_config_t*) arraylist_get(app_config_list, app_id);
-            assert(NULL != app_config);
-            shm_context* client_shm = app_config->shm_recv_bufs[client_id];
-            assert(NULL != client_shm);
-            shm_data_header* shm_hdr = (shm_data_header*) client_shm->addr;
+            app_client* client = get_app_client(app_id, client_id);
+            if (NULL != client) {
+                shm_context* client_shm = client->shmem_data;
+                assert(NULL != client_shm);
+                shm_data_header* shm_hdr = (shm_data_header*) client_shm->addr;
 
-            RM_LOCK(thrd_ctrl);
+                /* mark request as complete */
+                req->status = READREQ_COMPLETE;
 
-            /* mark request as complete */
-            req->status = READREQ_COMPLETE;
+                /* signal client that we're now done writing data */
+                client_signal(shm_hdr, SHMEM_REGION_DATA_COMPLETE);
 
-            /* signal client that we're now done writing data */
-            client_signal(shm_hdr, SHMEM_REGION_DATA_COMPLETE);
-
-            /* wait for client to read data */
-            client_wait(shm_hdr);
+                /* wait for client to read data */
+                client_wait(shm_hdr);
+            }
 
             rc = release_read_req(thrd_ctrl, req);
             if (rc != (int)UNIFYFS_SUCCESS) {
@@ -1805,7 +1783,7 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
     return ret;
 }
 
-static shm_data_meta* reserve_shmem_meta(app_config_t* app_config,
+static shm_data_meta* reserve_shmem_meta(shm_context* shmem_data,
                                          shm_data_header* hdr,
                                          size_t data_sz)
 {
@@ -1816,7 +1794,7 @@ static shm_data_meta* reserve_shmem_meta(app_config_t* app_config,
         pthread_mutex_lock(&(hdr->sync));
         LOGDBG("shm_data_header(cnt=%zu, bytes=%zu)",
                hdr->meta_cnt, hdr->bytes);
-        size_t remain_size = app_config->recv_buf_sz -
+        size_t remain_size = shmem_data->size -
                              (sizeof(shm_data_header) + hdr->bytes);
         size_t meta_size = sizeof(shm_data_meta) + data_sz;
         if (meta_size > remain_size) {
@@ -1855,14 +1833,14 @@ int rm_post_chunk_read_responses(int app_id,
 {
     int rc;
 
-    /* lookup RM thread control structure for this app id */
-    app_config_t* app_config = (app_config_t*)
-        arraylist_get(app_config_list, app_id);
-    assert(NULL != app_config);
+    /* get application client */
+    app_client* client = get_app_client(app_id, client_id);
+    if (NULL == client) {
+        return (int)UNIFYFS_FAILURE;
+    }
 
-    int thrd_id = app_config->thrd_idxs[client_id];
-
-    reqmgr_thrd_t* thrd_ctrl = rm_get_thread(thrd_id);
+    /* get thread control structure */
+    reqmgr_thrd_t* thrd_ctrl = client->reqmgr;
     assert(NULL != thrd_ctrl);
 
     RM_LOCK(thrd_ctrl);
@@ -1914,7 +1892,6 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
 {
     int errcode, gfid, i, num_chks, rc, thrd_id;
     int ret = (int)UNIFYFS_SUCCESS;
-    app_config_t* app_config = NULL;
     chunk_read_resp_t* responses = NULL;
     shm_context* client_shm = NULL;
     shm_data_header* shm_hdr = NULL;
@@ -1929,9 +1906,12 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
            (NULL != del_reads->resp));
 
     /* look up client shared memory region */
-    app_config = (app_config_t*) arraylist_get(app_config_list, rdreq->app_id);
-    assert(NULL != app_config);
-    client_shm = (shm_context*) app_config->shm_recv_bufs[rdreq->client_id];
+    app_config* app_cfg = get_application(rdreq->app_id);
+    app_client* clnt = get_app_client(rdreq->app_id, rdreq->client_id);
+    if ((NULL == app_cfg) || (NULL == clnt)) {
+        return (int)UNIFYFS_FAILURE;
+    }
+    client_shm = clnt->shmem_data;
     shm_hdr = (shm_data_header*) client_shm->addr;
 
     RM_LOCK(thrd_ctrl);
@@ -1965,7 +1945,7 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
             LOGDBG("chunk response for offset=%zu: sz=%zu", offset, data_sz);
 
             /* allocate and register local target buffer for bulk access */
-            meta = reserve_shmem_meta(app_config, shm_hdr, data_sz);
+            meta = reserve_shmem_meta(client_shm, shm_hdr, data_sz);
             if (NULL != meta) {
                 meta->offset = offset;
                 meta->length = data_sz;
@@ -2059,14 +2039,15 @@ void* rm_delegate_request_thread(void* arg)
         }
 
         /* release lock and wait to be signaled by dispatcher */
-        LOGDBG("RM[%d] waiting for work", thrd_ctrl->thrd_ndx);
+        LOGDBG("RM[%d:%d] waiting for work",
+               thrd_ctrl->app_id, thrd_ctrl->client_id);
         pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
 
         /* set flag to indicate we're no longer waiting */
         thrd_ctrl->has_waiting_delegator = 0;
 
         /* go do work ... */
-        LOGDBG("RM[%d] got work", thrd_ctrl->thrd_ndx);
+        LOGDBG("RM[%d:%d] got work", thrd_ctrl->app_id, thrd_ctrl->client_id);
 
         /* release lock and bail out if we've been told to exit */
         if (thrd_ctrl->exit_flag == 1) {
