@@ -1,6 +1,6 @@
 language: c
-sudo: required
 dist: xenial
+os: linux
 
 addons:
   apt:
@@ -74,9 +74,10 @@ before_cache:
 script:
   # Force git to update the shallow clone and include tags so git-describe works
   - git fetch --unshallow --tags
-  - sh autogen.sh
-  - ./configure --enable-fortran || cat config.log
-  - make -k && make distcheck
+  - export DISTCHECK_CONFIGURE_FLAGS="--enable-fortran"
+  - ./autogen.sh
+  - ./configure $DISTCHECK_CONFIGURE_FLAGS || cat config.log
+  - make distcheck
   - ./scripts/checkpatch.sh || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
 
 after_failure:
