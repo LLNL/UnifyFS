@@ -57,6 +57,10 @@
  * -------------------------------
  */
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 // system headers
 #include <aio.h>
 #include <assert.h>
@@ -85,7 +89,6 @@
 #include <wchar.h>
 #include <dirent.h>
 
-#define _GNU_SOURCE
 #include <pthread.h>
 #include <sched.h>
 
@@ -147,7 +150,6 @@
  * dlsym */
 
 /* we need the dlsym function */
-#define __USE_GNU
 #include <dlfcn.h>
 
 /* define a static variable called __real_open to record address of
