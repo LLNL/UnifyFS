@@ -35,7 +35,6 @@ int creat64_test(char* unifyfs_root)
     char path[64];
     int mode = 0600;
     int fd;
-    int rc;
 
     /* Create a random file name at the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifyfs_root);
@@ -47,7 +46,7 @@ int creat64_test(char* unifyfs_root)
     ok(fd >= 0, "creat64 non-existing file %s (fd=%d): %s",
        path, fd, strerror(errno));
 
-    rc = close(fd);
+    ok(close(fd) != -1, "close() worked");
 
     /* Verify creating an already created file succeeds. */
     errno = 0;
@@ -55,7 +54,8 @@ int creat64_test(char* unifyfs_root)
     ok(fd >= 0, "creat64 existing file %s (fd=%d): %s",
        path, fd, strerror(errno));
 
-    rc = close(fd);
+    ok(close(fd) != -1, "close() worked");
+
     end_skip;
 
     diag("Finished UNIFYFS_WRAP(creat64) tests");

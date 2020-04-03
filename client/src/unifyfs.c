@@ -68,7 +68,6 @@ unifyfs_cfg_t client_cfg;
 
 unifyfs_index_buf_t unifyfs_indices;
 static size_t unifyfs_index_buf_size;    /* size of metadata log */
-static size_t unifyfs_fattr_buf_size;
 unsigned long unifyfs_max_index_entries; /* max metadata log entries */
 
 /* tracks total number of unsync'd segments for all files */
@@ -1376,9 +1375,6 @@ static int unifyfs_init_structures()
     for (i = 0; i < unifyfs_max_files; i++) {
         /* indicate that file id is not in use by setting flag to 0 */
         unifyfs_filelist[i].in_use = 0;
-
-        /* set pointer to array of chunkmeta data structures */
-        unifyfs_filemeta_t* filemeta = &unifyfs_filemetas[i];
     }
 
     /* initialize stack of free file ids */
@@ -1390,33 +1386,6 @@ static int unifyfs_init_structures()
     LOGDBG("Meta-stacks initialized!");
 
     return UNIFYFS_SUCCESS;
-}
-
-static int unifyfs_get_spillblock(size_t size, const char* path)
-{
-    //MAP_OR_FAIL(open);
-    mode_t perms = unifyfs_getmode(0);
-    int spillblock_fd = __real_open(path, O_RDWR | O_CREAT | O_EXCL, perms);
-    if (spillblock_fd < 0) {
-        if (errno == EEXIST) {
-            /* spillover block exists; attach and return */
-            spillblock_fd = __real_open(path, O_RDWR);
-        } else {
-            LOGERR("open() failed: errno=%d (%s)", errno, strerror(errno));
-            return -1;
-        }
-    } else {
-        /* new spillover block created */
-        /* TODO: align to SSD block size*/
-
-        /*temp*/
-        off_t rc = __real_lseek(spillblock_fd, size, SEEK_SET);
-        if (rc < 0) {
-            LOGERR("lseek() failed: errno=%d (%s)", errno, strerror(errno));
-        }
-    }
-
-    return spillblock_fd;
 }
 
 /* create superblock of specified size and name, or attach to existing
@@ -1699,7 +1668,7 @@ static int CountTasksPerNode(int rank, int numTasks)
     int resultsLen = UNIFYFS_MAX_HOSTNAME;
     MPI_Status status;
     int i, j, rc;
-    int* local_rank_lst;
+    int* local_rank_lst = NULL;
 
     if (numTasks <= 0) {
         LOGERR("invalid number of tasks");
@@ -1776,7 +1745,6 @@ static int CountTasksPerNode(int rank, int numTasks)
         set_counter++;
 
         /* broadcast the rank_cnt and rank_set information to each rank */
-        int root_set_no = -1;
         for (i = 0; i < set_counter; i++) {
             /* send each rank set to all of its ranks */
             for (j = 0; j < rank_cnt[i]; j++) {
@@ -1794,7 +1762,6 @@ static int CountTasksPerNode(int rank, int numTasks)
                         return -1;
                     }
                 } else {
-                    root_set_no = i;
                     local_rank_cnt = rank_cnt[i];
                     local_rank_lst = (int*)calloc(rank_cnt[i], sizeof(int));
                     memcpy(local_rank_lst, rank_set[i],
@@ -1861,8 +1828,6 @@ int unifyfs_mount(const char prefix[], int rank, size_t size,
 {
     int rc;
     int kv_rank, kv_nranks;
-    bool b;
-    char* cfgval;
 
     if (-1 != unifyfs_mounted) {
         if (l_app_id != unifyfs_mounted) {
@@ -2181,7 +2146,6 @@ static int do_transfer_file_serial(const char* src, const char* dst,
     int ret = 0;
     int fd_src = 0;
     int fd_dst = 0;
-    char buf[UNIFYFS_TX_BUFSIZE] = { 0, };
 
     /*
      * for now, we do not use the @dir hint.

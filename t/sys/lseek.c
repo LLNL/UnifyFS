@@ -44,7 +44,10 @@ int lseek_test(char* unifyfs_root)
 
     /* Open a file and write to it to test lseek() */
     fd = open(path, O_RDWR | O_CREAT | O_TRUNC, file_mode);
-    write(fd, "hello world", 12);
+
+    ret = write(fd, "hello world", 12);
+    ok(ret == 12, "%s: write works (ret=%d): %s",
+        __FILE__, ret, strerror(errno));
 
     /* lseek with invalid whence fails with errno=EINVAL. */
     errno = 0;
@@ -134,7 +137,9 @@ int lseek_test(char* unifyfs_root)
 
     /* lseek() with SEEK_DATA tests */
     /* Write beyond end of file to create a hole */
-    write(fd, "hello universe", 15);
+    ret = write(fd, "hello universe", 15);
+    ok(ret == 15, "%s: write works (ret=%d): %s",
+        __FILE__, ret, strerror(errno));
 
     /* lseek to negative offset with SEEK_DATA should fail with errno=ENXIO */
     errno = 0;

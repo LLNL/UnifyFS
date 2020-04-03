@@ -29,6 +29,10 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+
 #include "unifyfs_log.h"
 #include "unifyfs_const.h"
 
@@ -99,4 +103,16 @@ void unifyfs_set_log_level(unifyfs_log_level_t lvl)
     if (lvl < LOG_LEVEL_MAX) {
         unifyfs_log_level = lvl;
     }
+}
+
+pid_t unifyfs_gettid(void)
+{
+#if defined(gettid)
+    return gettid();
+#elif defined(SYS_gettid)
+    return syscall(SYS_gettid);
+#else
+#error no gettid()
+#endif
+    return 0;
 }

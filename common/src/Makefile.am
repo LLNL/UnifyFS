@@ -33,6 +33,8 @@ BASE_SRCS = \
   unifyfs_logio.c \
   unifyfs_meta.h \
   unifyfs_meta.c \
+  unifyfs_misc.c \
+  unifyfs_misc.h \
   unifyfs_rpc_util.h \
   unifyfs_rpc_util.c \
   unifyfs_client_rpcs.h \
@@ -75,4 +77,4 @@ libunifyfs_common_la_LDFLAGS = \
 libunifyfs_common_la_LIBADD = \
   $(OPT_LIBS) -lm -lrt -lcrypto -lpthread
 
-AM_CFLAGS = -Wall -Wno-strict-aliasing
+AM_CFLAGS = -Wall -Werror -Wno-strict-aliasing

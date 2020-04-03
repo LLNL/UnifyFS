@@ -15,6 +15,7 @@
 #include "unifyfs_const.h"
 #include "unifyfs_keyval.h"
 #include "unifyfs_log.h"
+#include "unifyfs_misc.h"
 
 //#include "config.h"
 
@@ -543,7 +544,7 @@ static int unifyfs_fskv_init(unifyfs_cfg_t* cfg)
         }
 
         // find or create rank-specific subdir
-        snprintf(sharedfs_rank_kvdir, sizeof(sharedfs_rank_kvdir), "%s/%d",
+        scnprintf(sharedfs_rank_kvdir, sizeof(sharedfs_rank_kvdir), "%s/%d",
                  sharedfs_kvdir, kv_myrank);
         memset(&s, 0, sizeof(struct stat));
         rc = stat(sharedfs_rank_kvdir, &s);
@@ -591,7 +592,7 @@ static int unifyfs_fskv_fini(void)
                 continue;
             }
             memset(kvfile, 0, sizeof(kvfile));
-            snprintf(kvfile, sizeof(kvfile), "%s/%s",
+            scnprintf(kvfile, sizeof(kvfile), "%s/%s",
                      localfs_kvdir, de->d_name);
             rc = remove(kvfile);
             if (rc != 0) {
@@ -628,7 +629,7 @@ static int unifyfs_fskv_fini(void)
                     continue;
                 }
                 memset(rank_kvfile, 0, sizeof(rank_kvfile));
-                snprintf(rank_kvfile, sizeof(rank_kvfile), "%s/%s",
+                scnprintf(rank_kvfile, sizeof(rank_kvfile), "%s/%s",
                         sharedfs_rank_kvdir, de->d_name);
                 rc = remove(rank_kvfile);
                 if (rc != 0) {
@@ -688,8 +689,9 @@ static int unifyfs_fskv_lookup_local(const char* key,
     FILE* kvf;
     char kvfile[UNIFYFS_MAX_FILENAME];
     char kvalue[kv_max_vallen];
+    int rc;
 
-    snprintf(kvfile, sizeof(kvfile), "%s/%s",
+    scnprintf(kvfile, sizeof(kvfile), "%s/%s",
              localfs_kvdir, key);
     kvf = fopen(kvfile, "r");
     if (NULL == kvf) {
@@ -697,8 +699,12 @@ static int unifyfs_fskv_lookup_local(const char* key,
         return (int)UNIFYFS_ERROR_KEYVAL;
     }
     memset(kvalue, 0, sizeof(kvalue));
-    fscanf(kvf, "%s\n", kvalue);
+    rc = fscanf(kvf, "%s\n", kvalue);
     fclose(kvf);
+    if (rc != 1) {
+        *oval = NULL;
+        return (int)UNIFYFS_FAILURE;
+    }
 
     *oval = strdup(kvalue);
     return (int)UNIFYFS_SUCCESS;
@@ -711,12 +717,13 @@ static int unifyfs_fskv_lookup_remote(int rank,
     FILE* kvf;
     char rank_kvfile[UNIFYFS_MAX_FILENAME];
     char kvalue[kv_max_vallen];
+    int rc;
 
     if (!have_sharedfs_kvstore) {
         return (int)UNIFYFS_ERROR_KEYVAL;
     }
 
-    snprintf(rank_kvfile, sizeof(rank_kvfile), "%s/%d/%s",
+    scnprintf(rank_kvfile, sizeof(rank_kvfile), "%s/%d/%s",
              sharedfs_kvdir, rank, key);
     kvf = fopen(rank_kvfile, "r");
     if (NULL == kvf) {
@@ -724,8 +731,13 @@ static int unifyfs_fskv_lookup_remote(int rank,
         return (int)UNIFYFS_ERROR_KEYVAL;
     }
     memset(kvalue, 0, sizeof(kvalue));
-    fscanf(kvf, "%s\n", kvalue);
+    rc = fscanf(kvf, "%s\n", kvalue);
     fclose(kvf);
+
+    if (rc != 1) {
+        *oval = NULL;
+        return (int)UNIFYFS_FAILURE;
+    }
 
     *oval = strdup(kvalue);
     return (int)UNIFYFS_SUCCESS;
@@ -738,7 +750,7 @@ static int unifyfs_fskv_publish_local(const char* key,
     FILE* kvf;
     char kvfile[UNIFYFS_MAX_FILENAME];
 
-    snprintf(kvfile, sizeof(kvfile), "%s/%s",
+    scnprintf(kvfile, sizeof(kvfile), "%s/%s",
              localfs_kvdir, key);
     kvf = fopen(kvfile, "w");
     if (NULL == kvf) {
@@ -761,7 +773,7 @@ static int unifyfs_fskv_publish_remote(const char* key,
         return (int)UNIFYFS_ERROR_KEYVAL;
     }
 
-    snprintf(rank_kvfile, sizeof(rank_kvfile), "%s/%s",
+    scnprintf(rank_kvfile, sizeof(rank_kvfile), "%s/%s",
              sharedfs_rank_kvdir, key);
     kvf = fopen(rank_kvfile, "w");
     if (NULL == kvf) {

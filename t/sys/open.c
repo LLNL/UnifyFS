@@ -57,7 +57,7 @@ int open_test(char* unifyfs_root)
     ok(fd >= 0, "open non-existing file %s flags O_CREAT|O_EXCL (fd=%d): %s",
        path, fd, strerror(errno));
 
-    rc = close(fd);
+    ok(close(fd) != -1, "close() worked");
 
     /* Verify opening an existing file with O_CREAT|O_EXCL fails with
      * errno=EEXIST. */
@@ -73,12 +73,13 @@ int open_test(char* unifyfs_root)
     ok(fd >= 0, "open existing file %s O_RDWR (fd=%d): %s",
        path, fd, strerror(errno));
 
-    rc = close(fd);
+    ok(close(fd) != -1, "close() worked");
+
+    rc = mkdir(dir_path, dir_mode);
+    ok(rc == 0, "mkdir(%s, %o) worked, rc = %d", dir_path, dir_mode, rc);
 
     /* todo_open_1: Remove when issue is resolved */
     todo("open_1: should fail with errno=EISDIR=21");
-    /* Verify opening a dir for write fails with errno=EISDIR */
-    rc = mkdir(dir_path, dir_mode);
 
     errno = 0;
     fd = open(dir_path, O_RDWR, file_mode);
@@ -92,7 +93,7 @@ int open_test(char* unifyfs_root)
      * Don't unlink `path` so that the final test (9020-mountpoint-empty) can
      * check if open left anything in the mountpoint and thus wasn't wrapped
      * properly. */
-    rc = rmdir(dir_path);
+    ok(rmdir(dir_path) != -1, "rmdir() worked");
 
     diag("Finished UNIFYFS_WRAP(open) tests");
 

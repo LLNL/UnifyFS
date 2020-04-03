@@ -40,6 +40,7 @@
 #include "margo_server.h"
 #include "unifyfs_client_rpcs.h"
 #include "unifyfs_rpc_util.h"
+#include "unifyfs_misc.h"
 
 /**
  * attach to the client-side shared memory
@@ -331,7 +332,7 @@ static void unifyfs_metaset_rpc(hg_handle_t handle)
     memset(&fattr, 0, sizeof(fattr));
     int create         = (int) in.create;
     fattr.gfid         = in.gfid;
-    strncpy(fattr.filename, in.filename, sizeof(fattr.filename));
+    strlcpy(fattr.filename, in.filename, sizeof(fattr.filename));
     fattr.mode         = in.mode;
     fattr.uid          = in.uid;
     fattr.gid          = in.gid;

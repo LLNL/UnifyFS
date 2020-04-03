@@ -509,7 +509,6 @@ int truncate_empty_read(char* unifyfs_root, off_t seekpos)
     int rc;
     int fd;
     size_t global, log;
-    int i;
 
     size_t bufsize = 1024*1024;
     char* buf = (char*) malloc(bufsize);

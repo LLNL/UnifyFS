@@ -1722,7 +1722,7 @@ int unifyfs_fd_logreadlist(read_req_t* in_reqs, int in_count)
         if (reqs != NULL) {
             free(reqs);
         }
-        return read_rc;
+        return ENOSPC;
     }
 
     /* order read request by increasing file id, then increasing offset */

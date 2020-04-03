@@ -186,11 +186,11 @@ int main(int argc, char** argv)
 
         /* Open an existing file. */
         file_id = H5Fopen(targetfile, H5F_ACC_RDWR, H5P_DEFAULT);
-        printf("H5Fopen: %d\n", file_id);
+        printf("H5Fopen: %ld\n", (long) file_id);
 
         /* Open an existing dataset. */
         dataset_id = H5Dopen2(file_id, "/dset", H5P_DEFAULT);
-        printf("H5open2: %d\n", dataset_id);
+        printf("H5open2: %ld\n", (long) dataset_id);
 
         if (!readonly) {
             /* Write the dataset. */

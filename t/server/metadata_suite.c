@@ -8,7 +8,7 @@ int main(int argc, char* argv[])
 {
     /* need to initialize enough of the server to use the metadata API */
     unifyfs_cfg_t server_cfg;
-    int rc, provided, glb_rank, glb_size;
+    int rc;
 
     /* get the configuration */
     rc = unifyfs_config_init(&server_cfg, argc, argv);

@@ -24,6 +24,5 @@
 
 int unifyfs_set_file_attribute_test(void);
 int unifyfs_get_file_attribute_test(void);
-int unifyfs_get_file_extents_test(void);
 
 #endif /* METADATA_SUITE_H */

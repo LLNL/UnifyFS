@@ -36,6 +36,6 @@ AM_CPPFLAGS = -I$(top_srcdir)/meta/src/Mlog2 \
               -I$(top_srcdir)/server/src
 
 AM_CFLAGS = -DLEVELDB_SUPPORT $(LEVELDB_CFLAGS) $(MPI_CFLAGS) $(MARGO_CFLAGS)
-AM_CFLAGS += -Wall
+AM_CFLAGS += -Wall -Werror
 
 CLEANFILES =

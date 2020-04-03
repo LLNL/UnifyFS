@@ -11,7 +11,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/common/src \
               -DBINDIR=\"$(bindir)\" \
               -DSBINDIR=\"$(sbindir)\"
 
-AM_CFLAGS = -Wall
+AM_CFLAGS = -Wall -Werror
 
 CLEANFILES = $(bin_PROGRAMS)
 
