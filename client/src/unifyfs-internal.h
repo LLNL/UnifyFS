@@ -491,6 +491,11 @@ int unifyfs_fid_is_dir_empty(const char* path);
 /* Return current global size of given file id */
 off_t unifyfs_fid_global_size(int fid);
 
+/* if we have a local fid structure corresponding to the gfid
+ * in question, we attempt the file lookup with the fid method
+ * otherwise call back to the rpc */
+off_t unifyfs_gfid_filesize(int gfid);
+
 /* Return current local size of given file id */
 off_t unifyfs_fid_log_size(int fid);
 

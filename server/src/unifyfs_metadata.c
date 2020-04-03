@@ -43,6 +43,7 @@
 #include "indexes.h"
 #include "mdhim.h"
 
+
 struct mdhim_t* md;
 
 /* we use two MDHIM indexes:

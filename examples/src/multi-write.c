@@ -140,7 +140,10 @@ int do_test(test_cfg* cfg)
         /* + 1 so we always write at least 1 byte */
         count = (rand() % (MAX_WRITE-1)) + 1;
         lseek(fd, start, SEEK_SET);
-        write(fd, &bigbuf[start], count);
+        if (write(fd, &bigbuf[start], count) != count) {
+            perror("Couldn't write");
+            exit(1);
+        }
     }
 
     /* Sync extents of all our files and laminate them */

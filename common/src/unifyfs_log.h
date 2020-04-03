@@ -32,9 +32,8 @@
 
 #include <stdio.h>
 #include <time.h>
-#include <unistd.h>
-#include <sys/syscall.h>
 #include <sys/time.h>
+#include <sys/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,13 +55,7 @@ extern struct tm* unifyfs_log_ltime;
 extern char unifyfs_log_timestamp[256];
 extern size_t unifyfs_log_source_base_len;
 
-#if defined(__NR_gettid)
-#define gettid() syscall(__NR_gettid)
-#elif defined(SYS_gettid)
-#define gettid() syscall(SYS_gettid)
-#else
-#error gettid syscall is not defined
-#endif
+pid_t unifyfs_gettid(void);
 
 #define LOG(level, ...) \
     if (level <= unifyfs_log_level) { \
@@ -75,7 +68,7 @@ extern size_t unifyfs_log_source_base_len;
             unifyfs_log_stream = stderr; \
         } \
         fprintf(unifyfs_log_stream, "%s tid=%ld @ %s() [%s:%d] ", \
-            unifyfs_log_timestamp, (long)gettid(), \
+            unifyfs_log_timestamp, (long)unifyfs_gettid(), \
             __func__, srcfile, __LINE__); \
         fprintf(unifyfs_log_stream, __VA_ARGS__); \
         fprintf(unifyfs_log_stream, "\n"); \

@@ -40,7 +40,7 @@ AM_CPPFLAGS = \
   -I$(top_srcdir)/meta/src/uthash \
   -I$(top_srcdir)/meta/src/Mlog2
 
-AM_CFLAGS = -Wall \
+AM_CFLAGS = -Wall -Werror \
   $(LEVELDB_CFLAGS) \
   $(MPI_CFLAGS) \
   $(MERCURY_CFLAGS) \

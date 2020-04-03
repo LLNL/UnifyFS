@@ -37,7 +37,6 @@ int open64_test(char* unifyfs_root)
     char path[64];
     int mode = 0600;
     int fd;
-    int rc;
 
     /* Create a random file name at the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifyfs_root);
@@ -56,7 +55,7 @@ int open64_test(char* unifyfs_root)
     ok(fd >= 0, "open64 non-existing file %s flags O_CREAT|O_EXCL (fd=%d): %s",
        path, fd, strerror(errno));
 
-    rc = close(fd);
+    ok(close(fd) != -1, "close() worked");
 
     /* Verify opening an existing file with O_CREAT|O_EXCL fails with
      * errno=EEXIST. */
@@ -72,7 +71,7 @@ int open64_test(char* unifyfs_root)
     ok(fd >= 0, "open64 existing file %s O_RDWR (fd=%d): %s",
        path, fd, strerror(errno));
 
-    rc = close(fd);
+    ok(close(fd) != -1, "close() worked");
 
     diag("Finished UNIFYFS_WRAP(open64) tests");
 

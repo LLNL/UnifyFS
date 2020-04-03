@@ -676,7 +676,7 @@ int unifyfs_logio_read(logio_context* ctx,
                   &sz_in_mem, &sz_in_spill, &spill_offset);
 
     /* do reads */
-    int err_rc;
+    int err_rc = 0;
     if (sz_in_mem > 0) {
         /* read data from shared memory */
         char* shmem_data = (char*)(ctx->shmem->addr) + shmem_hdr->data_offset;
@@ -749,7 +749,7 @@ int unifyfs_logio_write(logio_context* ctx,
                   &sz_in_mem, &sz_in_spill, &spill_offset);
 
     /* do writes */
-    int err_rc;
+    int err_rc = 0;
     if (sz_in_mem > 0) {
         /* write data to shared memory */
         char* shmem_data = (char*)(ctx->shmem->addr) + shmem_hdr->data_offset;

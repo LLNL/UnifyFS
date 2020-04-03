@@ -10,7 +10,7 @@ if HAVE_FORTRAN
 lib_LTLIBRARIES += libunifyfsf.la
 endif
 
-AM_CFLAGS = -Wall -Wno-strict-aliasing
+AM_CFLAGS = -Wall -Wno-strict-aliasing -Werror
 
 include_HEADERS = unifyfs.h
 
@@ -19,10 +19,12 @@ include_HEADERS += unifyfsf.h
 endif
 
 CLIENT_COMMON_CPPFLAGS = \
+  -Wall -Werror \
   -I$(top_builddir)/client \
   -I$(top_srcdir)/common/src
 
 CLIENT_COMMON_CFLAGS = \
+  -Wall -Werror \
   $(MPI_CFLAGS) \
   $(MERCURY_CFLAGS) \
   $(ARGOBOTS_CFLAGS) \

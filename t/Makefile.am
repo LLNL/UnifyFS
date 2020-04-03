@@ -37,7 +37,7 @@ EXTRA_DIST = \
 	sharness.sh \
 	tap-driver.sh
 
-AM_CFLAGS = -Wall
+AM_CFLAGS = -Wall -Werror
 
 clean-local:
 	rm -fr trash-directory.* test-results *.log test_run_env.sh

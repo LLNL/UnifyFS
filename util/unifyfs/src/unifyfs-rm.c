@@ -196,7 +196,7 @@ static int lsf_read_resource(unifyfs_resource_t* resource)
     size_t i, n_nodes;
     char* val;
     char* node;
-    char* last_node;
+    char* last_node = NULL;
     char* lsb_hosts;
     char* pos;
     char** nodes;
