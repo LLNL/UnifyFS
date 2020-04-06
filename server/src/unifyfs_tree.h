@@ -15,7 +15,8 @@
 #ifndef UNIFYFS_TREE_H
 #define UNIFYFS_TREE_H
 
-#include "abt.h"
+#include <abt.h>
+#include "unifyfs_meta.h"
 
 /* define tree structure */
 typedef struct {
@@ -59,7 +60,15 @@ typedef struct {
   unifyfs_file_attr_t attr;  /* file attribute */
 } unifyfs_coll_state_t;
 
-/* allocate a structure defining the state for a file size collective */
+/**
+ * @brief allocate a structure defining the state for a file size collective
+ *
+ * @param root rank of server making request
+ * @param gfid global file id of request
+ * @param ptag tag to use when sending replies to parent
+ * @param tag tag out children should use when sending to us
+ * @return unifyfs_coll_state_t*
+ */
 unifyfs_coll_state_t* unifyfs_coll_state_alloc(
     int root,     /* rank of server making request */
     int gfid,     /* global file id of request */
@@ -77,5 +86,12 @@ void filesize_request_forward(unifyfs_coll_state_t* st);
 void truncate_request_forward(unifyfs_coll_state_t* st);
 void metaset_request_forward(unifyfs_coll_state_t* st);
 void unlink_request_forward(unifyfs_coll_state_t* st);
+
+/**
+ * @brief
+ *
+ * @return int UnifyFS return code
+ */
+int unifyfs_broadcast_extend_tree(int gfid);
 
 #endif /* UNIFYFS_TREE_H */
