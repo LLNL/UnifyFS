@@ -146,6 +146,11 @@ static void register_server_server_rpcs(margo_instance_id mid)
         MARGO_REGISTER(mid, "unlink_response_rpc",
                        unlink_response_in_t, unlink_response_out_t,
                        unlink_response_rpc);
+
+    unifyfsd_rpc_context->rpcs.extbcast_request_id =
+        MARGO_REGISTER(mid, "extbcast_request_rpc",
+                       extbcast_request_in_t, extbcast_request_out_t,
+                       extbcast_request_rpc);
 }
 
 /* setup_local_target - Initializes the client-server margo target */

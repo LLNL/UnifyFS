@@ -86,8 +86,11 @@ extern server_info_t* glb_servers; /* array of server info structs */
 extern size_t glb_num_servers; /* number of entries in glb_servers array */
 
 /* maps a global file id to its extent map */
-//extern struct gfid2ext_tree glb_gfid2ext;
 extern struct unifyfs_inode_tree* global_inode_tree;
+
+/* maps a global file id to its metadata extent map
+ * TODO: move to metadata? */
+extern struct unifyfs_inode_tree meta_inode_tree;
 
 /* stack to manage free communication tags */
 void* glb_tag_stack;

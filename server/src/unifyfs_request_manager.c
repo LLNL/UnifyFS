@@ -48,6 +48,8 @@
 #include "margo_server.h"
 #include "ucr_read_builder.h"
 
+#include "int2void.h"
+#include "unifyfs_inode_tree.h"
 
 #define RM_LOCK(rm) \
 do { \
@@ -61,6 +63,9 @@ do { \
     pthread_mutex_unlock(&(rm->thrd_lock)); \
 } while (0)
 
+#define HAVE_MDHIM 1
+
+arraylist_t* rm_thrd_list;
 
 /* One request manager thread is created for each client that a
  * delegator serves.  The main thread of the delegator assigns
@@ -2025,6 +2030,42 @@ int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl)
     return UNIFYFS_SUCCESS;
 }
 
+/**
+ * @brief
+ *
+ * @return int
+ */
+int unifyfs_distribute_extend_tree(int gfid)
+{
+    int ret = UNIFYFS_SUCCESS;
+
+    // get extend tree for gfid
+    struct extent_tree* extent_tree = unifyfs_inode_get_extent_tree(gfid);
+    if (NULL == extent_tree) {
+        return UNIFYFS_ERROR_NFILE;
+    }
+
+    // get # of extends in tree
+    unsigned long num_extends = extent_tree_count(extent_tree);
+
+    // get tree nodes
+    extent_tree_rdlock(extent_tree);
+
+    struct extent_tree_node *node = NULL;
+    struct extent_tree_node **nodes = malloc(num_extends *
+                                           sizeof(struct extent_tree_node *));
+    int i = 0;
+    while ((node = extent_tree_iter(extent_tree, node))) {
+        printf("[%lu-%lu]", node->start, node->end);
+        nodes[i++] = node;
+    }
+
+    /* start the bcast of the extend tree */
+    ret = unifyfs_broadcast_extend_tree(gfid);
+
+    return ret;
+}
+
 /*
  * store all writes from app-client's index in the global metadata
  *
@@ -2088,6 +2129,7 @@ int rm_cmd_sync(int app_id, int client_id)
         return ENOMEM;
     }
 
+#if HAVE_MDHIM
     /* pointers to memory we'll dynamically allocate for file extents */
     unifyfs_key_t** keys = NULL;
     unifyfs_val_t** vals = NULL;
@@ -2108,6 +2150,7 @@ int rm_cmd_sync(int app_id, int client_id)
         ret = ENOMEM;
         goto rm_cmd_sync_exit;
     }
+#endif
 
     /* create file extent key/values for insertion into MDHIM */
     int count = 0;
@@ -2119,6 +2162,7 @@ int rm_cmd_sync(int app_id, int client_id)
         size_t length = meta->length;
         size_t logpos = meta->log_pos;
 
+#if HAVE_MDHIM
         /* split this entry at the offset boundaries */
         int used = split_index(
             &keys[count], &vals[count], &key_lens[count], &val_lens[count],
@@ -2127,6 +2171,7 @@ int rm_cmd_sync(int app_id, int client_id)
 
         /* count up the number of keys we used for this index */
         count += used;
+#endif
 
         /* TODO: need to lock/unlock inode tree */
         /* get extent map for this gfid */
@@ -2155,6 +2200,14 @@ int rm_cmd_sync(int app_id, int client_id)
             glb_pmi_rank, app_id, client_side_id, (unsigned long)logpos);
     }
 
+    /* distribute the extend tree */
+    ret = unifyfs_distribute_extend_tree(gfid);
+    if (UNIFYFS_SUCCESS != ret) {
+        LOGERR("Error distributing extend tree");
+        goto rm_cmd_fsync_exit;
+    }
+
+#if HAVE_MDHIM
     /* batch insert file extent key/values into MDHIM */
     ret = unifyfs_set_file_extents((int)count,
         keys, key_lens, vals, val_lens);
@@ -2163,10 +2216,11 @@ int rm_cmd_sync(int app_id, int client_id)
         LOGERR("unifyfs_set_file_extents() failed");
         goto rm_cmd_sync_exit;
     }
+#endif
 
 rm_cmd_sync_exit:
     /* clean up memory */
-
+#if HAVE_MDHIM
     if (NULL != keys) {
         free_key_array(keys);
     }
@@ -2182,6 +2236,7 @@ rm_cmd_sync_exit:
     if (NULL != val_lens) {
         free(val_lens);
     }
+#endif
 
     return ret;
 }

@@ -167,6 +167,19 @@ MERCURY_GEN_PROC(unlink_response_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unlink_response_rpc)
 
+/* extbcast_request_rpc (server => server)
+ *
+ * initiates extbcast request operation */
+MERCURY_GEN_PROC(extbcast_request_in_t,
+        ((int32_t)(root))
+        ((int32_t)(gfid))
+        ((int32_t)(tag))
+        ((int32_t)(num_extends))
+        ((hg_bulk_t)(exttree)))
+MERCURY_GEN_PROC(extbcast_request_out_t,
+        ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(extbcast_request_rpc)
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

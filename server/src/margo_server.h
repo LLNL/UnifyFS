@@ -29,6 +29,8 @@ typedef struct ServerRpcIds {
     hg_id_t metaset_response_id;
     hg_id_t unlink_request_id;
     hg_id_t unlink_response_id;
+    hg_id_t extbcast_request_id;
+    hg_id_t extbcast_response_id;
 } server_rpcs_t;
 
 typedef struct ServerRpcContext {
