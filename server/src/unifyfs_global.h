@@ -69,8 +69,11 @@ extern char glb_host[UNIFYFS_MAX_HOSTNAME];
 extern int glb_pmi_rank, glb_pmi_size;
 
 /* maps a global file id to its extent map */
-//extern struct gfid2ext_tree glb_gfid2ext;
 extern struct unifyfs_inode_tree* global_inode_tree;
+
+/* maps a global file id to its metadata extent map
+ * TODO: move to metadata? */
+extern struct unifyfs_inode_tree meta_inode_tree;
 
 /* stack to manage free communication tags */
 void* glb_tag_stack;

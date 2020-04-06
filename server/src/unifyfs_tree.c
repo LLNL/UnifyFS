@@ -9,6 +9,17 @@
 /* given the process's rank and the number of ranks, this computes a k-ary
  * tree rooted at rank 0, the structure records the number of children
  * of the local rank and the list of their ranks */
+/**
+ * @brief given the process's rank and the number of ranks, this computes a k-ary
+ *        tree rooted at rank 0, the structure records the number of children
+ *        of the local rank and the list of their ranks
+ *
+ * @param rank rank of calling process
+ * @param ranks number of ranks in tree
+ * @param root rank of root of tree
+ * @param k degree of k-ary tree
+ * @param t output tree structure
+ */
 void unifyfs_tree_init(
     int rank,          /* rank of calling process */
     int ranks,         /* number of ranks in tree */
@@ -1232,4 +1243,322 @@ static void metaset_response_rpc(hg_handle_t handle)
     metaset_response_forward(st);
 }
 DEFINE_MARGO_RPC_HANDLER(metaset_response_rpc)
+
+
+/*
+ * Broadcast operation for file extends
+ */
+typedef struct {
+    margo_request request;
+    hg_handle_t   handle;
+} unifyfs_coll_request_t;
+
+static int rpc_allocate_extbcast_handle(int rank, unifyfs_coll_request_t *request)
+{
+    int rc = (int)UNIFYFS_SUCCESS;
+
+    /* get address for specified server rank */
+    hg_addr_t addr = glb_servers[rank].margo_svr_addr;
+
+    /* get handle to rpc function */
+    hg_return_t hret = margo_create(unifyfsd_rpc_context->svr_mid, addr,
+        unifyfsd_rpc_context->rpcs.extbcast_request_id, &request->handle);
+    assert(hret == HG_SUCCESS);
+
+    return rc;
+}
+
+static int rpc_invoke_extbcast_request(extbcast_request_in_t *in, unifyfs_coll_request_t *request)
+{
+    int rc = (int)UNIFYFS_SUCCESS;
+
+    /* call rpc function */
+    hg_return_t hret = margo_iforward(request->handle, in, &request->request);
+    assert(hret == HG_SUCCESS);
+
+    return rc;
+}
+
+/**
+ * @brief Blocking function to forward extent broadcast request
+ * 
+ * @param broadcast_tree The tree for the broadcast
+ * @param in Input data for the broadcast
+ * @return int
+ */
+static int extbcast_request_forward(const unifyfs_tree_t* broadcast_tree, extbcast_request_in_t *in)
+{
+    printf("%d: BUCKEYES request_forward\n", glb_pmi_rank);
+    fflush(stdout);
+
+    hg_return_t hret;
+    int ret;
+
+    /* get info for tree */
+    int child_count  = broadcast_tree->child_count;
+    int* child_ranks = broadcast_tree->child_ranks;
+
+    /* allocate memory for request objects
+     * TODO: possibly get this from memory pool */
+    unifyfs_coll_request_t *requests = malloc(sizeof(unifyfs_coll_request_t) * child_count);
+    /* forward request down the tree */
+    int i;
+    for (i = 0; i < child_count; i++) {
+        /* get rank of this child */
+        int child = child_ranks[i];
+
+        /* allocate handle */
+        ret = rpc_allocate_extbcast_handle(child, &requests[i]);
+
+        /* invoke filesize request rpc on child */
+        ret = rpc_invoke_extbcast_request(in, &requests[i]);
+    }
+
+    /* wait for the requests to finish */
+    extbcast_request_out_t out;
+    for (i = 0; i < child_count; i++) {
+        /* TODO: get outputs */
+        hret = margo_wait(requests[i].request);
+
+        /* get the output of the rpc */
+        hret = margo_get_output(requests[i].handle, &out);
+
+        /* set return value
+         * TODO: check if we have an error and handle it */
+        ret = out.ret;
+    }
+
+    return ret;
+}
+
+#define UNIFYFS_BCAST_K_ARY 2
+
+/* request a filesize operation to all servers for a given file
+ * from a given server */
+static void extbcast_request_rpc(hg_handle_t handle)
+{
+    printf("%d: BUCKEYES request_rpc\n", glb_pmi_rank);
+    fflush(stdout);
+
+    hg_return_t hret;
+
+    /* assume we'll succeed */
+    int32_t ret = UNIFYFS_SUCCESS;
+
+    /* get instance id */
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+
+    /* get input params */
+    extbcast_request_in_t in;
+    hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* get root of tree and global file id to lookup filesize
+     * record tag calling process wants us to include in our
+     * later response */
+    int root     = (int) in.root;
+    int gfid     = (int) in.gfid;
+    int32_t ptag = (int32_t) in.tag;
+    int32_t num_extents = (int32_t) in.num_extends;
+
+    /* allocate memory for extends */
+    struct extent_tree_node* extents;
+    extents = calloc(num_extents, sizeof(struct extent_tree_node));
+
+    /* get client address */
+    const struct hg_info* info = margo_get_info(handle);
+    hg_addr_t client_address = info->addr;
+
+    hg_size_t buf_size = num_extents*sizeof(struct extent_tree_node);
+#if 0
+    hg_size_t *buf_sizes = malloc(num_extents * sizeof(hg_size_t));
+    for (int i=0; i < num_extents; i++) {
+        buf_sizes[i] = sizeof(struct extent_tree_node);
+    }
+#endif
+
+    /* expose local bulk buffer */
+    hg_bulk_t extent_data;
+    void *datap = extents;
+    margo_bulk_create(mid, 1, &datap, &buf_size,
+                      HG_BULK_READWRITE, &extent_data);
+
+    /* request for bulk transfer */
+    margo_request bulk_request;
+
+    /* initiate data transfer
+     * TODO: see if we can make this asynchronous */
+    margo_bulk_itransfer(mid, HG_BULK_PULL, client_address,
+                         in.exttree, 0,
+                         extent_data, 0,
+                         //num_extents * sizeof(struct extent_tree_node),
+                         buf_size,
+                         &bulk_request);
+
+    /* create communication tree */
+    unifyfs_tree_t bcast_tree;
+    unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, root, UNIFYFS_BCAST_K_ARY, &bcast_tree);
+
+    /* update input structure to point to local bulk handle */
+    in.exttree = extent_data;
+
+    /* allocate memory for request objects
+     * TODO: possibly get this from memory pool */
+    unifyfs_coll_request_t *requests = malloc(sizeof(unifyfs_coll_request_t) * bcast_tree.child_count);
+
+    /* allogate mercury handles for forwarding the request */
+    int i;
+    for (i = 0; i < bcast_tree.child_count; i++) {
+        /* get rank of this child */
+        int child = bcast_tree.child_ranks[i];
+        /* allocate handle */
+        ret = rpc_allocate_extbcast_handle(child, &requests[i]);
+    }
+
+    /* wait for bulk request to finish */
+    hret = margo_wait(bulk_request);
+
+    /* forward request down the tree */
+    for (i = 0; i < bcast_tree.child_count; i++) {
+        /* invoke filesize request rpc on child */
+        ret = rpc_invoke_extbcast_request(&in, &requests[i]);
+    }
+
+    /* get metadata extend tree */
+    struct extent_tree* extent_tree = unifyfs_inode_get_extent_tree(gfid);
+    if (NULL == extent_tree) {
+        /* map does not have an entry for this gfid,
+            * allocate a new extent tree */
+        extent_tree = calloc(1, sizeof(*extent_tree));
+        if (NULL == extent_tree) {
+            LOGERR("failed to allocate memory for file extent tree");
+            ret = (int)UNIFYFS_ERROR_NOMEM;
+        }
+
+        /* initialize the extent tree */
+        extent_tree_init(extent_tree);
+
+        /* insert emtpy tree into gfid-to-extent map */
+        unifyfs_inode_add_extent(gfid, extent_tree);
+    }
+
+    /* update local extend tree */
+    for (i = 0; i < in.num_extends; i++)
+    {
+        /* add extent to extent tree */
+        extent_tree_add(extent_tree, (unsigned long)extents[i].start, extents[i].end,
+            extents[i].svr_rank, extents[i].app_id, extents[i].cli_id, (unsigned long)extents[i].pos);
+    }
+
+    /* wait for the requests to finish */
+    for (i = 0; i < bcast_tree.child_count; i++) {
+        extbcast_request_out_t out;
+        /* TODO: get outputs */
+        hret = margo_wait(requests[i].request);
+
+        /* get the output of the rpc */
+        hret = margo_get_output(requests[i].handle, &out);
+
+        /* set return value
+         * TODO: check if we have an error and handle it */
+        ret = out.ret;
+    }
+
+    /* build our output values */
+    extbcast_request_out_t out;
+    out.ret = ret;
+
+    /* send output back to caller */
+    hret = margo_respond(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    /* free margo resources */
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+
+    free(requests);
+}
+DEFINE_MARGO_RPC_HANDLER(extbcast_request_rpc)
+
+/**
+ * @brief 
+ * 
+ * @return int UnifyFS return code
+ */
+int unifyfs_broadcast_extend_tree(int gfid)
+{
+    LOGDBG("%d: BUCKEYES unifyfs_broadcast_extend_tree\n", glb_pmi_rank);
+
+    /* assuming success */
+    int ret = UNIFYFS_SUCCESS;
+
+    int root = glb_pmi_rank; /* root of the broadcast tree */
+
+    /* get extend tree for gfid */
+    struct extent_tree* extent_tree;
+    extent_tree = unifyfs_inode_get_extent_tree(gfid);
+
+    /* get # of extends in tree */
+    hg_size_t num_extents = extent_tree_count(extent_tree);
+
+    /* create communication tree */
+    unifyfs_tree_t bcast_tree;
+    unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, glb_pmi_rank, UNIFYFS_BCAST_K_ARY, &bcast_tree);
+
+    /* create array of extends
+     * TODO: get this from memory pool */
+    struct extent_tree_node* extents = NULL;
+    extents = calloc(num_extents, sizeof(struct extent_tree_node));
+
+#if 0
+    hg_size_t *buf_sizes = malloc(num_extents * sizeof(hg_size_t));
+
+    // prepare extend array for bulk transfer
+    hg_size_t buf_size = sizeof(struct extent_tree_node);
+#endif
+    int i = 0;
+    struct extent_tree_node *node = NULL;
+    while ((node = extent_tree_iter(extent_tree, node))) {
+        LOGDBG("[%lu-%lu]\n", node->start, node->end);
+        extents[i] = *node;
+        //buf_sizes[i++] = buf_size;
+    }
+    hg_size_t buf_size = num_extents*sizeof(struct extent_tree_node);
+
+    /* get info for tree */
+    int parent       = bcast_tree.parent_rank;
+    int child_count  = bcast_tree.child_count;
+    int* child_ranks = bcast_tree.child_ranks;
+
+    /* create bulk data structure containing the extends
+     * NOTE: bulk data is always read only at the root of the broadcast tree */
+    hg_bulk_t extent_data;
+    void *datap = (void *) extents;
+    margo_bulk_create(unifyfsd_rpc_context->svr_mid, 1,
+                      &datap, &buf_size,
+                      HG_BULK_READ_ONLY, &extent_data);
+
+    // get tag for collective
+    // TODO: protect these structures from concurrent rpcs with locking
+    int tag = unifyfs_stack_pop(glb_tag_stack);
+    if (tag < 0) {
+        // ERROR!
+    }
+
+    /* fill in input struct */
+    extbcast_request_in_t in;
+    in.root = (int32_t)glb_pmi_rank;
+    in.tag  = (int32_t)tag;
+    in.gfid = gfid;
+    in.num_extends = num_extents;
+    in.exttree = extent_data;
+
+    /*  */
+    extbcast_request_forward(&bcast_tree, &in);
+
+    /* free bulk data handle */
+    margo_bulk_free(extent_data);
+
+    return ret;
+}
 
