@@ -1370,12 +1370,6 @@ static void extbcast_request_rpc(hg_handle_t handle)
     hg_addr_t client_address = info->addr;
 
     hg_size_t buf_size = num_extents*sizeof(struct extent_tree_node);
-#if 0
-    hg_size_t *buf_sizes = malloc(num_extents * sizeof(hg_size_t));
-    for (int i=0; i < num_extents; i++) {
-        buf_sizes[i] = sizeof(struct extent_tree_node);
-    }
-#endif
 
     /* expose local bulk buffer */
     hg_bulk_t extent_data;
@@ -1391,9 +1385,14 @@ static void extbcast_request_rpc(hg_handle_t handle)
     margo_bulk_itransfer(mid, HG_BULK_PULL, client_address,
                          in.exttree, 0,
                          extent_data, 0,
-                         //num_extents * sizeof(struct extent_tree_node),
                          buf_size,
                          &bulk_request);
+#if 0
+    margo_bulk_transfer(mid, HG_BULK_PULL, client_address,
+                        in.exttree, 0,
+                        extent_data, 0,
+                        buf_size);
+#endif
 
     /* create communication tree */
     unifyfs_tree_t bcast_tree;
@@ -1417,6 +1416,13 @@ static void extbcast_request_rpc(hg_handle_t handle)
 
     /* wait for bulk request to finish */
     hret = margo_wait(bulk_request);
+
+    LOGDBG("received %d extents (%lu bytes):", num_extents, buf_size);
+    for (int i=0; i < num_extents; i++) {
+        struct extent_tree_node *n = &extents[i];
+        LOGDBG("[%d:%lu-%lu]", i, n->start, n->end);
+    }
+
 
     /* forward request down the tree */
     for (i = 0; i < bcast_tree.child_count; i++) {
@@ -1510,20 +1516,15 @@ int unifyfs_broadcast_extend_tree(int gfid)
     struct extent_tree_node* extents = NULL;
     extents = calloc(num_extents, sizeof(struct extent_tree_node));
 
-#if 0
-    hg_size_t *buf_sizes = malloc(num_extents * sizeof(hg_size_t));
-
-    // prepare extend array for bulk transfer
-    hg_size_t buf_size = sizeof(struct extent_tree_node);
-#endif
     int i = 0;
     struct extent_tree_node *node = NULL;
-    while ((node = extent_tree_iter(extent_tree, node))) {
-        LOGDBG("[%lu-%lu]\n", node->start, node->end);
-        extents[i] = *node;
-        //buf_sizes[i++] = buf_size;
-    }
     hg_size_t buf_size = num_extents*sizeof(struct extent_tree_node);
+
+    LOGDBG("sending %lu extents (%lu bytes): ", num_extents, buf_size);
+    while ((node = extent_tree_iter(extent_tree, node))) {
+        LOGDBG("[%d:%lu-%lu]", i, node->start, node->end);
+        extents[i++] = *node;
+    }
 
     /* get info for tree */
     int parent       = bcast_tree.parent_rank;
