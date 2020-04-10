@@ -7,6 +7,16 @@
 #include "unifyfs_meta.h"
 #include "unifyfs_global.h"
 
+/*
+ * TODO: maybe the remote extent buffer could be elsewhere, e.g., broadcasting
+ * context?
+ */
+struct remote_extent_buffer {
+    struct remote_extent_buffer *next;
+    int num_extents;
+    struct extent_tree_node nodes[0];
+};
+
 /**
  * @brief file and directory inode structure. this holds:
  */
@@ -18,6 +28,9 @@ struct unifyfs_inode {
     unifyfs_file_attr_t attr;     /** file attributes */
     pthread_rwlock_t rwlock;      /** rwlock for accessing this structure */
     struct extent_tree* extents;  /** extent tree for data segments */
+
+    int n_extbuf;
+    struct remote_extent_buffer *extbuf;
 };
 
 /**
@@ -28,6 +41,7 @@ struct unifyfs_inode {
  * @return inode structure on success, NULL otherwise.
  */
 struct unifyfs_inode* unifyfs_inode_get(int gfid);
+
 
 /**
  * @brief read lock the inode for ro access.
@@ -62,6 +76,7 @@ static inline void unifyfs_inode_unlock(struct unifyfs_inode* ino)
 {
     pthread_rwlock_unlock(&ino->rwlock);
 }
+
 
 /**
  * @brief create a new inode with given parameters. The newly created inode
@@ -167,6 +182,9 @@ int unifyfs_inode_add_extent(int gfid, struct extent_tree* extents);
  * @return 0 on success, errno otherwise
  */
 int unifyfs_inode_get_extent_size(int gfid, size_t* offset);
+
+int unifyfs_inode_buffer_remote_extents(int gfid, int n,
+                                        struct extent_tree_node *nodes);
 
 #endif /* __UNIFYFS_INODE_H */
 

@@ -132,4 +132,24 @@ void extent_tree_wrlock(struct extent_tree* extent_tree);
  */
 void extent_tree_unlock(struct extent_tree* extent_tree);
 
+/*
+ * for debugging
+ */
+#include "unifyfs_log.h"
+
+static inline void extent_tree_dump(struct extent_tree *extent_tree)
+{
+    if (!extent_tree)
+        return;
+
+    extent_tree_rdlock(extent_tree);
+ 
+    struct extent_tree_node *node = NULL;
+    while ((node = extent_tree_iter(extent_tree, node))) {
+       LOGDBG("[%lu-%lu]", node->start, node->end);
+    }
+ 
+    extent_tree_unlock(extent_tree);
+}
+
 #endif /* __EXTENT_TREE_H__ */
