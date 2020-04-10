@@ -92,6 +92,6 @@ void unlink_request_forward(unifyfs_coll_state_t* st);
  *
  * @return int UnifyFS return code
  */
-int unifyfs_broadcast_extend_tree(int gfid);
+int unifyfs_broadcast_extent_tree(int gfid);
 
 #endif /* UNIFYFS_TREE_H */

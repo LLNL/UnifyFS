@@ -1337,7 +1337,7 @@ static int extbcast_request_forward(const unifyfs_tree_t* broadcast_tree, extbca
  * from a given server */
 static void extbcast_request_rpc(hg_handle_t handle)
 {
-    printf("%d: BUCKEYES request_rpc\n", glb_pmi_rank);
+    printf("%d: BUCKEYES request_rpc (extbcast)\n", glb_pmi_rank);
     fflush(stdout);
 
     hg_return_t hret;
@@ -1390,7 +1390,8 @@ static void extbcast_request_rpc(hg_handle_t handle)
 
     /* create communication tree */
     unifyfs_tree_t bcast_tree;
-    unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, root, UNIFYFS_BCAST_K_ARY, &bcast_tree);
+    unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, root,
+                      UNIFYFS_BCAST_K_ARY, &bcast_tree);
 
     /* update input structure to point to local bulk handle */
     in.exttree = extent_data;
@@ -1411,12 +1412,8 @@ static void extbcast_request_rpc(hg_handle_t handle)
     /* wait for bulk request to finish */
     hret = margo_wait(bulk_request);
 
-    LOGDBG("received %d extents (%lu bytes):", num_extents, buf_size);
-    for (int i=0; i < num_extents; i++) {
-        struct extent_tree_node *n = &extents[i];
-        LOGDBG("[%d:%lu-%lu]", i, n->start, n->end);
-    }
-
+    LOGDBG("received %d extents (%lu bytes) from %d",
+           num_extents, buf_size, root);
 
     /* forward request down the tree */
     for (i = 0; i < bcast_tree.child_count; i++) {
@@ -1424,52 +1421,9 @@ static void extbcast_request_rpc(hg_handle_t handle)
         ret = rpc_invoke_extbcast_request(&in, &requests[i]);
     }
 
-#if 0
-    /* get metadata extend tree */
-    struct extent_tree* extent_tree = unifyfs_inode_get_extent_tree(gfid);
-    if (NULL == extent_tree) {
-        /* map does not have an entry for this gfid,
-            * allocate a new extent tree */
-        extent_tree = calloc(1, sizeof(*extent_tree));
-        if (NULL == extent_tree) {
-            LOGERR("failed to allocate memory for file extent tree");
-            ret = (int)UNIFYFS_ERROR_NOMEM;
-        }
-
-        /* initialize the extent tree */
-        extent_tree_init(extent_tree);
-
-        /* insert emtpy tree into gfid-to-extent map */
-        unifyfs_inode_add_extent(gfid, extent_tree);
-    }
-
-    /* update local extend tree */
-    for (i = 0; i < num_extents; i++) {
-        /* add extent to extent tree */
-        struct extent_tree_node *n = &extents[i];
-        unsigned long start = n->start;
-        unsigned long end = n->end;
-        int svr_rank = n->svr_rank;
-        int app_id = n->app_id;
-        int cli_id = n->cli_id;
-        unsigned long pos = n->pos;
-
-        int ret = extent_tree_add(extent_tree, start, end,
-                                  svr_rank, app_id, cli_id, pos);
-        if (ret) {
-            LOGERR("extent_tree_add failed (ret=%d)\n", ret);
-        }
-#if 0
-        extent_tree_add(extent_tree, (unsigned long)extents[i].start,
-                extents[i].end, extents[i].svr_rank, extents[i].app_id,
-                extents[i].cli_id, (unsigned long)extents[i].pos);
-#endif
-    }
-#endif
-
-    ret = unifyfs_inode_buffer_remote_extents(gfid, num_extents, extents);
+    ret = unifyfs_inode_add_shadow_extents(gfid, num_extents, extents);
     if (ret) {
-        LOGERR("adding remote extent buffer failed (ret=%d)\n", ret);
+        LOGERR("filling shadow extent failed (ret=%d)\n", ret);
         // what do we do now?
     }
 
@@ -1508,7 +1462,7 @@ DEFINE_MARGO_RPC_HANDLER(extbcast_request_rpc)
  * 
  * @return int UnifyFS return code
  */
-int unifyfs_broadcast_extend_tree(int gfid)
+int unifyfs_broadcast_extent_tree(int gfid)
 {
     LOGDBG("%d: BUCKEYES unifyfs_broadcast_extend_tree\n", glb_pmi_rank);
 
@@ -1526,7 +1480,8 @@ int unifyfs_broadcast_extend_tree(int gfid)
 
     /* create communication tree */
     unifyfs_tree_t bcast_tree;
-    unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, glb_pmi_rank, UNIFYFS_BCAST_K_ARY, &bcast_tree);
+    unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, glb_pmi_rank,
+                      UNIFYFS_BCAST_K_ARY, &bcast_tree);
 
     /* create array of extends
      * TODO: get this from memory pool */
@@ -1537,16 +1492,17 @@ int unifyfs_broadcast_extend_tree(int gfid)
     struct extent_tree_node *node = NULL;
     hg_size_t buf_size = num_extents*sizeof(struct extent_tree_node);
 
-    LOGDBG("sending %lu extents (%lu bytes): ", num_extents, buf_size);
+    LOGDBG("broadcasting %lu extents (%lu bytes): ", num_extents, buf_size);
     while ((node = extent_tree_iter(extent_tree, node))) {
-        LOGDBG("[%d:%lu-%lu]", i, node->start, node->end);
+        //LOGDBG("[%d:%lu-%lu]", i, node->start, node->end);
         extents[i++] = *node;
     }
 
-    /* get info for tree */
-    int parent       = bcast_tree.parent_rank;
-    int child_count  = bcast_tree.child_count;
-    int* child_ranks = bcast_tree.child_ranks;
+    ret = unifyfs_inode_add_shadow_extents(gfid, num_extents, extents);
+    if (ret) {
+        LOGERR("filling shadow extent failed (ret=%d)\n", ret);
+        // what do we do now?
+    }
 
     /* create bulk data structure containing the extends
      * NOTE: bulk data is always read only at the root of the broadcast tree */

@@ -7,16 +7,6 @@
 #include "unifyfs_meta.h"
 #include "unifyfs_global.h"
 
-/*
- * TODO: maybe the remote extent buffer could be elsewhere, e.g., broadcasting
- * context?
- */
-struct remote_extent_buffer {
-    struct remote_extent_buffer *next;
-    int num_extents;
-    struct extent_tree_node nodes[0];
-};
-
 /**
  * @brief file and directory inode structure. this holds:
  */
@@ -29,8 +19,7 @@ struct unifyfs_inode {
     pthread_rwlock_t rwlock;      /** rwlock for accessing this structure */
     struct extent_tree* extents;  /** extent tree for data segments */
 
-    int n_extbuf;
-    struct remote_extent_buffer *extbuf;
+    struct extent_tree* shadow;
 };
 
 /**
@@ -183,8 +172,10 @@ int unifyfs_inode_add_extent(int gfid, struct extent_tree* extents);
  */
 int unifyfs_inode_get_extent_size(int gfid, size_t* offset);
 
-int unifyfs_inode_buffer_remote_extents(int gfid, int n,
-                                        struct extent_tree_node *nodes);
+int unifyfs_inode_add_shadow_extents(int gfid, int n,
+                                     struct extent_tree_node *nodes);
+
+int unifyfs_inode_merge_shadow(int gfid);
 
 #endif /* __UNIFYFS_INODE_H */
 

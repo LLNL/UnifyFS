@@ -2030,42 +2030,6 @@ int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl)
     return UNIFYFS_SUCCESS;
 }
 
-/**
- * @brief
- *
- * @return int
- */
-int unifyfs_distribute_extend_tree(int gfid)
-{
-    int ret = UNIFYFS_SUCCESS;
-
-    // get extend tree for gfid
-    struct extent_tree* extent_tree = unifyfs_inode_get_extent_tree(gfid);
-    if (NULL == extent_tree) {
-        return UNIFYFS_ERROR_NFILE;
-    }
-
-    // get # of extends in tree
-    unsigned long num_extends = extent_tree_count(extent_tree);
-
-    // get tree nodes
-    extent_tree_rdlock(extent_tree);
-
-    struct extent_tree_node *node = NULL;
-    struct extent_tree_node **nodes = malloc(num_extends *
-                                           sizeof(struct extent_tree_node *));
-    int i = 0;
-    while ((node = extent_tree_iter(extent_tree, node))) {
-        printf("[%lu-%lu]", node->start, node->end);
-        nodes[i++] = node;
-    }
-
-    /* start the bcast of the extend tree */
-    ret = unifyfs_broadcast_extend_tree(gfid);
-
-    return ret;
-}
-
 /*
  * store all writes from app-client's index in the global metadata
  *
@@ -2201,7 +2165,8 @@ int rm_cmd_sync(int app_id, int client_id)
     }
 
     /* distribute the extend tree */
-    ret = unifyfs_distribute_extend_tree(gfid);
+    //ret = unifyfs_distribute_extend_tree(gfid);
+    ret = unifyfs_broadcast_extent_tree(gfid);
     if (UNIFYFS_SUCCESS != ret) {
         LOGERR("Error distributing extend tree");
         goto rm_cmd_fsync_exit;
