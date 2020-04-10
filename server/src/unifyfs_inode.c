@@ -249,43 +249,6 @@ out_unlock_tree:
     return ret;
 }
 
-static int merge_remote_extents(struct unifyfs_inode *ino)
-{
-    int ret = 0;
-    int i = 0;
-    struct extent_tree *tree = NULL;
-    struct remote_extent_buffer *buf = NULL;
-
-    if (ino->extents) {
-        tree = ino->extents;
-    } else {
-        tree = calloc(1, sizeof(*tree));
-        if (!tree) {
-            return ENOMEM;
-        }
-
-        extent_tree_init(tree);
-        ino->extents = tree;
-    }
-
-    for (buf = ino->extbuf; buf; buf = buf->next) {
-        for (i = 0; i < buf->num_extents; i++) {
-            struct extent_tree_node *n = &buf->nodes[i];
-
-            ret = extent_tree_add(tree, n->start, n->end,
-                                  n->svr_rank, n->app_id, n->cli_id, n->pos);
-            if (ret) {
-                LOGERR("extent_tree_add failed (ret=%d)\n", ret);
-                goto out;
-            }
-        }
-    }
-
-out:
-    return ret;
-}
-
-
 int unifyfs_inode_get_extent_size(int gfid, size_t* offset)
 {
     int ret = 0;
@@ -300,6 +263,13 @@ int unifyfs_inode_get_extent_size(int gfid, size_t* offset)
             goto out_unlock_tree;
         }
 
+        if (ino->shadow && (extent_tree_count(ino->shadow) > 0)) {
+            ret = unifyfs_inode_merge_shadow(gfid);
+            if (ret) {
+                LOGERR("merging extent free failed (ret=%d)", ret);
+            }
+        }
+
         unifyfs_inode_rdlock(ino);
         {
             if (ino->extents)
@@ -312,86 +282,102 @@ int unifyfs_inode_get_extent_size(int gfid, size_t* offset)
 out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);
 
+    LOGDBG("local file size (gfid=%d): %lu", gfid, filesize);
+
     return ret;
 }
 
-
-static struct remote_extent_buffer *
-remote_extent_buffer_create(int n, struct extent_tree_node *nodes)
-{
-    int i = 0;
-    struct remote_extent_buffer *buf = NULL;
-
-    buf = malloc(sizeof(*buf) + sizeof(struct extent_tree_node)*n);
-    if (buf) {
-        buf->next = NULL;
-        buf->num_extents = n;
-
-        for (i = 0; i < n; i++) {
-            buf->nodes[i] = nodes[i];
-        }
-    }
-
-    return buf;
-}
-
-static int inode_add_remote_extent_buffer(struct unifyfs_inode *ino,
-                                          struct remote_extent_buffer *buf)
+int unifyfs_inode_create_shadow_extent_tree(int gfid)
 {
     int ret = 0;
-
-    if (!ino || !buf)
-        return EINVAL;
-
-    unifyfs_inode_wrlock(ino);
-    {
-        struct remote_extent_buffer *current = ino->extbuf;
-
-        if (!current) {
-            ino->extbuf = buf;
-        } else {
-            while (current->next) {
-                current = current->next;
-            }
-            current->next = buf;
-        }
-
-        ino->n_extbuf += 1;
-
-        LOGDBG("ino (gfid=%d) adding remote extents (total remote bufs=%d)\n",
-                ino->gfid, ino->n_extbuf);
-
-#if 0
-        /* FIXME: this causes deadlock */
-        /* we received all the extents, merge them */
-        if (ino->n_extbuf > 0) {
-            ret = merge_remote_extents(ino);
-            if (ret) {
-                // TODO: do something!
-            }
-        }
-#endif
-    }
-    unifyfs_inode_unlock(ino);
-
-    return ret;
-}
-
-int unifyfs_inode_buffer_remote_extents(int gfid, int n,
-                                        struct extent_tree_node *nodes)
-{
     struct unifyfs_inode *ino = unifyfs_inode_get(gfid);
-    struct remote_extent_buffer *buf = NULL;
+    struct extent_tree *shadow = NULL;
 
     if (!ino) {
         return EINVAL;
     }
 
-    buf = remote_extent_buffer_create(n, nodes);
-    if (!buf) {
-        return ENOMEM;
+    /* if the shadow tree already exists, just clear it */
+    if (ino->shadow) {
+        extent_tree_wrlock(shadow);
+        {
+            extent_tree_clear(shadow);
+        }
+        extent_tree_unlock(shadow);
+    } else {
+        shadow = calloc(1, sizeof(*shadow));
+        if (!shadow) {
+            return ENOMEM;
+        }
+
+        extent_tree_init(shadow);
+
+        unifyfs_inode_wrlock(ino);
+        {
+            ino->shadow = shadow;
+        }
+        unifyfs_inode_unlock(ino);
     }
 
-    return inode_add_remote_extent_buffer(ino, buf);
+    return ret;
+}
+
+int unifyfs_inode_add_shadow_extents(int gfid, int n,
+                                     struct extent_tree_node *nodes)
+{
+    int ret = 0;
+    int i = 0;
+    struct unifyfs_inode *ino = unifyfs_inode_get(gfid);
+
+    if (!ino) {
+        return EINVAL;
+    }
+
+    if (!ino->shadow) {
+        ret = unifyfs_inode_create_shadow_extent_tree(gfid);
+        if (ret) {
+            LOGERR("failed to create a shadow tree (gfid=%d)", gfid);
+            return ret;
+        }
+    }
+
+    struct extent_tree *shadow = ino->shadow;
+
+    LOGDBG("adding %d extents to file (gfid=%d)\n", n, gfid);
+
+    for (i = 0; i < n; i++) {
+        struct extent_tree_node *n = &nodes[i];
+        ret = extent_tree_add(shadow, n->start, n->end,
+                              n->svr_rank, n->app_id, n->cli_id, n->pos);
+        if (ret) {
+            LOGERR("failed to add shadow extents (ret=%d)\n", ret);
+            break;
+        }
+    }
+
+    return ret;
+}
+
+int unifyfs_inode_merge_shadow(int gfid)
+{
+    int ret = 0;
+    struct unifyfs_inode *ino = unifyfs_inode_get(gfid);
+
+    if (!ino || !ino->shadow) {
+        return EINVAL;
+    }
+
+    unifyfs_inode_wrlock(ino);
+    {
+        struct extent_tree *current = ino->extents;
+
+        ino->extents = ino->shadow;
+        ino->shadow = current;
+
+        extent_tree_clear(ino->shadow);
+    }
+    unifyfs_inode_unlock(ino);
+
+    return ret;
 }
 
