@@ -1387,12 +1387,6 @@ static void extbcast_request_rpc(hg_handle_t handle)
                          extent_data, 0,
                          buf_size,
                          &bulk_request);
-#if 0
-    margo_bulk_transfer(mid, HG_BULK_PULL, client_address,
-                        in.exttree, 0,
-                        extent_data, 0,
-                        buf_size);
-#endif
 
     /* create communication tree */
     unifyfs_tree_t bcast_tree;
@@ -1430,6 +1424,7 @@ static void extbcast_request_rpc(hg_handle_t handle)
         ret = rpc_invoke_extbcast_request(&in, &requests[i]);
     }
 
+#if 0
     /* get metadata extend tree */
     struct extent_tree* extent_tree = unifyfs_inode_get_extent_tree(gfid);
     if (NULL == extent_tree) {
@@ -1449,11 +1444,33 @@ static void extbcast_request_rpc(hg_handle_t handle)
     }
 
     /* update local extend tree */
-    for (i = 0; i < in.num_extends; i++)
-    {
+    for (i = 0; i < num_extents; i++) {
         /* add extent to extent tree */
-        extent_tree_add(extent_tree, (unsigned long)extents[i].start, extents[i].end,
-            extents[i].svr_rank, extents[i].app_id, extents[i].cli_id, (unsigned long)extents[i].pos);
+        struct extent_tree_node *n = &extents[i];
+        unsigned long start = n->start;
+        unsigned long end = n->end;
+        int svr_rank = n->svr_rank;
+        int app_id = n->app_id;
+        int cli_id = n->cli_id;
+        unsigned long pos = n->pos;
+
+        int ret = extent_tree_add(extent_tree, start, end,
+                                  svr_rank, app_id, cli_id, pos);
+        if (ret) {
+            LOGERR("extent_tree_add failed (ret=%d)\n", ret);
+        }
+#if 0
+        extent_tree_add(extent_tree, (unsigned long)extents[i].start,
+                extents[i].end, extents[i].svr_rank, extents[i].app_id,
+                extents[i].cli_id, (unsigned long)extents[i].pos);
+#endif
+    }
+#endif
+
+    ret = unifyfs_inode_buffer_remote_extents(gfid, num_extents, extents);
+    if (ret) {
+        LOGERR("adding remote extent buffer failed (ret=%d)\n", ret);
+        // what do we do now?
     }
 
     /* wait for the requests to finish */
