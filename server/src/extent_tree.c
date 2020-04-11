@@ -35,8 +35,11 @@
 #include <pthread.h>
 #include "extent_tree.h"
 #include "tree.h"
+#include "unifyfs_metadata.h"
 
+#undef MIN
 #define MIN(a, b) (a < b ? a : b)
+#undef MAX
 #define MAX(a, b) (a > b ? a : b)
 
 int compare_func(
@@ -556,3 +559,63 @@ unsigned long extent_tree_get_size(struct extent_tree* extent_tree)
     extent_tree_unlock(extent_tree);
     return max;
 }
+
+/* given an extent tree and starting and ending logical offsets,
+ * fill in key/value entries that overlap that range, returns at
+ * most max entries starting from lowest starting offset,
+ * sets outnum with actual number of entries returned */
+int extent_tree_span(
+    struct extent_tree* extent_tree, /* extent tree to search */
+    int gfid,                        /* global file id we're looking in */
+    unsigned long start,             /* starting logical offset */
+    unsigned long end,               /* ending logical offset */
+    int max,                         /* maximum number of key/vals to return */
+    void* _keys,             /* array of length max for output keys */
+    void* _vals,             /* array of length max for output values */
+    int* outnum)                     /* number of entries returned */
+{
+    unifyfs_key_t* keys = (unifyfs_key_t*) _keys;
+    unifyfs_val_t* vals = (unifyfs_val_t*) _vals;
+
+    /* initialize output parameters */
+    *outnum = 0;
+
+    /* lock the tree for reading */
+    extent_tree_rdlock(extent_tree);
+
+    int count = 0;
+    struct extent_tree_node* next = extent_tree_find(extent_tree, start, end);
+    while (next != NULL       &&
+           next->start <= end &&
+           count < max) {
+        /* got an entry that overlaps with given span */
+
+        /* fill in key */
+        unifyfs_key_t* key = &keys[count];
+        key->gfid   = gfid;
+        key->offset = next->start;
+
+        /* fill in value */
+        unifyfs_val_t* val = &vals[count];
+        val->addr           = next->pos;
+        val->len            = next->end - next->start + 1;
+        val->delegator_rank = next->svr_rank;
+        val->app_id         = next->app_id;
+        val->rank           = next->cli_id;
+
+        /* increment the number of key/values we found */
+        count++;
+
+        /* get the next element in the tree */
+        next = extent_tree_iter(extent_tree, next);
+    }
+
+    /* return to user the number of key/values we set */
+    *outnum = count;
+
+    /* done reading the tree */
+    extent_tree_unlock(extent_tree);
+
+    return 0;
+}
+

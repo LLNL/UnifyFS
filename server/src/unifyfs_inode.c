@@ -224,6 +224,7 @@ out_unlock_tree:
     return extent_tree;
 }
 
+/* deplicated */
 int unifyfs_inode_add_extent(int gfid, struct extent_tree* extents)
 {
     int ret = 0;
@@ -241,6 +242,71 @@ int unifyfs_inode_add_extent(int gfid, struct extent_tree* extents)
         {
             ino->extents = extents;
         }
+        unifyfs_inode_unlock(ino);
+    }
+out_unlock_tree:
+    unifyfs_inode_tree_unlock(global_inode_tree);
+
+    return ret;
+}
+
+/**
+ * NOTE: inode rwlock should be hold by caller.
+ */
+static struct extent_tree *inode_get_extent_tree(struct unifyfs_inode *ino)
+{
+    /* create one if it doesn't exist yet */
+    if (!ino->extents) {
+        struct extent_tree *tree = calloc(1, sizeof(*tree));
+
+        if (tree) {
+            extent_tree_init(tree);
+            ino->extents = tree;
+        }
+    }
+
+    return ino->extents;
+}
+
+int unifyfs_inode_add_local_extents(int gfid, int num_extents,
+                                    struct extent_tree_node* nodes)
+{
+    int ret = 0;
+    struct unifyfs_inode *ino = NULL;
+
+    unifyfs_inode_tree_rdlock(global_inode_tree);
+    {
+        ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
+        if (!ino) {
+            ret = ENOENT;
+            goto out_unlock_tree;
+        }
+
+        unifyfs_inode_wrlock(ino);
+        {
+            int i = 0;
+            struct extent_tree *tree = inode_get_extent_tree(ino);
+
+            if (!tree) { /* failed to create one */
+                ret = ENOMEM;
+                goto out_unlock_inode;
+            }
+
+            LOGDBG("adding %d extents to inode (gfid=%d)", num_extents, gfid);
+
+            /* TODO: technically adding extents itself can go with rdlock */
+            for (i = 0; i < num_extents; i++) {
+                struct extent_tree_node *current = &nodes[i];
+                ret = extent_tree_add(tree, current->start, current->end,
+                                      current->svr_rank, current->app_id,
+                                      current->cli_id, current->pos);
+                if (ret) {
+                    LOGERR("failed to add extents");
+                    goto out_unlock_inode;
+                }
+            }
+        }
+out_unlock_inode:
         unifyfs_inode_unlock(ino);
     }
 out_unlock_tree:
@@ -283,6 +349,53 @@ out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);
 
     LOGDBG("local file size (gfid=%d): %lu", gfid, filesize);
+
+    return ret;
+}
+
+int unifyfs_inode_get_local_extents(int gfid, size_t *n,
+                                    struct extent_tree_node **nodes)
+{
+    int ret = 0;
+    struct unifyfs_inode *ino = NULL;
+
+    if (!n || !nodes) {
+        return EINVAL;
+    }
+
+    unifyfs_inode_tree_rdlock(global_inode_tree);
+    {
+        ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
+        if (!ino) {
+            ret = ENOENT;
+            goto out_unlock_tree;
+        }
+
+        unifyfs_inode_rdlock(ino);
+        {
+            int i = 0;
+            struct extent_tree *tree = ino->extents;
+            size_t n_nodes = tree->count;
+            struct extent_tree_node *_nodes = calloc(n_nodes, sizeof(*_nodes));
+            struct extent_tree_node *current = NULL;
+
+            if (!_nodes) {
+                ret = ENOMEM;
+                goto out_unlock_inode;
+            }
+
+            while (NULL != (current = extent_tree_iter(tree, current))) {
+                _nodes[i] = *current;
+            }
+
+            *n = n_nodes;
+            *nodes = _nodes;
+        }
+out_unlock_inode:
+        unifyfs_inode_unlock(ino);
+    }
+out_unlock_tree:
+    unifyfs_inode_tree_unlock(global_inode_tree);
 
     return ret;
 }
@@ -358,7 +471,7 @@ int unifyfs_inode_add_shadow_extents(int gfid, int n,
     return ret;
 }
 
-int unifyfs_inode_merge_shadow(int gfid)
+static int unifyfs_inode_merge_shadow(int gfid)
 {
     int ret = 0;
     struct unifyfs_inode *ino = unifyfs_inode_get(gfid);
@@ -377,6 +490,43 @@ int unifyfs_inode_merge_shadow(int gfid)
         extent_tree_clear(ino->shadow);
     }
     unifyfs_inode_unlock(ino);
+
+    return ret;
+}
+
+int unifyfs_inode_span_extents(
+    int gfid,                        /* global file id we're looking in */
+    unsigned long start,             /* starting logical offset */
+    unsigned long end,               /* ending logical offset */
+    int max,                         /* maximum number of key/vals to return */
+    void* keys,             /* array of length max for output keys */
+    void* vals,             /* array of length max for output values */
+    int* outnum)                     /* number of entries returned */
+{
+    int ret = 0;
+    struct unifyfs_inode *ino = NULL;
+
+    unifyfs_inode_tree_rdlock(global_inode_tree);
+    {
+        ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
+        if (!ino) {
+            ret = ENOENT;
+            goto out_unlock_tree;
+        }
+
+        unifyfs_inode_rdlock(ino);
+        {
+            ret = extent_tree_span(ino->extents, gfid, start, end,
+                                   max, keys, vals, outnum);
+            if (ret) {
+                LOGERR("extent_tree_span failed (gfid=%d, ret=%d)",
+                        gfid, ret);
+            }
+        }
+        unifyfs_inode_unlock(ino);
+    }
+out_unlock_tree:
+    unifyfs_inode_tree_unlock(global_inode_tree);
 
     return ret;
 }

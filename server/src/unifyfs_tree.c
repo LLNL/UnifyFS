@@ -1468,41 +1468,31 @@ int unifyfs_broadcast_extent_tree(int gfid)
 
     /* assuming success */
     int ret = UNIFYFS_SUCCESS;
-
     int root = glb_pmi_rank; /* root of the broadcast tree */
-
-    /* get extend tree for gfid */
-    struct extent_tree* extent_tree;
-    extent_tree = unifyfs_inode_get_extent_tree(gfid);
-
-    /* get # of extends in tree */
-    hg_size_t num_extents = extent_tree_count(extent_tree);
 
     /* create communication tree */
     unifyfs_tree_t bcast_tree;
     unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, glb_pmi_rank,
                       UNIFYFS_BCAST_K_ARY, &bcast_tree);
 
-    /* create array of extends
-     * TODO: get this from memory pool */
-    struct extent_tree_node* extents = NULL;
-    extents = calloc(num_extents, sizeof(struct extent_tree_node));
+    hg_size_t num_extents = 0;
+    struct extent_tree_node *extents = NULL;
 
-    int i = 0;
-    struct extent_tree_node *node = NULL;
-    hg_size_t buf_size = num_extents*sizeof(struct extent_tree_node);
-
-    LOGDBG("broadcasting %lu extents (%lu bytes): ", num_extents, buf_size);
-    while ((node = extent_tree_iter(extent_tree, node))) {
-        //LOGDBG("[%d:%lu-%lu]", i, node->start, node->end);
-        extents[i++] = *node;
+    ret = unifyfs_inode_get_local_extents(gfid, &num_extents, &extents);
+    if (ret) {
+        LOGERR("reading all extents failed (gfid=%d, ret=%d)\n", gfid, ret);
+        // abort function?
     }
+
+    hg_size_t buf_size = num_extents * sizeof(*extents);
 
     ret = unifyfs_inode_add_shadow_extents(gfid, num_extents, extents);
     if (ret) {
-        LOGERR("filling shadow extent failed (ret=%d)\n", ret);
+        LOGERR("filling shadow extent failed (gfid=%d, ret=%d)\n", gfid, ret);
         // what do we do now?
     }
+
+    LOGDBG("broadcasting %lu extents (%lu bytes): ", num_extents, buf_size);
 
     /* create bulk data structure containing the extends
      * NOTE: bulk data is always read only at the root of the broadcast tree */
@@ -1532,6 +1522,7 @@ int unifyfs_broadcast_extent_tree(int gfid)
 
     /* free bulk data handle */
     margo_bulk_free(extent_data);
+    free(extents);
 
     return ret;
 }
