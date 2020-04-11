@@ -132,6 +132,20 @@ void extent_tree_wrlock(struct extent_tree* extent_tree);
  */
 void extent_tree_unlock(struct extent_tree* extent_tree);
 
+/* given an extent tree and starting and ending logical offsets,
+ * fill in key/value entries that overlap that range, returns at
+ * most max entries starting from lowest starting offset,
+ * sets outnum with actual number of entries returned */
+int extent_tree_span(
+    struct extent_tree* extent_tree, /* extent tree to search */
+    int gfid,                        /* global file id we're looking in */
+    unsigned long start,             /* starting logical offset */
+    unsigned long end,               /* ending logical offset */
+    int max,                         /* maximum number of key/vals to return */
+    void* keys,             /* array of length max for output keys */
+    void* vals,             /* array of length max for output values */
+    int* outnum);                    /* number of entries returned */
+
 /*
  * for debugging
  */
