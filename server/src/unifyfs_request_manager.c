@@ -517,62 +517,6 @@ static int client_wait(shm_data_header* hdr)
     return rc;
 }
 
-/* given an extent tree and starting and ending logical offsets,
- * fill in key/value entries that overlap that range, returns at
- * most max entries starting from lowest starting offset,
- * sets outnum with actual number of entries returned */
-static int extent_tree_span(
-    struct extent_tree* extent_tree, /* extent tree to search */
-    int gfid,                        /* global file id we're looking in */
-    unsigned long start,             /* starting logical offset */
-    unsigned long end,               /* ending logical offset */
-    int max,                         /* maximum number of key/vals to return */
-    unifyfs_key_t* keys,             /* array of length max for output keys */
-    unifyfs_val_t* vals,             /* array of length max for output values */
-    int* outnum)                     /* number of entries returned */
-{
-    /* initialize output parameters */
-    *outnum = 0;
-
-    /* lock the tree for reading */
-    extent_tree_rdlock(extent_tree);
-
-    int count = 0;
-    struct extent_tree_node* next = extent_tree_find(extent_tree, start, end);
-    while (next != NULL       &&
-           next->start <= end &&
-           count < max) {
-        /* got an entry that overlaps with given span */
-
-        /* fill in key */
-        unifyfs_key_t* key = &keys[count];
-        key->gfid   = gfid;
-        key->offset = next->start;
-
-        /* fill in value */
-        unifyfs_val_t* val = &vals[count];
-        val->addr           = next->pos;
-        val->len            = next->end - next->start + 1;
-        val->delegator_rank = next->svr_rank;
-        val->app_id         = next->app_id;
-        val->rank           = next->cli_id;
-
-        /* increment the number of key/values we found */
-        count++;
-
-        /* get the next element in the tree */
-        next = extent_tree_iter(extent_tree, next);
-    }
-
-    /* return to user the number of key/values we set */
-    *outnum = count;
-
-    /* done reading the tree */
-    extent_tree_unlock(extent_tree);
-
-    return 0;
-}
-
 /************************
  * These functions are called by the rpc handler to assign work
  * to the request manager thread
@@ -1402,11 +1346,11 @@ int get_local_keyvals(
 
         /* look up any entries we can find in our local extent map */
         int num_local = 0;
-        struct extent_tree* extent_tree;
-        extent_tree = unifyfs_inode_get_extent_tree(gfid);
-        if (extent_tree != NULL) {
-            extent_tree_span(extent_tree, gfid, start, end,
+        int ret = unifyfs_inode_span_extents(gfid, start, end,
                 UNIFYFS_MAX_SPLIT_CNT, tmpkeys, tmpvals, &num_local);
+        if (ret) {
+            LOGERR("failed to span extents (gfid=%d)", gfid);
+            // now what?
         }
 
         /* iterate over local keys, create new keys to pass to server
@@ -2116,6 +2060,14 @@ int rm_cmd_sync(int app_id, int client_id)
     }
 #endif
 
+    struct extent_tree_node *local_extents = calloc(extent_num_entries,
+                                                     sizeof(*local_extents));
+    if (!local_extents) {
+        LOGERR("failed to allocate memory for local_extents");
+        ret = ENOMEM;
+        goto rm_cmd_fsync_exit;
+    }
+
     /* create file extent key/values for insertion into MDHIM */
     int count = 0;
     for (i = 0; i < extent_num_entries; i++) {
@@ -2137,31 +2089,23 @@ int rm_cmd_sync(int app_id, int client_id)
         count += used;
 #endif
 
-        /* TODO: need to lock/unlock inode tree */
-        /* get extent map for this gfid */
-        struct extent_tree* extent_tree;
-        extent_tree = unifyfs_inode_get_extent_tree(gfid);
-        if (NULL == extent_tree) {
-            /* map does not have an entry for this gfid,
-             * allocate a new extent tree */
-            extent_tree = calloc(1, sizeof(*extent_tree));
-            if (NULL == extent_tree) {
-                LOGERR("failed to allocate memory for file extent tree");
-                ret = (int)UNIFYFS_ERROR_NOMEM;
-                goto rm_cmd_fsync_exit;
-            }
-
-            /* initialize the extent tree */
-            extent_tree_init(extent_tree);
-
-            /* insert emtpy tree into gfid-to-extent map */
-            unifyfs_inode_add_extent(gfid, extent_tree);
-        }
-
-        /* insert entry for this extent into extent map for given gfid */
         unsigned long end = (unsigned long) (offset + length - 1);
-        extent_tree_add(extent_tree, (unsigned long)offset, end,
-            glb_pmi_rank, app_id, client_side_id, (unsigned long)logpos);
+        struct extent_tree_node *current = &local_extents[i];
+
+        current->start = offset;
+        current->end = end;
+        current->svr_rank = glb_pmi_rank;
+        current->app_id = app_id;
+        current->cli_id = client_side_id;
+        current->pos = (unsigned long) logpos;
+    }
+
+    ret = unifyfs_inode_add_local_extents(gfid,
+                                          extent_num_entries, local_extents);
+    if (ret) {
+        LOGERR("failed to add local extent to inode (gfid=%d, ret=%d)",
+                gfid, ret);
+        goto rm_cmd_fsync_exit;
     }
 
     /* distribute the extend tree */

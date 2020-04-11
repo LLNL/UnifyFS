@@ -17,8 +17,8 @@ struct unifyfs_inode {
     int gfid;                     /** global file identifier */
     unifyfs_file_attr_t attr;     /** file attributes */
     pthread_rwlock_t rwlock;      /** rwlock for accessing this structure */
-    struct extent_tree* extents;  /** extent tree for data segments */
 
+    struct extent_tree* extents;  /** extent tree for data segments */
     struct extent_tree* shadow;
 };
 
@@ -162,6 +162,9 @@ struct extent_tree* unifyfs_inode_get_extent_tree(int gfid);
  */
 int unifyfs_inode_add_extent(int gfid, struct extent_tree* extents);
 
+int unifyfs_inode_add_local_extents(int gfid, int num_extents,
+                                    struct extent_tree_node* nodes);
+
 /**
  * @brief get the maximum file size from the local extent tree of given file
  *
@@ -172,10 +175,22 @@ int unifyfs_inode_add_extent(int gfid, struct extent_tree* extents);
  */
 int unifyfs_inode_get_extent_size(int gfid, size_t* offset);
 
+int unifyfs_inode_get_local_extents(int gfid, size_t *n,
+                                    struct extent_tree_node **nodes);
+
 int unifyfs_inode_add_shadow_extents(int gfid, int n,
                                      struct extent_tree_node *nodes);
 
 int unifyfs_inode_merge_shadow(int gfid);
+
+int unifyfs_inode_span_extents(
+    int gfid,                        /* global file id we're looking in */
+    unsigned long start,             /* starting logical offset */
+    unsigned long end,               /* ending logical offset */
+    int max,                         /* maximum number of key/vals to return */
+    void* keys,             /* array of length max for output keys */
+    void* vals,             /* array of length max for output values */
+    int* outnum);                    /* number of entries returned */
 
 #endif /* __UNIFYFS_INODE_H */
 
