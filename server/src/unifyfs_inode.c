@@ -65,6 +65,40 @@ static inline int unifyfs_inode_destroy(struct unifyfs_inode* ino)
     return ret;
 }
 
+/**
+ * @brief read lock the inode for ro access.
+ *
+ * @param ino inode structure to get access
+ *
+ * @return 0 on success, errno otherwise
+ */
+static inline int unifyfs_inode_rdlock(struct unifyfs_inode* ino)
+{
+    return pthread_rwlock_rdlock(&ino->rwlock);
+}
+
+/**
+ * @brief write lock the inode for w+r access.
+ *
+ * @param ino inode structure to get access
+ *
+ * @return 0 on success, errno otherwise
+ */
+static inline int unifyfs_inode_wrlock(struct unifyfs_inode* ino)
+{
+    return pthread_rwlock_wrlock(&ino->rwlock);
+}
+
+/**
+ * @brief unlock the inode.
+ *
+ * @param ino inode structure to unlock
+ */
+static inline void unifyfs_inode_unlock(struct unifyfs_inode* ino)
+{
+    pthread_rwlock_unlock(&ino->rwlock);
+}
+
 int unifyfs_inode_create(int gfid, unifyfs_file_attr_t* attr)
 {
     int ret = 0;
@@ -87,19 +121,6 @@ int unifyfs_inode_create(int gfid, unifyfs_file_attr_t* attr)
     }
 
     return ret;
-}
-
-struct unifyfs_inode* unifyfs_inode_get(int gfid)
-{
-    struct unifyfs_inode *ino = NULL;
-
-    unifyfs_inode_tree_rdlock(global_inode_tree);
-    {
-        ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
-    }
-    unifyfs_inode_tree_unlock(global_inode_tree);
-
-    return ino;
 }
 
 int unifyfs_inode_update_attr(int gfid, unifyfs_file_attr_t* attr)
@@ -200,56 +221,6 @@ out_unlock_tree:
     return ret;
 }
 
-struct extent_tree* unifyfs_inode_get_extent_tree(int gfid)
-{
-    struct unifyfs_inode *ino = NULL;
-    struct extent_tree* extent_tree = NULL;
-
-    unifyfs_inode_tree_rdlock(global_inode_tree);
-    {
-        ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
-        if (!ino) {
-            goto out_unlock_tree;
-        }
-
-        unifyfs_inode_rdlock(ino);
-        {
-            extent_tree = ino->extents;
-        }
-        unifyfs_inode_unlock(ino);
-    }
-out_unlock_tree:
-    unifyfs_inode_tree_unlock(global_inode_tree);
-
-    return extent_tree;
-}
-
-/* deplicated */
-int unifyfs_inode_add_extent(int gfid, struct extent_tree* extents)
-{
-    int ret = 0;
-    struct unifyfs_inode *ino = NULL;
-
-    unifyfs_inode_tree_rdlock(global_inode_tree);
-    {
-        ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
-        if (!ino) {
-            ret = ENOENT;
-            goto out_unlock_tree;
-        }
-
-        unifyfs_inode_wrlock(ino);
-        {
-            ino->extents = extents;
-        }
-        unifyfs_inode_unlock(ino);
-    }
-out_unlock_tree:
-    unifyfs_inode_tree_unlock(global_inode_tree);
-
-    return ret;
-}
-
 /**
  * NOTE: inode rwlock should be hold by caller.
  */
@@ -315,6 +286,20 @@ out_unlock_tree:
     return ret;
 }
 
+static inline int unifyfs_inode_merge_shadow(struct unifyfs_inode *ino)
+{
+    int ret = 0;
+
+    struct extent_tree *current = ino->extents;
+
+    ino->extents = ino->shadow;
+    ino->shadow = current;
+
+    extent_tree_clear(ino->shadow);
+
+    return ret;
+}
+
 int unifyfs_inode_get_extent_size(int gfid, size_t* offset)
 {
     int ret = 0;
@@ -329,12 +314,19 @@ int unifyfs_inode_get_extent_size(int gfid, size_t* offset)
             goto out_unlock_tree;
         }
 
-        if (ino->shadow && (extent_tree_count(ino->shadow) > 0)) {
-            ret = unifyfs_inode_merge_shadow(gfid);
-            if (ret) {
-                LOGERR("merging extent free failed (ret=%d)", ret);
+        /* FIXME: this operation should be performed elsewhere.
+         * e.g., after fsync() broadcasting has been completed.
+         */
+        unifyfs_inode_wrlock(ino);
+        {
+            if (ino->shadow && (extent_tree_count(ino->shadow) > 0)) {
+                ret = unifyfs_inode_merge_shadow(ino);
+                if (ret) {
+                    LOGERR("merging extent free failed (ret=%d)", ret);
+                }
             }
         }
+        unifyfs_inode_unlock(ino);
 
         unifyfs_inode_rdlock(ino);
         {
@@ -400,23 +392,14 @@ out_unlock_tree:
     return ret;
 }
 
-int unifyfs_inode_create_shadow_extent_tree(int gfid)
+static int unifyfs_inode_prepare_shadow(struct unifyfs_inode *ino)
 {
     int ret = 0;
-    struct unifyfs_inode *ino = unifyfs_inode_get(gfid);
     struct extent_tree *shadow = NULL;
 
-    if (!ino) {
-        return EINVAL;
-    }
-
-    /* if the shadow tree already exists, just clear it */
     if (ino->shadow) {
-        extent_tree_wrlock(shadow);
-        {
-            extent_tree_clear(shadow);
-        }
-        extent_tree_unlock(shadow);
+        shadow = ino->shadow;
+        extent_tree_clear(shadow);
     } else {
         shadow = calloc(1, sizeof(*shadow));
         if (!shadow) {
@@ -424,12 +407,7 @@ int unifyfs_inode_create_shadow_extent_tree(int gfid)
         }
 
         extent_tree_init(shadow);
-
-        unifyfs_inode_wrlock(ino);
-        {
-            ino->shadow = shadow;
-        }
-        unifyfs_inode_unlock(ino);
+        ino->shadow = shadow;
     }
 
     return ret;
@@ -440,56 +418,49 @@ int unifyfs_inode_add_shadow_extents(int gfid, int n,
 {
     int ret = 0;
     int i = 0;
-    struct unifyfs_inode *ino = unifyfs_inode_get(gfid);
+    struct unifyfs_inode *ino = NULL;
 
-    if (!ino) {
-        return EINVAL;
-    }
-
-    if (!ino->shadow) {
-        ret = unifyfs_inode_create_shadow_extent_tree(gfid);
-        if (ret) {
-            LOGERR("failed to create a shadow tree (gfid=%d)", gfid);
-            return ret;
-        }
-    }
-
-    struct extent_tree *shadow = ino->shadow;
-
-    LOGDBG("adding %d extents to file (gfid=%d)\n", n, gfid);
-
-    for (i = 0; i < n; i++) {
-        struct extent_tree_node *n = &nodes[i];
-        ret = extent_tree_add(shadow, n->start, n->end,
-                              n->svr_rank, n->app_id, n->cli_id, n->pos);
-        if (ret) {
-            LOGERR("failed to add shadow extents (ret=%d)\n", ret);
-            break;
-        }
-    }
-
-    return ret;
-}
-
-static int unifyfs_inode_merge_shadow(int gfid)
-{
-    int ret = 0;
-    struct unifyfs_inode *ino = unifyfs_inode_get(gfid);
-
-    if (!ino || !ino->shadow) {
-        return EINVAL;
-    }
-
-    unifyfs_inode_wrlock(ino);
+    unifyfs_inode_tree_rdlock(global_inode_tree);
     {
-        struct extent_tree *current = ino->extents;
+        ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
+        if (!ino) {
+            ret = ENOENT;
+            goto out_unlock_inode_tree;
+        }
 
-        ino->extents = ino->shadow;
-        ino->shadow = current;
+        unifyfs_inode_wrlock(ino);
+        {
+            if (!ino->shadow) {
+                ret = unifyfs_inode_prepare_shadow(ino);
+                if (ret) {
+                    LOGERR("failed to create a shadow tree (gfid=%d)", gfid);
+                    goto out_unlock_inode;
+                }
+            }
+        }
+        unifyfs_inode_unlock(ino);
 
-        extent_tree_clear(ino->shadow);
+        unifyfs_inode_rdlock(ino);
+        {
+            struct extent_tree *shadow = ino->shadow;
+
+            LOGDBG("adding %d extents to file (gfid=%d)\n", n, gfid);
+
+            for (i = 0; i < n; i++) {
+                struct extent_tree_node *n = &nodes[i];
+                ret = extent_tree_add(shadow, n->start, n->end, n->svr_rank,
+                                      n->app_id, n->cli_id, n->pos);
+                if (ret) {
+                    LOGERR("failed to add shadow extents (ret=%d)\n", ret);
+                    break;
+                }
+            }
+        }
+out_unlock_inode:
+        unifyfs_inode_unlock(ino);
     }
-    unifyfs_inode_unlock(ino);
+out_unlock_inode_tree:
+    unifyfs_inode_tree_unlock(global_inode_tree);
 
     return ret;
 }

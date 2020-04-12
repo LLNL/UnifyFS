@@ -23,51 +23,6 @@ struct unifyfs_inode {
 };
 
 /**
- * @brief returns inode with given @gfid.
- *
- * @param gfid global file identifier
- *
- * @return inode structure on success, NULL otherwise.
- */
-struct unifyfs_inode* unifyfs_inode_get(int gfid);
-
-
-/**
- * @brief read lock the inode for ro access.
- *
- * @param ino inode structure to get access
- *
- * @return 0 on success, errno otherwise
- */
-static inline int unifyfs_inode_rdlock(struct unifyfs_inode* ino)
-{
-    return pthread_rwlock_rdlock(&ino->rwlock);
-}
-
-/**
- * @brief write lock the inode for w+r access.
- *
- * @param ino inode structure to get access
- *
- * @return 0 on success, errno otherwise
- */
-static inline int unifyfs_inode_wrlock(struct unifyfs_inode* ino)
-{
-    return pthread_rwlock_wrlock(&ino->rwlock);
-}
-
-/**
- * @brief unlock the inode.
- *
- * @param ino inode structure to unlock
- */
-static inline void unifyfs_inode_unlock(struct unifyfs_inode* ino)
-{
-    pthread_rwlock_unlock(&ino->rwlock);
-}
-
-
-/**
  * @brief create a new inode with given parameters. The newly created inode
  * will be inserted to the global inode tree (global_inode_tree).
  *
@@ -144,24 +99,14 @@ int unifyfs_inode_unlink(int gfid);
 int unifyfs_inode_truncate(int gfid, unsigned long size);
 
 /**
- * @brief get extent tree of file.
+ * @brief
  *
- * @param gfid global file identifier
+ * @param gfid
+ * @param num_extents
+ * @param nodes
  *
- * @return extent tree if successful, NULL otherwise
+ * @return
  */
-struct extent_tree* unifyfs_inode_get_extent_tree(int gfid);
-
-/**
- * @brief add extents to file
- *
- * @param gfid global file identifier
- * @param extents extent tree to be added
- *
- * @return 0 on success, errno otherwise
- */
-int unifyfs_inode_add_extent(int gfid, struct extent_tree* extents);
-
 int unifyfs_inode_add_local_extents(int gfid, int num_extents,
                                     struct extent_tree_node* nodes);
 
@@ -175,13 +120,29 @@ int unifyfs_inode_add_local_extents(int gfid, int num_extents,
  */
 int unifyfs_inode_get_extent_size(int gfid, size_t* offset);
 
+/**
+ * @brief
+ *
+ * @param gfid
+ * @param n
+ * @param nodes
+ *
+ * @return
+ */
 int unifyfs_inode_get_local_extents(int gfid, size_t *n,
                                     struct extent_tree_node **nodes);
 
+/**
+ * @brief
+ *
+ * @param gfid
+ * @param n
+ * @param nodes
+ *
+ * @return
+ */
 int unifyfs_inode_add_shadow_extents(int gfid, int n,
                                      struct extent_tree_node *nodes);
-
-int unifyfs_inode_merge_shadow(int gfid);
 
 int unifyfs_inode_span_extents(
     int gfid,                        /* global file id we're looking in */
