@@ -1421,9 +1421,9 @@ static void extbcast_request_rpc(hg_handle_t handle)
         ret = rpc_invoke_extbcast_request(&in, &requests[i]);
     }
 
-    ret = unifyfs_inode_add_shadow_extents(gfid, num_extents, extents);
+    ret = unifyfs_inode_add_remote_extents(gfid, num_extents, extents);
     if (ret) {
-        LOGERR("filling shadow extent failed (ret=%d)\n", ret);
+        LOGERR("filling remote extent failed (ret=%d)\n", ret);
         // what do we do now?
     }
 
@@ -1485,12 +1485,6 @@ int unifyfs_broadcast_extent_tree(int gfid)
     }
 
     hg_size_t buf_size = num_extents * sizeof(*extents);
-
-    ret = unifyfs_inode_add_shadow_extents(gfid, num_extents, extents);
-    if (ret) {
-        LOGERR("filling shadow extent failed (gfid=%d, ret=%d)\n", gfid, ret);
-        // what do we do now?
-    }
 
     LOGDBG("broadcasting %lu extents (%lu bytes): ", num_extents, buf_size);
 
