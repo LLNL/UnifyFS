@@ -14,12 +14,12 @@ struct unifyfs_inode {
     RB_ENTRY(unifyfs_inode) inode_tree_entry; /** tree entry for global inode
                                                 tree */
 
-    int gfid;                     /** global file identifier */
-    unifyfs_file_attr_t attr;     /** file attributes */
-    pthread_rwlock_t rwlock;      /** rwlock for accessing this structure */
+    int gfid;                     /* global file identifier */
+    unifyfs_file_attr_t attr;     /* file attributes */
+    pthread_rwlock_t rwlock;      /* rwlock for accessing this structure */
 
-    struct extent_tree* extents;  /** extent tree for data segments */
-    struct extent_tree* shadow;
+    struct extent_tree* local_extents;  /* tree for local data segments */
+    struct extent_tree* remote_extents; /* tree for remote data segments */
 };
 
 /**
@@ -141,7 +141,7 @@ int unifyfs_inode_get_local_extents(int gfid, size_t *n,
  *
  * @return
  */
-int unifyfs_inode_add_shadow_extents(int gfid, int n,
+int unifyfs_inode_add_remote_extents(int gfid, int n,
                                      struct extent_tree_node *nodes);
 
 int unifyfs_inode_span_extents(
@@ -152,6 +152,11 @@ int unifyfs_inode_span_extents(
     void* keys,             /* array of length max for output keys */
     void* vals,             /* array of length max for output values */
     int* outnum);                    /* number of entries returned */
+
+/*
+ * for debugging
+ */
+int unifyfs_inode_dump(int gfid);
 
 #endif /* __UNIFYFS_INODE_H */
 

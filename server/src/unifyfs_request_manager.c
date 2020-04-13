@@ -654,6 +654,8 @@ int rm_cmd_filesize(
         ABT_cond_wait(st->cond, st->mutex);
     }
 
+    unifyfs_inode_dump(gfid);
+
     /* have result at this point, get it */
     //filesize = st->filesize;
     printf("BUCKEYES got a filesize of %llu\n",
