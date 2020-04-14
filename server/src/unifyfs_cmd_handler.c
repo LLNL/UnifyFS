@@ -237,18 +237,8 @@ static void unifyfs_metaset_rpc(hg_handle_t handle)
     assert(hret == HG_SUCCESS);
 
     /* store file name for given global file id */
-    unifyfs_file_attr_t fattr;
-    int create         = (int) in.create;
-    fattr.gfid         = in.gfid;
-    strlcpy(fattr.filename, in.filename, sizeof(fattr.filename));
-    fattr.mode         = in.mode;
-    fattr.uid          = in.uid;
-    fattr.gid          = in.gid;
-    fattr.size         = in.size;
-    fattr.atime        = in.atime;
-    fattr.mtime        = in.mtime;
-    fattr.ctime        = in.ctime;
-    fattr.is_laminated = in.is_laminated;
+    int create = (int) in.create;
+    unifyfs_file_attr_t fattr = in.attr;
 
     /* if we're creating the file,
      * we initialize both the size and laminate flags */

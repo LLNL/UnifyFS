@@ -13,8 +13,6 @@ BASE_SRCS = \
   rm_enumerator.c \
   flatbuffers_common_builder.h \
   flatbuffers_common_reader.h \
-  seg_tree.h \
-  seg_tree.c \
   slotmap.h \
   slotmap.c \
   tinyexpr.h \

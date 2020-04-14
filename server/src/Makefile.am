@@ -22,6 +22,8 @@ libunifyfsd_a_SOURCES = \
 	unifyfs_inode.h \
 	unifyfs_inode_tree.c \
 	unifyfs_inode_tree.h \
+	unifyfs_collectives.c \
+	unifyfs_collectives.h \
     int2void.c \
     int2void.h
 

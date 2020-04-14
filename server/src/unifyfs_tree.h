@@ -15,9 +15,6 @@
 #ifndef UNIFYFS_TREE_H
 #define UNIFYFS_TREE_H
 
-#include <abt.h>
-#include "unifyfs_meta.h"
-
 /* define tree structure */
 typedef struct {
     int rank;         /* global rank of calling process */
@@ -30,7 +27,7 @@ typedef struct {
 /* given the process's rank and the number of ranks, this computes a k-ary
  * tree rooted at rank 0, the structure records the number of children
  * of the local rank and the list of their ranks */
-void unifyfs_tree_init(
+int unifyfs_tree_init(
     int rank,         /* rank of calling process */
     int ranks,        /* number of ranks in tree */
     int root,         /* rank of root process */
@@ -40,58 +37,5 @@ void unifyfs_tree_init(
 
 /* free resources allocated in unifyfs_tree_init */
 void unifyfs_tree_free(unifyfs_tree_t* t);
-
-/* the structure that tracks all collective operations */
-typedef struct {
-  /* tracking collective operations */
-  int root;            /* root of the tree (server making request) */
-  unifyfs_tree_t tree; /* tree structure for given root */
-  int32_t parent_tag;  /* tag we use in our reply to our parent */
-  int32_t tag;         /* tag children will use in their replies to us */
-  int num_responses;   /* number of replies we have received from children */
-  int err;             /* returns UNIFYFS_SUCCESS/ERROR code on operation */
-  ABT_mutex mutex;     /* argobots mutex to protect condition variable below */
-  ABT_cond cond;       /* argobots condition variable root server waits on */
-
-  /* operation specific information */
-  int gfid;                  /* global file id of request */
-  size_t filesize;           /* running max of file size */
-  int create;                /* is this for creating a new entry? */
-  unifyfs_file_attr_t attr;  /* file attribute */
-} unifyfs_coll_state_t;
-
-/**
- * @brief allocate a structure defining the state for a file size collective
- *
- * @param root rank of server making request
- * @param gfid global file id of request
- * @param ptag tag to use when sending replies to parent
- * @param tag tag out children should use when sending to us
- * @return unifyfs_coll_state_t*
- */
-unifyfs_coll_state_t* unifyfs_coll_state_alloc(
-    int root,     /* rank of server making request */
-    int gfid,     /* global file id of request */
-    int32_t ptag, /* tag to use when sending replies to parent */
-    int32_t tag   /* tag out children should use when sending to us */
-);
-
-/* free structure allocated in call to state_filesize_alloc,
- * caller should pass address of pointer to structure,
- * which the call with set to NULL */
-void unifyfs_coll_state_free(unifyfs_coll_state_t** pst);
-
-/* forward request to children */
-void filesize_request_forward(unifyfs_coll_state_t* st);
-void truncate_request_forward(unifyfs_coll_state_t* st);
-void metaset_request_forward(unifyfs_coll_state_t* st);
-void unlink_request_forward(unifyfs_coll_state_t* st);
-
-/**
- * @brief
- *
- * @return int UnifyFS return code
- */
-int unifyfs_broadcast_extent_tree(int gfid);
 
 #endif /* UNIFYFS_TREE_H */

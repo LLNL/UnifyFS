@@ -211,9 +211,10 @@ int unifyfs_inode_truncate(int gfid, unsigned long size)
             goto out_unlock_tree;
         }
 
-        unifyfs_inode_wrlock(ino);
+        unifyfs_inode_rdlock(ino);
         {
             ret = extent_tree_truncate(ino->local_extents, size);
+            ret |= extent_tree_truncate(ino->remote_extents, size);
             if (ret == 0) {
                 ino->attr.size = size;
             }

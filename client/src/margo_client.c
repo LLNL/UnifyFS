@@ -320,16 +320,7 @@ int invoke_client_metaset_rpc(int create, unifyfs_file_attr_t* f_meta)
     /* fill in input struct */
     unifyfs_metaset_in_t in;
     in.create       = (int32_t) create;
-    in.gfid         = (int32_t) f_meta->gfid;
-    in.filename     = f_meta->filename;
-    in.mode         = f_meta->mode;
-    in.uid          = f_meta->uid;
-    in.gid          = f_meta->gid;
-    in.size         = f_meta->size;
-    in.atime        = f_meta->atime;
-    in.mtime        = f_meta->mtime;
-    in.ctime        = f_meta->ctime;
-    in.is_laminated = f_meta->is_laminated;
+    in.attr         = *f_meta;
 
     /* call rpc function */
     LOGDBG("invoking the metaset rpc function in client");

@@ -107,50 +107,30 @@ static void register_server_server_rpcs(margo_instance_id mid)
                        chunk_read_response_in_t, chunk_read_response_out_t,
                        chunk_read_response_rpc);
 
-    unifyfsd_rpc_context->rpcs.filesize_request_id =
-        MARGO_REGISTER(mid, "filesize_request_rpc",
-                       filesize_request_in_t, filesize_request_out_t,
-                       filesize_request_rpc);
-
-    unifyfsd_rpc_context->rpcs.filesize_response_id =
-        MARGO_REGISTER(mid, "filesize_response_rpc",
-                       filesize_response_in_t, filesize_response_out_t,
-                       filesize_response_rpc);
-
-    unifyfsd_rpc_context->rpcs.truncate_request_id =
-        MARGO_REGISTER(mid, "truncate_request_rpc",
-                       truncate_request_in_t, truncate_request_out_t,
-                       truncate_request_rpc);
-
-    unifyfsd_rpc_context->rpcs.truncate_response_id =
-        MARGO_REGISTER(mid, "truncate_response_rpc",
-                       truncate_response_in_t, truncate_response_out_t,
-                       truncate_response_rpc);
-
-    unifyfsd_rpc_context->rpcs.metaset_request_id =
-        MARGO_REGISTER(mid, "metaset_request_rpc",
-                       metaset_request_in_t, metaset_request_out_t,
-                       metaset_request_rpc);
-
-    unifyfsd_rpc_context->rpcs.metaset_response_id =
-        MARGO_REGISTER(mid, "metaset_response_rpc",
-                       metaset_response_in_t, metaset_response_out_t,
-                       metaset_response_rpc);
-
-    unifyfsd_rpc_context->rpcs.unlink_request_id =
-        MARGO_REGISTER(mid, "unlink_request_rpc",
-                       unlink_request_in_t, unlink_request_out_t,
-                       unlink_request_rpc);
-
-    unifyfsd_rpc_context->rpcs.unlink_response_id =
-        MARGO_REGISTER(mid, "unlink_response_rpc",
-                       unlink_response_in_t, unlink_response_out_t,
-                       unlink_response_rpc);
-
     unifyfsd_rpc_context->rpcs.extbcast_request_id =
         MARGO_REGISTER(mid, "extbcast_request_rpc",
                        extbcast_request_in_t, extbcast_request_out_t,
                        extbcast_request_rpc);
+
+    unifyfsd_rpc_context->rpcs.filesize_id =
+        MARGO_REGISTER(mid, "filesize_rpc",
+                       filesize_in_t, filesize_out_t,
+                       filesize_rpc);
+
+    unifyfsd_rpc_context->rpcs.truncate_id =
+        MARGO_REGISTER(mid, "truncate_rpc",
+                       truncate_in_t, truncate_out_t,
+                       truncate_rpc);
+
+    unifyfsd_rpc_context->rpcs.metaset_id =
+        MARGO_REGISTER(mid, "metaset_rpc",
+                       metaset_in_t, metaset_out_t,
+                       metaset_rpc);
+
+    unifyfsd_rpc_context->rpcs.unlink_id =
+        MARGO_REGISTER(mid, "unlink_rpc",
+                       unlink_in_t, unlink_out_t,
+                       unlink_rpc);
 }
 
 /* setup_local_target - Initializes the client-server margo target */
