@@ -50,6 +50,7 @@
 
 #include "int2void.h"
 #include "unifyfs_inode_tree.h"
+#include "unifyfs_collectives.h"
 
 #define RM_LOCK(rm) \
 do { \
@@ -540,6 +541,32 @@ static int client_wait(shm_header_t* hdr)
  * to the request manager thread
  ***********************/
 
+int rm_cmd_filesize(
+    int app_id,    /* app_id for requesting client */
+    int client_id, /* client_id for requesting client */
+    int gfid,      /* global file id of read request */
+    size_t* outsize) /* output file size */
+{
+    
+    size_t filesize = 0;
+    int ret = unifyfs_invoke_filesize_rpc(gfid, &filesize);
+
+    if (ret) {
+        LOGERR("unifyfs_invoke_filesize failed (ret=%d)", ret);
+    }
+
+    LOGDBG("BUCKEYES got a filesize of %llu\n",
+           (unsigned long long) filesize);
+
+    unifyfs_file_attr_t attr = { 0, };
+    unifyfs_inode_metaget(gfid, &attr);
+
+    *outsize = attr.size >filesize ? attr.size : filesize;
+
+    return ret;
+}
+
+#if 0
 /* given an app_id, client_id and global file id,
  * compute and return file size for specified file
  */
@@ -703,6 +730,7 @@ int rm_cmd_filesize(
 //    *outsize = filesize;
     return rc;
 }
+#endif
 
 /* delete any key whose last byte is beyond the specified
  * file size */
@@ -1024,7 +1052,12 @@ int rm_cmd_truncate(
         goto truncate_exit;
     }
 
+    rc = unifyfs_invoke_truncate_rpc(gfid, newsize);
+    if (rc) {
+        LOGERR("truncate rpc failed");
+    }
 
+#if 0
     /* hs; new truncate code */
     // TODO: protect these structures from concurrent rpcs with locking
     int tag = unifyfs_stack_pop(glb_tag_stack);
@@ -1075,6 +1108,7 @@ int rm_cmd_truncate(
     unifyfs_stack_push(glb_tag_stack, st->tag);
     unifyfs_coll_state_free(&st);
     /* hs; new truncate code */
+#endif
 
 truncate_exit:
 
@@ -1097,6 +1131,12 @@ int rm_cmd_metaset(
 {
     int rc = UNIFYFS_SUCCESS;
 
+    rc = unifyfs_invoke_metaset_rpc(gfid, create, attr);
+    if (rc) {
+        LOGERR("metaset rpc failed (ret=%d)", rc);
+    }
+
+#if 0
     /* hs; new metaset using the collective */
     // TODO: protect these structures from concurrent rpcs with locking
     int tag = unifyfs_stack_pop(glb_tag_stack);
@@ -1148,6 +1188,7 @@ int rm_cmd_metaset(
     unifyfs_stack_push(glb_tag_stack, st->tag);
     unifyfs_coll_state_free(&st);
     /* hs; new metaset code */
+#endif
 
     return rc;
 }
@@ -1188,6 +1229,12 @@ int rm_cmd_unlink(
         rc = ret;
     }
 
+    rc = unifyfs_invoke_unlink_rpc(gfid);
+    if (rc) {
+        LOGERR("unlink rpc failed (ret=%d)", rc);
+    }
+
+#if 0
     /* hs; new unlink using the collective */
     // TODO: protect these structures from concurrent rpcs with locking
     int tag = unifyfs_stack_pop(glb_tag_stack);
@@ -1237,6 +1284,7 @@ int rm_cmd_unlink(
     unifyfs_stack_push(glb_tag_stack, st->tag);
     unifyfs_coll_state_free(&st);
     /* hs; new unlink code */
+#endif
 
     return rc;
 }
