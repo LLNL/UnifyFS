@@ -2304,8 +2304,11 @@ static int __srefill(unifyfs_stream_t* stream)
 
         /* read data from file into buffer */
         ssize_t read_rc = unifyfs_fd_read(s->fd, current, s->buf, s->bufsize);
-        if (read_rc < 0) {
-            /* ERROR: read error, set error indicator */
+        if (read_rc == -1) {
+            /*
+             * ERROR: read error, set error indicator. errno is already set
+             * by unifyfs_fd_read()
+             */
             s->err = 1;
             return 1;
         }
