@@ -36,8 +36,13 @@
 #include "seg_tree.h"
 #include "tree.h"
 
-#define MIN(a, b) (a < b ? a : b)
-#define MAX(a, b) (a > b ? a : b)
+#ifndef MIN
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
+
+#ifndef MAX
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
 
 int
 compare_func(struct seg_tree_node* node1, struct seg_tree_node* node2)

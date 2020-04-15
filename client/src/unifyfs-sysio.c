@@ -46,8 +46,9 @@
 #include "ucr_read_builder.h"
 #include "seg_tree.h"
 
-
-#define MAX(a, b) (a > b ? a : b)
+#ifndef MAX
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
 
 /* ---------------------------------------
  * POSIX wrappers: paths
