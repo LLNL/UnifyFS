@@ -114,7 +114,6 @@ ssize_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count);
  * allocates new bytes and updates file size as necessary,
  * fills any gaps with zeros */
 int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count);
-int unifyfs_fd_logreadlist(read_req_t* read_req, int count);
 
 #include "unifyfs-dirops.h"
 

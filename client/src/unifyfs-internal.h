@@ -509,6 +509,8 @@ int unifyfs_fid_create_file(const char* path);
  * returns the new fid, or a negative value on error */
 int unifyfs_fid_create_directory(const char* path);
 
+int unifyfs_fid_read_reqs(read_req_t* in_reqs, int in_count);
+
 /* write count bytes from buf into file starting at offset pos */
 int unifyfs_fid_write(int fid, off_t pos, const void* buf, size_t count);
 
