@@ -680,17 +680,6 @@ off_t unifyfs_gfid_filesize(int gfid)
     return filesize;
 }
 
-/* Return the local (un-laminated) size of the file */
-off_t unifyfs_fid_log_size(int fid)
-{
-    /* get meta data for this file */
-    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    if (NULL != meta) {
-        return meta->log_size;
-    }
-    return (off_t)-1;
-}
-
 /* Update local metadata for file from global metadata */
 int unifyfs_fid_update_file_meta(int fid, unifyfs_file_attr_t* gfattr)
 {
@@ -870,7 +859,6 @@ int unifyfs_fid_create_file(const char* path)
     /* initialize meta data */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     meta->global_size  = 0;
-    meta->log_size     = 0;
     meta->flock_status = UNLOCKED;
     meta->storage      = FILE_STORAGE_NULL;
     meta->gfid         = unifyfs_generate_gfid(path);
