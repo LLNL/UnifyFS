@@ -261,8 +261,6 @@ enum {FILE_STORAGE_NULL = 0, FILE_STORAGE_LOGIO};
 
 typedef struct {
     off_t global_size;            /* Global size of the file */
-    off_t log_size;               /* Log size.  This is the sum of all the
-                                   * write counts. */
     pthread_spinlock_t fspinlock; /* file lock variable */
     enum flock_enum flock_status; /* file lock status */
 
@@ -486,9 +484,6 @@ off_t unifyfs_fid_global_size(int fid);
  * in question, we attempt the file lookup with the fid method
  * otherwise call back to the rpc */
 off_t unifyfs_gfid_filesize(int gfid);
-
-/* Return current local size of given file id */
-off_t unifyfs_fid_log_size(int fid);
 
 /*
  * Return current size of given file id.  If the file is laminated, return the

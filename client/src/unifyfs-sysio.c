@@ -408,18 +408,6 @@ static int __stat(const char* path, struct stat* buf)
     /* copy attributes to stat struct */
     unifyfs_file_attr_to_stat(&fattr, buf);
 
-    if (fid >= 0) { /* If we have a local file */
-        /*
-         * For debugging and testing purposes, we hijack st_rdev to store our
-         * log size.  We also assume the stat struct is
-         * the 64-bit variant.  The values are stored as:
-         *
-         * st_rdev = log_size
-         *
-         */
-        buf->st_rdev = unifyfs_fid_log_size(fid);
-    }
-
     return 0;
 }
 
@@ -628,18 +616,11 @@ int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count)
         return EOVERFLOW;
     }
 
-    /* get current log size before extending the log */
-    off_t logsize = unifyfs_fid_log_size(fid);
-
-    /* compute size log will be after we append data */
-    off_t newlogsize = logsize + count;
-
     /* finally write specified data to file */
     int write_rc = unifyfs_fid_write(fid, pos, buf, count);
     if (write_rc == 0) {
         unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
         meta->needs_sync = 1;
-        meta->log_size = newlogsize;
     }
     return write_rc;
 }
