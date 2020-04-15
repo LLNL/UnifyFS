@@ -618,10 +618,6 @@ int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count)
 
     /* finally write specified data to file */
     int write_rc = unifyfs_fid_write(fid, pos, buf, count);
-    if (write_rc == 0) {
-        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-        meta->needs_sync = 1;
-    }
     return write_rc;
 }
 

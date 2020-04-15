@@ -981,6 +981,11 @@ int unifyfs_fid_write(int fid, off_t pos, const void* buf, size_t count)
     if (meta->storage == FILE_STORAGE_LOGIO) {
         /* file stored in fixed-size chunks */
         rc = unifyfs_fid_logio_write(fid, meta, pos, buf, count);
+        if (rc == UNIFYFS_SUCCESS) {
+            /* write succeeded, remember that we have new data
+             * that needs to be synced with the server */
+            meta->needs_sync = 1;
+        }
     } else {
         /* unknown storage type */
         rc = EIO;
