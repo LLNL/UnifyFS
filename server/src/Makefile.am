@@ -1,14 +1,20 @@
 noinst_LIBRARIES = libunifyfsd.a
 
 libunifyfsd_a_SOURCES = \
-    arraylist.c \
-    arraylist.h \
     margo_server.c \
     margo_server.h \
     unifyfs_cmd_handler.c \
     unifyfs_global.h \
     unifyfs_metadata.c \
     unifyfs_metadata.h \
+	unifyfs_inode.h \
+	unifyfs_inode.c \
+	unifyfs_inode_tree.h \
+	unifyfs_inode_tree.c \
+	unifyfs_tree.h \
+	unifyfs_tree.c \
+	unifyfs_collectives.h \
+	unifyfs_collectives.c \
     unifyfs_request_manager.c \
     unifyfs_request_manager.h \
     unifyfs_service_manager.c \

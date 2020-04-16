@@ -35,7 +35,7 @@
 static inline
 struct unifyfs_inode* unifyfs_inode_alloc(int gfid, unifyfs_file_attr_t* attr)
 {
-    struct unifyfs_inode *ino = calloc(1, sizeof(*ino));
+    struct unifyfs_inode* ino = calloc(1, sizeof(*ino));
 
     if (ino) {
         ino->gfid = gfid;
@@ -107,7 +107,7 @@ static inline void unifyfs_inode_unlock(struct unifyfs_inode* ino)
 int unifyfs_inode_create(int gfid, unifyfs_file_attr_t* attr)
 {
     int ret = 0;
-    struct unifyfs_inode *ino = NULL;
+    struct unifyfs_inode* ino = NULL;
 
     if (!attr) {
         return EINVAL;
@@ -131,7 +131,7 @@ int unifyfs_inode_create(int gfid, unifyfs_file_attr_t* attr)
 int unifyfs_inode_update_attr(int gfid, unifyfs_file_attr_t* attr)
 {
     int ret = 0;
-    struct unifyfs_inode *ino = NULL;
+    struct unifyfs_inode* ino = NULL;
 
     if (!attr) {
         return EINVAL;
@@ -162,8 +162,9 @@ int unifyfs_inode_metaget(int gfid, unifyfs_file_attr_t* attr)
     int ret = 0;
     struct unifyfs_inode* ino = NULL;
 
-    if (!global_inode_tree || !attr)
+    if (!global_inode_tree || !attr) {
         return EINVAL;
+    }
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
     {
@@ -182,7 +183,7 @@ int unifyfs_inode_metaget(int gfid, unifyfs_file_attr_t* attr)
 int unifyfs_inode_unlink(int gfid)
 {
     int ret = 0;
-    struct unifyfs_inode *ino = NULL;
+    struct unifyfs_inode* ino = NULL;
 
     unifyfs_inode_tree_wrlock(global_inode_tree);
     {
@@ -190,8 +191,9 @@ int unifyfs_inode_unlink(int gfid)
     }
     unifyfs_inode_tree_unlock(global_inode_tree);
 
-    if (ret)
+    if (ret) {
         goto out;
+    }
 
     ret = unifyfs_inode_destroy(ino);
 out:
@@ -201,7 +203,7 @@ out:
 int unifyfs_inode_truncate(int gfid, unsigned long size)
 {
     int ret = 0;
-    struct unifyfs_inode *ino = NULL;
+    struct unifyfs_inode* ino = NULL;
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
     {
@@ -235,10 +237,10 @@ enum {
     UNIFYFS_INODE_REMOTE = 1,
 };
 
-static struct extent_tree *
-inode_get_extent_tree(struct unifyfs_inode *ino, int is_remote)
+static struct extent_tree*
+inode_get_extent_tree(struct unifyfs_inode* ino, int is_remote)
 {
-    struct extent_tree *tree = is_remote ? ino->remote_extents
+    struct extent_tree* tree = is_remote ? ino->remote_extents
                                          : ino->local_extents;
 
     /* create one if it doesn't exist yet */
@@ -263,13 +265,13 @@ inode_get_extent_tree(struct unifyfs_inode *ino, int is_remote)
 }
 
 static inline
-struct extent_tree *inode_get_local_extent_tree(struct unifyfs_inode *ino)
+struct extent_tree* inode_get_local_extent_tree(struct unifyfs_inode* ino)
 {
     return inode_get_extent_tree(ino, UNIFYFS_INODE_LOCAL);
 }
 
 static inline
-struct extent_tree *inode_get_remote_extent_tree(struct unifyfs_inode *ino)
+struct extent_tree* inode_get_remote_extent_tree(struct unifyfs_inode* ino)
 {
     return inode_get_extent_tree(ino, UNIFYFS_INODE_REMOTE);
 }
@@ -281,8 +283,8 @@ static int unifyfs_inode_add_extents(int gfid,
 {
     int ret = 0;
     int i = 0;
-    struct unifyfs_inode *ino = NULL;
-    struct extent_tree *tree = NULL;
+    struct unifyfs_inode* ino = NULL;
+    struct extent_tree* tree = NULL;
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
     {
@@ -309,7 +311,7 @@ static int unifyfs_inode_add_extents(int gfid,
         unifyfs_inode_rdlock(ino);
         {
             for (i = 0; i < num_extents; i++) {
-                struct extent_tree_node *current = &nodes[i];
+                struct extent_tree_node* current = &nodes[i];
                 ret = extent_tree_add(tree, current->start, current->end,
                                       current->svr_rank, current->app_id,
                                       current->cli_id, current->pos);
@@ -380,11 +382,11 @@ out_unlock_tree:
     return ret;
 }
 
-int unifyfs_inode_get_local_extents(int gfid, size_t *n,
-                                    struct extent_tree_node **nodes)
+int unifyfs_inode_get_local_extents(int gfid, size_t* n,
+                                    struct extent_tree_node** nodes)
 {
     int ret = 0;
-    struct unifyfs_inode *ino = NULL;
+    struct unifyfs_inode* ino = NULL;
 
     if (!n || !nodes) {
         return EINVAL;
@@ -401,10 +403,10 @@ int unifyfs_inode_get_local_extents(int gfid, size_t *n,
         unifyfs_inode_rdlock(ino);
         {
             int i = 0;
-            struct extent_tree *tree = ino->local_extents;
+            struct extent_tree* tree = ino->local_extents;
             size_t n_nodes = tree->count;
-            struct extent_tree_node *_nodes = calloc(n_nodes, sizeof(*_nodes));
-            struct extent_tree_node *current = NULL;
+            struct extent_tree_node* _nodes = calloc(n_nodes, sizeof(*_nodes));
+            struct extent_tree_node* current = NULL;
 
             if (!_nodes) {
                 ret = ENOMEM;
@@ -437,7 +439,7 @@ int unifyfs_inode_span_extents(
     int* outnum)                   /* number of entries returned */
 {
     int ret = 0;
-    struct unifyfs_inode *ino = NULL;
+    struct unifyfs_inode* ino = NULL;
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
     {
@@ -464,11 +466,10 @@ out_unlock_tree:
     return ret;
 }
 
-
 int unifyfs_inode_dump(int gfid)
 {
     int ret = 0;
-    struct unifyfs_inode *ino = NULL;
+    struct unifyfs_inode* ino = NULL;
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
     {

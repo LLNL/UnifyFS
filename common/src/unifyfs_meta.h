@@ -69,7 +69,7 @@ enum {
     UNIFYFS_STAT_DEFAULT_DIR_MODE = S_IFDIR | 0755,
 };
 
-static inline int unifyfs_file_attr_set_invalid(unifyfs_file_attr_t *attr)
+static inline int unifyfs_file_attr_set_invalid(unifyfs_file_attr_t* attr)
 {
     if (!attr) {
         return EINVAL;
@@ -91,7 +91,7 @@ static inline int unifyfs_file_attr_set_invalid(unifyfs_file_attr_t *attr)
 }
 
 /*
- * updates @dst with new values from @src. 
+ * updates @dst with new values from @src.
  * ignores fields from @src with negative values.
  */
 static inline int

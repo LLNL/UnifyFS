@@ -67,8 +67,9 @@ int unifyfs_inode_tree_init(
 {
     int ret = 0;
 
-    if (!tree)
+    if (!tree) {
         return EINVAL;
+    }
 
     memset(tree, 0, sizeof(*tree));
     ret = pthread_rwlock_init(&tree->rwlock, NULL);

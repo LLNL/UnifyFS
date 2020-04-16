@@ -80,6 +80,8 @@ MERCURY_GEN_PROC(chunk_read_response_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(chunk_read_response_rpc)
 
+/* server collective operations: */
+
 /* extbcast_request_rpc (server => server)
  *
  * initiates extbcast request operation */
@@ -93,7 +95,7 @@ MERCURY_GEN_PROC(extbcast_request_out_t,
 DECLARE_MARGO_RPC_HANDLER(extbcast_request_rpc)
 
 /*
- * filesize
+ * filesize (server => server)
  */
 MERCURY_GEN_PROC(filesize_in_t,
                  ((int32_t)(root))
@@ -104,7 +106,7 @@ MERCURY_GEN_PROC(filesize_out_t,
 DECLARE_MARGO_RPC_HANDLER(filesize_rpc)
 
 /*
- * truncate
+ * truncate (server => server)
  */
 MERCURY_GEN_PROC(truncate_in_t,
                  ((int32_t)(root))
@@ -115,7 +117,7 @@ MERCURY_GEN_PROC(truncate_out_t,
 DECLARE_MARGO_RPC_HANDLER(truncate_rpc)
 
 /*
- * metaset
+ * metaset (server => server)
  */
 MERCURY_GEN_PROC(metaset_in_t,
                  ((int32_t)(root))
@@ -127,7 +129,7 @@ MERCURY_GEN_PROC(metaset_out_t,
 DECLARE_MARGO_RPC_HANDLER(metaset_rpc)
 
 /*
- * unlink
+ * unlink (server => server)
  */
 MERCURY_GEN_PROC(unlink_in_t,
                  ((int32_t)(root))

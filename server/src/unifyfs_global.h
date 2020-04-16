@@ -50,11 +50,7 @@
 #include "unifyfs_logio.h"
 #include "unifyfs_meta.h"
 #include "unifyfs_shm.h"
-#include "unifyfs_tree.h"
-#include "extent_tree.h"
 #include "unifyfs_inode_tree.h"
-#include "int2void.h"
-#include "unifyfs-stack.h"
 
 #include <margo.h>
 #include <pthread.h>
@@ -85,22 +81,7 @@ typedef struct {
 extern server_info_t* glb_servers; /* array of server info structs */
 extern size_t glb_num_servers; /* number of entries in glb_servers array */
 
-/* maps a global file id to its extent map */
-extern struct unifyfs_inode_tree* global_inode_tree;
-
-/* maps a global file id to its metadata extent map
- * TODO: move to metadata? */
-extern struct unifyfs_inode_tree meta_inode_tree;
-
-/* stack to manage free communication tags */
-void* glb_tag_stack;
-
-/* maps a tag to a collective state structure (stored as void*) */
-extern struct int2void glb_tag2state;
-
-/* configuration flag whether to use local extent tracking
- * on server to service client read requests of local data */
-extern bool unifyfs_local_extents;
+extern struct unifyfs_inode_tree* global_inode_tree; /* global inode tree */
 
 /* defines commands for messages sent to service manager threads */
 typedef enum {

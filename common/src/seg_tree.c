@@ -46,7 +46,7 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
-int
+static int
 compare_func(struct seg_tree_node* node1, struct seg_tree_node* node2)
 {
     if (node1->start > node2->end) {
