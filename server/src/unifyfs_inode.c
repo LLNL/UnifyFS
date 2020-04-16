@@ -276,6 +276,31 @@ struct extent_tree* inode_get_remote_extent_tree(struct unifyfs_inode* ino)
     return inode_get_extent_tree(ino, UNIFYFS_INODE_REMOTE);
 }
 
+/*
+ * @ino should be properly locked by the caller
+ */
+static inline uint64_t inode_get_filesize(struct unifyfs_inode* ino)
+{
+    uint64_t size_local = 0;
+    uint64_t size_remote = 0;
+
+    if (ino->local_extents) {
+        size_local = extent_tree_max(ino->local_extents);
+        if (extent_tree_count(ino->local_extents)) {
+            size_local += 1;
+        }
+    }
+
+    if (ino->remote_extents) {
+        size_remote = extent_tree_max(ino->remote_extents);
+        if (extent_tree_count(ino->remote_extents)) {
+            size_remote += 1;
+        }
+    }
+
+    return size_local > size_remote ? size_local : size_remote;
+}
+
 static int unifyfs_inode_add_extents(int gfid,
                                      int num_extents,
                                      struct extent_tree_node* nodes,
@@ -302,16 +327,13 @@ static int unifyfs_inode_add_extents(int gfid,
                 ret = ENOMEM;
                 goto out_unlock_inode;
             }
-        }
-        unifyfs_inode_unlock(ino);
 
-        LOGDBG("adding %d %s extents to inode (gfid=%d)",
-               num_extents, is_remote ? "remote" : "local", gfid);
-
-        unifyfs_inode_rdlock(ino);
-        {
             for (i = 0; i < num_extents; i++) {
                 struct extent_tree_node* current = &nodes[i];
+
+                LOGDBG("new extent[%4d]: (%lu, %lu)",
+                        i, current->start, current->end);
+
                 ret = extent_tree_add(tree, current->start, current->end,
                                       current->svr_rank, current->app_id,
                                       current->cli_id, current->pos);
@@ -320,6 +342,13 @@ static int unifyfs_inode_add_extents(int gfid,
                     goto out_unlock_inode;
                 }
             }
+
+            ino->attr.size = inode_get_filesize(ino);
+
+            LOGDBG("adding %d %s extents to inode (gfid=%d, filesize=%lu)",
+                   num_extents, is_remote ? "remote" : "local",
+                   gfid, ino->attr.size);
+
         }
 out_unlock_inode:
         unifyfs_inode_unlock(ino);
@@ -344,11 +373,10 @@ int unifyfs_inode_add_remote_extents(int gfid, int num_extents,
                                      UNIFYFS_INODE_REMOTE);
 }
 
-int unifyfs_inode_get_extent_size(int gfid, size_t* offset)
+int unifyfs_inode_get_filesize(int gfid, size_t* offset)
 {
     int ret = 0;
-    size_t filesize_local = 0;
-    size_t filesize_remote = 0;
+    size_t filesize = 0;
     struct unifyfs_inode* ino = NULL;
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
@@ -361,18 +389,11 @@ int unifyfs_inode_get_extent_size(int gfid, size_t* offset)
 
         unifyfs_inode_rdlock(ino);
         {
-            if (ino->local_extents) {
-                filesize_local = extent_tree_get_size(ino->local_extents);
-            }
-
-            if (ino->remote_extents) {
-                filesize_remote = extent_tree_get_size(ino->remote_extents);
-            }
+            filesize = inode_get_filesize(ino);
         }
         unifyfs_inode_unlock(ino);
 
-        *offset = filesize_local > filesize_remote ? filesize_local
-                                                   : filesize_remote;
+        *offset = filesize;
     }
 out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);

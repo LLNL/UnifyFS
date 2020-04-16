@@ -13,6 +13,10 @@ libunifyfsd_a_SOURCES = \
 	unifyfs_inode_tree.c \
 	unifyfs_tree.h \
 	unifyfs_tree.c \
+	unifyfs_fops.h \
+	unifyfs_fops.c \
+	unifyfs_fops_mdhim.c \
+	unifyfs_fops_collective.c \
 	unifyfs_collectives.h \
 	unifyfs_collectives.c \
     unifyfs_request_manager.c \

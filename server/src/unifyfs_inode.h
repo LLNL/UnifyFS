@@ -130,7 +130,7 @@ int unifyfs_inode_get_local_extents(int gfid, size_t* n,
  *
  * @return 0 on success, errno otherwise
  */
-int unifyfs_inode_get_extent_size(int gfid, size_t* offset);
+int unifyfs_inode_get_filesize(int gfid, size_t* offset);
 
 /**
  * @brief adds remote extents to the inode
