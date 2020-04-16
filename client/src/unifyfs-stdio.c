@@ -476,12 +476,17 @@ static int unifyfs_stream_flush(FILE* stream)
 
     /* if buffer is dirty, write data to file */
     if (s->buf != NULL && s->bufdirty) {
-        int write_rc = unifyfs_fd_write(s->fd, s->bufpos, s->buf, s->buflen);
+        size_t bytes;
+        int write_rc = unifyfs_fd_write(s->fd, s->bufpos, s->buf, s->buflen,
+            &bytes);
         if (write_rc != UNIFYFS_SUCCESS) {
+            /* ERROR: set stream error indicator and errno */
             s->err = 1;
             errno = unifyfs_rc_errno(write_rc);
             return write_rc;
         }
+
+        /* TODO: handle short writes as error? */
 
         /* lookup file id from file descriptor attached to stream */
         int fid = unifyfs_get_fid_from_fd(s->fd);
@@ -616,20 +621,19 @@ static int unifyfs_stream_read(
             }
 
             /* read data from file into buffer */
-            ssize_t read_rc = unifyfs_fd_read(s->fd, current, s->buf,
-                s->bufsize);
-            if (read_rc == -1) {
-                /*
-                 * ERROR: read error, set error indicator. errno is already set
-                 * by unifyfs_fd_read()
-                 */
+            size_t bytes;
+            int read_rc = unifyfs_fd_read(s->fd, current, s->buf,
+                s->bufsize, &bytes);
+            if (read_rc != UNIFYFS_SUCCESS) {
+                /* ERROR: set error indicator and errno */
                 s->err = 1;
+                errno = unifyfs_rc_errno(read_rc);
                 return EIO;
             }
 
             /* record new buffer range within file */
-            s->bufpos  = current;
-            s->buflen  = read_rc;
+            s->bufpos = current;
+            s->buflen = bytes;
 
             /* set end-of-file flag if our read was short */
             if (s->buflen < s->bufsize) {
@@ -761,16 +765,19 @@ static int unifyfs_stream_write(
     /* if unbuffered, write data directly to file */
     if (s->buftype == _IONBF) {
         /* write data directly to file */
-        int write_rc = unifyfs_fd_write(s->fd, current, buf, count);
+        size_t bytes;
+        int write_rc = unifyfs_fd_write(s->fd, current, buf, count, &bytes);
         if (write_rc != UNIFYFS_SUCCESS) {
-            /* ERROR: write error, set error indicator and errno */
+            /* ERROR: set stream error indicator and errno */
             s->err = 1;
             errno = unifyfs_rc_errno(write_rc);
             return write_rc;
         }
 
+        /* TODO: handle short writes as error? */
+
         /* update file position */
-        filedesc->pos = current + (off_t) count;
+        filedesc->pos = current + (off_t) bytes;
 
         return UNIFYFS_SUCCESS;
     }
@@ -2303,19 +2310,19 @@ static int __srefill(unifyfs_stream_t* stream)
         }
 
         /* read data from file into buffer */
-        ssize_t read_rc = unifyfs_fd_read(s->fd, current, s->buf, s->bufsize);
-        if (read_rc == -1) {
-            /*
-             * ERROR: read error, set error indicator. errno is already set
-             * by unifyfs_fd_read()
-             */
+        size_t bytes;
+        int read_rc = unifyfs_fd_read(s->fd, current, s->buf, s->bufsize,
+            &bytes);
+        if (read_rc != UNIFYFS_SUCCESS) {
+            /* ERROR: set error indicator and errno */
             s->err = 1;
+            errno = unifyfs_rc_errno(read_rc);
             return 1;
         }
 
         /* record new buffer range within file */
         s->bufpos = current;
-        s->buflen = read_rc;
+        s->buflen = bytes;
     }
 
     /* determine number of bytes to copy from stream buffer */

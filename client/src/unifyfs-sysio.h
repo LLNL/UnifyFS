@@ -105,15 +105,29 @@ UNIFYFS_DECL(lio_listio, int, (int mode, struct aiocb* const aiocb_list[],
 
 /*
  * Read 'count' bytes info 'buf' from file starting at offset 'pos'.
- * Returns number of bytes actually read, or -1 on error, in which
- * case errno will be set.
+ * Returns UNIFYFS_SUCCESS and sets number of bytes actually read in bytes
+ * on success.  Otherwise returns error code on error.
  */
-ssize_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count);
+int unifyfs_fd_read(
+    int fd,       /* file descriptor to read from */
+    off_t pos,    /* offset within file to read from */
+    void* buf,    /* buffer to hold data */
+    size_t count, /* number of bytes to read */
+    size_t* bytes /* number of bytes read */
+);
 
-/* write count bytes from buf into file starting at offset pos,
- * allocates new bytes and updates file size as necessary,
- * fills any gaps with zeros */
-int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count);
+/*
+ * Write 'count' bytes from 'buf' into file starting at offset 'pos'.
+ * Returns UNIFYFS_SUCCESS and sets number of bytes actually written in bytes
+ * on success.  Otherwise returns error code on error.
+ */
+int unifyfs_fd_write(
+    int fd,          /* file descriptor to write to */
+    off_t pos,       /* offset within file to write to */
+    const void* buf, /* buffer holding data to write */
+    size_t count,    /* number of bytes to write */
+    size_t* bytes    /* number of bytes written */
+);
 
 #include "unifyfs-dirops.h"
 

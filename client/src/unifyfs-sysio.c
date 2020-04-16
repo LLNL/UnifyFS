@@ -509,34 +509,33 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
  * Returns number of bytes actually read, or -1 on error, in which
  * case errno will be set.
  */
-ssize_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
+int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* bytes)
 {
+    /* assume we'll fail, set bytes to 0 as a clue */
+    *bytes = 0;
+
     /* get the file id for this file descriptor */
     int fid = unifyfs_get_fid_from_fd(fd);
     if (fid < 0) {
-        errno = EBADF;
-        return -1;
+        return EBADF;
     }
 
     /* it's an error to read from a directory */
     if (unifyfs_fid_is_dir(fid)) {
         /* TODO: note that read/pread can return this, but not fread */
-        errno = EISDIR;
-        return -1;
+        return EISDIR;
     }
 
     /* check that file descriptor is open for read */
     unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(fd);
     if (!filedesc->read) {
-        errno = EBADF;
-        return -1;
+        return EBADF;
     }
 
     /* TODO: is it safe to assume that off_t is bigger than size_t? */
     /* check that we don't overflow the file length */
     if (unifyfs_would_overflow_offt(pos, (off_t) count)) {
-        errno = EOVERFLOW;
-        return -1;
+        return EOVERFLOW;
     }
 
     /* TODO: check that file is open for reading */
@@ -544,7 +543,7 @@ ssize_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
     /* if we don't read any bytes, return success */
     if (count == 0) {
         LOGDBG("returning EOF");
-        return 0;
+        return UNIFYFS_SUCCESS;
     }
 
     /* fill in read request */
@@ -557,25 +556,19 @@ ssize_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
     req.buf     = buf;
 
     /* execute read operation */
-    ssize_t retcount;
     int ret = unifyfs_fid_read_reqs(&req, 1);
     if (ret != UNIFYFS_SUCCESS) {
         /* failed to issue read operation */
-        errno = EIO;
-        retcount = -1;
+        return EIO;
     } else if (req.errcode != UNIFYFS_SUCCESS) {
         /* read executed, but failed */
-        errno = EIO;
-        retcount = -1;
-    } else {
-        /* success, get number of bytes read from read request field */
-        retcount = (ssize_t) req.nread;
-
-        /* update file pointer position */
-        filedesc->pos += (off_t) retcount;
+        return EIO;
     }
 
-    return retcount;
+    /* success, get number of bytes read from read request field */
+    *bytes = req.nread;
+
+    return UNIFYFS_SUCCESS;
 }
 
 /*
@@ -584,8 +577,12 @@ ssize_t unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count)
  * that 'pos' is actually where you want to write, and so O_APPEND behavior
  * is ignored.  Fills any gaps with zeros
  */
-int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count)
+int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count,
+    size_t* bytes)
 {
+    /* assume we'll fail, set bytes to 0 as a clue */
+    *bytes = 0;
+
     /* get the file id for this file descriptor */
     int fid = unifyfs_get_fid_from_fd(fd);
     if (fid < 0) {
@@ -612,6 +609,10 @@ int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count)
 
     /* finally write specified data to file */
     int write_rc = unifyfs_fid_write(fid, pos, buf, count);
+    if (write_rc == UNIFYFS_SUCCESS) {
+        *bytes = count;
+    }
+
     return write_rc;
 }
 
@@ -994,8 +995,19 @@ ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
         }
 
         /* execute read */
-        ssize_t ret = unifyfs_fd_read(fd, filedesc->pos, buf, count);
-        return ret;
+        size_t bytes;
+        int read_rc = unifyfs_fd_read(fd, filedesc->pos, buf, count, &bytes);
+        if (read_rc != UNIFYFS_SUCCESS) {
+            /* read operation failed */
+            errno = unifyfs_rc_errno(read_rc);
+            return (ssize_t)(-1);
+        }
+
+        /* success, update file pointer position */
+        filedesc->pos += (off_t)bytes;
+
+        /* return number of bytes read */
+        return (ssize_t)bytes;
     } else {
         MAP_OR_FAIL(read);
         ssize_t ret = UNIFYFS_REAL(read)(fd, buf, count);
@@ -1007,8 +1019,6 @@ ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
 ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
 {
     LOGDBG("write was called for fd %d", fd);
-    size_t ret;
-    off_t pos;
 
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
@@ -1020,6 +1030,9 @@ ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
             return (ssize_t)(-1);
         }
 
+        /* compute starting position to write within file,
+         * assume at current position on file descriptor */
+        off_t pos = filedesc->pos;
         if (filedesc->append) {
             /*
              * With O_APPEND we always write to the end, despite the current
@@ -1027,26 +1040,27 @@ ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
              */
             int fid = unifyfs_get_fid_from_fd(fd);
             pos = unifyfs_fid_logical_size(fid);
-        } else {
-            pos = filedesc->pos;
         }
 
         /* write data to file */
-        int write_rc = unifyfs_fd_write(fd, pos, buf, count);
+        size_t bytes;
+        int write_rc = unifyfs_fd_write(fd, pos, buf, count, &bytes);
         if (write_rc != UNIFYFS_SUCCESS) {
+            /* write failed */
             errno = unifyfs_rc_errno(write_rc);
             return (ssize_t)(-1);
         }
-        ret = count;
 
         /* update file position */
-        filedesc->pos = pos + count;
+        filedesc->pos = pos + bytes;
+
+        /* return number of bytes written */
+        return (ssize_t)bytes;
     } else {
         MAP_OR_FAIL(write);
-        ret = UNIFYFS_REAL(write)(fd, buf, count);
+        ssize_t ret = UNIFYFS_REAL(write)(fd, buf, count);
+        return ret;
     }
-
-    return ret;
 }
 
 ssize_t UNIFYFS_WRAP(readv)(int fd, const struct iovec* iov, int iovcnt)
@@ -1281,14 +1295,15 @@ ssize_t UNIFYFS_WRAP(pwrite)(int fd, const void* buf, size_t count,
         }
 
         /* write data to file */
-        int write_rc = unifyfs_fd_write(fd, offset, buf, count);
+        size_t bytes;
+        int write_rc = unifyfs_fd_write(fd, offset, buf, count, &bytes);
         if (write_rc != UNIFYFS_SUCCESS) {
             errno = unifyfs_rc_errno(write_rc);
             return (ssize_t)(-1);
         }
 
-        /* return number of bytes read */
-        return (ssize_t) count;
+        /* return number of bytes written */
+        return (ssize_t)bytes;
     } else {
         MAP_OR_FAIL(pwrite);
         ssize_t ret = UNIFYFS_REAL(pwrite)(fd, buf, count, offset);
