@@ -4,14 +4,10 @@
 
 #include "unifyfs_tree.h"
 
-
-/* given the process's rank and the number of ranks, this computes a k-ary
- * tree rooted at rank 0, the structure records the number of children
- * of the local rank and the list of their ranks */
 /**
- * @brief given the process's rank and the number of ranks, this computes a k-ary
- *        tree rooted at rank 0, the structure records the number of children
- *        of the local rank and the list of their ranks
+ * @brief given the process's rank and the number of ranks, this computes a
+ * k-ary tree rooted at rank 0, the structure records the number of children of
+ * the local rank and the list of their ranks
  *
  * @param rank rank of calling process
  * @param ranks number of ranks in tree

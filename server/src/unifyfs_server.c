@@ -83,6 +83,9 @@ static int CountTasksPerNode(int rank, int numTasks);
 static int find_rank_idx(int my_rank);
 #endif
 
+struct unifyfs_inode_tree _global_inode_tree;
+struct unifyfs_inode_tree* global_inode_tree = &_global_inode_tree;
+
 /*
  * Perform steps to create a daemon process:
  *

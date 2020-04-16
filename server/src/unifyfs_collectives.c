@@ -38,7 +38,7 @@ typedef struct {
 } unifyfs_coll_request_t;
 
 static
-int rpc_allocate_extbcast_handle(int rank, unifyfs_coll_request_t *request)
+int rpc_allocate_extbcast_handle(int rank, unifyfs_coll_request_t* request)
 {
     int rc = (int)UNIFYFS_SUCCESS;
 
@@ -53,8 +53,8 @@ int rpc_allocate_extbcast_handle(int rank, unifyfs_coll_request_t *request)
     return rc;
 }
 
-static int rpc_invoke_extbcast_request(extbcast_request_in_t *in,
-                                       unifyfs_coll_request_t *request)
+static int rpc_invoke_extbcast_request(extbcast_request_in_t* in,
+                                       unifyfs_coll_request_t* request)
 {
     int rc = (int)UNIFYFS_SUCCESS;
 
@@ -67,18 +67,17 @@ static int rpc_invoke_extbcast_request(extbcast_request_in_t *in,
 
 /**
  * @brief Blocking function to forward extent broadcast request
- * 
+ *
  * @param broadcast_tree The tree for the broadcast
  * @param in Input data for the broadcast
  * @return int
  */
 static int extbcast_request_forward(const unifyfs_tree_t* broadcast_tree,
-                                    extbcast_request_in_t *in)
+                                    extbcast_request_in_t* in)
 {
     printf("%d: BUCKEYES request_forward\n", glb_pmi_rank);
     fflush(stdout);
 
-    hg_return_t hret;
     int ret;
 
     /* get info for tree */
@@ -87,7 +86,7 @@ static int extbcast_request_forward(const unifyfs_tree_t* broadcast_tree,
 
     /* allocate memory for request objects
      * TODO: possibly get this from memory pool */
-    unifyfs_coll_request_t *requests = calloc(child_count,
+    unifyfs_coll_request_t* requests = calloc(child_count,
                                               sizeof(unifyfs_coll_request_t));
     /* forward request down the tree */
     int i;
@@ -105,13 +104,15 @@ static int extbcast_request_forward(const unifyfs_tree_t* broadcast_tree,
     /* wait for the requests to finish */
     extbcast_request_out_t out;
     for (i = 0; i < child_count; i++) {
+        hg_return_t hret;
+
         /* TODO: get outputs */
         hret = margo_wait(requests[i].request);
-        assert(hret == HG_SUCCESS);
+        assert(HG_SUCCESS == hret);
 
         /* get the output of the rpc */
         hret = margo_get_output(requests[i].handle, &out);
-        assert(hret == HG_SUCCESS);
+        assert(HG_SUCCESS == hret);
 
         /* set return value
          * TODO: check if we have an error and handle it */
@@ -161,7 +162,8 @@ static void extbcast_request_rpc(hg_handle_t handle)
 
     /* expose local bulk buffer */
     hg_bulk_t extent_data;
-    void *datap = extents;
+    void* datap = extents;
+>>>>>>> Implementation of collective operations in the server for removing mdhim
     margo_bulk_create(mid, 1, &datap, &buf_size,
                       HG_BULK_READWRITE, &extent_data);
 
@@ -186,7 +188,8 @@ static void extbcast_request_rpc(hg_handle_t handle)
 
     /* allocate memory for request objects
      * TODO: possibly get this from memory pool */
-    unifyfs_coll_request_t *requests = malloc(sizeof(unifyfs_coll_request_t) * bcast_tree.child_count);
+    unifyfs_coll_request_t* requests =
+        malloc(sizeof(unifyfs_coll_request_t) * bcast_tree.child_count);
 
     /* allogate mercury handles for forwarding the request */
     int i;
@@ -248,8 +251,8 @@ static void extbcast_request_rpc(hg_handle_t handle)
 DEFINE_MARGO_RPC_HANDLER(extbcast_request_rpc)
 
 /**
- * @brief 
- * 
+ * @brief
+ *
  * @return int UnifyFS return code
  */
 int unifyfs_broadcast_extent_tree(int gfid)
@@ -265,7 +268,7 @@ int unifyfs_broadcast_extent_tree(int gfid)
                       UNIFYFS_BCAST_K_ARY, &bcast_tree);
 
     hg_size_t num_extents = 0;
-    struct extent_tree_node *extents = NULL;
+    struct extent_tree_node* extents = NULL;
 
     ret = unifyfs_inode_get_local_extents(gfid, &num_extents, &extents);
     if (ret) {
@@ -280,7 +283,7 @@ int unifyfs_broadcast_extent_tree(int gfid)
     /* create bulk data structure containing the extends
      * NOTE: bulk data is always read only at the root of the broadcast tree */
     hg_bulk_t extent_data;
-    void *datap = (void *) extents;
+    void* datap = (void*) extents;
     margo_bulk_create(unifyfsd_rpc_context->svr_mid, 1,
                       &datap, &buf_size,
                       HG_BULK_READ_ONLY, &extent_data);
@@ -308,10 +311,10 @@ int unifyfs_broadcast_extent_tree(int gfid)
  * filesize
  *************************************************************************/
 
-static int filesize_forward(const unifyfs_tree_t* broadcast_tree, 
-                             filesize_in_t *in, hg_size_t *filesize)
+static int filesize_forward(const unifyfs_tree_t* broadcast_tree,
+                            filesize_in_t* in, hg_size_t* filesize)
 {
-    printf("%d: BUCKEYES filesize_forward\n", glb_pmi_rank);
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -335,7 +338,7 @@ static int filesize_forward(const unifyfs_tree_t* broadcast_tree,
     if (child_count > 0) {
         /* allocate memory for request objects
          * TODO: possibly get this from memory pool */
-        unifyfs_coll_request_t *requests = calloc(child_count,
+        unifyfs_coll_request_t* requests = calloc(child_count,
                                       sizeof(unifyfs_coll_request_t));
         if (!requests) {
             ret = ENOMEM;
@@ -346,7 +349,7 @@ static int filesize_forward(const unifyfs_tree_t* broadcast_tree,
         for (i = 0; i < child_count; i++) {
             /* get rank of this child */
             int child = child_ranks[i];
-            unifyfs_coll_request_t *req = &requests[i];
+            unifyfs_coll_request_t* req = &requests[i];
 
             printf("children[%d]: %s\n",
                    child, glb_servers[child].margo_svr_addr_str);
@@ -391,7 +394,7 @@ out:
 
 static void filesize_rpc(hg_handle_t handle)
 {
-    printf("%d: BUCKEYES filesize_rpc\n", glb_pmi_rank);
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -429,9 +432,10 @@ static void filesize_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(filesize_rpc)
 
-int unifyfs_invoke_filesize_rpc(int gfid, size_t *filesize)
+int unifyfs_invoke_filesize_rpc(int gfid, size_t* filesize)
 {
-    LOGDBG("%d: BUCKEYES filesize\n", glb_pmi_rank);
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    fflush(stdout);
 
     /* assuming success */
     int ret = UNIFYFS_SUCCESS;
@@ -451,7 +455,7 @@ int unifyfs_invoke_filesize_rpc(int gfid, size_t *filesize)
     ret = filesize_forward(&bcast_tree, &in, &_filesize);
 
     if (ret) {
-        LOGERR("filesize_forward faild: (ret=%d)", ret);
+        LOGERR("filesize_forward failed: (ret=%d)", ret);
     } else {
         *filesize = _filesize;
     }
@@ -466,9 +470,9 @@ int unifyfs_invoke_filesize_rpc(int gfid, size_t *filesize)
  *************************************************************************/
 
 static
-int truncate_forward(const unifyfs_tree_t* broadcast_tree, truncate_in_t *in)
+int truncate_forward(const unifyfs_tree_t* broadcast_tree, truncate_in_t* in)
 {
-    printf("%d: BUCKEYES truncate_forward\n", glb_pmi_rank);
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -492,7 +496,7 @@ int truncate_forward(const unifyfs_tree_t* broadcast_tree, truncate_in_t *in)
     if (child_count > 0) {
         /* allocate memory for request objects
          * TODO: possibly get this from memory pool */
-        unifyfs_coll_request_t *requests = calloc(child_count,
+        unifyfs_coll_request_t* requests = calloc(child_count,
                                       sizeof(unifyfs_coll_request_t));
         if (!requests) {
             ret = ENOMEM;
@@ -503,7 +507,7 @@ int truncate_forward(const unifyfs_tree_t* broadcast_tree, truncate_in_t *in)
         for (i = 0; i < child_count; i++) {
             /* get rank of this child */
             int child = child_ranks[i];
-            unifyfs_coll_request_t *req = &requests[i];
+            unifyfs_coll_request_t* req = &requests[i];
 
             printf("children[%d]: %s\n",
                    child, glb_servers[child].margo_svr_addr_str);
@@ -545,7 +549,7 @@ out:
 
 static void truncate_rpc(hg_handle_t handle)
 {
-    printf("%d: BUCKEYES truncate_rpc\n", glb_pmi_rank);
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -602,7 +606,7 @@ int unifyfs_invoke_truncate_rpc(int gfid, size_t filesize)
     ret = truncate_forward(&bcast_tree, &in);
 
     if (ret) {
-        LOGERR("truncate_forward faild: (ret=%d)", ret);
+        LOGERR("truncate_forward failed: (ret=%d)", ret);
     }
 
     unifyfs_tree_free(&bcast_tree);
@@ -615,9 +619,9 @@ int unifyfs_invoke_truncate_rpc(int gfid, size_t filesize)
  *************************************************************************/
 
 static
-int metaset_forward(const unifyfs_tree_t* broadcast_tree, metaset_in_t *in)
+int metaset_forward(const unifyfs_tree_t* broadcast_tree, metaset_in_t* in)
 {
-    printf("%d: BUCKEYES metaset_forward\n", glb_pmi_rank);
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -639,7 +643,7 @@ int metaset_forward(const unifyfs_tree_t* broadcast_tree, metaset_in_t *in)
     if (child_count > 0) {
         /* allocate memory for request objects
          * TODO: possibly get this from memory pool */
-        unifyfs_coll_request_t *requests = calloc(child_count,
+        unifyfs_coll_request_t* requests = calloc(child_count,
                                       sizeof(unifyfs_coll_request_t));
         if (!requests) {
             ret = ENOMEM;
@@ -650,7 +654,7 @@ int metaset_forward(const unifyfs_tree_t* broadcast_tree, metaset_in_t *in)
         for (i = 0; i < child_count; i++) {
             /* get rank of this child */
             int child = child_ranks[i];
-            unifyfs_coll_request_t *req = &requests[i];
+            unifyfs_coll_request_t* req = &requests[i];
 
             printf("children[%d]: %s\n",
                    child, glb_servers[child].margo_svr_addr_str);
@@ -691,7 +695,7 @@ out:
 
 static void metaset_rpc(hg_handle_t handle)
 {
-    printf("%d: BUCKEYES metaset_rpc\n", glb_pmi_rank);
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -728,9 +732,10 @@ static void metaset_rpc(hg_handle_t handle)
 DEFINE_MARGO_RPC_HANDLER(metaset_rpc)
 
 int unifyfs_invoke_metaset_rpc(int gfid, int create,
-                                unifyfs_file_attr_t *fattr)
+                                unifyfs_file_attr_t* fattr)
 {
-    LOGDBG("%d: BUCKEYES metaset\n", glb_pmi_rank);
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    fflush(stdout);
 
     /* assuming success */
     int ret = UNIFYFS_SUCCESS;
@@ -749,7 +754,7 @@ int unifyfs_invoke_metaset_rpc(int gfid, int create,
 
     ret = metaset_forward(&bcast_tree, &in);
     if (ret) {
-        LOGERR("metaset_forward faild: (ret=%d)", ret);
+        LOGERR("metaset_forward failed: (ret=%d)", ret);
     }
 
     unifyfs_tree_free(&bcast_tree);
@@ -762,9 +767,9 @@ int unifyfs_invoke_metaset_rpc(int gfid, int create,
  *************************************************************************/
 
 static
-int unlink_forward(const unifyfs_tree_t* broadcast_tree, unlink_in_t *in)
+int unlink_forward(const unifyfs_tree_t* broadcast_tree, unlink_in_t* in)
 {
-    printf("%d: BUCKEYES unlink_forward\n", glb_pmi_rank);
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -786,7 +791,7 @@ int unlink_forward(const unifyfs_tree_t* broadcast_tree, unlink_in_t *in)
     if (child_count > 0) {
         /* allocate memory for request objects
          * TODO: possibly get this from memory pool */
-        unifyfs_coll_request_t *requests = calloc(child_count,
+        unifyfs_coll_request_t* requests = calloc(child_count,
                                       sizeof(unifyfs_coll_request_t));
         if (!requests) {
             ret = ENOMEM;
@@ -797,7 +802,7 @@ int unlink_forward(const unifyfs_tree_t* broadcast_tree, unlink_in_t *in)
         for (i = 0; i < child_count; i++) {
             /* get rank of this child */
             int child = child_ranks[i];
-            unifyfs_coll_request_t *req = &requests[i];
+            unifyfs_coll_request_t* req = &requests[i];
 
             printf("children[%d]: %s\n",
                    child, glb_servers[child].margo_svr_addr_str);
@@ -839,7 +844,7 @@ out:
 
 static void unlink_rpc(hg_handle_t handle)
 {
-    printf("%d: BUCKEYES unlink_rpc\n", glb_pmi_rank);
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -878,7 +883,8 @@ DEFINE_MARGO_RPC_HANDLER(unlink_rpc)
 
 int unifyfs_invoke_unlink_rpc(int gfid)
 {
-    LOGDBG("%d: BUCKEYES unlink\n", glb_pmi_rank);
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    fflush(stdout);
 
     /* assuming success */
     int ret = UNIFYFS_SUCCESS;
@@ -896,7 +902,7 @@ int unifyfs_invoke_unlink_rpc(int gfid)
 
     ret = unlink_forward(&bcast_tree, &in);
     if (ret) {
-        LOGERR("unlink_forward faild: (ret=%d)", ret);
+        LOGERR("unlink_forward failed: (ret=%d)", ret);
     }
 
     unifyfs_tree_free(&bcast_tree);

@@ -11,8 +11,8 @@
  * @brief file and directory inode structure. this holds:
  */
 struct unifyfs_inode {
-    RB_ENTRY(unifyfs_inode) inode_tree_entry; /** tree entry for global inode
-                                                tree */
+    /* tree entry for global inode tree */
+    RB_ENTRY(unifyfs_inode) inode_tree_entry;
 
     int gfid;                     /* global file identifier */
     unifyfs_file_attr_t attr;     /* file attributes */
@@ -99,16 +99,28 @@ int unifyfs_inode_unlink(int gfid);
 int unifyfs_inode_truncate(int gfid, unsigned long size);
 
 /**
- * @brief
+ * @brief adds local extents to the inode
  *
- * @param gfid
- * @param num_extents
- * @param nodes
+ * @param gfid global file identifier
+ * @param num_extents the number of extents to be added (size of @nodes)
+ * @param nodes the array of extent_tree_node
  *
- * @return
+ * @return 0 on success, errno otherwise
  */
 int unifyfs_inode_add_local_extents(int gfid, int num_extents,
                                     struct extent_tree_node* nodes);
+
+/**
+ * @brief get the local extent array from the target inode
+ *
+ * @param gfid the global file identifier
+ * @param n the number of extents, set by this function
+ * @param nodes the pointer to the array of extents, caller should free this
+ *
+ * @return 0 on success, errno otherwise
+ */
+int unifyfs_inode_get_local_extents(int gfid, size_t* n,
+                                    struct extent_tree_node** nodes);
 
 /**
  * @brief get the maximum file size from the local extent tree of given file
@@ -121,40 +133,50 @@ int unifyfs_inode_add_local_extents(int gfid, int num_extents,
 int unifyfs_inode_get_extent_size(int gfid, size_t* offset);
 
 /**
- * @brief
+ * @brief adds remote extents to the inode
  *
- * @param gfid
- * @param n
- * @param nodes
+ * @param gfid global file identifier
+ * @param num_extents the number of extents to be added (size of @nodes)
+ * @param nodes the array of extent_tree_node
  *
- * @return
- */
-int unifyfs_inode_get_local_extents(int gfid, size_t *n,
-                                    struct extent_tree_node **nodes);
-
-/**
- * @brief
- *
- * @param gfid
- * @param n
- * @param nodes
- *
- * @return
+ * @return 0 on success, errno otherwise
  */
 int unifyfs_inode_add_remote_extents(int gfid, int n,
-                                     struct extent_tree_node *nodes);
+                                     struct extent_tree_node* nodes);
 
+/**
+ * @brief calls extents_tree_span, which will do:
+ *
+ * given an extent tree and starting and ending logical offsets, fill in
+ * key/value entries that overlap that range, returns at most max entries
+ * starting from lowest starting offset, sets outnum with actual number of
+ * entries returned
+ *
+ * @param gfid global file id
+ * @param start starting logical offset
+ * @param end ending logical offset
+ * @param max maximum number of key/vals to return
+ * @param keys array of length max for output keys
+ * @param vals array of length max for output values
+ * @param outnum number of entries returned
+ *
+ * @return
+ */
 int unifyfs_inode_span_extents(
-    int gfid,                        /* global file id we're looking in */
-    unsigned long start,             /* starting logical offset */
-    unsigned long end,               /* ending logical offset */
-    int max,                         /* maximum number of key/vals to return */
+    int gfid,               /* global file id we're looking in */
+    unsigned long start,    /* starting logical offset */
+    unsigned long end,      /* ending logical offset */
+    int max,                /* maximum number of key/vals to return */
     void* keys,             /* array of length max for output keys */
     void* vals,             /* array of length max for output values */
-    int* outnum);                    /* number of entries returned */
+    int* outnum);           /* number of entries returned */
 
-/*
- * for debugging
+/**
+ * @brief prints the inode information to the log stream
+ *
+ * @param gfid global file identifier
+ *
+ * @return 0 on success, errno otherwise
  */
 int unifyfs_inode_dump(int gfid);
 

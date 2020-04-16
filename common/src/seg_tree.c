@@ -44,7 +44,7 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
-int
+static int
 compare_func(struct seg_tree_node* node1, struct seg_tree_node* node2)
 {
     if (node1->start > node2->end) {
@@ -56,8 +56,8 @@ compare_func(struct seg_tree_node* node1, struct seg_tree_node* node2)
     }
 }
 
-RB_PROTOTYPE(inttree, seg_tree_node, entry, compare_func)
-RB_GENERATE(inttree, seg_tree_node, entry, compare_func)
+RB_PROTOTYPE(seg_inttree, seg_tree_node, entry, compare_func)
+RB_GENERATE(seg_inttree, seg_tree_node, entry, compare_func)
 
 /* Returns 0 on success, positive non-zero error code otherwise */
 int seg_tree_init(struct seg_tree* seg_tree)
@@ -185,7 +185,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
      * overlaps, and our range was successfully inserted.
      */
     overlap = NULL;
-    while ((overlap = RB_INSERT(inttree, &seg_tree->head, node))) {
+    while ((overlap = RB_INSERT(seg_inttree, &seg_tree->head, node))) {
         /*
          * Our range overlaps with another range (in 'overlap'). Is there any
          * any part of 'overlap' that does not overlap our range?  If so,
@@ -200,7 +200,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
              * range in the tree defined in overlap. We can't find a
              * non-overlapping range.  Delete the existing range.
              */
-            RB_REMOVE(inttree, &seg_tree->head, overlap);
+            RB_REMOVE(seg_inttree, &seg_tree->head, overlap);
             free(overlap);
             seg_tree->count--;
         } else {
@@ -243,12 +243,12 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
             }
 
             /* Remove our old range */
-            RB_REMOVE(inttree, &seg_tree->head, overlap);
+            RB_REMOVE(seg_inttree, &seg_tree->head, overlap);
             free(overlap);
             seg_tree->count--;
 
             /* Insert the non-overlapping part of the new range */
-            RB_INSERT(inttree, &seg_tree->head, resized);
+            RB_INSERT(seg_inttree, &seg_tree->head, resized);
             seg_tree->count++;
 
             /*
@@ -257,7 +257,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
              * into two
              */
             if (remaining != NULL) {
-                RB_INSERT(inttree, &seg_tree->head, remaining);
+                RB_INSERT(seg_inttree, &seg_tree->head, remaining);
                 seg_tree->count++;
             }
         }
@@ -276,7 +276,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
     target = node;
 
     /* Check whether we can coalesce new extent with any preceding extent. */
-    prev = RB_PREV(inttree, &seg_tree->head, target);
+    prev = RB_PREV(seg_inttree, &seg_tree->head, target);
     if (prev != NULL && prev->end + 1 == target->start) {
         /*
          * We found a extent that ends just before the new extent starts.
@@ -292,7 +292,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
             prev->end = target->end;
 
             /* Delete new extent from the tree and free it. */
-            RB_REMOVE(inttree, &seg_tree->head, target);
+            RB_REMOVE(seg_inttree, &seg_tree->head, target);
             free(target);
             seg_tree->count--;
 
@@ -305,7 +305,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
     }
 
     /* Check whether we can coalesce new extent with any trailing extent. */
-    next = RB_NEXT(inttree, &seg_tree->head, target);
+    next = RB_NEXT(seg_inttree, &seg_tree->head, target);
     if (next != NULL && target->end + 1 == next->start) {
         /*
          * We found a extent that starts just after the new extent ends.
@@ -321,7 +321,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
             target->end = next->end;
 
             /* Delete next extent from the tree and free it. */
-            RB_REMOVE(inttree, &seg_tree->head, next);
+            RB_REMOVE(seg_inttree, &seg_tree->head, next);
             free(next);
             seg_tree->count--;
         }
@@ -355,7 +355,7 @@ struct seg_tree_node* seg_tree_find_nolock(
     /* Search tree for either a range that overlaps with
      * the target range (starting byte), or otherwise the
      * node for the next biggest starting byte. */
-    struct seg_tree_node* next = RB_NFIND(inttree, &seg_tree->head, node);
+    struct seg_tree_node* next = RB_NFIND(seg_inttree, &seg_tree->head, node);
 
     free(node);
 
@@ -417,7 +417,7 @@ seg_tree_iter(struct seg_tree* seg_tree, struct seg_tree_node* start)
     struct seg_tree_node* next = NULL;
     if (start == NULL) {
         /* Initial case, no starting node */
-        next = RB_MIN(inttree, &seg_tree->head);
+        next = RB_MIN(seg_inttree, &seg_tree->head);
         return next;
     }
 
@@ -425,14 +425,14 @@ seg_tree_iter(struct seg_tree* seg_tree, struct seg_tree_node* start)
      * We were given a valid start node.  Look it up to start our traversal
      * from there.
      */
-    next = RB_FIND(inttree, &seg_tree->head, start);
+    next = RB_FIND(seg_inttree, &seg_tree->head, start);
     if (!next) {
         /* Some kind of error */
         return NULL;
     }
 
     /* Look up our next node */
-    next = RB_NEXT(inttree, &seg_tree->head, start);
+    next = RB_NEXT(seg_inttree, &seg_tree->head, start);
 
     return next;
 }
@@ -490,13 +490,13 @@ void seg_tree_clear(struct seg_tree* seg_tree)
     /* Remove and free each node in the tree */
     while ((node = seg_tree_iter(seg_tree, node))) {
         if (oldnode) {
-            RB_REMOVE(inttree, &seg_tree->head, oldnode);
+            RB_REMOVE(seg_inttree, &seg_tree->head, oldnode);
             free(oldnode);
         }
         oldnode = node;
     }
     if (oldnode) {
-        RB_REMOVE(inttree, &seg_tree->head, oldnode);
+        RB_REMOVE(seg_inttree, &seg_tree->head, oldnode);
         free(oldnode);
     }
 

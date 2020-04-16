@@ -11,7 +11,7 @@ struct seg_tree_node {
 };
 
 struct seg_tree {
-    RB_HEAD(inttree, seg_tree_node) head;
+    RB_HEAD(seg_inttree, seg_tree_node) head;
     pthread_rwlock_t rwlock;
     unsigned long count;     /* number of segments stored in tree */
     unsigned long max;       /* maximum logical offset value in the tree */

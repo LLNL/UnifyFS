@@ -51,7 +51,7 @@ void unifyfs_inode_tree_destroy(struct unifyfs_inode_tree* tree);
  * @param tree inode tree
  * @param ino new inode to insert
  *
- * @return 0 on sucess, errno otherwise
+ * @return 0 on success, errno otherwise
  */
 int unifyfs_inode_tree_insert(struct unifyfs_inode_tree* tree,
                               struct unifyfs_inode* ino);
@@ -63,7 +63,7 @@ int unifyfs_inode_tree_insert(struct unifyfs_inode_tree* tree,
  * @param gfid global file identifier of the target inode
  * @param removed [out] removed inode
  *
- * @return 0 on sucess, errno otherwise
+ * @return 0 on success, errno otherwise
  */
 int unifyfs_inode_tree_remove(struct unifyfs_inode_tree* tree,
                               int gfid, struct unifyfs_inode** removed);
