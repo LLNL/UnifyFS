@@ -51,6 +51,7 @@
 #include "unifyfs_meta.h"
 #include "unifyfs_shm.h"
 #include "unifyfs_inode_tree.h"
+#include "unifyfs_fops.h"
 
 #include <margo.h>
 #include <pthread.h>

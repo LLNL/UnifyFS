@@ -42,6 +42,7 @@
 #include "unifyfs_request_manager.h"
 #include "unifyfs_service_manager.h"
 #include "unifyfs_metadata.h"
+#include "unifyfs_collectives.h"
 
 // margo rpcs
 #include "unifyfs_server_rpcs.h"
@@ -2031,7 +2032,7 @@ int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl)
  * @param client_id: client rank in app
  * @return success/error code
  */
-int rm_cmd_sync(int app_id, int client_id)
+int rm_cmd_sync_mdhim(int app_id, int client_id)
 {
     size_t i;
 
@@ -2200,6 +2201,140 @@ rm_cmd_sync_exit:
         free(val_lens);
     }
 #endif
+
+    return ret;
+}
+
+int rm_cmd_sync_collective(int app_id, int client_id)
+{
+    size_t i;
+
+    /* assume we'll succeed */
+    int ret = (int)UNIFYFS_SUCCESS;
+
+    /* get memory page size on this machine */
+    int page_sz = getpagesize();
+
+    /* get application client */
+    app_client* client = get_app_client(app_id, client_id);
+    if (NULL == client) {
+        return EINVAL;
+    }
+
+    /* get pointer to superblock for this client and app */
+    shm_context* super_ctx = client->shmem_super;
+    if (NULL == super_ctx) {
+        LOGERR("missing client superblock");
+        return EIO;
+    }
+    char* superblk = (char*)(super_ctx->addr);
+
+    /* get pointer to start of key/value region in superblock */
+    char* meta = superblk + client->super_meta_offset;
+
+    /* get number of file extent index values client has for us,
+     * stored as a size_t value in meta region of shared memory */
+    size_t extent_num_entries = *(size_t*)(meta);
+
+    /* indices are stored in the superblock shared memory
+     * created by the client, these are stored as index_t
+     * structs starting one page size offset into meta region */
+    char* ptr_extents = meta + page_sz;
+
+    if (extent_num_entries == 0) {
+        /* Nothing to do */
+        return UNIFYFS_SUCCESS;
+    }
+
+    unifyfs_index_t* meta_payload = (unifyfs_index_t*)(ptr_extents);
+
+    /* total up number of key/value pairs we'll need for this
+     * set of index values */
+    size_t slices = 0;
+    for (i = 0; i < extent_num_entries; i++) {
+        size_t offset = meta_payload[i].file_pos;
+        size_t length = meta_payload[i].length;
+        slices += num_slices(offset, length);
+    }
+    if (slices >= UNIFYFS_MAX_SPLIT_CNT) {
+        LOGERR("Error allocating buffers");
+        return ENOMEM;
+    }
+
+    struct extent_tree_node* local_extents = calloc(extent_num_entries,
+                                                    sizeof(*local_extents));
+    if (!local_extents) {
+        LOGERR("failed to allocate memory for local_extents");
+        return ENOMEM;
+    }
+
+    /*
+     * During sync() in client, all index entries in the superblock are
+     * re-written with the segments (unifyfs_rewrite_index_from_seg_tree).
+     * Therefore, the entries here are also ordered by gfid.
+     */
+    int current_count = 0;
+    int current_gfid = meta_payload[0].gfid;
+    struct extent_tree_node* current_extents = local_extents;
+
+    for (i = 0; i < extent_num_entries; i++) {
+        struct extent_tree_node* tmp = &local_extents[i];
+        unifyfs_index_t* meta = &meta_payload[i];
+        int gfid = meta->gfid;
+        size_t offset = meta->file_pos;
+        size_t length = meta->length;
+        size_t logpos = meta->log_pos;
+        unsigned long end = (unsigned long) (offset + length - 1);
+
+        tmp->start = offset;
+        tmp->end = end;
+        tmp->svr_rank = glb_pmi_rank;
+        tmp->app_id = app_id;
+        tmp->cli_id = client_id;
+        tmp->pos = (unsigned long) logpos;
+
+        current_count++;
+
+        if (gfid != current_gfid) {
+            ret = unifyfs_inode_add_local_extents(current_gfid,
+                                                  current_count - 1,
+                                                  current_extents);
+            if (ret) {
+                LOGERR("failed to add extents (gfid=%d, ret=%d)",
+                        current_gfid, ret);
+                return ret;
+            }
+
+            ret = unifyfs_invoke_broadcast_extents_rpc(current_gfid);
+            if (ret) {
+                LOGERR("failed to broadcast extents (gfid=%d, ret=%d)",
+                        current_gfid, ret);
+                return ret;
+            }
+
+            current_gfid = gfid;
+            current_extents = tmp;
+            current_count = 1;
+        }
+
+        if (current_count == extent_num_entries) {
+            ret = unifyfs_inode_add_local_extents(current_gfid,
+                                                  current_count,
+                                                  current_extents);
+            if (ret) {
+                LOGERR("failed to add extents (gfid=%d, ret=%d)",
+                        current_gfid, ret);
+                return ret;
+            }
+
+            ret = unifyfs_invoke_broadcast_extents_rpc(current_gfid);
+            if (ret) {
+                LOGERR("failed to broadcast extents (gfid=%d, ret=%d)",
+                        current_gfid, ret);
+                return ret;
+            }
+        }
+    }
 
     return ret;
 }

@@ -12,7 +12,10 @@ int unifyfs_broadcast_extent_tree(int gfid);
  *
  * @return
  */
-int unifyfs_invoke_broadcast_extents_rpc(int gfid);
+static inline int unifyfs_invoke_broadcast_extents_rpc(int gfid)
+{
+    return unifyfs_broadcast_extent_tree(gfid);
+}
 
 /**
  * @brief

@@ -93,8 +93,7 @@ static int CountTasksPerNode(int rank, int numTasks);
 static int find_rank_idx(int my_rank);
 #endif
 
-struct unifyfs_inode_tree _global_inode_tree;
-struct unifyfs_inode_tree* global_inode_tree = &_global_inode_tree;
+struct unifyfs_fops* global_fops_tab;
 
 /*
  * Perform steps to create a daemon process:
@@ -405,8 +404,8 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    LOGDBG("initializing metadata store");
-    rc = meta_init_store(&server_cfg);
+    LOGDBG("initializing file operations");
+    rc = unifyfs_fops_init(&server_cfg);
     if (rc != 0) {
         LOGERR("%s", unifyfs_rc_enum_description(rc));
         exit(1);

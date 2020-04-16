@@ -210,7 +210,8 @@ static void unifyfs_metaget_rpc(hg_handle_t handle)
     /* given the global file id, look up file attributes
      * from key/value store */
     unifyfs_file_attr_t attr_val;
-    int ret = unifyfs_inode_metaget(in.gfid, &attr_val);
+
+    int ret = unifyfs_fops_metaget(NULL, in.gfid, &attr_val);
 
     /* build our output values */
     unifyfs_metaget_out_t out;
@@ -242,7 +243,7 @@ static void unifyfs_metaset_rpc(hg_handle_t handle)
 
     /* if we're creating the file,
      * we initialize both the size and laminate flags */
-    int ret = unifyfs_set_file_attribute(create, create, &fattr);
+    int ret = unifyfs_fops_metaset(NULL, in.attr.gfid, create, &fattr);
 
     /* use the new collective for file creation */
     ret = rm_cmd_metaset(in.app_id, in.local_rank_idx, fattr.gfid,create,
@@ -272,9 +273,14 @@ static void unifyfs_sync_rpc(hg_handle_t handle)
     hg_return_t hret = margo_get_input(handle, &in);
     assert(hret == HG_SUCCESS);
 
-    /* read the write indices for all client files from shmem and
-     * propagate their extents to our global metadata */
-    int ret = rm_cmd_sync(in.app_id, in.client_id);
+    /* given global file id, read index metadata from client and
+     * insert into global index key/value store */
+    unifyfs_fops_ctx_t ctx = {
+        .app_id = in.app_id,
+        .client_id = in.client_id,
+    };
+
+    int ret = unifyfs_fops_sync(&ctx);
 
     /* build our output values */
     unifyfs_sync_out_t out;
@@ -302,8 +308,12 @@ static void unifyfs_filesize_rpc(hg_handle_t handle)
     /* read data for a single read request from client,
      * returns data to client through shared memory */
     size_t filesize = 0;
-    int ret = rm_cmd_filesize(in.app_id, in.client_id,
-                              in.gfid, &filesize);
+    unifyfs_fops_ctx_t ctx = {
+        .app_id = in.app_id,
+        .client_id = in.client_id,
+    };
+
+    int ret = unifyfs_fops_filesize(&ctx, in.gfid, &filesize);
 
     /* build our output values */
     unifyfs_filesize_out_t out;
@@ -330,8 +340,12 @@ static void unifyfs_truncate_rpc(hg_handle_t handle)
     assert(hret == HG_SUCCESS);
 
     /* truncate file to specified size */
-    int ret = rm_cmd_truncate(in.app_id, in.client_id,
-                              in.gfid, in.filesize);
+    unifyfs_fops_ctx_t ctx = {
+        .app_id = in.app_id,
+        .client_id = in.client_id,
+    };
+
+    int ret = unifyfs_fops_truncate(&ctx, in.gfid, in.filesize);
 
     /* build our output values */
     unifyfs_truncate_out_t out;
@@ -357,7 +371,12 @@ static void unifyfs_unlink_rpc(hg_handle_t handle)
     assert(hret == HG_SUCCESS);
 
     /* truncate file to specified size */
-    int ret = rm_cmd_unlink(in.app_id, in.client_id, in.gfid);
+    unifyfs_fops_ctx_t ctx = {
+        .app_id = in.app_id,
+        .client_id = in.client_id,
+    };
+
+    int ret = unifyfs_fops_unlink(&ctx, in.gfid);
 
     /* build our output values */
     unifyfs_unlink_out_t out;
@@ -383,7 +402,12 @@ static void unifyfs_laminate_rpc(hg_handle_t handle)
     assert(hret == HG_SUCCESS);
 
     /* truncate file to specified size */
-    int ret = rm_cmd_laminate(in.app_id, in.client_id, in.gfid);
+    unifyfs_fops_ctx_t ctx = {
+        .app_id = in.app_id,
+        .client_id = in.client_id,
+    };
+
+    int ret = unifyfs_fops_laminate(&ctx, in.gfid);
 
     /* build our output values */
     unifyfs_laminate_out_t out;
@@ -412,8 +436,12 @@ static void unifyfs_read_rpc(hg_handle_t handle)
 
     /* read data for a single read request from client,
      * returns data to client through shared memory */
-    int ret = rm_cmd_read(in.app_id, in.client_id,
-                          in.gfid, in.offset, in.length);
+    unifyfs_fops_ctx_t ctx = {
+        .app_id = in.app_id,
+        .client_id = in.client_id,
+    };
+
+    int ret = unifyfs_fops_read(&ctx, in.gfid, in.offset, in.length);
 
     /* build our output values */
     unifyfs_read_out_t out;
@@ -464,8 +492,12 @@ static void unifyfs_mread_rpc(hg_handle_t handle)
     assert(hret == HG_SUCCESS);
 
     /* initiate read operations to fetch data for read requests */
-    int ret = rm_cmd_mread(in.app_id, in.client_id,
-                           in.read_count, buffer);
+    unifyfs_fops_ctx_t ctx = {
+        .app_id = in.app_id,
+        .client_id = in.client_id,
+    };
+
+    int ret = unifyfs_fops_mread(&ctx, in.read_count, buffer);
 
     /* build our output values */
     unifyfs_mread_out_t out;

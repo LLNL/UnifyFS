@@ -327,7 +327,7 @@ static int filesize_forward(const unifyfs_tree_t* broadcast_tree,
 
     hg_size_t _filesize = 0;
 
-    ret = unifyfs_inode_get_extent_size(in->gfid, &_filesize);
+    ret = unifyfs_inode_get_filesize(in->gfid, &_filesize);
     if (ret) {
         goto out;
     }
