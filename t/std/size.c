@@ -12,9 +12,6 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
- /*
-  * Test fwrite/fread/fseek/fgets/rewind/ftell/feof/chmod
-  */
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
@@ -25,39 +22,19 @@
 #include "t/lib/testutil.h"
 
 /*
- * Test correctness of global file size.  Also, test opening a file
- * for append, and test file positioning (fseek, ftell, etc).
+ * Test correctness of global file size.  Also, test opening a file for append
  */
-
-/* Get global or log sizes (or all) */
-static
-void get_size(char* path, size_t* global, size_t* log)
-{
-    struct stat sb = {0};
-    int rc;
-
-    rc = stat(path, &sb);
-    if (rc != 0) {
-        printf("Error: %s\n", strerror(errno));
-        exit(1);    /* die on failure */
-    }
-    if (global) {
-        *global = sb.st_size;
-    }
-
-    if (log) {
-        *log = sb.st_rdev;
-    }
-}
 
 int size_test(char* unifyfs_root)
 {
+    diag("Starting file size and fwrite/fread with append tests");
+
     char path[64];
     char buf[64] = {0};
     FILE* fp = NULL;
-    int rc;
     char* tmp;
     size_t global, log;
+    int fd;
 
     errno = 0;
 
@@ -65,88 +42,81 @@ int size_test(char* unifyfs_root)
 
     /* Write "hello world" to a file */
     fp = fopen(path, "w");
-    ok(fp != NULL, "%s: fopen(%s): %s", __FILE__, path, strerror(errno));
+    ok(fp != NULL, "%s:%d fopen(%s): %s",
+       __FILE__, __LINE__, path, strerror(errno));
+    ok(fwrite("hello world", 12, 1, fp) == 1,
+       "%s:%d fwrite(\"hello world\": %s", __FILE__, __LINE__, strerror(errno));
+    ok(fclose(fp) == 0, "%s:%d fclose(): %s",
+       __FILE__, __LINE__, strerror(errno));
 
-    rc = fwrite("hello world", 12, 1, fp);
-    ok(rc == 1, "%s: fwrite(\"hello world\"): %s", __FILE__, strerror(errno));
-
-    rc = fclose(fp);
-    ok(rc == 0, "%s: fclose() (rc=%d): %s", __FILE__, rc, strerror(errno));
-
-    get_size(path, &global, &log);
-    ok(global == 12, "%s: global size is %d: %s",  __FILE__, global,
-        strerror(errno));
-    ok(log == 12, "%s: log size is %d: %s",  __FILE__, log,
-        strerror(errno));
+    testutil_get_size(path, &global, &log);
+    ok(global == 12, "%s:%d global size after fwrite(\"hello world\") = %d: %s",
+       __FILE__, __LINE__, global, strerror(errno));
+    ok(log == 12, "%s:%d log size after fwrite(\"hello world\") = %d: %s",
+       __FILE__, __LINE__, log, strerror(errno));
 
     /* Open the file again with append, write to it. */
     fp = fopen(path, "a");
-    ok(fp != NULL, "%s: fopen(%s) in append mode: %s", __FILE__, path,
-        strerror(errno));
+    ok(fp != NULL, "%s:%d fopen(%s) in append mode: %s",
+       __FILE__, __LINE__, path, strerror(errno));
+    ok(fwrite("HELLO WORLD", 12, 1, fp) == 1,
+       "%s:%d fwrite(\"HELLO WORLD\") with file %s open for append: %s",
+       __FILE__, __LINE__, path, strerror(errno));
 
-    rc = fwrite("HELLO WORLD", 12, 1, fp);
-    ok(rc == 1, "%s: fwrite(\"HELLO WORLD\"): %s", __FILE__, strerror(errno));
-
-    rc = ftell(fp);
-    ok(rc == 24, "%s: ftell() (rc=%d) %s", __FILE__, rc, strerror(errno));
+    ok(ftell(fp) == 24, "%s:%d ftell() after appending to file: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /*
      * Set our position to somewhere in the middle of the file.  Since the file
      * is in append mode, this new position should be ignored, and writes
      * should still go to the end of the file.
      */
-    rc = fseek(fp, 11, SEEK_SET);
-    ok(rc == 0, "%s: fseek(11) (rc=%d) %s", __FILE__, rc, strerror(errno));
+    ok(fseek(fp, 11, SEEK_SET) == 0, "%s:%d fseek(11) before append: %s",
+       __FILE__, __LINE__, strerror(errno));
+    ok(fwrite("<end>", 6, 1, fp) == 1,
+       "%s:%d fwrite(\"<end>\") to append after seek to middle of file: %s",
+       __FILE__, __LINE__, strerror(errno));
 
-    rc = fwrite("<end>", 6, 1, fp);
-    ok(rc == 1, "%s: fwrite(\" \") (rc=%d): %s", __FILE__, rc, strerror(errno));
+    ok(ftell(fp) == 30, "%s:%d ftell() after seek and appending to file: %s",
+       __FILE__, __LINE__, strerror(errno));
 
-    /* Test seeking to SEEK_END */
-    rc = fseek(fp, 0, SEEK_END);
-    ok(rc == 0, "%s: fseek(SEEK_END) (rc=%d) %s", __FILE__, rc,
-        strerror(errno));
+    ok(fclose(fp) == 0, "%s:%d fclose(): %s",
+       __FILE__, __LINE__, strerror(errno));
 
-    rc = ftell(fp);
-    ok(rc == 30, "%s: ftell() (rc=%d) %s", __FILE__, rc, strerror(errno));
-
-    rc = fclose(fp);
-    ok(rc == 0, "%s: fclose() (rc=%d): %s", __FILE__, rc, strerror(errno));
-
-    get_size(path, &global, &log);
-    ok(global == 30, "%s: global size is %d: %s",  __FILE__, global,
-        strerror(errno));
-    ok(log == 30, "%s: log size is %d: %s",  __FILE__, log,
-        strerror(errno));
-
+    testutil_get_size(path, &global, &log);
+    ok(global == 30, "%s:%d global size after append is %d: %s",
+       __FILE__, __LINE__, global, strerror(errno));
+    ok(log == 30, "%s:%d log size after append is %d: %s",
+       __FILE__, __LINE__, log, strerror(errno));
 
     /* Sync extents */
-    int fd;
     fd = open(path, O_RDWR);
-    ok(fd >= 0, "%s: open() (fd=%d): %s", __FILE__, fd, strerror(errno));
-
-    rc = fsync(fd);
-    ok(rc == 0, "%s: fsync() (rc=%d): %s", __FILE__, rc, strerror(errno));
-    close(fd);
+    ok(fd >= 0, "%s:%d open file for fsync: %s",
+       __FILE__, __LINE__, strerror(errno));
+    ok(fsync(fd) == 0, "%s:%d fsync(): %s",
+       __FILE__, __LINE__, strerror(errno));
+    ok(close(fd) != -1, "%s:%d close after fsync: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* Laminate */
-    rc = chmod(path, 0444);
-    ok(rc == 0, "%s: chmod(0444) (rc=%d): %s", __FILE__, rc, strerror(errno));
+    ok(chmod(path, 0444) == 0, "%s:%d chmod(0444): %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* Global size should be correct */
-    get_size(path, &global, &log);
-    ok(global == 30, "%s: global size is %d: %s",  __FILE__, global,
-        strerror(errno));
-    ok(log == 30, "%s: log size is %d: %s",  __FILE__, log,
-        strerror(errno));
+    testutil_get_size(path, &global, &log);
+    ok(global == 30, "%s:%d global size after laminate is %d: %s",
+       __FILE__, __LINE__, global, strerror(errno));
+    ok(log == 30, "%s:%d log size after laminate is %d: %s",
+       __FILE__, __LINE__, log, strerror(errno));
 
     /* Read it back */
     fp = fopen(path, "r");
-    ok(fp != NULL, "%s: fopen(%s): %s", __FILE__, path, strerror(errno));
+    ok(fp != NULL, "%s%d: fopen(%s): %s",
+       __FILE__, __LINE__, path, strerror(errno));
 
     memset(buf, 0, sizeof(buf));
-    rc = fread(buf, 30, 1, fp);
-    ok(rc == 1, "%s: fread() buf[]=\"%s\", (rc %d): %s", __FILE__, buf, rc,
-        strerror(errno));
+    ok(fread(buf, 30, 1, fp) == 1, "%s:%d fread() buf[]=\"%s\", : %s",
+       __FILE__, __LINE__, buf, strerror(errno));
 
      /*
       * We wrote three strings to the file: "hello world" "HELLO WORLD" and
@@ -157,49 +127,47 @@ int size_test(char* unifyfs_root)
     buf[23] = ' ';  /* after "HELLO WORLD" */
 
     is(buf, "hello world HELLO WORLD <end>",
-        "%s: saw \"hello world HELLO WORLD <end>\"", __FILE__);
+        "%s:%d saw \"hello world HELLO WORLD <end>\"", __FILE__, __LINE__);
 
     /* Try seeking and reading at various positions */
-    fseek(fp, 6, SEEK_SET);
-    rc = ftell(fp);
-    ok(rc == 6, "%s: fseek() (rc %d): %s", __FILE__, rc, strerror(errno));
+    ok(fseek(fp, 6, SEEK_SET) == 0, "%s:%d fseek(6): %s",
+       __FILE__, __LINE__, strerror(errno));
 
-    rc = fread(buf, 6, 1, fp);
-    ok(rc == 1, "%s: fread() at offset 6 buf[]=\"%s\", (rc %d): %s", __FILE__,
-        buf, rc, strerror(errno));
-    is(buf, "world", "%s: saw \"world\"", __FILE__);
+    ok(fread(buf, 6, 1, fp) == 1, "%s:%d fread() at offset 6 buf[]=\"%s\": %s",
+       __FILE__, __LINE__, buf, strerror(errno));
+    is(buf, "world", "%s:%d saw \"world\"", __FILE__, __LINE__);
 
     rewind(fp);
-    rc = fread(buf, 12, 1, fp);
-    ok(rc == 1, "%s: fread() after rewind() buf[]=\"%s\", (rc %d): %s",
-        __FILE__, buf, rc, strerror(errno));
-    is(buf, "hello world", "%s: saw \"hello world\"", __FILE__);
+    ok(fread(buf, 12, 1, fp) == 1,
+       "%s:%d fread() after rewind() buf[]=\"%s\": %s",
+       __FILE__, __LINE__, buf, strerror(errno));
+    is(buf, "hello world", "%s:%d saw \"hello world\"", __FILE__, __LINE__);
 
     rewind(fp);
     memset(buf, 0, sizeof(buf));
     tmp = fgets(buf, 12, fp);
-    ok(tmp == buf, "%s: fgets() after rewind() buf[]=\"%s\": %s", __FILE__, buf,
-        strerror(errno));
-    is(buf, "hello world", "%s: saw \"hello world\"", __FILE__);
+    ok(tmp == buf, "%s:%d fgets() after rewind() buf[]=\"%s\": %s",
+       __FILE__, __LINE__, buf, strerror(errno));
+    is(buf, "hello world", "%s:%d saw \"hello world\"", __FILE__, __LINE__);
 
     rewind(fp);
     memset(buf, 0, sizeof(buf));
     tmp = fgets(buf, 6, fp);
-    ok(tmp == buf, "%s: fgets() with size = 6 after rewind() buf[]=\"%s\": %s",
-        __FILE__, buf, strerror(errno));
-    is(buf, "hello", "%s: saw \"hello\"", __FILE__);
+    ok(tmp == buf, "%s:%d fgets() w/ size = 6 after rewind() buf[]=\"%s\": %s",
+        __FILE__, __LINE__, buf, strerror(errno));
+    is(buf, "hello", "%s:%d saw \"hello\"", __FILE__, __LINE__);
 
     rewind(fp);
-    rc = fread(buf, sizeof(buf), 1, fp);
-    ok(rc != 1, "%s: fread() past end of file (rc %d): %s", __FILE__, rc,
-        strerror(errno));
+    ok(fread(buf, sizeof(buf), 1, fp) != 1,
+       "%s:%d fread() past EOF: %s", __FILE__, __LINE__, strerror(errno));
 
-    rc = feof(fp);
-    ok(rc != 0, "%s: feof() past end of file (rc %d): %s", __FILE__, rc,
-        strerror(errno));
+    ok(feof(fp) != 0, "%s:%d feof() past EOF: %s",
+       __FILE__, __LINE__, strerror(errno));
 
-    rc = fclose(fp);
-    ok(rc == 0, "%s: fclose() (rc=%d): %s", __FILE__, rc, strerror(errno));
+    ok(fclose(fp) == 0, "%s:%d fclose(): %s",
+       __FILE__, __LINE__, strerror(errno));
+
+    diag("Starting file size and fwrite/fread with append tests");
 
     return 0;
 }

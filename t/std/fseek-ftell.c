@@ -33,217 +33,181 @@ int fseek_ftell_test(char* unifyfs_root)
     diag("Starting UNIFYFS_WRAP(fseek/ftell/rewind) tests");
 
     char path[64];
-    FILE* fd;
-    int ret;
-    long pos;
+    FILE* fp = NULL;
+
+    errno = 0;
 
     /* Create a random file at the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifyfs_root);
 
+    /* fseek on bad file stream should fail with errno=EBADF */
+    dies_ok({ fseek(fp, 0, SEEK_SET); },
+            "%s:%d fseek on bad file stream segfaults: %s",
+            __FILE__, __LINE__, strerror(errno));
+
+    /* ftell on non-open file stream should fail with errno=EBADF
+     * variable declaration and `ok` test are to avoid a compiler warning */
+    dies_ok({ int rc = ftell(fp); ok(rc > 0); },
+            "%s:%d ftell on bad file stream segfaults: %s",
+            __FILE__, __LINE__, strerror(errno));
+
+    /* rewind on non-open file stream should fail with errno=EBADF */
+    dies_ok({ rewind(fp); }, "%s:%d rewind on bad file stream segfaults: %s",
+            __FILE__, __LINE__, strerror(errno));
+
     /* Open a file and write to it to test fseek() */
-    fd = fopen(path, "w");
-    fwrite("hello world", 12, 1, fd);
+    fp = fopen(path, "w");
+    ok(fp != NULL, "%s:%d fopen(%s): %s",
+       __FILE__, __LINE__, path, strerror(errno));
+    ok(fwrite("hello world", 12, 1, fp) == 1, "%s:%d fwrite() to file %s: %s",
+        __FILE__, __LINE__, path, strerror(errno));
 
     /* fseek with invalid whence fails with errno=EINVAL. */
-    errno = 0;
-    ret = fseek(fd, 0, -1);
-    ok(ret == -1 && errno == EINVAL,
-       "%s: fseek with invalid whence should fail (ret=%d, errno=%d): %s",
-       __FILE__, ret, errno, strerror(errno));
+    ok(fseek(fp, 0, -1) == -1 && errno == EINVAL,
+       "%s:%d fseek with invalid whence should fail (errno=%d): %s",
+       __FILE__, __LINE__, errno, strerror(errno));
+    errno = 0; /* Reset errno after test for failure */
 
     /* fseek() with SEEK_SET tests */
     /* fseek to negative offset with SEEK_SET should fail with errno=EINVAL */
+    ok(fseek(fp, -1, SEEK_SET) == -1 && errno == EINVAL,
+       "%s:%d fseek(-1) to invalid offset w/ SEEK_SET fails (errno=%d): %s",
+       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
-    ret = fseek(fd, -1, SEEK_SET);
-    ok(ret == -1 && errno == EINVAL,
-       "%s: fseek to negative offset w/ SEEK_SET fails (ret=%d, errno=%d): %s",
-       __FILE__, ret, errno, strerror(errno));
 
     /* ftell after invalid fseek should return last offset */
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 12,
-       "%s: ftell after fseek to negative offset w/ SEEK_SET (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    ok(ftell(fp) == 12,
+       "%s:%d ftell after fseek(-1) to invalid offset w/ SEEK_SET: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* fseek to valid offset with SEEK_SET succeeds */
-    errno = 0;
-    ret = fseek(fd, 7, SEEK_SET);
-    ok(ret == 0, "%s: fseek to valid offset w/ SEEK_SET (ret=%d): %s",
-       __FILE__, ret, strerror(errno));
+    ok(fseek(fp, 7, SEEK_SET) == 0,
+       "%s:%d fseek(7) to valid offset w/ SEEK_SET: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* ftell after valid fseek with SEEK_SET */
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 7, "%s: ftell after valid fseek w/ SEEK_SET (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    ok(ftell(fp) == 7, "%s:%d ftell after fseek(7) w/ SEEK_SET: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* fseek beyond end of file with SEEK_SET succeeds */
-    errno = 0;
-    ret = fseek(fd, 25, SEEK_SET);
-    ok(ret == 0, "%s: fseek beyond end of file w/ SEEK_SET (ret=%d): %s",
-       __FILE__, ret, strerror(errno));
+    ok(fseek(fp, 25, SEEK_SET) == 0, "%s:%d fseek(25) past EOF w/ SEEK_SET: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* ftell after fseek beyond end of file with SEEK_SET */
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 25,
-       "%s: ftell after fseek beyond end of file w/ SEEK_SET (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    ok(ftell(fp) == 25, "%s:%d ftell after fseek(25) w/ SEEK_SET: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* fseek to beginning of file with SEEK_SET succeeds */
-    errno = 0;
-    ret = fseek(fd, 0, SEEK_SET);
-    ok(ret == 0, "%s: fseek to beginning of file w/ SEEK_SET (ret=%d): %s",
-       __FILE__, ret, strerror(errno));
+    ok(fseek(fp, 0, SEEK_SET) == 0, "%s:%d fseek(0) w/ SEEK_SET: %s",
+        __FILE__, __LINE__, strerror(errno));
 
     /* ftell after fseek to beginning of file with SEEK_SET */
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 0,
-       "%s: ftell after fseek to beginning of file w/ SEEK_SET (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    ok(ftell(fp) == 0, "%s:%d ftell after fseek(0) w/ SEEK_SET: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* fseek() with SEEK_CUR tests */
     /* fseek to end of file with SEEK_CUR succeeds */
-    errno = 0;
-    ret = fseek(fd, 12, SEEK_CUR);
-    ok(ret == 0, "%s: fseek to end of file w/ SEEK_CUR (ret=%d): %s",
-       __FILE__, ret, strerror(errno));
+    ok(fseek(fp, 12, SEEK_CUR) == 0, "%s:%d fseek(12) to EOF w/ SEEK_CUR: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* ftell after fseek to end of file with SEEK_CUR */
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 12,
-       "%s: ftell after fseek to beginning of file w/ SEEK_CUR (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    ok(ftell(fp) == 12, "%s:%d ftell after fseek(12) w/ SEEK_CUR: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* fseek to negative offset with SEEK_CUR should fail with errno=EINVAL */
+    ok(fseek(fp, -15, SEEK_CUR) == -1 && errno == EINVAL,
+       "%s:%d fseek(-15) to invalid offset w/ SEEK_CUR fails (errno=%d): %s",
+       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
-    ret = fseek(fd, -15, SEEK_CUR);
-    ok(ret == -1 && errno == EINVAL,
-       "%s: fseek to negative offset w/ SEEK_CUR fails (ret=%d, errno=%d): %s",
-       __FILE__, ret, errno, strerror(errno));
 
     /* ftell after fseek to negative offset with SEEK_CUR */
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 12,
-       "%s: ftell after fseek to negative offset w/ SEEK_CUR (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    ok(ftell(fp) == 12,
+       "%s:%d ftell after fseek(-15) to invalid offset w/ SEEK_CUR: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* fseek to beginning of file with SEEK_CUR succeeds */
-    errno = 0;
-    ret = fseek(fd, -12, SEEK_CUR);
-    ok(ret == 0, "%s: fseek to beginning of file w/ SEEK_CUR (ret=%d): %s",
-       __FILE__, ret, strerror(errno));
+    ok(fseek(fp, -12, SEEK_CUR) == 0,
+       "%s:%d fseek(-12) to beginning of file w/ SEEK_CUR: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* ftell after fseek to beginning of file with SEEK_CUR */
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 0,
-       "%s: ftell after fseek to beginnig of file w/ SEEK_CUR (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    ok(ftell(fp) == 0,
+       "%s:%d ftell after fseek(-12) to beginning of file w/ SEEK_CUR: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* fseek beyond end of file with SEEK_CUR succeeds */
-    errno = 0;
-    ret = fseek(fd, 25, SEEK_CUR);
-    ok(ret == 0, "%s: fseek beyond end of file w/ SEEK_CUR (ret=%d): %s",
-       __FILE__, ret, strerror(errno));
+    ok(fseek(fp, 25, SEEK_CUR) == 0, "%s:%d fseek(25) past EOF w/ SEEK_CUR: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* ftell after fseek beyond end of file with SEEK_CUR */
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 25,
-       "%s: ftell after fseek beyond end of file w/ SEEK_CUR (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    ok(ftell(fp) == 25, "%s:%d ftell after fseek(25) past EOF w/ SEEK_CUR: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* rewind test */
     /* ftell after rewind reports beginning of file */
-    rewind(fd);
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 0,
-       "%s: ftell after rewind reports beginning of file (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    rewind(fp);
+    ok(ftell(fp) == 0, "%s:%d ftell after rewind reports beginning of file: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* fseek() with SEEK_END tests */
     /* fseek to negative offset with SEEK_END should fail with errno=EINVAL */
+    ok(fseek(fp, -15, SEEK_END) == -1 && errno == EINVAL,
+       "%s:%d fseek(-15) to invalid offset w/ SEEK_END fails (errno=%d): %s",
+       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
-    ret = fseek(fd, -15, SEEK_END);
-    ok(ret == -1 && errno == EINVAL,
-       "%s: fseek to negative offset w/ SEEK_END fails (ret=%d, errno=%d): %s",
-       __FILE__, ret, errno, strerror(errno));
 
     /* ftell after fseek to negative offset with SEEK_END */
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 0,
-       "%s: ftell after fseek to negative offset w/ SEEK_END (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    ok(ftell(fp) == 0,
+       "%s:%d ftell after fseek(-15) to negative offset w/ SEEK_END: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* fseek back one from end of file with SEEK_END succeeds */
-    errno = 0;
-    ret = fseek(fd, -1, SEEK_END);
-    ok(ret == 0,
-       "%s: fseek back one from end of file w/ SEEK_END (ret=%d): %s",
-       __FILE__, ret, strerror(errno));
+    ok(fseek(fp, -1, SEEK_END) == 0, "%s:%d fseek(-1) from EOF w/ SEEK_END: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* ftell after fseek back one from end of file with SEEK_END */
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 11,
-       "%s: ftell after fseek back one from end w/ SEEK_END (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    ok(ftell(fp) == 11, "%s:%d ftell after fseek(-1) from end w/ SEEK_END: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* fseek to beginning of file with SEEK_END succeeds */
-    errno = 0;
-    ret = fseek(fd, -12, SEEK_END);
-    ok(ret == 0, "%s: fseek to beginning of file w/ SEEK_END (ret=%d): %s",
-       __FILE__, ret, strerror(errno));
+    ok(fseek(fp, -12, SEEK_END) == 0,
+       "%s:%d fseek(-12) to beginning of file w/ SEEK_END: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* ftell after fseek to beginning of file with SEEK_END */
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 0,
-       "%s: ftell after fseek to beginning of file w/ SEEK_END (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    ok(ftell(fp) == 0,
+       "%s:%d ftell after fseek(-12) to beginning of file w/ SEEK_END: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* fseek beyond end of file with SEEK_END succeeds */
-    errno = 0;
-    ret = fseek(fd, 25, SEEK_END);
-    ok(ret == 0, "%s: fseek beyond end of file w/ SEEK_END (ret=%d): %s",
-       __FILE__, ret, strerror(errno));
+    ok(fseek(fp, 25, SEEK_END) == 0, "%s:%d fseek(25) past EOF w/ SEEK_END: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* ftell after fseek beyond end of file with SEEK_END */
-    errno = 0;
-    pos = ftell(fd);
-    ok(pos == 37,
-       "%s: ftell after fseek beyond end of file w/ SEEK_END (pos=%ld): %s",
-       __FILE__, pos, strerror(errno));
+    ok(ftell(fp) == 37, "%s:%d ftell after fseek(25) past EOF w/ SEEK_END: %s",
+       __FILE__, __LINE__, strerror(errno));
 
-    fclose(fd);
+    ok(fclose(fp) == 0, "%s:%d fclose(): %s",
+       __FILE__, __LINE__, strerror(errno));
 
-    /* fseek in non-open file descriptor should fail with errno=EBADF */
+    /* fseek in non-open file stream should fail with errno=EBADF */
+    ok(fseek(fp, 0, SEEK_SET) == -1 && errno == EBADF,
+       "%s:%d fseek in non-open file stream fails (errno=%d): %s",
+       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
-    ret = fseek(fd, 0, SEEK_SET);
-    ok(ret == -1 && errno == EBADF,
-       "%s: fseek in non-open file descriptor fails (ret=%d, errno=%d): %s",
-       __FILE__, ret, errno, strerror(errno));
 
-    /* ftell on non-open file descriptor should fail with errno=EBADF */
+    /* ftell on non-open file stream should fail with errno=EBADF */
+    ok(ftell(fp) == -1 && errno == EBADF,
+       "%s:%d ftell on non-open file stream fails (errno=%d): %s",
+       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
-    pos = ftell(fd);
-    ok(pos == -1 && errno == EBADF,
-       "%s: ftell on non-open file descriptor fails (pos=%ld, errno=%d): %s",
-       __FILE__, pos, errno, strerror(errno));
 
-    /* rewind on non-open file descriptor should fail with errno=EBADF */
-    errno = 0;
-    rewind(fd);
+    /* rewind on non-open file stream should fail with errno=EBADF */
+    rewind(fp);
     ok(errno == EBADF,
-       "%s: rewind on non-open file descriptor fails (errno=%d): %s",
-       __FILE__, errno, strerror(errno));
+       "%s:%d rewind on non-open file stream fails (errno=%d): %s",
+       __FILE__, __LINE__, errno, strerror(errno));
+    errno = 0;
 
     diag("Finished UNIFYFS_WRAP(fseek/ftell/rewind) tests");
 

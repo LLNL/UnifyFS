@@ -27,8 +27,8 @@
 static int unlink_after_sync_test(char* unifyfs_root)
 {
     char path[64];
-    int rc;
     int fd;
+    errno = 0;
 
     testutil_rand_path(path, sizeof(path), unifyfs_root);
 
@@ -36,30 +36,33 @@ static int unlink_after_sync_test(char* unifyfs_root)
     ok(fd != -1, "%s:%d open(%s) (fd=%d): %s",
         __FILE__, __LINE__, path, fd, strerror(errno));
 
-    rc = write(fd, "hello world", 12);
-    ok(rc == 12, "%s:%d write() (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    ok(write(fd, "hello world", 12) == 12, "%s:%d write(): %s",
+        __FILE__, __LINE__, strerror(errno));
 
-    rc = fsync(fd);
-    ok(rc == 0, "%s:%d fsync() (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    ok(fsync(fd) == 0, "%s:%d fsync(): %s",
+        __FILE__, __LINE__, strerror(errno));
 
-    rc = close(fd);
-    ok(rc == 0, "%s:%d close() (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    ok(close(fd) == 0, "%s:%d close(): %s",
+        __FILE__, __LINE__, strerror(errno));
 
     struct stat sb = {0};
-    rc = stat(path, &sb);
-    ok(rc == 0, "%s:%d stat() (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    ok(stat(path, &sb) == 0, "%s:%d stat(): %s",
+        __FILE__, __LINE__, strerror(errno));
 
-    rc = unlink(path);
-    ok(rc == 0, "%s:%d unlink() (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    ok(unlink(path) == 0, "%s:%d unlink(): %s",
+        __FILE__, __LINE__, strerror(errno));
 
-    rc = stat(path, &sb);
-    ok(rc == -1, "%s:%d stat() (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    todo("Failing with wrong errno. Should fail with errno=ENOENT=2");
+    ok(stat(path, &sb) == -1 && errno == ENOENT,
+       "%s:%d stat() after unlink fails (errno=%d): %s",
+        __FILE__, __LINE__, errno, strerror(errno));
+    end_todo;
+    errno = 0; /* Reset errno after test for failure */
+
+    ok(unlink(path) == -1 && errno == ENOENT,
+       "%s:%d unlink() already unlinked file fails (errno=%d): %s",
+        __FILE__, __LINE__, errno, strerror(errno));
+    errno = 0;
 
     return 0;
 }
@@ -67,8 +70,8 @@ static int unlink_after_sync_test(char* unifyfs_root)
 static int unlink_after_sync_laminate_test(char* unifyfs_root)
 {
     char path[64];
-    int rc;
     int fd;
+    errno = 0;
 
     testutil_rand_path(path, sizeof(path), unifyfs_root);
 
@@ -76,43 +79,102 @@ static int unlink_after_sync_laminate_test(char* unifyfs_root)
     ok(fd != -1, "%s:%d open(%s) (fd=%d): %s",
         __FILE__, __LINE__, path, fd, strerror(errno));
 
-    rc = write(fd, "hello world", 12);
-    ok(rc == 12, "%s:%d write() (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    ok(write(fd, "hello world", 12) == 12, "%s:%d write(): %s",
+        __FILE__, __LINE__, strerror(errno));
 
-    rc = fsync(fd);
-    ok(rc == 0, "%s:%d fsync() (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    ok(fsync(fd) == 0, "%s:%d fsync(): %s",
+        __FILE__, __LINE__, strerror(errno));
 
-    rc = close(fd);
-    ok(rc == 0, "%s:%d close() (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    ok(close(fd) == 0, "%s:%d close(): %s",
+        __FILE__, __LINE__, strerror(errno));
 
     /* Laminate */
-    rc = chmod(path, 0444);
-    ok(rc == 0, "%s:%d chmod(0444) (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    ok(chmod(path, 0444) == 0, "%s:%d chmod(0444): %s",
+        __FILE__, __LINE__, strerror(errno));
 
     struct stat sb = {0};
-    rc = stat(path, &sb);
-    ok(rc == 0, "%s:%d stat() (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    ok(stat(path, &sb) == 0, "%s:%d stat(): %s",
+        __FILE__, __LINE__, strerror(errno));
 
-    rc = unlink(path);
-    ok(rc == 0, "%s:%d unlink() (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    ok(unlink(path) == 0, "%s:%d unlink(): %s",
+        __FILE__, __LINE__, strerror(errno));
 
-    rc = stat(path, &sb);
-    ok(rc == -1, "%s:%d stat() (rc=%d): %s",
-        __FILE__, __LINE__, rc, strerror(errno));
+    todo("Failing with wrong errno. Should fail with errno=ENOENT=2");
+    ok(stat(path, &sb) == -1 && errno == ENOENT,
+       "%s:%d stat() after unlink fails (errno=%d): %s",
+        __FILE__, __LINE__, errno, strerror(errno));
+    end_todo;
+    errno = 0;
+
+    ok(unlink(path) == -1 && errno == ENOENT,
+       "%s:%d unlink() already unlinked, laminated file fails (errno=%d): %s",
+        __FILE__, __LINE__, errno, strerror(errno));
+    errno = 0;
 
     return 0;
 }
 
 int unlink_test(char* unifyfs_root)
 {
-    int rc = 0;
+    diag("Finished UNIFYFS_WRAP(unlink) tests");
 
+    char path[64];
+    char dir_path[64];
+    int fd;
+    int rc = 0;
+    errno = 0;
+
+    testutil_rand_path(path, sizeof(path), unifyfs_root);
+    testutil_rand_path(dir_path, sizeof(dir_path), unifyfs_root);
+
+    ok(unlink(path) == -1 && errno == ENOENT,
+       "%s:%d unlink() non-existent file fails (errno=%d): %s",
+        __FILE__, __LINE__, errno, strerror(errno));
+    errno = 0; /* Reset errno after test for failure */
+
+    fd = creat(path, 0222);
+    ok(fd != -1, "%s:%d creat(%s) (fd=%d): %s",
+        __FILE__, __LINE__, path, fd, strerror(errno));
+
+    ok(fsync(fd) == 0, "%s:%d fsync(): %s",
+        __FILE__, __LINE__, strerror(errno));
+
+    ok(close(fd) == 0, "%s:%d close(): %s",
+        __FILE__, __LINE__, strerror(errno));
+
+    struct stat sb = {0};
+    ok(stat(path, &sb) == 0, "%s:%d stat(): %s",
+        __FILE__, __LINE__, strerror(errno));
+
+    ok(unlink(path) == 0, "%s:%d unlink() empty file: %s",
+        __FILE__, __LINE__, strerror(errno));
+
+    todo("Failing with wrong errno. Should fail with errno=ENOENT=2");
+    ok(stat(path, &sb) == -1 && errno == ENOENT,
+       "%s:%d stat() after unlink fails (errno=%d): %s",
+        __FILE__, __LINE__, errno, strerror(errno));
+    end_todo;
+    errno = 0;
+
+    ok(unlink(path) == -1 && errno == ENOENT,
+       "%s:%d unlink() already unlinked, empty file fails (errno=%d): %s",
+        __FILE__, __LINE__, errno, strerror(errno));
+    errno = 0; /* Reset errno after test for failure */
+
+    /* Calling unlink() on a directory should fail */
+    ok(mkdir(dir_path, 0777) == 0, "%s:%d mkdir(%s): %s",
+        __FILE__, __LINE__, dir_path, strerror(errno));
+
+    ok(unlink(dir_path) == -1 && errno == EISDIR,
+       "%s:%d unlink() a directory fails (errno=%d): %s",
+        __FILE__, __LINE__, errno, strerror(errno));
+    errno = 0; /* Reset errno after test for failure */
+
+    ok(rmdir(dir_path) == 0, "%s:%d rmdir(): %s",
+        __FILE__, __LINE__, strerror(errno));
+
+
+    /* Tests for unlink after writing to a file */
     int ret = unlink_after_sync_test(unifyfs_root);
     if (ret != 0) {
         rc = ret;
@@ -122,6 +184,8 @@ int unlink_test(char* unifyfs_root)
     if (ret != 0) {
         rc = ret;
     }
+
+    diag("Finished UNIFYFS_WRAP(unlink) tests");
 
     return rc;
 }

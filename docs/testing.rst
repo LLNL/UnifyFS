@@ -55,6 +55,24 @@ Here is an example of a sharness test:
         test "P" == "NP"
     '
 
+    # Various tests available to use inside test_expect_success/failure
+    test_expect_success "Show various available tests" '
+        test_path_is_dir /somedir
+        test_must_fail test_dir_is_empty /somedir
+        test_path_is_file /somedir/somefile
+    '
+
+    # Use test_set_prereq/test_have_prereq to conditionally skip tests
+    [[ -n $(which h5cc 2>/dev/null) ]] && test_set_prereq HAVE_HDF5
+    if test_have_prereq HAVE_HDF5; then
+        # run HDF5 tests
+    fi
+
+    # Can also check for prereq in individual test
+    test_expect_success HAVE_HDF5 "Run HDF5 test" '
+        # Run HDF5 test
+    '
+
     test_done
 
 .. _C-tests-label:
@@ -62,8 +80,9 @@ Here is an example of a sharness test:
 C Program Tests
 ^^^^^^^^^^^^^^^
 
-C programs use the `libtap library`_ to implement test cases. Convenience
-functions common to test cases written in C are implemented in the library
+C programs use the `libtap library`_ to implement test cases. All available
+testing functions are viewable in the `libtap README`_. Convenience functions
+common to test cases written in C are implemented in the library
 `lib/testutil.c`_. If your C program needs to use environment variables set by
 sharness, it can be wrapped in a shell script that first sources
 `sharness.d/00-test-env.sh`_ and `sharness.d/01-unifyfs-settings.sh`_. Your
@@ -74,12 +93,13 @@ The most common way to implement a test with libtap is to use the ``ok()``
 function. TODO test cases that demonstrate known breakage are surrounded by the
 libtap library calls ``todo()`` and ``end_todo()``.
 
-Here is an example libtap test:
+Here are some examples of libtap tests:
 
 .. code-block:: C
     :linenos:
 
     #include "t/lib/tap.h"
+    #include "t/lib/testutil.h"
     #include <string.h>
 
     int main(int argc, char *argv[])
@@ -89,15 +109,82 @@ Here is an example libtap test:
         result = (1 == 1);
         ok(result, "1 equals 1: %d", result);
 
+        /* Or put a function call directly in test */
+        ok(somefunc() == 42, "somefunc() returns 42");
+        ok(somefunc() == -1, "somefunc() should fail");
+
+        /* Use pass/fail for more complex code paths */
+        int x = somefunc();
+        if (x > 0) {
+            pass("somefunc() returned a valid value");
+        } else {
+            fail("somefunc() returned an invalid value");
+        }
+
+        /* Use is/isnt for string comparisions */
+        char buf[64] = {0};
+        ok(fread(buf, 12, 1, fd) == 1, "read 12 bytes into buf);
+        is(buf, "hello world", "buf is \"hello world\"");
+
+        /* Use cmp_mem to test first n bytes of memory */
+        char* a = "foo";
+        char* b = "bar";
+        cmp_mem(a, b, 3);
+
+        /* Use like/unlike to string match to a POSIX regex */
+        like("stranger", "^s.(r).*\\1$", "matches the regex");
+
+        /* Use dies_ok/lives_ok to test whether code causes an exit */
+        dies_ok({int x = 0/0;}, "divide by zero crashes");
+
+        /* Use todo for failing tests to be notified when they start passing */
         todo("Prove this someday");
         result = strcmp("P", "NP");
         ok(result == 0, "P equals NP: %d", result);
         end_todo;
 
-        done_testing();
+        /* Use skip/end_skip when a feature isn't implemented yet, or to
+        conditionally skip when a resource isn't available */
+        skip(TRUE, 2, "Reason for skipping tests");
+        ok(1);
+        ok(2);
+        end_skip;
 
-        return 0;
+        #ifdef HAVE_SOME_FEATURE
+            ok(somefunc());
+            ok(someotherfunc());
+        #else
+            skip(TRUE, 2, "Don't have SOME_FEATURE");
+            end_skip;
+        #endif
+
+        done_testing();
     }
+
+.. tip::
+
+    Including the file and line number, as well as any useful variable values,
+    in each test output can be very helpful when a test fails or needs to be
+    debugged.
+
+        .. code-block:: C
+
+            ok(somefunc() == 42, "%s:%d somefunc() returns 42", __FILE__,
+            __LINE__);
+
+    Also, note that ``errno`` is only set when an error occurs and is never set
+    back to ``0`` implicitly.
+    When testing for a failure and using ``errno`` as part of the test,
+    resetting ``errno`` after the test will prevent subsequent tests from
+    appearing to error.
+
+        .. code-block:: C
+            :emphasize-lines: 4
+
+            ok(somefunc() == -1 && errno == ENOTTY,
+               "%s:%d somefunc() should fail (errno=%d): %s",
+               __FILE__, __LINE__, errno, strerror(errno));
+            errno = 0;
 
 ------------
 
@@ -797,6 +884,7 @@ comments in `t/ci/ci-functions.sh`_.
 .. _GitLab: https://about.gitlab.com
 .. _examples: https://github.com/LLNL/UnifyFS/tree/dev/examples/src
 .. _libtap library: https://github.com/zorgnax/libtap
+.. _libtap README: https://github.com/zorgnax/libtap/blob/master/README.md
 .. _lib/testutil.c: https://github.com/LLNL/UnifyFS/blob/dev/t/lib/testutil.c
 .. _PDSH: https://github.com/chaos/pdsh
 .. _sharness: https://github.com/chriscool/sharness

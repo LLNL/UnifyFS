@@ -34,46 +34,41 @@ int creat_close_test(char* unifyfs_root)
     char path[64];
     int mode = 0600;
     int fd = -1;
-    int rc = -1;
+
+    errno = 0;
 
     /* Create a random file name at the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifyfs_root);
 
     /* Verify closing a non-existent file fails with errno=EBADF */
-    errno = 0;
-    rc = close(fd);
-    ok(rc < 0 && errno == EBADF,
-       "close non-existing file %s should fail (rc=%d, errno=%d): %s",
-       path, rc, errno, strerror(errno));
+    ok(close(fd) == -1 && errno == EBADF,
+       "%s:%d close non-existing file %s should fail (errno=%d): %s",
+       __FILE__, __LINE__, path, errno, strerror(errno));
+    errno = 0; /* Reset errno after test for failure */
 
     /* Verify we can create a non-existent file. */
-    errno = 0;
     fd = creat(path, mode);
-    ok(fd >= 0, "creat non-existing file %s (fd=%d): %s",
-       path, fd, strerror(errno));
+    ok(fd >= 0, "%s:%d creat non-existing file %s (fd=%d): %s",
+       __FILE__, __LINE__, path, fd, strerror(errno));
 
     /* Verify close succeeds. */
-    errno = 0;
-    rc = close(fd);
-    ok(rc == 0, "close new file %s (rc=%d): %s", path, rc, strerror(errno));
+    ok(close(fd) == 0, "%s:%d close new file: %s",
+       __FILE__, __LINE__, strerror(errno));
 
     /* Verify creating an already created file succeeds. */
-    errno = 0;
     fd = creat(path, mode);
-    ok(fd >= 0, "creat existing file %s (fd=%d): %s",
-       path, fd, strerror(errno));
+    ok(fd >= 0, "%s:%d creat existing file %s (fd=%d): %s",
+       __FILE__, __LINE__, path, fd, strerror(errno));
 
     /* Verify close succeeds. */
-    errno = 0;
-    rc = close(fd);
-    ok(rc == 0, "close %s (rc=%d): %s", path, rc, strerror(errno));
+    ok(close(fd) == 0, "%s:%d close %s: %s",
+       __FILE__, __LINE__, path, strerror(errno));
 
     /* Verify closing already closed file fails with errno=EBADF */
+    ok(close(fd) == -1 && errno == EBADF,
+       "%s:%d close already closed file %s should fail (errno=%d): %s",
+       __FILE__, __LINE__, path, errno, strerror(errno));
     errno = 0;
-    rc = close(fd);
-    ok(rc < 0 && errno == EBADF,
-       "close already closed file %s should fail (rc=%d, errno=%d): %s",
-       path, rc, errno, strerror(errno));
 
     /* CLEANUP
      *
