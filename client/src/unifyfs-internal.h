@@ -512,7 +512,13 @@ int unifyfs_fid_create_directory(const char* path);
 int unifyfs_fid_read_reqs(read_req_t* in_reqs, int in_count);
 
 /* write count bytes from buf into file starting at offset pos */
-int unifyfs_fid_write(int fid, off_t pos, const void* buf, size_t count);
+int unifyfs_fid_write(
+    int fid,         /* global file id to write to */
+    off_t pos,       /* starting offset within file */
+    const void* buf, /* buffer of data to be written */
+    size_t count,    /* number of bytes to write */
+    size_t* bytes    /* returns number of bytes written */
+);
 
 /* truncate file id to given length, frees resources if length is
  * less than size and allocates and zero-fills new bytes if length
