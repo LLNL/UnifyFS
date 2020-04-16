@@ -23,27 +23,6 @@
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
 
-/* Get global or log sizes (or all) */
-static
-void get_size(char* path, size_t* global, size_t* log)
-{
-    struct stat sb = {0};
-    int rc;
-
-    rc = stat(path, &sb);
-    if (rc != 0) {
-        printf("Error: %s\n", strerror(errno));
-        exit(1);    /* die on failure */
-    }
-    if (global) {
-        *global = sb.st_size;
-    }
-
-    if (log) {
-        *log = sb.st_rdev;
-    }
-}
-
 static int check_contents(char* buf, size_t len, char c)
 {
     int valid = 1;
@@ -99,7 +78,7 @@ int write_read_hole_test(char* unifyfs_root)
         __FILE__, __LINE__, rc, strerror(errno));
 
     /* Check global size on our un-laminated file */
-    get_size(path, &global, &log);
+    testutil_get_size(path, &global, &log);
     ok(global == 0, "%s:%d global size is %d: %s",
         __FILE__, __LINE__, global, strerror(errno));
     ok(log == 2*bufsize, "%s:%d log size is %d: %s",
@@ -111,7 +90,7 @@ int write_read_hole_test(char* unifyfs_root)
         __FILE__, __LINE__, rc, strerror(errno));
 
     /* Check global size on our un-laminated file */
-    get_size(path, &global, &log);
+    testutil_get_size(path, &global, &log);
     ok(global == 3*bufsize, "%s:%d global size is %d: %s",
         __FILE__, __LINE__, global, strerror(errno));
     ok(log == 2*bufsize, "%s:%d log size is %d: %s",
@@ -129,7 +108,7 @@ int write_read_hole_test(char* unifyfs_root)
         __FILE__, __LINE__, rc, strerror(errno));
 
     /* Check global size on our un-laminated file */
-    get_size(path, &global, &log);
+    testutil_get_size(path, &global, &log);
     ok(global == 4*bufsize, "%s:%d global size is %d: %s",
         __FILE__, __LINE__, global, strerror(errno));
     ok(log == 2*bufsize, "%s:%d log size is %d: %s",

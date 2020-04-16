@@ -12,10 +12,12 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/time.h>
-#include "testutil.h"
+#include <sys/stat.h>
 
 static unsigned long seed;
 
@@ -96,4 +98,26 @@ char* testutil_get_mount_point(void)
     }
 
     return path;
+}
+
+/* Stat the file associated to by path and store the global and log sizes of the
+ * file at path in the addresses of the respective global and log pointers
+ * passed in.
+ * User can ask for one or both sizes. */
+void testutil_get_size(char* path, size_t* global, size_t* log)
+{
+    struct stat sb = {0};
+    int rc;
+
+    rc = stat(path, &sb);
+    if (rc != 0) {
+        printf("Error: %s\n", strerror(errno));
+        exit(1);
+    }
+    if (global) {
+        *global = sb.st_size;
+    }
+    if (log) {
+        *log = sb.st_rdev;
+    }
 }
