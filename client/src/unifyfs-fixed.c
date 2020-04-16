@@ -369,7 +369,8 @@ int unifyfs_fid_logio_write(int fid,
                             unifyfs_filemeta_t* meta,
                             off_t pos,
                             const void* buf,
-                            size_t count)
+                            size_t count,
+                            size_t* bytes)
 {
     assert(meta != NULL);
     if (meta->storage != FILE_STORAGE_LOGIO) {
@@ -400,6 +401,9 @@ int unifyfs_fid_logio_write(int fid,
         LOGDBG("successful logio_write() @ log offset=%zu (%zu bytes)",
                (size_t)log_off, count);
     }
+
+    /* return number of bytes written */
+    *bytes = nwritten;
 
     /* update our write metadata for this write */
     rc = add_write_meta_to_index(meta, pos, log_off, nwritten);

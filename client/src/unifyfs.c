@@ -1608,9 +1608,17 @@ int unifyfs_fid_read_reqs(read_req_t* in_reqs, int in_count)
  *
  * Returns UNIFYFS_SUCCESS, or an error code
  */
-int unifyfs_fid_write(int fid, off_t pos, const void* buf, size_t count)
+int unifyfs_fid_write(
+    int fid,         /* global file id to write to */
+    off_t pos,       /* starting position in file */
+    const void* buf, /* buffer to be written */
+    size_t count,    /* number of bytes to write */
+    size_t* bytes)   /* returns number of bytes written */
 {
     int rc;
+
+    /* assume we won't write anything */
+    *bytes = 0;
 
     /* short-circuit a 0-byte write */
     if (count == 0) {
@@ -1623,7 +1631,7 @@ int unifyfs_fid_write(int fid, off_t pos, const void* buf, size_t count)
     /* determine storage type to write file data */
     if (meta->storage == FILE_STORAGE_LOGIO) {
         /* file stored in fixed-size chunks */
-        rc = unifyfs_fid_logio_write(fid, meta, pos, buf, count);
+        rc = unifyfs_fid_logio_write(fid, meta, pos, buf, count, bytes);
         if (rc == UNIFYFS_SUCCESS) {
             /* write succeeded, remember that we have new data
              * that needs to be synced with the server */
