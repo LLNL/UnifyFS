@@ -538,8 +538,6 @@ int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* bytes)
         return EOVERFLOW;
     }
 
-    /* TODO: check that file is open for reading */
-
     /* if we don't read any bytes, return success */
     if (count == 0) {
         LOGDBG("returning EOF");
@@ -907,7 +905,7 @@ off64_t UNIFYFS_WRAP(lseek64)(int fd, off64_t offset, int whence)
             /* off_t and off64_t are the same size,
              * delegate to lseek wrapper */
             off64_t ret = (off64_t)UNIFYFS_WRAP(lseek)(
-                              origfd, (off_t) offset, whence);
+                origfd, (off_t) offset, whence);
             return ret;
         } else {
             /* ERROR: fn not yet supported */
@@ -1068,13 +1066,14 @@ ssize_t UNIFYFS_WRAP(readv)(int fd, const struct iovec* iov, int iovcnt)
     ssize_t ret;
 
     /* check whether we should intercept this file descriptor */
+    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
         ssize_t rret;
         int i;
         ret = 0;
         for (i = 0; i < iovcnt; i++) {
-            rret = UNIFYFS_WRAP(read)(fd, (void*)iov[i].iov_base,
-                                      iov[i].iov_len);
+            rret = UNIFYFS_WRAP(read)(origfd, (void*)iov[i].iov_base,
+                iov[i].iov_len);
             if (-1 == rret) {
                 return -1;
             } else if (0 == rret) {
@@ -1096,13 +1095,14 @@ ssize_t UNIFYFS_WRAP(writev)(int fd, const struct iovec* iov, int iovcnt)
     ssize_t ret;
 
     /* check whether we should intercept this file descriptor */
+    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
         ssize_t wret;
         int i;
         ret = 0;
         for (i = 0; i < iovcnt; i++) {
-            wret = UNIFYFS_WRAP(write)(fd, (const void*)iov[i].iov_base,
-                                       iov[i].iov_len);
+            wret = UNIFYFS_WRAP(write)(origfd, (const void*)iov[i].iov_base,
+                iov[i].iov_len);
             if (-1 == wret) {
                 return -1;
             } else {
@@ -1270,8 +1270,9 @@ ssize_t UNIFYFS_WRAP(pread)(int fd, void* buf, size_t count, off_t offset)
 ssize_t UNIFYFS_WRAP(pread64)(int fd, void* buf, size_t count, off64_t offset)
 {
     /* check whether we should intercept this file descriptor */
+    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
-        return UNIFYFS_WRAP(pread)(fd, buf, count, (off_t)offset);
+        return UNIFYFS_WRAP(pread)(origfd, buf, count, (off_t)offset);
     } else {
         MAP_OR_FAIL(pread64);
         ssize_t ret = UNIFYFS_REAL(pread64)(fd, buf, count, offset);
@@ -1315,8 +1316,9 @@ ssize_t UNIFYFS_WRAP(pwrite64)(int fd, const void* buf, size_t count,
                                off64_t offset)
 {
     /* check whether we should intercept this file descriptor */
+    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
-        return UNIFYFS_WRAP(pwrite)(fd, buf, count, (off_t)offset);
+        return UNIFYFS_WRAP(pwrite)(origfd, buf, count, (off_t)offset);
     } else {
         MAP_OR_FAIL(pwrite64);
         ssize_t ret = UNIFYFS_REAL(pwrite64)(fd, buf, count, offset);
@@ -1568,8 +1570,11 @@ void* UNIFYFS_WRAP(mmap64)(void* addr, size_t length, int prot, int flags,
                            int fd, off64_t offset)
 {
     /* check whether we should intercept this file descriptor */
+    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
-        return UNIFYFS_WRAP(mmap)(addr, length, prot, flags, fd, (off_t)offset);
+        void* ret = UNIFYFS_WRAP(mmap)(addr, length, prot, flags, origfd,
+            (off_t)offset);
+        return ret;
     } else {
         MAP_OR_FAIL(mmap64);
         void* ret = UNIFYFS_REAL(mmap64)(addr, length, prot, flags, fd, offset);
