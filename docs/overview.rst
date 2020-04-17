@@ -22,6 +22,10 @@ deleted.  It is therefore the user's responsibility to copy out files that
 need to be persisted to another permanent file system. We provide an API and
 a utility to make this easier.
 
+A sample paragraph composed in the GUI editor.  This is to find out if this editor
+really does create spurious trailing white space.  Another white space thingy.  I
+now test the trailing white space thing from VSC.
+
 ---------------------------
 High Level Design
 ---------------------------
