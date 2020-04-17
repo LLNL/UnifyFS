@@ -132,6 +132,15 @@ AC_ARG_ENABLE(st-dev-workaround,
     ]
 ,[])
 
+# use mpi for bootstraping unifyfsd
+AC_ARG_ENABLE(unifyfsd-mpi,
+    [AS_HELP_STRING([--enable-unifyfsd-mpi],[Use MPI for bootstrapping unifyfsd])],[
+        AS_IF([test "x$enableval" = "xyes"],[
+            AC_DEFINE(UNIFYFSD_USE_MPI, 1, Define if unifyfsd has to use mpi for bootstrapping)],[])
+    ]
+,[])
+
+
 # look for MPI and set flags
 LX_FIND_MPI
 AS_IF([test "x$enable_fortran" = "xyes"],[

@@ -29,6 +29,7 @@
 
 #ifndef UNIFYFS_GLOBAL_H
 #define UNIFYFS_GLOBAL_H
+#include <config.h>
 
 // system headers
 #include <assert.h>
