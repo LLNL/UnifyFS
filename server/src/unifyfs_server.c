@@ -149,10 +149,10 @@ void exit_request(int sig)
 }
 
 #if defined(UNIFYFSD_USE_MPI)
-static void init_MPI(void)
+static void init_MPI(int* argc, char*** argv)
 {
     int rc, provided;
-    rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+    rc = MPI_Init_thread(argc, argv, MPI_THREAD_MULTIPLE, &provided);
     if (rc != MPI_SUCCESS) {
         exit(1);
     }
@@ -286,7 +286,7 @@ int main(int argc, char* argv[])
     memset(app_configs, 0, sizeof(app_configs));
 
 #if defined(UNIFYFSD_USE_MPI)
-    init_MPI();
+    init_MPI(&argc, &argv);
 #endif
 
     // start logging
