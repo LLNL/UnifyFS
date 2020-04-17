@@ -31,7 +31,7 @@ int write_read_test(char* unifyfs_root)
     char path[64];
     char buf[64] = {0};
     int fd = -1;
-    size_t global, log;
+    size_t global;
 
     errno = 0;
 
@@ -65,21 +65,17 @@ int write_read_test(char* unifyfs_root)
        __FILE__, __LINE__, strerror(errno));
 
     /* Check global size on our un-laminated and un-synced file */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 0, "%s:%d global size before fsync is %d: %s",
        __FILE__, __LINE__, global, strerror(errno));
-    ok(log == 21, "%s:%d log size before fsync is %d: %s",
-       __FILE__, __LINE__, log, strerror(errno));
 
     ok(fsync(fd) == 0, "%s:%d fsync() worked: %s",
        __FILE__, __LINE__, strerror(errno));
 
     /* Check global size on our un-laminated file */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 15, "%s:%d global size after fsync is %d: %s",
        __FILE__, __LINE__, global, strerror(errno));
-    ok(log == 21, "%s:%d log size after fsync is %d: %s",
-       __FILE__, __LINE__, log, strerror(errno));
 
     /* read from file open as write-only should fail with errno=EBADF */
     ok(lseek(fd, 0, SEEK_SET) == 0, "%s:%d lseek(0): %s",
@@ -111,22 +107,18 @@ int write_read_test(char* unifyfs_root)
        __FILE__, __LINE__, strerror(errno));
 
     /* Check global size on our un-laminated file */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 21, "%s:%d global size before laminate is %d: %s",
        __FILE__, __LINE__, global, strerror(errno));
-    ok(log == 27, "%s:%d log size before laminate is %d: %s",
-       __FILE__, __LINE__, log, strerror(errno));
 
     /* Laminate */
     ok(chmod(path, 0444) == 0, "%s:%d chmod(0444): %s",
        __FILE__, __LINE__, strerror(errno));
 
     /* Verify we're getting the correct file size */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 21, "%s:%d global size after laminate is %d: %s",
        __FILE__, __LINE__, global, strerror(errno));
-    ok(log == 27, "%s:%d log size after laminate is %d: %s",
-       __FILE__, __LINE__, log, strerror(errno));
 
     /* open laminated file for write should fail with errno=EROFS */
     fd = open(path, O_WRONLY | O_CREAT, 0222);

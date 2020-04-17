@@ -33,7 +33,7 @@ int size_test(char* unifyfs_root)
     char buf[64] = {0};
     FILE* fp = NULL;
     char* tmp;
-    size_t global, log;
+    size_t global;
     int fd;
 
     errno = 0;
@@ -49,11 +49,9 @@ int size_test(char* unifyfs_root)
     ok(fclose(fp) == 0, "%s:%d fclose(): %s",
        __FILE__, __LINE__, strerror(errno));
 
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 12, "%s:%d global size after fwrite(\"hello world\") = %d: %s",
        __FILE__, __LINE__, global, strerror(errno));
-    ok(log == 12, "%s:%d log size after fwrite(\"hello world\") = %d: %s",
-       __FILE__, __LINE__, log, strerror(errno));
 
     /* Open the file again with append, write to it. */
     fp = fopen(path, "a");
@@ -83,11 +81,9 @@ int size_test(char* unifyfs_root)
     ok(fclose(fp) == 0, "%s:%d fclose(): %s",
        __FILE__, __LINE__, strerror(errno));
 
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 30, "%s:%d global size after append is %d: %s",
        __FILE__, __LINE__, global, strerror(errno));
-    ok(log == 30, "%s:%d log size after append is %d: %s",
-       __FILE__, __LINE__, log, strerror(errno));
 
     /* Sync extents */
     fd = open(path, O_RDWR);
@@ -103,11 +99,9 @@ int size_test(char* unifyfs_root)
        __FILE__, __LINE__, strerror(errno));
 
     /* Global size should be correct */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 30, "%s:%d global size after laminate is %d: %s",
        __FILE__, __LINE__, global, strerror(errno));
-    ok(log == 30, "%s:%d log size after laminate is %d: %s",
-       __FILE__, __LINE__, log, strerror(errno));
 
     /* Read it back */
     fp = fopen(path, "r");

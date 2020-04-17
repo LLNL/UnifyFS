@@ -32,8 +32,6 @@ void testutil_rand_path(char* buf, size_t len, const char* pfx);
  */
 char* testutil_get_mount_point(void);
 
-/* Stat the file associated to by path and store the global and log sizes of the
- * file at path in the addresses of the respective global and log pointers
- * passed in.
- * User can ask for one or both sizes. */
-void testutil_get_size(char* path, size_t* global, size_t* log);
+/* Stat the file associated to by path and store the global size of the
+ * file at path in the address of the global pointer passed in. */
+void testutil_get_size(char* path, size_t* global);

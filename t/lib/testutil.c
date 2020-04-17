@@ -100,11 +100,9 @@ char* testutil_get_mount_point(void)
     return path;
 }
 
-/* Stat the file associated to by path and store the global and log sizes of the
- * file at path in the addresses of the respective global and log pointers
- * passed in.
- * User can ask for one or both sizes. */
-void testutil_get_size(char* path, size_t* global, size_t* log)
+/* Stat the file associated to by path and store the global size of the
+ * file at path in the address of the global pointer passed in. */
+void testutil_get_size(char* path, size_t* global)
 {
     struct stat sb = {0};
     int rc;
@@ -116,8 +114,5 @@ void testutil_get_size(char* path, size_t* global, size_t* log)
     }
     if (global) {
         *global = sb.st_size;
-    }
-    if (log) {
-        *log = sb.st_rdev;
     }
 }

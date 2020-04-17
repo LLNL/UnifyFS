@@ -28,7 +28,7 @@ int truncate_test(char* unifyfs_root)
     char path[64];
     int rc;
     int fd;
-    size_t global, log;
+    size_t global;
 
     size_t bufsize = 1024*1024;
     char* buf = (char*) malloc(bufsize);
@@ -41,11 +41,9 @@ int truncate_test(char* unifyfs_root)
         __FILE__, __LINE__, path, fd, strerror(errno));
 
     /* file should be 0 bytes at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 0, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, 0);
-    ok(log == 0, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 0);
 
     /* write 1MB and fsync, expect 1MB */
     rc = write(fd, buf, bufsize);
@@ -56,11 +54,9 @@ int truncate_test(char* unifyfs_root)
     ok(rc == 0, "%s:%d fsync() (rc=%d): %s",
         __FILE__, __LINE__, rc, strerror(errno));
 
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 1*bufsize, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, 1*bufsize);
-    ok(log == 1*bufsize, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 1*bufsize);
 
     /* skip a 1MB hole, write another 1MB, and fsync expect 3MB */
     rc = lseek(fd, 2*bufsize, SEEK_SET);
@@ -75,22 +71,18 @@ int truncate_test(char* unifyfs_root)
     ok(rc == 0, "%s:%d fsync() (rc=%d): %s",
         __FILE__, __LINE__, rc, strerror(errno));
 
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 3*bufsize, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, 3*bufsize);
-    ok(log == 2*bufsize, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 2*bufsize);
 
     /* ftruncate at 5MB, expect 5MB */
     rc = ftruncate(fd, 5*bufsize);
     ok(rc == 0, "%s:%d ftruncate(%d) (rc=%d): %s",
         __FILE__, __LINE__, 5*bufsize, rc, strerror(errno));
 
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 5*bufsize, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, 5*bufsize);
-    ok(log == 2*bufsize, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 2*bufsize);
 
     close(fd);
 
@@ -99,22 +91,18 @@ int truncate_test(char* unifyfs_root)
     ok(rc == 0, "%s:%d truncate(%d) (rc=%d): %s",
         __FILE__, __LINE__, bufsize/2, rc, strerror(errno));
 
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == bufsize/2, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, bufsize/2);
-    ok(log == 2*bufsize, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 2*bufsize);
 
     /* truncate to 0, expect 0 */
     rc = truncate(path, 0);
     ok(rc == 0, "%s:%d truncate(%d) (rc=%d): %s",
         __FILE__, __LINE__, 0, rc, strerror(errno));
 
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 0, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, 0);
-    ok(log == 2*bufsize, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 2*bufsize);
 
     free(buf);
 
@@ -126,7 +114,7 @@ int truncate_bigempty(char* unifyfs_root)
     char path[64];
     int rc;
     int fd;
-    size_t global, log;
+    size_t global;
 
     size_t bufsize = 1024*1024;
     char* buf = (char*) malloc(bufsize);
@@ -138,11 +126,9 @@ int truncate_bigempty(char* unifyfs_root)
     ok(fd != -1, "%s:%d open(%s) (fd=%d): %s",
         __FILE__, __LINE__, path, fd, strerror(errno));
 
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 0, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, 0);
-    ok(log == 0, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 0);
 
     /* ftruncate at 1TB, expect 1TB */
     off_t bigempty = 1024*1024*1024*1024ULL;
@@ -151,7 +137,7 @@ int truncate_bigempty(char* unifyfs_root)
         __FILE__, __LINE__, (unsigned long long) bigempty,
         rc, strerror(errno));
 
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == (size_t)bigempty, "%s:%d global size is %llu expected %llu",
         __FILE__, __LINE__, global, (unsigned long long)bigempty,
         strerror(errno));
@@ -168,7 +154,7 @@ int truncate_eof(char* unifyfs_root)
     char path[64];
     int rc;
     int fd;
-    size_t global, log;
+    size_t global;
 
     size_t bufsize = 1024*1024;
     char* buf = (char*) malloc(bufsize);
@@ -181,11 +167,9 @@ int truncate_eof(char* unifyfs_root)
         __FILE__, __LINE__, path, fd, strerror(errno));
 
     /* file should be 0 bytes at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 0, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, 0);
-    ok(log == 0, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 0);
 
     /* write 1MB */
     rc = write(fd, buf, bufsize);
@@ -247,7 +231,7 @@ int truncate_truncsync(char* unifyfs_root)
     char path[64];
     int rc;
     int fd;
-    size_t global, log;
+    size_t global;
 
     size_t bufsize = 1024*1024;
     char* buf = (char*) malloc(bufsize);
@@ -260,11 +244,9 @@ int truncate_truncsync(char* unifyfs_root)
         __FILE__, __LINE__, path, fd, strerror(errno));
 
     /* file should be 0 bytes at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 0, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, 0);
-    ok(log == 0, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 0);
 
     /* write 1MB */
     rc = write(fd, buf, bufsize);
@@ -277,22 +259,18 @@ int truncate_truncsync(char* unifyfs_root)
         __FILE__, __LINE__, bufsize/2, rc, strerror(errno));
 
     /* file should be 0.5MB bytes at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == bufsize/2, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, bufsize/2);
-    ok(log == bufsize, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, bufsize);
 
     rc = fsync(fd);
     ok(rc == 0, "%s:%d fsync() (rc=%d): %s",
         __FILE__, __LINE__, rc, strerror(errno));
 
     /* file should still be 0.5MB bytes at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == bufsize/2, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, bufsize/2);
-    ok(log == bufsize, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, bufsize);
 
     close(fd);
 
@@ -344,7 +322,7 @@ int truncate_pattern_size(char* unifyfs_root, off_t seekpos)
     char path[64];
     int rc;
     int fd;
-    size_t global, log;
+    size_t global;
     int i;
 
     size_t bufsize = 1024*1024;
@@ -358,11 +336,9 @@ int truncate_pattern_size(char* unifyfs_root, off_t seekpos)
         __FILE__, __LINE__, path, fd, strerror(errno));
 
     /* file should be 0 bytes at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 0, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, 0);
-    ok(log == 0, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 0);
 
     /* write pattern out of 20 MB in size */
     size_t nwritten = 0;
@@ -388,11 +364,9 @@ int truncate_pattern_size(char* unifyfs_root, off_t seekpos)
         __FILE__, __LINE__, (int)truncsize, rc, strerror(errno));
 
     /* file should be of size 5MB + 42 at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == truncsize, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, (int)truncsize);
-    ok(log == 20*bufsize, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 20*bufsize);
 
     /* this kind of tests that the ftruncate above implied an fsync,
      * can't really since the writes may have gone to disk on their
@@ -402,11 +376,9 @@ int truncate_pattern_size(char* unifyfs_root, off_t seekpos)
         __FILE__, __LINE__, rc, strerror(errno));
 
     /* file should still be 5MB + 42 bytes at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == truncsize, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, (int)truncsize);
-    ok(log == 20*bufsize, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 20*bufsize);
 
     close(fd);
 
@@ -486,7 +458,7 @@ int truncate_empty_read(char* unifyfs_root, off_t seekpos)
     char path[64];
     int rc;
     int fd;
-    size_t global, log;
+    size_t global;
 
     size_t bufsize = 1024*1024;
     char* buf = (char*) malloc(bufsize);
@@ -499,11 +471,9 @@ int truncate_empty_read(char* unifyfs_root, off_t seekpos)
         __FILE__, __LINE__, path, fd, strerror(errno));
 
     /* file should be 0 bytes at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 0, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, 0);
-    ok(log == 0, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 0);
 
     /* set size we'll truncate file to */
     off_t truncsize = 5*bufsize + 42;
@@ -514,11 +484,9 @@ int truncate_empty_read(char* unifyfs_root, off_t seekpos)
         __FILE__, __LINE__, (int)truncsize, rc, strerror(errno));
 
     /* file should be of size 5MB + 42 at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == truncsize, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, (int)truncsize);
-    ok(log == 0, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 0);
 
     /* this kind of tests that the ftruncate above implied an fsync,
      * can't really since the writes may have gone to disk on their
@@ -528,11 +496,9 @@ int truncate_empty_read(char* unifyfs_root, off_t seekpos)
         __FILE__, __LINE__, rc, strerror(errno));
 
     /* file should still be 5MB + 42 bytes at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == truncsize, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, (int)truncsize);
-    ok(log == 0, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 0);
 
     close(fd);
 
@@ -610,7 +576,7 @@ int truncate_ftrunc_before_sync(char* unifyfs_root)
     char path[64];
     int rc;
     int fd;
-    size_t global, log;
+    size_t global;
 
     size_t bufsize = 1024;
     char* buf = (char*) malloc(bufsize);
@@ -623,11 +589,9 @@ int truncate_ftrunc_before_sync(char* unifyfs_root)
         __FILE__, __LINE__, path, fd, strerror(errno));
 
     /* file should be 0 bytes at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 0, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, 0);
-    ok(log == 0, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 0);
 
     /* write a small amount, intended to be small enough that
      * the write itself does not cause an implicit fsync */
@@ -651,11 +615,9 @@ int truncate_ftrunc_before_sync(char* unifyfs_root)
     /* finally, check that the file is 0 bytes,
      * i.e., check that the writes happened before the truncate
      * and not at the fsync */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == truncsize, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, (int)truncsize);
-    ok(log == bufsize, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, bufsize);
 
     close(fd);
 
@@ -669,7 +631,7 @@ int truncate_trunc_before_sync(char* unifyfs_root)
     char path[64];
     int rc;
     int fd;
-    size_t global, log;
+    size_t global;
 
     size_t bufsize = 1024;
     char* buf = (char*) malloc(bufsize);
@@ -682,11 +644,9 @@ int truncate_trunc_before_sync(char* unifyfs_root)
         __FILE__, __LINE__, path, fd, strerror(errno));
 
     /* file should be 0 bytes at this point */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 0, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, 0);
-    ok(log == 0, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, 0);
 
     /* write a small amount, intended to be small enough that
      * the write itself does not cause an implicit fsync */
@@ -710,11 +670,9 @@ int truncate_trunc_before_sync(char* unifyfs_root)
     /* finally, check that the file is 0 bytes,
      * i.e., check that the writes happened before the truncate
      * and not at the fsync */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == truncsize, "%s:%d global size is %d expected %d",
         __FILE__, __LINE__, global, (int)truncsize);
-    ok(log == bufsize, "%s:%d log size is %d expected %d",
-        __FILE__, __LINE__, log, bufsize);
 
     close(fd);
 
