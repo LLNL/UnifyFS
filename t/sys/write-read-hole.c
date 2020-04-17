@@ -40,7 +40,7 @@ int write_read_hole_test(char* unifyfs_root)
     char path[64];
     int rc;
     int fd;
-    size_t global, log;
+    size_t global;
 
     size_t bufsize = 1024*1024;
     char* buf = (char*) malloc(bufsize);
@@ -78,11 +78,9 @@ int write_read_hole_test(char* unifyfs_root)
         __FILE__, __LINE__, rc, strerror(errno));
 
     /* Check global size on our un-laminated file */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 0, "%s:%d global size is %d: %s",
         __FILE__, __LINE__, global, strerror(errno));
-    ok(log == 2*bufsize, "%s:%d log size is %d: %s",
-        __FILE__, __LINE__, log, strerror(errno));
 
     /* flush writes */
     rc = fsync(fd);
@@ -90,11 +88,9 @@ int write_read_hole_test(char* unifyfs_root)
         __FILE__, __LINE__, rc, strerror(errno));
 
     /* Check global size on our un-laminated file */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 3*bufsize, "%s:%d global size is %d: %s",
         __FILE__, __LINE__, global, strerror(errno));
-    ok(log == 2*bufsize, "%s:%d log size is %d: %s",
-        __FILE__, __LINE__, log, strerror(errno));
 
     /* truncate file at 4MB, extends file so that
      * [3MB, 4MB) is implied "0" */
@@ -108,11 +104,9 @@ int write_read_hole_test(char* unifyfs_root)
         __FILE__, __LINE__, rc, strerror(errno));
 
     /* Check global size on our un-laminated file */
-    testutil_get_size(path, &global, &log);
+    testutil_get_size(path, &global);
     ok(global == 4*bufsize, "%s:%d global size is %d: %s",
         __FILE__, __LINE__, global, strerror(errno));
-    ok(log == 2*bufsize, "%s:%d log size is %d: %s",
-        __FILE__, __LINE__, log, strerror(errno));
 
     close(fd);
 
