@@ -143,7 +143,6 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
     }
 
     meta->global_size = sb.st_size;
-    meta->chunks = sb.st_blocks;
 
     unifyfs_dirstream_t* dirp = unifyfs_dirstream_alloc(fid);
 
