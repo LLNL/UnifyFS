@@ -269,7 +269,6 @@ typedef struct {
     int gfid;                     /* global file id for this file */
     int needs_sync;               /* have unsynced writes */
 
-    off_t chunks;                 /* number of chunks allocated to file */
     int is_laminated;             /* Is this file laminated */
     uint32_t mode;                /* st_mode bits.  This has file
                                    * permission info and will tell you if this

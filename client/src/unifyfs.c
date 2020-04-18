@@ -864,7 +864,6 @@ int unifyfs_fid_create_file(const char* path)
     meta->storage      = FILE_STORAGE_NULL;
     meta->gfid         = unifyfs_generate_gfid(path);
     meta->needs_sync   = 0;
-    meta->chunks       = 0;
     meta->is_laminated = 0;
     meta->mode         = UNIFYFS_STAT_DEFAULT_FILE_MODE;
 
@@ -1630,7 +1629,7 @@ int unifyfs_fid_write(
 
     /* determine storage type to write file data */
     if (meta->storage == FILE_STORAGE_LOGIO) {
-        /* file stored in fixed-size chunks */
+        /* file stored in logged i/o */
         rc = unifyfs_fid_logio_write(fid, meta, pos, buf, count, bytes);
         if (rc == UNIFYFS_SUCCESS) {
             /* write succeeded, remember that we have new data
@@ -1900,11 +1899,8 @@ int unifyfs_fid_unlink(int fid)
  * ------------- */
 
 /* The super block is a region of shared memory that is used to
- * persist file system data.  It contains both room for data
- * structures used to track file names, meta data, the list of
- * storage blocks used for each file, and optional blocks.
- * It also contains a fixed-size region for keeping log
- * index entries for each file.
+ * persist file system meta data.  It also contains a fixed-size
+ * region for keeping log index entries for each file.
  *
  *  - stack of free local file ids of length max_files,
  *    the local file id is used to index into other data
@@ -1915,20 +1911,7 @@ int unifyfs_fid_unlink(int fid)
  *    slot is in use and if so, the current file name
  *
  *  - array of unifyfs_filemeta structs, indexed by local
- *    file id, records list of storage blocks used to
- *    store data for the file
- *
- *  - array of unifyfs_chunkmeta structs, indexed by local
- *    file id and then by chunk id for recording metadata
- *    of each chunk allocated to a file, including host
- *    storage and id of that chunk within its storage
- *
- *  - stack to track free list of memory chunks
- *
- *  - stack to track free list of spillover chunks
- *
- *  - array of storage chunks of length unifyfs_max_chunks,
- *    if storing data in memory
+ *    file id
  *
  *  - count of number of active index entries
  *  - array of index metadata to track physical offset
