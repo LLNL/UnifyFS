@@ -30,7 +30,7 @@ struct unifyfs_fops* unifyfs_fops_get(const char* name)
     int i = 0;
     struct unifyfs_fops* fops[] = {
         unifyfs_fops_mdhim,
-        unifyfs_fops_collective
+        unifyfs_fops_rpc
     };
 
     for (i = 0; i < sizeof(fops)/sizeof(fops[0]); i++) {

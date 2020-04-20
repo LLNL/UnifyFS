@@ -26,7 +26,7 @@
 #include "unifyfs_global.h"
 #include "unifyfs_inode_tree.h"
 #include "unifyfs_inode.h"
-#include "unifyfs_collectives.h"
+#include "unifyfs_group_rpc.h"
 #include "unifyfs_metadata.h"
 #include "unifyfs_request_manager.h"
 #include "unifyfs_fops.h"
@@ -34,7 +34,7 @@
 struct unifyfs_inode_tree _global_inode_tree;
 struct unifyfs_inode_tree* global_inode_tree = &_global_inode_tree;
 
-static int collective_init(unifyfs_cfg_t* cfg)
+static int rpc_init(unifyfs_cfg_t* cfg)
 {
     int ret = 0;
     long range_sz = 0;
@@ -55,24 +55,24 @@ static int collective_init(unifyfs_cfg_t* cfg)
     return ret;
 }
 
-static int collective_metaget(unifyfs_fops_ctx_t* ctx,
+static int rpc_metaget(unifyfs_fops_ctx_t* ctx,
                               int gfid, unifyfs_file_attr_t* attr)
 {
     return unifyfs_inode_metaget(gfid, attr);
 }
 
-static int collective_metaset(unifyfs_fops_ctx_t* ctx,
+static int rpc_metaset(unifyfs_fops_ctx_t* ctx,
                               int gfid, int create, unifyfs_file_attr_t* attr)
 {
     return unifyfs_invoke_metaset_rpc(gfid, create, attr);
 }
 
-static int collective_sync(unifyfs_fops_ctx_t* ctx)
+static int rpc_sync(unifyfs_fops_ctx_t* ctx)
 {
-    return rm_cmd_sync_collective(ctx->app_id, ctx->client_id);
+    return rm_cmd_sync_rpc(ctx->app_id, ctx->client_id);
 }
 
-static int collective_fsync(unifyfs_fops_ctx_t* ctx, int gfid)
+static int rpc_fsync(unifyfs_fops_ctx_t* ctx, int gfid)
 {
     int ret = 0;
 
@@ -81,18 +81,18 @@ static int collective_fsync(unifyfs_fops_ctx_t* ctx, int gfid)
     return ret;
 }
 
-static int collective_filesize(unifyfs_fops_ctx_t* ctx,
+static int rpc_filesize(unifyfs_fops_ctx_t* ctx,
                                int gfid, size_t* filesize)
 {
     return unifyfs_invoke_filesize_rpc(gfid, filesize);
 }
 
-static int collective_truncate(unifyfs_fops_ctx_t* ctx, int gfid, off_t len)
+static int rpc_truncate(unifyfs_fops_ctx_t* ctx, int gfid, off_t len)
 {
     return unifyfs_invoke_truncate_rpc(gfid, len);
 }
 
-static int collective_laminate(unifyfs_fops_ctx_t* ctx, int gfid)
+static int rpc_laminate(unifyfs_fops_ctx_t* ctx, int gfid)
 {
     int ret = 0;
 
@@ -101,12 +101,12 @@ static int collective_laminate(unifyfs_fops_ctx_t* ctx, int gfid)
     return ret;
 }
 
-static int collective_unlink(unifyfs_fops_ctx_t* ctx, int gfid)
+static int rpc_unlink(unifyfs_fops_ctx_t* ctx, int gfid)
 {
     return unifyfs_invoke_unlink_rpc(gfid);
 }
 
-static int collective_read(unifyfs_fops_ctx_t* ctx,
+static int rpc_read(unifyfs_fops_ctx_t* ctx,
                            int gfid, off_t offset, size_t len)
 {
     int ret = 0;
@@ -116,7 +116,7 @@ static int collective_read(unifyfs_fops_ctx_t* ctx,
     return ret;
 }
 
-static int collective_mread(unifyfs_fops_ctx_t* ctx, size_t n_req, void* req)
+static int rpc_mread(unifyfs_fops_ctx_t* ctx, size_t n_req, void* req)
 {
     int ret = 0;
 
@@ -125,20 +125,20 @@ static int collective_mread(unifyfs_fops_ctx_t* ctx, size_t n_req, void* req)
     return ret;
 }
 
-static struct unifyfs_fops _fops_collective = {
-    .name = "collective",
-    .init = collective_init,
-    .metaget = collective_metaget,
-    .metaset = collective_metaset,
-    .sync = collective_sync,
-    .fsync = collective_fsync,
-    .filesize = collective_filesize,
-    .truncate = collective_truncate,
-    .laminate = collective_laminate,
-    .unlink = collective_unlink,
-    .read = collective_read,
-    .mread = collective_mread,
+static struct unifyfs_fops _fops_rpc = {
+    .name = "rpc",
+    .init = rpc_init,
+    .metaget = rpc_metaget,
+    .metaset = rpc_metaset,
+    .sync = rpc_sync,
+    .fsync = rpc_fsync,
+    .filesize = rpc_filesize,
+    .truncate = rpc_truncate,
+    .laminate = rpc_laminate,
+    .unlink = rpc_unlink,
+    .read = rpc_read,
+    .mread = rpc_mread,
 };
 
-struct unifyfs_fops* unifyfs_fops_collective = &_fops_collective;
+struct unifyfs_fops* unifyfs_fops_rpc = &_fops_rpc;
 

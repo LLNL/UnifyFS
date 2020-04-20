@@ -27,7 +27,7 @@
 #include "unifyfs_tree.h"
 #include "margo_server.h"
 #include "unifyfs_server_rpcs.h"
-#include "unifyfs_collectives.h"
+#include "unifyfs_group_rpc.h"
 
 /*
  * Broadcast operation for file extends

@@ -93,7 +93,7 @@
     UNIFYFS_CFG_CLI(server, init_timeout, INT, UNIFYFS_DEFAULT_INIT_TIMEOUT, "timeout of waiting for server initialization", NULL, 't', "timeout in seconds to wait for servers to be ready for clients") \
     UNIFYFS_CFG_CLI(server, fops, STRING, mdhim, \
                     "server file operation implementation", \
-                    NULL, 'z', "mdhim|collective") \
+                    NULL, 'z', "mdhim|rpc") \
 
 
 #ifdef __cplusplus

@@ -16,9 +16,9 @@ libunifyfsd_a_SOURCES = \
 	unifyfs_fops.h \
 	unifyfs_fops.c \
 	unifyfs_fops_mdhim.c \
-	unifyfs_fops_collective.c \
-	unifyfs_collectives.h \
-	unifyfs_collectives.c \
+	unifyfs_fops_rpc.c \
+	unifyfs_group_rpc.h \
+	unifyfs_group_rpc.c \
     unifyfs_request_manager.c \
     unifyfs_request_manager.h \
     unifyfs_service_manager.c \

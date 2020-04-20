@@ -63,7 +63,7 @@ struct unifyfs_fops {
 
 /* available file operations.  */
 extern struct unifyfs_fops* unifyfs_fops_mdhim;
-extern struct unifyfs_fops* unifyfs_fops_collective;
+extern struct unifyfs_fops* unifyfs_fops_rpc;
 
 /* the one that is configured to be used: defined in unifyfs_server.c */
 extern struct unifyfs_fops* global_fops_tab;
