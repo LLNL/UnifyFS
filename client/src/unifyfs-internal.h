@@ -404,9 +404,9 @@ int unifyfs_would_overflow_offt(off_t a, off_t b);
  * added together */
 int unifyfs_would_overflow_long(long a, long b);
 
-int unifyfs_stack_lock();
+int unifyfs_stack_lock(void);
 
-int unifyfs_stack_unlock();
+int unifyfs_stack_unlock(void);
 
 /* sets flag if the path is a special path */
 int unifyfs_intercept_path(const char* path);
@@ -495,7 +495,7 @@ int unifyfs_fid_update_file_meta(int fid, unifyfs_file_attr_t* gfattr);
 
 /* allocate a file id slot for a new file
  * return the fid or -1 on error */
-int unifyfs_fid_alloc();
+int unifyfs_fid_alloc(void);
 
 /* return the file id back to the free pool */
 int unifyfs_fid_free(int fid);
@@ -507,8 +507,6 @@ int unifyfs_fid_create_file(const char* path);
 /* add a new directory and initialize metadata
  * returns the new fid, or a negative value on error */
 int unifyfs_fid_create_directory(const char* path);
-
-int unifyfs_fid_read_reqs(read_req_t* in_reqs, int in_count);
 
 /* write count bytes from buf into file starting at offset pos */
 int unifyfs_fid_write(
@@ -524,6 +522,9 @@ int unifyfs_fid_write(
  * is more than size */
 int unifyfs_fid_truncate(int fid, off_t length);
 
+/* sync data for file id to server if needed */
+int unifyfs_fid_sync(int fid);
+
 /* opens a new file id with specified path, access flags, and permissions,
  * fills outfid with file id and outpos with position for current file pointer,
  * returns UNIFYFS error code */
@@ -537,6 +538,9 @@ int unifyfs_fid_unlink(int fid);
 
 
 /* functions used in UnifyFS */
+
+/* issue a set of read requests */
+int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count);
 
 int unifyfs_set_global_file_meta_from_fid(
     int fid,

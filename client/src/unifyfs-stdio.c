@@ -501,8 +501,7 @@ static int unifyfs_stream_flush(FILE* stream)
         }
 
         /* invoke fsync rpc to register index metadata with server */
-        int gfid = unifyfs_gfid_from_fid(fid);
-        int ret = unifyfs_sync(gfid);
+        int ret = unifyfs_fid_sync(fid);
         if (ret != UNIFYFS_SUCCESS) {
             /* sync failed for some reason, set errno and return error */
             s->err = 1;

@@ -166,7 +166,7 @@ static void add_index_entry_to_seg_tree(unifyfs_filemeta_t* meta,
     if (unifyfs_segment_count >= (unifyfs_max_index_entries - 2)) {
         /* this will flush our segments, sync them, and set the running
          * segment count back to 0 */
-        unifyfs_sync(meta->gfid);
+        unifyfs_sync();
     } else {
         /* increase the running global segment count by the number of
          * new entries we added to this tree */
@@ -222,7 +222,7 @@ static int add_write_meta_to_index(unifyfs_filemeta_t* meta,
         /* if we have filled the key/value buffer, flush it to server */
         if (0 == remaining_entries) {
             /* index buffer is full, flush it */
-            int ret = unifyfs_sync(cur_idx.gfid);
+            int ret = unifyfs_sync();
             if (ret != UNIFYFS_SUCCESS) {
                 /* something went wrong when trying to flush key/values */
                 LOGERR("failed to flush key/value index to server");
@@ -311,7 +311,7 @@ void unifyfs_rewrite_index_from_seg_tree(void)
  *
  * Returns 0 on success, nonzero otherwise.
  */
-int unifyfs_sync(int gfid)
+int unifyfs_sync(void)
 {
     /* NOTE: we currently ignore gfid and sync extents for all files in
      * the index. If we ever switch to storing extents in a per-file index,
@@ -349,7 +349,6 @@ int unifyfs_sync(int gfid)
 
     return UNIFYFS_SUCCESS;
 }
-
 
 /* ---------------------------------------
  * Operations on file storage

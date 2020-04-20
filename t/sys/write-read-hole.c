@@ -79,7 +79,7 @@ int write_read_hole_test(char* unifyfs_root)
 
     /* Check global size on our un-laminated file */
     testutil_get_size(path, &global);
-    ok(global == 0, "%s:%d global size is %d: %s",
+    ok(global == 3*bufsize, "%s:%d global size is %d: %s",
         __FILE__, __LINE__, global, strerror(errno));
 
     /* flush writes */
