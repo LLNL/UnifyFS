@@ -223,20 +223,17 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
 {
     /* determine whether we should intercept this path or not */
     if (unifyfs_intercept_path(path)) {
-        /* get global file id for path */
-        int gfid = unifyfs_generate_gfid(path);
-
-        /* before we truncate, sync any data cached this file id */
-        int ret = unifyfs_sync(gfid);
-        if (ret != UNIFYFS_SUCCESS) {
-            /* sync failed for some reason, set errno and return error */
-            errno = unifyfs_rc_errno(ret);
-            return -1;
-        }
-
         /* get file id for path name */
         int fid = unifyfs_get_fid_from_path(path);
         if (fid >= 0) {
+            /* before we truncate, sync any data cached this file id */
+            int ret = unifyfs_fid_sync(fid);
+            if (ret != UNIFYFS_SUCCESS) {
+                /* sync failed for some reason, set errno and return error */
+                errno = unifyfs_rc_errno(ret);
+                return -1;
+            }
+
             /* got the file locally, use fid_truncate the file */
             int rc = unifyfs_fid_truncate(fid, length);
             if (rc != UNIFYFS_SUCCESS) {
@@ -245,6 +242,7 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
             }
         } else {
             /* invoke truncate rpc */
+            int gfid = unifyfs_generate_gfid(path);
             int rc = invoke_client_truncate_rpc(gfid, length);
             if (rc != UNIFYFS_SUCCESS) {
                 LOGDBG("truncate rpc failed %s in UNIFYFS", path);
@@ -379,6 +377,16 @@ static int __stat(const char* path, struct stat* buf)
         return -1;
     }
 
+    /* flush any pending writes if needed */
+    int fid = unifyfs_get_fid_from_path(path);
+    if (fid != -1) {
+        int sync_rc = unifyfs_fid_sync(fid);
+        if (sync_rc != UNIFYFS_SUCCESS) {
+            errno = EIO;
+            return -1;
+        }
+    }
+
     /* clear the user buffer */
     memset(buf, 0, sizeof(*buf));
 
@@ -394,7 +402,6 @@ static int __stat(const char* path, struct stat* buf)
     }
 
     /* update local file metadata (if applicable) */
-    int fid = unifyfs_get_fid_from_path(path);
     if (fid != -1) {
         unifyfs_fid_update_file_meta(fid, &fattr);
     }
@@ -409,10 +416,12 @@ int UNIFYFS_WRAP(stat)(const char* path, struct stat* buf)
 {
     LOGDBG("stat was called for %s", path);
     if (unifyfs_intercept_path(path)) {
-        return __stat(path, buf);
+        int ret = __stat(path, buf);
+        return ret;
     } else {
         MAP_OR_FAIL(stat);
-        return UNIFYFS_REAL(stat)(path, buf);
+        int ret = UNIFYFS_REAL(stat)(path, buf);
+        return ret;
     }
 }
 
@@ -424,10 +433,12 @@ int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
     if (unifyfs_intercept_fd(&fd)) {
         int fid = unifyfs_get_fid_from_fd(fd);
         const char* path = unifyfs_path_from_fid(fid);
-        return __stat(path, buf);
+        int ret = __stat(path, buf);
+        return ret;
     } else {
         MAP_OR_FAIL(fstat);
-        return UNIFYFS_REAL(fstat)(fd, buf);
+        int ret = UNIFYFS_REAL(fstat)(fd, buf);
+        return ret;
     }
 }
 
@@ -450,7 +461,8 @@ int UNIFYFS_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
             errno = EINVAL;
             return -1;
         }
-        return __stat(path, buf);
+        int ret = __stat(path, buf);
+        return ret;
     } else {
         MAP_OR_FAIL(__xstat);
         int ret = UNIFYFS_REAL(__xstat)(vers, path, buf);
@@ -469,10 +481,12 @@ int UNIFYFS_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
             errno = EINVAL;
             return -1;
         }
-        return __stat(path, buf);
+        int ret = __stat(path, buf);
+        return ret;
     } else {
         MAP_OR_FAIL(__lxstat);
-        return UNIFYFS_REAL(__lxstat)(vers, path, buf);
+        int ret = UNIFYFS_REAL(__lxstat)(vers, path, buf);
+        return ret;
     }
 }
 #endif
@@ -491,10 +505,12 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
 
         int fid = unifyfs_get_fid_from_fd(fd);
         const char* path = unifyfs_path_from_fid(fid);
-        return __stat(path, buf);
+        int ret = __stat(path, buf);
+        return ret;
     } else {
         MAP_OR_FAIL(__fxstat);
-        return UNIFYFS_REAL(__fxstat)(vers, fd, buf);
+        int ret = UNIFYFS_REAL(__fxstat)(vers, fd, buf);
+        return ret;
     }
 }
 #endif
@@ -544,6 +560,10 @@ int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* nread)
         return UNIFYFS_SUCCESS;
     }
 
+    /* TODO: handle error if sync fails? */
+    /* sync data for file before reading, if needed */
+    unifyfs_fid_sync(fid);
+
     /* fill in read request */
     read_req_t req;
     req.gfid    = unifyfs_gfid_from_fid(fid);
@@ -554,7 +574,7 @@ int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* nread)
     req.buf     = buf;
 
     /* execute read operation */
-    int ret = unifyfs_fid_read_reqs(&req, 1);
+    int ret = unifyfs_gfid_read_reqs(&req, 1);
     if (ret != UNIFYFS_SUCCESS) {
         /* failed to issue read operation */
         return EIO;
@@ -1156,6 +1176,11 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
                 if (fid < 0) {
                     AIOCB_ERROR_CODE(cbp) = EINVAL;
                 } else {
+                    /* TODO: handle error if sync fails? */
+                    /* sync data for file before reading, if needed */
+                    unifyfs_fid_sync(fid);
+
+                    /* define read request for this file */
                     reqs[reqcnt].gfid    = unifyfs_gfid_from_fid(fid);
                     reqs[reqcnt].offset  = (size_t)(cbp->aio_offset);
                     reqs[reqcnt].length  = cbp->aio_nbytes;
@@ -1183,11 +1208,12 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
     }
 
     if (reqcnt) {
-        rc = unifyfs_fid_read_reqs(reqs, reqcnt);
+        rc = unifyfs_gfid_read_reqs(reqs, reqcnt);
         if (rc != UNIFYFS_SUCCESS) {
             /* error reading data */
             ret = -1;
         }
+
         /* update aiocb fields to record error status and return value */
         ndx = 0;
         for (i = 0; i < reqcnt; i++) {
@@ -1229,6 +1255,10 @@ ssize_t UNIFYFS_WRAP(pread)(int fd, void* buf, size_t count, off_t offset)
             return (ssize_t)(-1);
         }
 
+        /* TODO: handle error if sync fails? */
+        /* sync data for file before reading, if needed */
+        unifyfs_fid_sync(fid);
+
         /* fill in read request */
         read_req_t req;
         req.gfid    = unifyfs_gfid_from_fid(fid);
@@ -1240,7 +1270,7 @@ ssize_t UNIFYFS_WRAP(pread)(int fd, void* buf, size_t count, off_t offset)
 
         /* execute read operation */
         ssize_t retcount;
-        int ret = unifyfs_fid_read_reqs(&req, 1);
+        int ret = unifyfs_gfid_read_reqs(&req, 1);
         if (ret != UNIFYFS_SUCCESS) {
             /* error reading data */
             errno = EIO;
@@ -1341,11 +1371,8 @@ int UNIFYFS_WRAP(ftruncate)(int fd, off_t length)
             return -1;
         }
 
-        /* get global file id for fid */
-        int gfid = unifyfs_gfid_from_fid(fid);
-
         /* before we truncate, sync any data cached this file id */
-        int ret = unifyfs_sync(gfid);
+        int ret = unifyfs_fid_sync(fid);
         if (ret != UNIFYFS_SUCCESS) {
             /* sync failed for some reason, set errno and return error */
             errno = unifyfs_rc_errno(ret);
@@ -1379,23 +1406,14 @@ int UNIFYFS_WRAP(fsync)(int fd)
             return -1;
         }
 
-        /* skip this file if no new data has been written to it */
-        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-        if (!meta->needs_sync) {
-            return 0;
-        }
-
         /* invoke fsync rpc to register index metadata with server */
-        int gfid = unifyfs_gfid_from_fid(fid);
-        int ret = unifyfs_sync(gfid);
+        int ret = unifyfs_fid_sync(fid);
         if (ret != UNIFYFS_SUCCESS) {
             /* sync failed for some reason, set errno and return error */
             errno = unifyfs_rc_errno(ret);
             return -1;
         }
 
-        /* update metadata to indicate that data has been synced */
-        meta->needs_sync = 0;
         return 0;
     } else {
         MAP_OR_FAIL(fsync);
@@ -1581,7 +1599,6 @@ void* UNIFYFS_WRAP(mmap64)(void* addr, size_t length, int prot, int flags,
 int UNIFYFS_WRAP(close)(int fd)
 {
     /* check whether we should intercept this file descriptor */
-    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
         LOGDBG("closing fd %d", fd);
 
@@ -1601,9 +1618,13 @@ int UNIFYFS_WRAP(close)(int fd)
             return -1;
         }
 
-        /* if file was opened for writing, fsync it */
+        /* if file was opened for writing, sync it */
         if (filedesc->write) {
-            UNIFYFS_WRAP(fsync)(origfd);
+            int sync_rc = unifyfs_fid_sync(fid);
+            if (sync_rc != UNIFYFS_SUCCESS) {
+                errno = unifyfs_rc_errno(sync_rc);
+                return -1;
+            }
         }
 
         /* close the file id */

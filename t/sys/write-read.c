@@ -66,7 +66,7 @@ int write_read_test(char* unifyfs_root)
 
     /* Check global size on our un-laminated and un-synced file */
     testutil_get_size(path, &global);
-    ok(global == 0, "%s:%d global size before fsync is %d: %s",
+    ok(global == 15, "%s:%d global size before fsync is %d: %s",
        __FILE__, __LINE__, global, strerror(errno));
 
     ok(fsync(fd) == 0, "%s:%d fsync() worked: %s",

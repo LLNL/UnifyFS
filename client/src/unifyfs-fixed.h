@@ -49,7 +49,7 @@
 void unifyfs_rewrite_index_from_seg_tree(void);
 
 /* sync all writes from client's index with local server */
-int unifyfs_sync(int gfid);
+int unifyfs_sync(void);
 
 /* write data to file using log-based I/O */
 int unifyfs_fid_logio_write(
