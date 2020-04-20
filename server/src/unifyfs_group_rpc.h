@@ -1,5 +1,5 @@
-#ifndef __UNIFYFS_COLLECTIVES_H
-#define __UNIFYFS_COLLECTIVES_H
+#ifndef __UNIFYFS_GROUP_RPC_H
+#define __UNIFYFS_GROUP_RPC_H
 
 #include "unifyfs_tree.h"
 
@@ -58,4 +58,4 @@ int unifyfs_invoke_metaset_rpc(int gfid, int create,
  */
 int unifyfs_invoke_unlink_rpc(int gfid);
 
-#endif /* __UNIFYFS_COLLECTIVES_H */
+#endif /* __UNIFYFS_GROUP_RPC_H */

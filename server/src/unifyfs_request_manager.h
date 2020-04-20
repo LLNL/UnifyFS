@@ -125,7 +125,7 @@ int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl);
 /* retrieve all write index entries for app-client and
  * store them in global metadata */
 int rm_cmd_sync_mdhim(int app_id, int client_side_id);
-int rm_cmd_sync_collective(int app_id, int client_side_id);
+int rm_cmd_sync_rpc(int app_id, int client_side_id);
 
 /* update state for remote chunk reads with received response data */
 int rm_post_chunk_read_responses(int app_id,

@@ -42,7 +42,7 @@
 #include "unifyfs_request_manager.h"
 #include "unifyfs_service_manager.h"
 #include "unifyfs_metadata.h"
-#include "unifyfs_collectives.h"
+#include "unifyfs_group_rpc.h"
 
 // margo rpcs
 #include "unifyfs_server_rpcs.h"
@@ -2204,7 +2204,7 @@ rm_cmd_fsync_exit:
     return ret;
 }
 
-int rm_cmd_sync_collective(int app_id, int client_id)
+int rm_cmd_sync_rpc(int app_id, int client_id)
 {
     size_t i;
 
