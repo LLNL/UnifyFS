@@ -2065,6 +2065,44 @@ static int init_superblock_shm(size_t super_sz)
         /* superblock structure has been initialized,
          * so set flag to indicate that fact */
         *(uint32_t*)addr = (uint32_t)0xDEADBEEF;
+    } else {
+        /* In this case, we have reattached to an existing superblock from
+         * an earlier run.  We need to reset the segtree pointers to
+         * newly allocated segtrees, because they point to structures
+         * allocated in the last run whose memory addresses are no longer
+         * valid. */
+
+        /* TODO: what to do if a process calls unifyfs_init multiple times
+         * in a run? */
+
+        /* Clear any index entries from the cache.  We do this to ensure
+         * the newly allocated seg trees are consistent with the extents
+         * in the index.  It would be nice to call unifyfs_sync to flush
+         * any entries to the server, but we can't do that since that will
+         * try to rewrite the index using the trees, which point to invalid
+         * memory at this point. */
+        /* initialize count of key/value entries */
+        *(unifyfs_indices.ptr_num_entries) = 0;
+
+        int i;
+        for (i = 0; i < unifyfs_max_files; i++) {
+            /* if the file entry is active, reset its segment trees */
+            if (unifyfs_filelist[i].in_use) {
+                /* got a live file, get pointer to its metadata */
+                unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(i);
+
+                /* Reset our segment tree that will record our writes */
+                if (unifyfs_flatten_writes) {
+                    seg_tree_init(&meta->extents_sync);
+                }
+
+                /* Reset our segment tree to track extents for all writes
+                 * by this process, can be used to read back local data */
+                if (unifyfs_local_extents) {
+                    seg_tree_init(&meta->extents);
+                }
+            }
+        }
     }
 
     /* return starting memory address of super block */
