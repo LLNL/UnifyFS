@@ -113,7 +113,7 @@ int unifyfs_fd_read(
     off_t pos,    /* offset within file to read from */
     void* buf,    /* buffer to hold data */
     size_t count, /* number of bytes to read */
-    size_t* bytes /* number of bytes read */
+    size_t* nread /* number of bytes read */
 );
 
 /*
@@ -126,7 +126,7 @@ int unifyfs_fd_write(
     off_t pos,       /* offset within file to write to */
     const void* buf, /* buffer holding data to write */
     size_t count,    /* number of bytes to write */
-    size_t* bytes    /* number of bytes written */
+    size_t* nwritten /* number of bytes written */
 );
 
 #include "unifyfs-dirops.h"
