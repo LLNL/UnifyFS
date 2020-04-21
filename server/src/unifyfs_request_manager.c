@@ -49,9 +49,7 @@
 #include "margo_server.h"
 #include "ucr_read_builder.h"
 
-#include "int2void.h"
 #include "unifyfs_inode_tree.h"
-#include "unifyfs_collectives.h"
 
 #define RM_LOCK(rm) \
 do { \
@@ -66,6 +64,8 @@ do { \
 } while (0)
 
 #define HAVE_MDHIM 1
+
+extern bool unifyfs_local_extents;
 
 arraylist_t* rm_thrd_list;
 

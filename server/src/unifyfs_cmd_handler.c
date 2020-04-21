@@ -245,10 +245,6 @@ static void unifyfs_metaset_rpc(hg_handle_t handle)
      * we initialize both the size and laminate flags */
     int ret = unifyfs_fops_metaset(NULL, in.attr.gfid, create, &fattr);
 
-    /* use the new collective for file creation */
-    ret = rm_cmd_metaset(in.app_id, in.local_rank_idx, fattr.gfid,create,
-                         &fattr);
-
     /* build our output values */
     unifyfs_metaset_out_t out;
     out.ret = ret;

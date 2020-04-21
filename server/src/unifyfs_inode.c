@@ -373,6 +373,19 @@ int unifyfs_inode_add_remote_extents(int gfid, int num_extents,
                                      UNIFYFS_INODE_REMOTE);
 }
 
+static inline void __unifyfs_inode_dump(struct unifyfs_inode* ino)
+{
+    LOGDBG("== inode (gfid=%d) ==\n", ino->gfid);
+    if (ino->local_extents) {
+        LOGDBG("local extents:");
+        extent_tree_dump(ino->local_extents);
+    }
+    if (ino->remote_extents) {
+        LOGDBG("remote extents:");
+        extent_tree_dump(ino->remote_extents);
+    }
+}
+
 int unifyfs_inode_get_filesize(int gfid, size_t* offset)
 {
     int ret = 0;
@@ -390,6 +403,7 @@ int unifyfs_inode_get_filesize(int gfid, size_t* offset)
         unifyfs_inode_rdlock(ino);
         {
             filesize = inode_get_filesize(ino);
+            __unifyfs_inode_dump(ino);
         }
         unifyfs_inode_unlock(ino);
 
@@ -436,6 +450,7 @@ int unifyfs_inode_get_local_extents(int gfid, size_t* n,
 
             while (NULL != (current = extent_tree_iter(tree, current))) {
                 _nodes[i] = *current;
+                i++;
             }
 
             *n = n_nodes;
@@ -502,15 +517,7 @@ int unifyfs_inode_dump(int gfid)
 
         unifyfs_inode_rdlock(ino);
         {
-            LOGDBG("== inode (gfid=%d) ==\n", ino->gfid);
-            if (ino->local_extents) {
-                LOGDBG("local extents:");
-                extent_tree_dump(ino->local_extents);
-            }
-            if (ino->remote_extents) {
-                LOGDBG("remote extents:");
-                extent_tree_dump(ino->remote_extents);
-            }
+            __unifyfs_inode_dump(ino);
         }
         unifyfs_inode_unlock(ino);
     }

@@ -163,7 +163,6 @@ static void extbcast_request_rpc(hg_handle_t handle)
     /* expose local bulk buffer */
     hg_bulk_t extent_data;
     void* datap = extents;
->>>>>>> Implementation of collective operations in the server for removing mdhim
     margo_bulk_create(mid, 1, &datap, &buf_size,
                       HG_BULK_READWRITE, &extent_data);
 
@@ -205,6 +204,12 @@ static void extbcast_request_rpc(hg_handle_t handle)
 
     LOGDBG("received %d extents (%lu bytes) from %d",
            num_extents, buf_size, in.root);
+
+    for (i = 0; i < num_extents; i++) {
+        struct extent_tree_node* n = &extents[i];
+        LOGDBG("[%lu,%lu] { svr: %d, app: %d, cli: %d, pos: %lu }",
+                n->start, n->end, n->svr_rank, n->app_id, n->cli_id, n->pos);
+    }
 
     /* forward request down the tree */
     for (i = 0; i < bcast_tree.child_count; i++) {
@@ -279,6 +284,12 @@ int unifyfs_broadcast_extent_tree(int gfid)
     hg_size_t buf_size = num_extents * sizeof(*extents);
 
     LOGDBG("broadcasting %lu extents (%lu bytes): ", num_extents, buf_size);
+
+    for (int i = 0; i < num_extents; i++) {
+        struct extent_tree_node* n = &extents[i];
+        LOGDBG("[%lu,%lu] { svr: %d, app: %d, cli: %d, pos: %lu }",
+                n->start, n->end, n->svr_rank, n->app_id, n->cli_id, n->pos);
+    }
 
     /* create bulk data structure containing the extends
      * NOTE: bulk data is always read only at the root of the broadcast tree */
