@@ -58,7 +58,7 @@ int unifyfs_fid_logio_write(
     off_t pos,                /* file position to start writing at */
     const void* buf,          /* user buffer holding data */
     size_t count,             /* number of bytes to write */
-    size_t* bytes             /* returns number of bytes written */
+    size_t* nwritten          /* returns number of bytes written */
 );
 
 #endif /* UNIFYFS_FIXED_H */

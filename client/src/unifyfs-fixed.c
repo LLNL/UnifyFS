@@ -358,11 +358,12 @@ int unifyfs_sync(int gfid)
 /**
  * Write data to file using log-based I/O
  *
- * @param fid    file id to write to
- * @param meta   metadata for file
- * @param pos    file position to start writing at
- * @param buf    user buffer holding data
- * @param count  number of bytes to write
+ * @param fid       file id to write to
+ * @param meta      metadata for file
+ * @param pos       file position to start writing at
+ * @param buf       user buffer holding data
+ * @param count     number of bytes to write
+ * @param nwritten  number of bytes written
  * @return UNIFYFS_SUCCESS, or error code
  */
 int unifyfs_fid_logio_write(int fid,
@@ -370,8 +371,11 @@ int unifyfs_fid_logio_write(int fid,
                             off_t pos,
                             const void* buf,
                             size_t count,
-                            size_t* bytes)
+                            size_t* nwritten)
 {
+    /* assume we'll fail to write anything */
+    *nwritten = 0;
+
     assert(meta != NULL);
     if (meta->storage != FILE_STORAGE_LOGIO) {
         LOGERR("file (fid=%d) storage mode != FILE_STORAGE_LOGIO", fid);
@@ -387,25 +391,21 @@ int unifyfs_fid_logio_write(int fid,
     }
 
     /* do the write */
-    size_t nwritten = 0;
-    rc = unifyfs_logio_write(logio_ctx, log_off, count, buf, &nwritten);
+    rc = unifyfs_logio_write(logio_ctx, log_off, count, buf, nwritten);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("logio_write(%zu, %zu) failed", log_off, count);
         return rc;
     }
 
-    if (nwritten < count) {
+    if (*nwritten < count) {
         LOGWARN("partial logio_write() @ offset=%zu (%zu of %zu bytes)",
-                (size_t)log_off, nwritten, count);
+                (size_t)log_off, *nwritten, count);
     } else {
         LOGDBG("successful logio_write() @ log offset=%zu (%zu bytes)",
                (size_t)log_off, count);
     }
 
-    /* return number of bytes written */
-    *bytes = nwritten;
-
     /* update our write metadata for this write */
-    rc = add_write_meta_to_index(meta, pos, log_off, nwritten);
+    rc = add_write_meta_to_index(meta, pos, log_off, *nwritten);
     return rc;
 }

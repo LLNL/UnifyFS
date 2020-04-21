@@ -509,10 +509,10 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
  * Returns number of bytes actually read, or -1 on error, in which
  * case errno will be set.
  */
-int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* bytes)
+int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* nread)
 {
-    /* assume we'll fail, set bytes to 0 as a clue */
-    *bytes = 0;
+    /* assume we'll fail, set bytes read to 0 as a clue */
+    *nread = 0;
 
     /* get the file id for this file descriptor */
     int fid = unifyfs_get_fid_from_fd(fd);
@@ -564,7 +564,7 @@ int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* bytes)
     }
 
     /* success, get number of bytes read from read request field */
-    *bytes = req.nread;
+    *nread = req.nread;
 
     return UNIFYFS_SUCCESS;
 }
@@ -576,10 +576,10 @@ int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* bytes)
  * is ignored.  Fills any gaps with zeros
  */
 int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count,
-    size_t* bytes)
+    size_t* nwritten)
 {
-    /* assume we'll fail, set bytes to 0 as a clue */
-    *bytes = 0;
+    /* assume we'll fail, set bytes written to 0 as a clue */
+    *nwritten = 0;
 
     /* get the file id for this file descriptor */
     int fid = unifyfs_get_fid_from_fd(fd);
@@ -606,7 +606,7 @@ int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count,
     }
 
     /* finally write specified data to file */
-    int write_rc = unifyfs_fid_write(fid, pos, buf, count, bytes);
+    int write_rc = unifyfs_fid_write(fid, pos, buf, count, nwritten);
     return write_rc;
 }
 
