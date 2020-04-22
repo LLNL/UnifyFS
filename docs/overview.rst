@@ -28,6 +28,8 @@ now test the trailing white space thing from VSC.
 
 This is another line from VSC.
 
+Yet another line from VSC.
+
 ---------------------------
 High Level Design
 ---------------------------
