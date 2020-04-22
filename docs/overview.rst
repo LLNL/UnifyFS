@@ -26,6 +26,8 @@ A sample paragraph composed in the GUI editor.  This is to find out if this edit
 really does create spurious trailing white space.  Another white space thingy.  I
 now test the trailing white space thing from VSC.
 
+This is another line from VSC.
+
 ---------------------------
 High Level Design
 ---------------------------
