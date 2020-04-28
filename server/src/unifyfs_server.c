@@ -186,7 +186,7 @@ static void fini_MPI(void)
 {
     MPI_Finalize();
 }
-//#endif // UNIFYFSD_USE_MPI
+#endif // UNIFYFSD_USE_MPI
 
 static int allocate_servers(size_t n_servers)
 {

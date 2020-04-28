@@ -1425,7 +1425,7 @@ int get_local_keyvals(
                     free(keylens_global);
                     free_key_array(keys_global);
                     free(kvs_local);
-                    return (int)UNIFYFS_ERROR_NOMEM;
+                    return ENOMEM;
                 }
 
                 /* first key is for starting offset of the hole,
@@ -1455,7 +1455,7 @@ int get_local_keyvals(
                     free(keylens_global);
                     free_key_array(keys_global);
                     free(kvs_local);
-                    return (int)UNIFYFS_ERROR_NOMEM;
+                    return ENOMEM;
                 }
 
                 /* create a key/value describing the
@@ -1486,7 +1486,7 @@ int get_local_keyvals(
                 free(keylens_global);
                 free_key_array(keys_global);
                 free(kvs_local);
-                return (int)UNIFYFS_ERROR_NOMEM;
+                return ENOMEM;
             }
 
             /* first key is for starting offset of the hole,
@@ -2118,6 +2118,7 @@ int rm_cmd_sync(int app_id, int client_id)
     }
 
     /* create file extent key/values for insertion into MDHIM */
+    int gfid_wrong = 0;
     int count = 0;
     for (i = 0; i < extent_num_entries; i++) {
         /* get file offset, length, and log offset for this entry */
@@ -2145,21 +2146,24 @@ int rm_cmd_sync(int app_id, int client_id)
         current->end = end;
         current->svr_rank = glb_pmi_rank;
         current->app_id = app_id;
-        current->cli_id = client_side_id;
+        current->cli_id = client_id;
         current->pos = (unsigned long) logpos;
+
+        /* TODO: using the gfid of the last entry for the gfid below (buggy hack)*/
+        gfid_wrong = gfid;
     }
 
-    ret = unifyfs_inode_add_local_extents(gfid,
+    ret = unifyfs_inode_add_local_extents(gfid_wrong,
                                           extent_num_entries, local_extents);
     if (ret) {
         LOGERR("failed to add local extent to inode (gfid=%d, ret=%d)",
-                gfid, ret);
+                gfid_wrong, ret);
         goto rm_cmd_fsync_exit;
     }
 
     /* distribute the extend tree */
     //ret = unifyfs_distribute_extend_tree(gfid);
-    ret = unifyfs_broadcast_extent_tree(gfid);
+    ret = unifyfs_broadcast_extent_tree(gfid_wrong);
     if (UNIFYFS_SUCCESS != ret) {
         LOGERR("Error distributing extend tree");
         goto rm_cmd_fsync_exit;

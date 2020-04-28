@@ -107,9 +107,11 @@ static int extbcast_request_forward(const unifyfs_tree_t* broadcast_tree,
     for (i = 0; i < child_count; i++) {
         /* TODO: get outputs */
         hret = margo_wait(requests[i].request);
+        assert(hret == HG_SUCCESS);
 
         /* get the output of the rpc */
         hret = margo_get_output(requests[i].handle, &out);
+        assert(hret == HG_SUCCESS);
 
         /* set return value
          * TODO: check if we have an error and handle it */
