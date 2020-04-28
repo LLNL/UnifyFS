@@ -2632,6 +2632,7 @@ __svfscanf(unifyfs_stream_t* fp, const char* fmt0, va_list ap)
     char ccltab[256];   /* character class table for %[...] */
     char buf[BUF];      /* buffer for numeric conversions */
 
+    base = 0;
     nassigned = 0;
     nconversions = 0;
     nread = 0;
