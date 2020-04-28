@@ -148,6 +148,9 @@ void* unifyfs_dirstream_stack;
 char*  unifyfs_mount_prefix;
 size_t unifyfs_mount_prefixlen = 0;
 
+/* to track current working directory within unifyfs namespace */
+char* unifyfs_cwd;
+
 /* mutex to lock stack operations */
 pthread_mutex_t unifyfs_stack_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -271,6 +274,20 @@ inline int unifyfs_stack_unlock(void)
     return 0;
 }
 
+inline void unifyfs_normalize_path(const char* path, char* normalized)
+{
+    /* if we have a relative path, prepend the current working directory */
+    if (path[0] != '/' && unifyfs_cwd != NULL) {
+        /* got a relative path, add our cwd */
+        snprintf(normalized, UNIFYFS_MAX_FILENAME, "%s/%s", unifyfs_cwd, path);
+    } else {
+        snprintf(normalized, UNIFYFS_MAX_FILENAME, "%s", path);
+    }
+
+    /* TODO: normalize path to handle '.', '..',
+     * and extra or trailing '/' characters */
+}
+
 /* sets flag if the path is a special path */
 inline int unifyfs_intercept_path(const char* path)
 {
@@ -279,8 +296,12 @@ inline int unifyfs_intercept_path(const char* path)
         return 0;
     }
 
+    /* if we have a relative path, prepend the current working directory */
+    char target[UNIFYFS_MAX_FILENAME];
+    unifyfs_normalize_path(path, target);
+
     /* if the path starts with our mount point, intercept it */
-    if (strncmp(path, unifyfs_mount_prefix, unifyfs_mount_prefixlen) == 0) {
+    if (strncmp(target, unifyfs_mount_prefix, unifyfs_mount_prefixlen) == 0) {
         return 1;
     }
     return 0;
@@ -2185,6 +2206,12 @@ static int unifyfs_init(void)
         unifyfs_max_long = LONG_MAX;
         unifyfs_min_long = LONG_MIN;
 
+        /* set our current working directory if user gave us one */
+        cfgval = client_cfg.client_cwd;
+        if (cfgval != NULL) {
+            unifyfs_cwd = strdup(cfgval);
+        }
+
         /* determine max number of files to store in file system */
         unifyfs_max_files = UNIFYFS_MAX_FILES;
         cfgval = client_cfg.client_max_files;
@@ -2580,6 +2607,11 @@ int unifyfs_unmount(void)
     /************************
      * free configuration values
      ************************/
+
+    /* free global holding current working directory */
+    if (unifyfs_cwd != NULL) {
+        free(unifyfs_cwd);
+    }
 
     /* clean up configuration */
     rc = unifyfs_config_fini(&client_cfg);
