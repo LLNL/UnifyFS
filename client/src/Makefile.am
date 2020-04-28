@@ -1,4 +1,4 @@
-lib_LTLIBRARIES = libunifyfs.la
+lib_LTLIBRARIES = libunifyfs.la libunifyfs_api.la
 libunifyfsdir = $(includedir)
 
 if HAVE_GOTCHA
@@ -13,6 +13,7 @@ endif
 AM_CFLAGS = -Wall -Wno-strict-aliasing -Werror
 
 include_HEADERS = unifyfs.h
+pkginclude_HEADERS = unifyfs_api.h
 
 if HAVE_FORTRAN
 include_HEADERS += unifyfsf.h
@@ -21,6 +22,7 @@ endif
 CLIENT_COMMON_CPPFLAGS = \
   -Wall -Werror \
   -I$(top_builddir)/client \
+  -I$(top_srcdir)/client/include \
   -I$(top_srcdir)/common/src
 
 CLIENT_COMMON_CFLAGS = \
@@ -62,6 +64,20 @@ CLIENT_COMMON_SOURCES += \
   pmpi_wrappers.c \
   pmpi_wrappers.h
 endif
+
+CLIENT_API_SOURCES = \
+  unifyfs_api.h \
+  unifyfs_api_internal.h \
+  unifyfs_api.c \
+  unifyfs_api_file.c \
+  unifyfs_api_io.c \
+  unifyfs_api_transfer.c
+
+libunifyfs_api_la_SOURCES  = $(CLIENT_API_SOURCES)
+libunifyfs_api_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS)
+libunifyfs_api_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS)
+libunifyfs_api_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS)
+libunifyfs_api_la_LIBADD   = $(CLIENT_COMMON_LIBADD)
 
 libunifyfs_la_SOURCES  = $(CLIENT_COMMON_SOURCES)
 libunifyfs_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS)
