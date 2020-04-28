@@ -19,6 +19,7 @@ TESTS += \
   0510-statfs-static.t \
   0600-stdio-static.t \
   0700-unifyfs-stage-full.t \
+  8000-client-api.t \
   9005-unifyfs-unmount.t \
   9010-stop-unifyfsd.t \
   9020-mountpoint-empty.t \
@@ -33,7 +34,8 @@ check_SCRIPTS = \
   0510-statfs-static.t \
   0600-stdio-static.t \
   0700-unifyfs-stage-full.t \
-  9005-unifyfs-unmount.t \
+  8000-client-api.t \
+	9005-unifyfs-unmount.t \
   9010-stop-unifyfsd.t \
   9020-mountpoint-empty.t \
   9200-seg-tree-test.t \
@@ -60,6 +62,7 @@ clean-local:
 	rm -fr trash-directory.* test-results *.log test_run_env.sh
 
 libexec_PROGRAMS = \
+  api/client_api_test.t \
   common/seg_tree_test.t \
   common/slotmap_test.t \
   std/stdio-static.t \
@@ -73,6 +76,17 @@ if HAVE_GOTCHA
     sys/statfs-gotcha.t \
     sys/sysio-gotcha.t
 endif
+
+test_api_ldadd = \
+	$(top_builddir)/t/lib/libtap.la \
+	$(top_builddir)/t/lib/libtestutil.la \
+	$(top_builddir)/client/src/libunifyfs_api.la
+
+test_api_ldflags = \
+  $(AM_LDFLAGS) \
+  $(MPI_CLDFLAGS) \
+  $(CP_WRAPPERS) \
+  -static
 
 test_common_ldadd = \
   $(top_builddir)/t/lib/libtap.la \
@@ -116,6 +130,18 @@ test_cppflags = \
   $(AM_CPPFLAGS) \
   $(MPI_CFLAGS)
 
+
+api_client_api_test_t_SOURCES = \
+	api/client_api_suite.h \
+	api/client_api_suite.c \
+	api/init-fini.c \
+	api/create-open-remove.c \
+	api/write-read-sync-stat.c \
+	api/laminate.c
+
+api_client_api_test_t_CPPFLAGS = $(test_cppflags)
+api_client_api_test_t_LDADD    = $(test_api_ldadd)
+api_client_api_test_t_LDFLAGS  = $(test_api_ldflags)
 
 sys_sysio_gotcha_t_SOURCES = \
   sys/sysio_suite.h \

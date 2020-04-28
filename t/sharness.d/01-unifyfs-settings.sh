@@ -19,7 +19,9 @@ export UNIFYFS_RUNSTATE_DIR=${UNIFYFS_TEST_STATE}
 export UNIFYFS_SHAREDFS_DIR=${UNIFYFS_TEST_SHARE}
 
 # Client settings
-export UNIFYFS_LOGIO_SPILL_SIZE=$((5 * (2 ** 30)))
+export UNIFYFS_LOGIO_CHUNK_SIZE=$((32 * 1024))
+export UNIFYFS_LOGIO_SHMEM_SIZE=$((64 * 1048576))
+export UNIFYFS_LOGIO_SPILL_SIZE=$((512 * 1048576))
 export UNIFYFS_LOGIO_SPILL_DIR=${UNIFYFS_TEST_SPILL}
 
 # In mercury 2.0.0, daemonize breaks our use of na+sm. More info

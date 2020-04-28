@@ -10,6 +10,7 @@ addons:
     - automake
     - build-essential
     - cmake
+    - diffutils
     - gfortran
     - libhdf5-openmpi-dev
     - libopenmpi-dev

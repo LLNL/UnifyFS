@@ -13,6 +13,8 @@
  */
 
 #include "unifyfs-internal.h"
+#include "unifyfs-stdio.h"
+#include "unifyfs-sysio.h"
 #include <gotcha/gotcha.h>
 
 /* define gotcha-specific state to use with our wrapper */
