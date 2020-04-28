@@ -386,7 +386,7 @@ int unifyfs_logio_init_client(const int app_id,
 
 /* Close logio context */
 int unifyfs_logio_close(logio_context* ctx,
-                        int clean_spill)
+                        int clean_storage)
 {
     if (NULL == ctx) {
         return EINVAL;
@@ -395,6 +395,9 @@ int unifyfs_logio_close(logio_context* ctx,
     int rc;
     if (NULL != ctx->shmem) {
         /* release shmem region */
+        if (clean_storage) {
+            unifyfs_shm_unlink(ctx->shmem);
+        }
         rc = unifyfs_shm_free(&(ctx->shmem));
         if (rc != UNIFYFS_SUCCESS) {
             LOGERR("Failed to release logio shmem region!");
@@ -422,7 +425,7 @@ int unifyfs_logio_close(logio_context* ctx,
             }
             ctx->spill_fd = -1;
         }
-        if (clean_spill && (ctx->spill_file != NULL)) {
+        if (clean_storage && (ctx->spill_file != NULL)) {
             rc = unlink(ctx->spill_file);
             if (rc != 0) {
                 int err = errno;

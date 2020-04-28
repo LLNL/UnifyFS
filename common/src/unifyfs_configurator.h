@@ -98,6 +98,12 @@
 extern "C" {
 #endif
 
+/* UnifyFS config option struct (key-value pair) */
+typedef struct unifyfs_config_option {
+    const char* opt_name;
+    const char* opt_value;
+} unifyfs_cfg_option;
+
 typedef enum {
     INVALID_PROCESS_TYPE = 0,
     UNIFYFS_CLIENT = 1,
@@ -132,80 +138,88 @@ typedef struct {
 
 /* initialization and cleanup */
 
-int unifyfs_config_init(unifyfs_cfg_t *cfg,
-                        int argc,
-                        char **argv);
+int unifyfs_config_init(unifyfs_cfg_t* cfg,
+                        int argc, char** argv,
+                        int nopt, unifyfs_cfg_option* options);
 
 int unifyfs_config_fini(unifyfs_cfg_t *cfg);
 
 
 /* print configuration to specified file (or stderr if fp==NULL) */
-void unifyfs_config_print(unifyfs_cfg_t *cfg,
-                          FILE *fp);
+void unifyfs_config_print(unifyfs_cfg_t* cfg,
+                          FILE* fp);
 
 /* print configuration in .INI format to specified file (or stderr) */
-void unifyfs_config_print_ini(unifyfs_cfg_t *cfg,
-                              FILE *inifp);
+void unifyfs_config_print_ini(unifyfs_cfg_t* cfg,
+                              FILE* inifp);
 
 /* used internally, but may be useful externally */
 
-int unifyfs_config_set_defaults(unifyfs_cfg_t *cfg);
+int unifyfs_config_set_defaults(unifyfs_cfg_t* cfg);
 
-void unifyfs_config_cli_usage(char *arg0);
-void unifyfs_config_cli_usage_error(char *arg0,
-                                    char *err_msg);
+void unifyfs_config_cli_usage(char* arg0);
+void unifyfs_config_cli_usage_error(char* arg0,
+                                    char* err_msg);
 
-int unifyfs_config_process_cli_args(unifyfs_cfg_t *cfg,
+int unifyfs_config_process_cli_args(unifyfs_cfg_t* cfg,
                                     int argc,
-                                    char **argv);
+                                    char** argv);
 
-int unifyfs_config_process_environ(unifyfs_cfg_t *cfg);
+int unifyfs_config_process_environ(unifyfs_cfg_t* cfg);
 
-int unifyfs_config_process_ini_file(unifyfs_cfg_t *cfg,
-                                    const char *file);
+int unifyfs_config_process_ini_file(unifyfs_cfg_t* cfg,
+                                    const char* file);
+
+int unifyfs_config_process_option(unifyfs_cfg_t* cfg,
+                                  const char* opt_name,
+                                  const char* opt_val);
+
+int unifyfs_config_process_options(unifyfs_cfg_t* cfg,
+                                   int nopt,
+                                   unifyfs_cfg_option* options);
 
 
-int unifyfs_config_validate(unifyfs_cfg_t *cfg);
+int unifyfs_config_validate(unifyfs_cfg_t* cfg);
 
 /* validate function prototype
    -  Returns: 0 for valid input, non-zero otherwise.
    -  out_val: set this output parameter to specify an alternate value */
-typedef int (*configurator_validate_fn)(const char *section,
-                                        const char *key,
-                                        const char *val,
-                                        char **out_val);
+typedef int (*configurator_validate_fn)(const char* section,
+                                        const char* key,
+                                        const char* val,
+                                        char** out_val);
 
 /* predefined validation functions */
-int configurator_bool_val(const char *val,
-                          bool *b);
-int configurator_bool_check(const char *section,
-                            const char *key,
-                            const char *val,
-                            char **oval);
+int configurator_bool_val(const char* val,
+                          bool* b);
+int configurator_bool_check(const char* section,
+                            const char* key,
+                            const char* val,
+                            char** oval);
 
-int configurator_float_val(const char *val,
-                           double *d);
-int configurator_float_check(const char *section,
-                             const char *key,
-                             const char *val,
-                             char **oval);
+int configurator_float_val(const char* val,
+                           double* d);
+int configurator_float_check(const char* section,
+                             const char* key,
+                             const char* val,
+                             char** oval);
 
-int configurator_int_val(const char *val,
-                         long *l);
-int configurator_int_check(const char *section,
-                           const char *key,
-                           const char *val,
-                           char **oval);
+int configurator_int_val(const char* val,
+                         long* l);
+int configurator_int_check(const char* section,
+                           const char* key,
+                           const char* val,
+                           char** oval);
 
-int configurator_file_check(const char *section,
-                            const char *key,
-                            const char *val,
-                            char **oval);
+int configurator_file_check(const char* section,
+                            const char* key,
+                            const char* val,
+                            char** oval);
 
-int configurator_directory_check(const char *section,
-                                 const char *key,
-                                 const char *val,
-                                 char **oval);
+int configurator_directory_check(const char* section,
+                                 const char* key,
+                                 const char* val,
+                                 char** oval);
 
 
 #ifdef __cplusplus

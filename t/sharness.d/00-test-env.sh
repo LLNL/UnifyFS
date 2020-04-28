@@ -64,3 +64,6 @@ if [ -f /proc/sys/kernel/yama/ptrace_scope ]; then
         fi
     fi
 fi
+
+# Want core dumps? uncomment following line
+#ulimit -c unlimited

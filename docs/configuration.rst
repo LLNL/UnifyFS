@@ -177,20 +177,20 @@ is used, the value must immediately follow the option character (e.g., ``-Cyes``
 .. table:: ``unifyfsd`` command line options
    :widths: auto
 
-   ======================  ========
-   LongOpt                 ShortOpt
-   ======================  ========
-   --unifyfs-cleanup         -C
-   --unifyfs-configfile      -f
-   --unifyfs-consistency     -c
-   --unifyfs-daemonize       -D
-   --unifyfs-mountpoint      -m
-   --log-verbosity           -v
-   --log-file                -l
-   --log-dir                 -L
-   --runstate-dir            -R
-   --server-hostfile         -H
-   --sharedfs-dir            -S
-   --server-init_timeout     -t
-   ======================  ========
+   =========================  ========
+   LongOpt                    ShortOpt
+   =========================  ========
+   ``--unifyfs-cleanup``       ``-C``
+   ``--unifyfs-configfile``    ``-f``
+   ``--unifyfs-consistency``   ``-c``
+   ``--unifyfs-daemonize``     ``-D``
+   ``--unifyfs-mountpoint``    ``-m``
+   ``--log-verbosity``         ``-v``
+   ``--log-file``              ``-l``
+   ``--log-dir``               ``-L``
+   ``--runstate-dir``          ``-R``
+   ``--server-hostfile``       ``-H``
+   ``--sharedfs-dir``          ``-S``
+   ``--server-init_timeout``   ``-t``
+   =========================  ========
 

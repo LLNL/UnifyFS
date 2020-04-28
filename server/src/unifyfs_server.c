@@ -264,7 +264,7 @@ int main(int argc, char* argv[])
     char rank_str[16] = {0};
     char dbg_fname[UNIFYFS_MAX_FILENAME] = {0};
 
-    rc = unifyfs_config_init(&server_cfg, argc, argv);
+    rc = unifyfs_config_init(&server_cfg, argc, argv, 0, NULL);
     if (rc != 0) {
         exit(1);
     }
