@@ -52,11 +52,13 @@ int unifyfs_client_rpc_init(void);
 
 int unifyfs_client_rpc_finalize(void);
 
-void fill_client_attach_info(unifyfs_attach_in_t* in);
-int invoke_client_attach_rpc(void);
+void fill_client_attach_info(unifyfs_cfg_t* clnt_cfg,
+                             unifyfs_attach_in_t* in);
+int invoke_client_attach_rpc(unifyfs_cfg_t* clnt_cfg);
 
-void fill_client_mount_info(unifyfs_mount_in_t* in);
-int invoke_client_mount_rpc(void);
+void fill_client_mount_info(unifyfs_cfg_t* clnt_cfg,
+                            unifyfs_mount_in_t* in);
+int invoke_client_mount_rpc(unifyfs_cfg_t* clnt_cfg);
 
 int invoke_client_unmount_rpc(void);
 

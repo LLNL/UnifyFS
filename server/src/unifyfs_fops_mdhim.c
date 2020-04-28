@@ -259,11 +259,11 @@ static int mdhim_fsync(unifyfs_fops_ctx_t* ctx, int gfid)
     int count = 0;
     for (i = 0; i < extent_num_entries; i++) {
         /* get file offset, length, and log offset for this entry */
-        unifyfs_index_t* meta = &meta_payload[i];
-        assert(gfid == meta->gfid);
-        size_t offset = meta->file_pos;
-        size_t length = meta->length;
-        size_t logpos = meta->log_pos;
+        unifyfs_index_t* ndx = &meta_payload[i];
+        assert(gfid == ndx->gfid);
+        size_t offset = ndx->file_pos;
+        size_t length = ndx->length;
+        size_t logpos = ndx->log_pos;
 
         /* split this entry at the offset boundaries */
         int used = split_index(

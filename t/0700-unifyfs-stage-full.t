@@ -14,51 +14,64 @@ test_expect_success "testing temp dir exists" '
     test_path_is_dir  ${UNIFYFS_TEST_TMPDIR}
 '
 
-mkdir -p ${UNIFYFS_TEST_TMPDIR}/config_0700
-mkdir -p ${UNIFYFS_TEST_TMPDIR}/stage_source
-mkdir -p ${UNIFYFS_TEST_TMPDIR}/stage_destination_0700
+stage_cfg_dir=${UNIFYFS_TEST_TMPDIR}/stage/config_0700
+stage_src_dir=${UNIFYFS_TEST_TMPDIR}/stage/source
+stage_dst_dir=${UNIFYFS_TEST_TMPDIR}/stage/destination_0700
+mkdir -p $stage_cfg_dir $stage_src_dir $stage_dst_dir
 
 test_expect_success "stage testing dirs exist" '
-    test_path_is_dir  ${UNIFYFS_TEST_TMPDIR}/config_0700
-    test_path_is_dir  ${UNIFYFS_TEST_TMPDIR}/stage_source
-    test_path_is_dir  ${UNIFYFS_TEST_TMPDIR}/stage_destination_0700
+    test_path_is_dir $stage_cfg_dir &&
+    test_path_is_dir $stage_src_dir &&
+    test_path_is_dir $stage_dst_dir
 '
 
-dd if=/dev/urandom bs=4M count=1 of=${UNIFYFS_TEST_TMPDIR}/stage_source/source_0700.file
+stage_src_file=$stage_src_dir/source_0700.file
+stage_im_file=$UNIFYFS_TEST_MOUNT/intermediate_0700.file
+stage_dst_file=$stage_dst_dir/destination_0700.file
+
+dd if=/dev/urandom bs=4M count=1 of=$stage_src_file &>/dev/null
 
 test_expect_success "source.file exists" '
-    test_path_is_file ${UNIFYFS_TEST_TMPDIR}/stage_source/source_0700.file
+    test_path_is_file $stage_src_file
 '
 
-rm -f ${UNIFYFS_TEST_TMPDIR}/config_0700/*
-rm -f ${UNIFYFS_TEST_TMPDIR}/stage_destination_0700/*
+rm -f $stage_cfg_dir/* $stage_dst_dir/*
 
 test_expect_success "config_0700 directory is empty" '
-    test_dir_is_empty ${UNIFYFS_TEST_TMPDIR}/config_0700
+    test_dir_is_empty $stage_cfg_dir
 '
 
-echo "\"${UNIFYFS_TEST_TMPDIR}/stage_source/source_0700.file\" \"${UNIFYFS_TEST_MOUNT}/intermediate.file\""  > ${UNIFYFS_TEST_TMPDIR}/config_0700/test_IN.manifest
-echo "\"${UNIFYFS_TEST_MOUNT}/intermediate.file\" \"${UNIFYFS_TEST_TMPDIR}/stage_destination_0700/destination_0700.file\"" > ${UNIFYFS_TEST_TMPDIR}/config_0700/test_OUT.manifest
+stage_in_manifest=$stage_cfg_dir/stage_IN.manifest
+stage_out_manifest=$stage_cfg_dir/stage_OUT.manifest
+
+echo "\"$stage_src_file\" \"$stage_im_file\"" > $stage_in_manifest
+echo "\"$stage_im_file\" \"$stage_dst_file\"" > $stage_out_manifest
 
 test_expect_success "config_0700 directory now has manifest files" '
-    test_path_is_file  ${UNIFYFS_TEST_TMPDIR}/config_0700/test_IN.manifest
-    test_path_is_file  ${UNIFYFS_TEST_TMPDIR}/config_0700/test_OUT.manifest
+    test_path_is_file $stage_in_manifest &&
+    test_path_is_file $stage_out_manifest
 '
 
 test_expect_success "target directory is empty" '
-    test_dir_is_empty ${UNIFYFS_TEST_TMPDIR}/stage_destination_0700
+    test_dir_is_empty $stage_dst_dir
 '
 
-$JOB_RUN_COMMAND ${SHARNESS_BUILD_DIRECTORY}/util/unifyfs-stage/src/unifyfs-stage -m ${UNIFYFS_TEST_MOUNT} ${UNIFYFS_TEST_TMPDIR}/config_0700/test_IN.manifest > ${UNIFYFS_TEST_TMPDIR}/config_0700/stage_IN_output.OUT 2>&1
+stage_in_log=$stage_cfg_dir/stage_IN.log
+stage_out_log=$stage_cfg_dir/stage_OUT.log
+stage_exe=${SHARNESS_BUILD_DIRECTORY}/util/unifyfs-stage/src/unifyfs-stage
 
-$JOB_RUN_COMMAND ${SHARNESS_BUILD_DIRECTORY}/util/unifyfs-stage/src/unifyfs-stage -m ${UNIFYFS_TEST_MOUNT} ${UNIFYFS_TEST_TMPDIR}/config_0700/test_OUT.manifest > ${UNIFYFS_TEST_TMPDIR}/config_0700/stage_OUT_output.OUT 2>&1
+$JOB_RUN_COMMAND $stage_exe -v -m ${UNIFYFS_TEST_MOUNT} $stage_in_manifest &> $stage_in_log
+
+$JOB_RUN_COMMAND $stage_exe -v -m ${UNIFYFS_TEST_MOUNT} $stage_out_manifest &> $stage_out_log
 
 test_expect_success "input file has been staged to output" '
-    test_path_is_file ${UNIFYFS_TEST_TMPDIR}/stage_destination_0700/destination_0700.file
+    test_path_is_file $stage_dst_file
 '
 
+export TEST_CMP='cmp --quiet'
+
 test_expect_success "final output is identical to initial input" '
-    test_might_fail test_cmp ${UNIFYFS_TEST_TMPDIR}/stage_source/source_0700.file ${UNIFYFS_TEST_TMPDIR}/stage_destination_0700/destination_0700.file
+    test_might_fail test_cmp $stage_src_file $stage_dst_file
 '
 
 test_done

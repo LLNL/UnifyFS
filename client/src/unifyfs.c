@@ -42,6 +42,7 @@
 
 #include "unifyfs.h"
 #include "unifyfs-internal.h"
+#include "unifyfs-fixed.h"
 #include "client_read.h"
 
 // client-server rpc headers
@@ -54,12 +55,12 @@
 #endif /* HAVE_SPATH */
 
 /* avoid duplicate mounts (for now) */
-static int unifyfs_mounted = -1;
+int unifyfs_mounted = -1;
 
 /* whether we can use fgetpos/fsetpos */
 static int unifyfs_fpos_enabled = 1;
 
-unifyfs_cfg_t client_cfg;
+static unifyfs_cfg_t client_cfg;
 
 unifyfs_index_buf_t unifyfs_indices;
 static size_t unifyfs_index_buf_size;    /* size of metadata log */
@@ -68,8 +69,8 @@ unsigned long unifyfs_max_index_entries; /* max metadata log entries */
 int global_rank_cnt; /* count of world ranks */
 int client_rank;     /* client-provided rank (for debugging) */
 
-int unifyfs_app_id;
-int unifyfs_client_id;
+int unifyfs_app_id;    /* application (aka mountpoint) id */
+int unifyfs_client_id; /* client id within application */
 
 static int unifyfs_use_single_shm = 0;
 static int unifyfs_page_size      = 0;
@@ -508,7 +509,7 @@ int unifyfs_fid_is_laminated(int fid)
 {
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     if ((meta != NULL) && (meta->fid == fid)) {
-        return meta->is_laminated;
+        return meta->attrs.is_laminated;
     }
     return 0;
 }
@@ -561,7 +562,7 @@ static int fid_store_alloc(int fid)
 }
 
 /* free data management resource for file */
-static int fid_store_free(int fid)
+static int fid_storage_free(int fid)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
@@ -595,12 +596,10 @@ static int fid_store_free(int fid)
 int unifyfs_fid_is_dir(int fid)
 {
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    if ((meta != NULL) && (meta->mode & S_IFDIR)) {
+    if ((meta != NULL) && (meta->attrs.mode & S_IFDIR)) {
         return 1;
-    } else {
-        /* if it doesn't exist, then it's not a directory? */
-        return 0;
     }
+    return 0;
 }
 
 int unifyfs_gfid_from_fid(const int fid)
@@ -613,7 +612,7 @@ int unifyfs_gfid_from_fid(const int fid)
     /* return global file id, cached in file meta struct */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     if (meta != NULL) {
-        return meta->gfid;
+        return meta->attrs.gfid;
     } else {
         return -1;
     }
@@ -626,7 +625,7 @@ int unifyfs_fid_from_gfid(int gfid)
     int i;
     for (i = 0; i < unifyfs_max_files; i++) {
         if (unifyfs_filelist[i].in_use &&
-            unifyfs_filemetas[i].gfid == gfid) {
+            unifyfs_filemetas[i].attrs.gfid == gfid) {
             /* found a file id that's in use and it matches
              * the target fid, this is the one */
             return i;
@@ -683,7 +682,7 @@ off_t unifyfs_fid_global_size(int fid)
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     if (meta != NULL) {
-        return meta->global_size;
+        return meta->attrs.size;
     }
     return (off_t)-1;
 }
@@ -744,32 +743,22 @@ off_t unifyfs_gfid_filesize(int gfid)
     return filesize;
 }
 
-/* Update local metadata for file from global metadata.
- * Currently, this updates the is_laminated flag, and if
- * the file is laminated, it also updates the global_size value */
+/* Update local metadata for file from global metadata */
 int unifyfs_fid_update_file_meta(int fid, unifyfs_file_attr_t* gfattr)
 {
     if (NULL == gfattr) {
-        return UNIFYFS_FAILURE;
+        return EINVAL;
     }
 
     /* lookup local metadata for file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     if (meta != NULL) {
-        /* update lamination state */
-        meta->is_laminated = gfattr->is_laminated;
-        if (meta->is_laminated) {
-            /* file has been laminated, record its size
-             * for local lookup since it won't change */
-            meta->global_size = (off_t)gfattr->size;
-            LOGDBG("laminated file size is %zu bytes",
-                   (size_t)meta->global_size);
-        }
+        meta->attrs = *gfattr;
         return UNIFYFS_SUCCESS;
     }
 
     /* else, bad fid */
-    return UNIFYFS_FAILURE;
+    return EINVAL;
 }
 
 /*
@@ -822,8 +811,8 @@ int unifyfs_get_global_file_meta(int gfid, unifyfs_file_attr_t* gfattr)
 }
 
 /*
- * Set the metadata values for a file (after optionally creating it),
- * using metadata associated with a given local file id.
+ * Set the global metadata values for a file using local file
+ * attributes associated with the given local file id.
  *
  * fid:    The local file id on which to base global metadata values.
  *
@@ -842,43 +831,19 @@ int unifyfs_set_global_file_meta_from_fid(int fid, unifyfs_file_attr_op_e op)
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     assert(meta != NULL);
 
-    /* get file name */
-    char* filename = (char*) unifyfs_path_from_fid(fid);
-
     /* set global file id */
-    fattr.gfid = meta->gfid;
+    fattr.gfid = meta->attrs.gfid;
 
     LOGDBG("setting global file metadata for fid:%d gfid:%d path:%s",
-           fid, fattr.gfid, filename);
+           fid, fattr.gfid, meta->attrs.filename);
 
-    /* use current time for atime/mtime/ctime */
-    struct timespec tp = {0};
-    clock_gettime(CLOCK_REALTIME, &tp);
-    fattr.atime = tp;
-    fattr.mtime = tp;
-    fattr.ctime = tp;
-
-    /* copy file mode bits */
-    fattr.mode = meta->mode;
-
-    if (op == UNIFYFS_FILE_ATTR_OP_CREATE) {
-        /* these fields are set by server, except when we're creating a
-         * new file in which case we should initialize them both to 0 */
-        fattr.is_laminated = 0;
-        fattr.size         = 0;
-
-        /* capture current uid and gid */
-        fattr.uid = getuid();
-        fattr.gid = getgid();
-
-        fattr.filename = filename;
-    }
+    unifyfs_file_attr_update(op, &fattr, &(meta->attrs));
 
     LOGDBG("using following attributes");
     debug_print_file_attr(&fattr);
 
     /* submit file attributes to global key/value store */
-    int ret = unifyfs_set_global_file_meta(meta->gfid, op, &fattr);
+    int ret = unifyfs_set_global_file_meta(fattr.gfid, op, &fattr);
     return ret;
 }
 
@@ -935,17 +900,32 @@ int unifyfs_fid_create_file(const char* path)
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     assert(meta != NULL);
 
-    /* initialize meta data */
-    meta->global_size  = 0;
-    meta->flock_status = UNLOCKED;
-    meta->storage      = FILE_STORAGE_NULL;
+    /* initialize file attributes */
+    unifyfs_file_attr_set_invalid(&(meta->attrs));
+    meta->attrs.gfid = unifyfs_generate_gfid(path);
+    meta->attrs.size = 0;
+    meta->attrs.mode = UNIFYFS_STAT_DEFAULT_FILE_MODE;
+    meta->attrs.is_laminated = 0;
+    meta->attrs.filename = (char*)&(unifyfs_filelist[fid].filename);
+
+    /* use client user/group */
+    meta->attrs.uid = getuid();
+    meta->attrs.gid = getgid();
+
+    /* use current time for atime/mtime/ctime */
+    struct timespec tp = {0};
+    clock_gettime(CLOCK_REALTIME, &tp);
+    meta->attrs.atime = tp;
+    meta->attrs.mtime = tp;
+    meta->attrs.ctime = tp;
+
+    /* set UnifyFS client metadata */
     meta->fid          = fid;
-    meta->gfid         = unifyfs_generate_gfid(path);
+    meta->storage      = FILE_STORAGE_NULL;
     meta->needs_sync   = 0;
-    meta->is_laminated = 0;
-    meta->mode         = UNIFYFS_STAT_DEFAULT_FILE_MODE;
 
     /* PTHREAD_PROCESS_SHARED allows Process-Shared Synchronization */
+    meta->flock_status = UNLOCKED;
     pthread_spin_init(&meta->fspinlock, PTHREAD_PROCESS_SHARED);
 
     return fid;
@@ -967,14 +947,9 @@ int unifyfs_fid_create_directory(const char* path)
     int found_local = (fid >= 0);
 
     /* test whether we have metadata for file in global key/value store */
-    int found_global = 0;
     unifyfs_file_attr_t gfattr = { 0, };
     if (unifyfs_get_global_file_meta(gfid, &gfattr) == UNIFYFS_SUCCESS) {
-        found_global = 1;
-    }
-
-    /* can't create if it already exists */
-    if (found_global) {
+        /* can't create if it already exists */
         return EEXIST;
     }
 
@@ -998,16 +973,15 @@ int unifyfs_fid_create_directory(const char* path)
         return EEXIST;
     }
 
-    /* now, we need to create a new directory. */
+    /* now, we need to create a new directory. we reuse the file creation
+     * method and then update the mode to indicate it's a directory */
     fid = unifyfs_fid_create_file(path);
     if (fid < 0) {
         return -fid;
     }
-
-    /* Set as directory */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     assert(meta != NULL);
-    meta->mode = (meta->mode & ~S_IFREG) | S_IFDIR;
+    meta->attrs.mode = (meta->attrs.mode & ~S_IFREG) | S_IFDIR;
 
     /* insert global meta data for directory */
     unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_CREATE;
@@ -1023,10 +997,10 @@ int unifyfs_fid_create_directory(const char* path)
 
 /* delete a file id, free its local storage resources and return
  * the file id to free stack */
-static int unifyfs_fid_delete(int fid)
+int unifyfs_fid_delete(int fid)
 {
     /* finalize the storage we're using for this file */
-    int rc = fid_store_free(fid);
+    int rc = fid_storage_free(fid);
     if (rc != UNIFYFS_SUCCESS) {
         /* failed to release structures tracking storage,
          * bail out to keep its file id active */
@@ -1072,6 +1046,11 @@ int unifyfs_fid_write(
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     assert(meta != NULL);
 
+    if (meta->attrs.is_laminated) {
+        /* attempt to write to laminated file, return read-only filesystem */
+        return EROFS;
+    }
+
     /* determine storage type to write file data */
     if (meta->storage == FILE_STORAGE_LOGIO) {
         /* file stored in logged i/o */
@@ -1083,7 +1062,7 @@ int unifyfs_fid_write(
 
             /* optionally sync after every write */
             if (unifyfs_write_sync) {
-                int ret = unifyfs_sync(fid);
+                int ret = unifyfs_sync_extents(fid);
                 if (ret != UNIFYFS_SUCCESS) {
                     LOGERR("client sync after write failed");
                     rc = ret;
@@ -1109,11 +1088,11 @@ int unifyfs_fid_truncate(int fid, off_t length)
     assert(meta != NULL);
 
     /* truncate is not valid for directories */
-    if (S_ISDIR(meta->mode)) {
+    if (S_ISDIR(meta->attrs.mode)) {
         return EISDIR;
     }
 
-    if (meta->is_laminated) {
+    if (meta->attrs.is_laminated) {
         /* Can't truncate a laminated file */
         return EINVAL;
     }
@@ -1137,7 +1116,7 @@ int unifyfs_fid_truncate(int fid, off_t length)
 
     /* update global size in filemeta to reflect truncated size.
      * note that log size is not affected */
-    meta->global_size = length;
+    meta->attrs.size = length;
 
     /* invoke truncate rpc */
     int gfid = unifyfs_gfid_from_fid(fid);
@@ -1161,7 +1140,7 @@ int unifyfs_fid_sync(int fid)
 
     /* sync data with server */
     if (meta->needs_sync) {
-        ret = unifyfs_sync(fid);
+        ret = unifyfs_sync_extents(fid);
     }
 
     return ret;
@@ -1415,7 +1394,7 @@ int unifyfs_fid_close(int fid)
     return UNIFYFS_SUCCESS;
 }
 
-/* delete a file id and return file its resources to free pools */
+/* unlink file and then delete its associated state */
 int unifyfs_fid_unlink(int fid)
 {
     int rc;
@@ -1432,7 +1411,7 @@ int unifyfs_fid_unlink(int fid)
     /* finalize the storage we're using for this file */
     rc = unifyfs_fid_delete(fid);
     if (rc != UNIFYFS_SUCCESS) {
-        /* released strorage for file, but failed to release
+        /* released storage for file, but failed to release
          * structures tracking storage, again bail out to keep
          * its file id active */
         return rc;
@@ -1610,7 +1589,7 @@ static int init_superblock_shm(size_t super_sz)
 
         /* Clear any index entries from the cache.  We do this to ensure
          * the newly allocated seg trees are consistent with the extents
-         * in the index.  It would be nice to call unifyfs_sync to flush
+         * in the index.  It would be nice to call unifyfs_sync_extents to flush
          * any entries to the server, but we can't do that since that will
          * try to rewrite the index using the trees, which point to invalid
          * memory at this point. */
@@ -1641,7 +1620,7 @@ static int init_superblock_shm(size_t super_sz)
     return UNIFYFS_SUCCESS;
 }
 
-static int unifyfs_init(void)
+int unifyfs_init(unifyfs_cfg_t* clnt_cfg)
 {
     int rc;
     int i;
@@ -1681,7 +1660,7 @@ static int unifyfs_init(void)
         unifyfs_min_long = LONG_MIN;
 
         /* set our current working directory if user gave us one */
-        cfgval = client_cfg.client_cwd;
+        cfgval = clnt_cfg->client_cwd;
         if (cfgval != NULL) {
             unifyfs_cwd = strdup(cfgval);
 
@@ -1721,7 +1700,7 @@ static int unifyfs_init(void)
 
         /* determine max number of files to store in file system */
         unifyfs_max_files = UNIFYFS_CLIENT_MAX_FILES;
-        cfgval = client_cfg.client_max_files;
+        cfgval = clnt_cfg->client_max_files;
         if (cfgval != NULL) {
             rc = configurator_int_val(cfgval, &l);
             if (rc == 0) {
@@ -1732,7 +1711,7 @@ static int unifyfs_init(void)
         /* Determine if we should track all write extents and use them
          * to service read requests if all data is local */
         unifyfs_local_extents = 0;
-        cfgval = client_cfg.client_local_extents;
+        cfgval = clnt_cfg->client_local_extents;
         if (cfgval != NULL) {
             rc = configurator_bool_val(cfgval, &b);
             if (rc == 0) {
@@ -1744,7 +1723,7 @@ static int unifyfs_init(void)
          * This slows write performance, but it can serve as a work
          * around for apps that do not have all necessary syncs. */
         unifyfs_write_sync = false;
-        cfgval = client_cfg.client_write_sync;
+        cfgval = clnt_cfg->client_write_sync;
         if (cfgval != NULL) {
             rc = configurator_bool_val(cfgval, &b);
             if (rc == 0) {
@@ -1766,7 +1745,7 @@ static int unifyfs_init(void)
         /* define size of buffer used to cache key/value pairs for
          * data offsets before passing them to the server */
         unifyfs_index_buf_size = UNIFYFS_CLIENT_WRITE_INDEX_SIZE;
-        cfgval = client_cfg.client_write_index_size;
+        cfgval = clnt_cfg->client_write_index_size;
         if (cfgval != NULL) {
             rc = configurator_int_val(cfgval, &l);
             if (rc == 0) {
@@ -1841,7 +1820,7 @@ static int unifyfs_init(void)
 
         /* initialize log-based I/O context */
         rc = unifyfs_logio_init_client(unifyfs_app_id, unifyfs_client_id,
-                                       &client_cfg, &logio_ctx);
+                                       clnt_cfg, &logio_ctx);
         if (rc != UNIFYFS_SUCCESS) {
             LOGERR("failed to initialize log-based I/O (rc = %s)",
                    unifyfs_rc_enum_str(rc));
@@ -1858,7 +1837,7 @@ static int unifyfs_init(void)
 /* free resources allocated during unifyfs_init().
  * generally, we do this in reverse order with respect to
  * how things were initialized */
-static int unifyfs_finalize(void)
+int unifyfs_fini(void)
 {
     int rc = UNIFYFS_SUCCESS;
 
@@ -1911,14 +1890,16 @@ static int unifyfs_finalize(void)
  * --------------- */
 
 /* Fill mount rpc input struct with client-side context info */
-void fill_client_mount_info(unifyfs_mount_in_t* in)
+void fill_client_mount_info(unifyfs_cfg_t* clnt_cfg,
+                            unifyfs_mount_in_t* in)
 {
     in->dbg_rank = client_rank;
-    in->mount_prefix = strdup(client_cfg.unifyfs_mountpoint);
+    in->mount_prefix = strdup(clnt_cfg->unifyfs_mountpoint);
 }
 
 /* Fill attach rpc input struct with client-side context info */
-void fill_client_attach_info(unifyfs_attach_in_t* in)
+void fill_client_attach_info(unifyfs_cfg_t* clnt_cfg,
+                             unifyfs_attach_in_t* in)
 {
     size_t meta_offset = (char*)unifyfs_indices.ptr_num_entries -
                          (char*)shm_super_ctx->addr;
@@ -1939,7 +1920,7 @@ void fill_client_attach_info(unifyfs_attach_in_t* in)
 
     in->logio_spill_size = logio_ctx->spill_sz;
     if (logio_ctx->spill_sz) {
-        in->logio_spill_dir = strdup(client_cfg.logio_spill_dir);
+        in->logio_spill_dir = strdup(clnt_cfg->logio_spill_dir);
     } else {
         in->logio_spill_dir = NULL;
     }
@@ -1981,7 +1962,7 @@ int unifyfs_mount(
     unifyfs_log_open(NULL);
 
     // initialize configuration
-    rc = unifyfs_config_init(&client_cfg, 0, NULL);
+    rc = unifyfs_config_init(&client_cfg, 0, NULL, 0, NULL);
     if (rc) {
         LOGERR("failed to initialize configuration.");
         return UNIFYFS_FAILURE;
@@ -2031,7 +2012,7 @@ int unifyfs_mount(
 
     /* Call client mount rpc function to get client id */
     LOGDBG("calling mount rpc");
-    rc = invoke_client_mount_rpc();
+    rc = invoke_client_mount_rpc(&client_cfg);
     if (rc != UNIFYFS_SUCCESS) {
         /* If we fail to connect to the server, bail with an error */
         LOGERR("failed to mount to server");
@@ -2040,7 +2021,7 @@ int unifyfs_mount(
 
     /* initialize our library using assigned client id, creates shared memory
      * regions (e.g., superblock and data recv) and inits log-based I/O */
-    rc = unifyfs_init();
+    rc = unifyfs_init(&client_cfg);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
     }
@@ -2048,11 +2029,11 @@ int unifyfs_mount(
     /* Call client attach rpc function to register our newly created shared
      * memory and files with server */
     LOGDBG("calling attach rpc");
-    rc = invoke_client_attach_rpc();
+    rc = invoke_client_attach_rpc(&client_cfg);
     if (rc != UNIFYFS_SUCCESS) {
         /* If we fail, bail with an error */
         LOGERR("failed to attach to server");
-        unifyfs_finalize();
+        unifyfs_fini();
         return rc;
     }
 
@@ -2064,7 +2045,7 @@ int unifyfs_mount(
             /* if there was an error, return it */
             LOGERR("failed to create directory entry for mount point: `%s'",
                    prefix);
-            unifyfs_finalize();
+            unifyfs_fini();
             return UNIFYFS_FAILURE;
         }
     }
@@ -2091,7 +2072,7 @@ int unifyfs_unmount(void)
 
     /* sync any outstanding writes */
     LOGDBG("syncing data");
-    int rc = unifyfs_sync(-1);
+    int rc = unifyfs_sync_extents(-1);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("client sync failed");
         ret = UNIFYFS_FAILURE;
@@ -2118,7 +2099,7 @@ int unifyfs_unmount(void)
      ************************/
 
     /* free resources allocated in unifyfs_init */
-    unifyfs_finalize();
+    unifyfs_fini();
 
     /* free memory tracking our mount prefix string */
     if (unifyfs_mount_prefix != NULL) {
@@ -2150,291 +2131,4 @@ int unifyfs_unmount(void)
     unifyfs_mounted = -1;
 
     return ret;
-}
-
-#define UNIFYFS_TX_BUFSIZE (8*(1<<20))
-
-enum {
-    UNIFYFS_TX_STAGE_OUT = 0,
-    UNIFYFS_TX_STAGE_IN = 1,
-    UNIFYFS_TX_SERIAL = 0,
-    UNIFYFS_TX_PARALLEL = 1,
-};
-
-static
-ssize_t do_transfer_data(int fd_src, int fd_dst, off_t offset, size_t count)
-{
-    ssize_t ret = 0;
-    off_t pos = 0;
-    ssize_t n_written = 0;
-    ssize_t n_left = 0;
-    ssize_t n_processed = 0;
-    size_t len = UNIFYFS_TX_BUFSIZE;
-    char* buf = NULL;
-
-    buf = malloc(UNIFYFS_TX_BUFSIZE);
-    if (!buf) {
-        LOGERR("failed to allocate transfer buffer");
-        return ENOMEM;
-    }
-
-    pos = lseek(fd_src, offset, SEEK_SET);
-    if (pos == (off_t) -1) {
-        LOGERR("lseek failed (%d: %s)\n", errno, strerror(errno));
-        ret = errno;
-        goto out;
-    }
-
-    pos = lseek(fd_dst, offset, SEEK_SET);
-    if (pos == (off_t) -1) {
-        LOGERR("lseek failed (%d: %s)\n", errno, strerror(errno));
-        ret = errno;
-        goto out;
-    }
-
-    while (count > n_processed) {
-        if (len > count) {
-            len = count;
-        }
-
-        n_left = read(fd_src, buf, len);
-
-        if (n_left == 0) {  /* EOF */
-            break;
-        } else if (n_left < 0) {   /* error */
-            ret = errno;
-            goto out;
-        }
-
-        do {
-            n_written = write(fd_dst, buf, n_left);
-
-            if (n_written < 0) {
-                ret = errno;
-                goto out;
-            } else if (n_written == 0 && errno && errno != EAGAIN) {
-                ret = errno;
-                goto out;
-            }
-
-            n_left -= n_written;
-            n_processed += n_written;
-        } while (n_left);
-    }
-
-out:
-    if (buf) {
-        free(buf);
-        buf = NULL;
-    }
-
-    return ret;
-}
-
-static int do_transfer_file_serial(const char* src, const char* dst,
-                                   struct stat* sb_src, int dir)
-{
-    int ret = 0;
-    int fd_src = 0;
-    int fd_dst = 0;
-
-    /*
-     * for now, we do not use the @dir hint.
-     */
-
-    fd_src = open(src, O_RDONLY);
-    if (fd_src < 0) {
-        return errno;
-    }
-
-    fd_dst = open(dst, O_CREAT | O_WRONLY | O_TRUNC, 0644);
-    if (fd_dst < 0) {
-        ret = errno;
-        goto out_close_src;
-    }
-
-    LOGDBG("serial transfer (%d/%d): offset=0, length=%lu",
-           client_rank, global_rank_cnt, (unsigned long) sb_src->st_size);
-
-    ret = do_transfer_data(fd_src, fd_dst, 0, sb_src->st_size);
-    if (ret < 0) {
-        LOGERR("do_transfer_data failed!");
-    } else {
-        fsync(fd_dst);
-    }
-
-    close(fd_dst);
-out_close_src:
-    close(fd_src);
-
-    return ret;
-}
-
-static int do_transfer_file_parallel(const char* src, const char* dst,
-                                     struct stat* sb_src, int dir)
-{
-    int ret = 0;
-    int fd_src = 0;
-    int fd_dst = 0;
-    uint64_t total_chunks = 0;
-    uint64_t chunk_start = 0;
-    uint64_t remainder = 0;
-    uint64_t n_chunks = 0;
-    uint64_t offset = 0;
-    uint64_t len = 0;
-    uint64_t size = sb_src->st_size;
-
-    fd_src = open(src, O_RDONLY);
-    if (fd_src < 0) {
-        LOGERR("failed to open file %s", src);
-        return errno;
-    }
-
-    /*
-     * if the file is smaller than (rankcount*buffersize), just do with the
-     * serial mode.
-     *
-     * FIXME: is this assumtion fair even for the large rank count?
-     */
-    if ((UNIFYFS_TX_BUFSIZE * global_rank_cnt) > size) {
-        if (client_rank == 0) {
-            ret = do_transfer_file_serial(src, dst, sb_src, dir);
-            if (ret) {
-                LOGERR("do_transfer_file_parallel failed");
-            }
-
-            return ret;
-        }
-    }
-
-    total_chunks = size / UNIFYFS_TX_BUFSIZE;
-    if (size % UNIFYFS_TX_BUFSIZE) {
-        total_chunks++;
-    }
-
-    n_chunks = total_chunks / global_rank_cnt;
-    remainder = total_chunks % global_rank_cnt;
-
-    chunk_start = n_chunks * client_rank;
-    if (client_rank < remainder) {
-        chunk_start += client_rank;
-        n_chunks += 1;
-    } else {
-        chunk_start += remainder;
-    }
-
-    offset = chunk_start * UNIFYFS_TX_BUFSIZE;
-
-    if (client_rank == (global_rank_cnt - 1)) {
-        len = (n_chunks - 1) * UNIFYFS_TX_BUFSIZE;
-        remainder = size % UNIFYFS_TX_BUFSIZE;
-        len += (remainder > 0 ? remainder : UNIFYFS_TX_BUFSIZE);
-    } else {
-        len = n_chunks * UNIFYFS_TX_BUFSIZE;
-    }
-
-    if (len > 0) {
-        LOGDBG("parallel transfer (%d/%d): "
-               "nchunks=%lu, offset=%lu, length=%lu",
-               client_rank, global_rank_cnt,
-               n_chunks, (unsigned long) offset, (unsigned long) len);
-
-        fd_dst = open(dst, O_WRONLY);
-        if (fd_dst < 0) {
-            LOGERR("failed to open file %s", dst);
-            ret = errno;
-            goto out_close_src;
-        }
-
-        ret = do_transfer_data(fd_src, fd_dst, offset, len);
-        if (ret) {
-            LOGERR("failed to transfer data (ret=%d, %s)", ret, strerror(ret));
-        } else {
-            fsync(fd_dst);
-        }
-
-        close(fd_dst);
-    }
-
-out_close_src:
-    close(fd_src);
-
-    return ret;
-}
-
-int unifyfs_transfer_file(const char* src, const char* dst, int parallel)
-{
-    int ret = 0;
-    int dir = 0;
-    struct stat sb_src = { 0, };
-    mode_t source_file_mode_write_removed;
-    struct stat sb_dst = { 0, };
-    int unify_src = 0;
-    int unify_dst = 0;
-    char dst_path[UNIFYFS_MAX_FILENAME] = { 0, };
-    char* pos = dst_path;
-    char* src_path = strdup(src);
-
-    int local_return_val;
-
-    if (!src_path) {
-        return -ENOMEM;
-    }
-
-    char src_upath[UNIFYFS_MAX_FILENAME];
-    if (unifyfs_intercept_path(src, src_upath)) {
-        dir = UNIFYFS_TX_STAGE_OUT;
-        unify_src = 1;
-    }
-
-    ret = UNIFYFS_WRAP(stat)(src, &sb_src);
-    if (ret < 0) {
-        return -errno;
-    }
-
-    pos += sprintf(pos, "%s", dst);
-
-    char dst_upath[UNIFYFS_MAX_FILENAME];
-    if (unifyfs_intercept_path(dst, dst_upath)) {
-        dir = UNIFYFS_TX_STAGE_IN;
-        unify_dst = 1;
-    }
-
-    ret = UNIFYFS_WRAP(stat)(dst, &sb_dst);
-    if (ret == 0 && !S_ISREG(sb_dst.st_mode)) {
-        if (S_ISDIR(sb_dst.st_mode)) {
-            sprintf(pos, "/%s", basename((char*) src_path));
-        } else {
-            return -EEXIST;
-        }
-    }
-
-    if (unify_src + unify_dst != 1) {
-        // we may fail the operation with EINVAL, but useful for testing
-        LOGDBG("WARNING: none of pathnames points to unifyfs volume");
-    }
-
-    if (parallel) {
-        local_return_val =
-	    do_transfer_file_parallel(src_path, dst_path, &sb_src, dir);
-    } else {
-        local_return_val =
-	    do_transfer_file_serial(src_path, dst_path, &sb_src, dir);
-    }
-
-    // We know here that one (but not both) of the constituent files
-    // is in the unify FS.  We just have to decide if the *destination* file is.
-    // If it is, then now that we've transferred it, we'll set it to be readable
-    // so that it will be laminated and will be readable by other processes.
-    if (unify_dst) {
-      // pull the source file's mode bits, remove all the write bits but leave
-      // the rest intact and store that new mode.  Now that the file has been
-      // copied into the unify file system, chmod the file to the new
-      // permission.  When unify senses all the write bits are removed it will
-      // laminate the file.
-        source_file_mode_write_removed =
-	    (sb_src.st_mode) & ~(0222);
-        chmod(dst_path, source_file_mode_write_removed);
-    }
-    return local_return_val;
 }

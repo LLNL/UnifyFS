@@ -2142,7 +2142,7 @@ static int __chmod(int fid, mode_t mode)
     }
 
     /* Once a file is laminated, you can't modify it in any way */
-    if (meta->is_laminated) {
+    if (meta->attrs.is_laminated) {
         LOGDBG("%s is already laminated", path);
         errno = EROFS;
         return -1;
@@ -2158,8 +2158,8 @@ static int __chmod(int fid, mode_t mode)
      * meta->mode & 0222                  Was at least one write bit set before?
      * ((meta->mode & 0222) & mode) == 0  Will all the write bits be cleared?
      */
-    if ((meta->mode & 0222) &&
-        (((meta->mode & 0222) & mode) == 0)) {
+    if ((meta->attrs.mode & 0222) &&
+        (((meta->attrs.mode & 0222) & mode) == 0)) {
         /* We're laminating. */
         ret = invoke_client_laminate_rpc(gfid);
         if (ret) {
@@ -2170,8 +2170,8 @@ static int __chmod(int fid, mode_t mode)
     }
 
     /* Clear out our old permission bits, and set the new ones in */
-    meta->mode = meta->mode & ~0777;
-    meta->mode = meta->mode | mode;
+    meta->attrs.mode = meta->attrs.mode & ~0777;
+    meta->attrs.mode = meta->attrs.mode | mode;
 
     /* update the global meta data to reflect new permissions */
     unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_CHMOD;

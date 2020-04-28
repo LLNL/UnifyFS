@@ -141,10 +141,12 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
 
         meta = unifyfs_get_meta_from_fid(fid);
         assert(meta != NULL);
-        meta->mode = (meta->mode & ~S_IFREG) | S_IFDIR; /* set as directory */
+
+        /* set as directory */
+        meta->attrs.mode = (meta->attrs.mode & ~S_IFREG) | S_IFDIR;
     }
 
-    meta->global_size = sb.st_size;
+    meta->attrs.size = sb.st_size;
 
     unifyfs_dirstream_t* dirp = unifyfs_dirstream_alloc(fid);
 
