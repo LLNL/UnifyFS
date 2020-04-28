@@ -66,12 +66,21 @@ a given section and key.
    ================  ======  =================================================================
    Key               Type    Description
    ================  ======  =================================================================
+   cwd               STRING  effective starting current working directory
    max_files         INT     maximum number of open files per client process (default: 128)
    flatten_writes    BOOL    enable flattening writes (optimization for overwrite-heavy codes)
    local_extents     BOOL    service reads from local data if possible (default: off)
    recv_data_size    INT     maximum size (B) of memory buffer for receiving data from server
    write_index_size  INT     maximum size (B) of memory buffer for storing write log metadata
    ================  ======  =================================================================
+
+The ``cwd`` setting is used to emulate the behavior one
+expects when changing into a working directory before starting a job
+and then using relative file names within the application.
+If set, the value specified in ``cwd`` is prepended to any
+relative path name when determining whether UnifyFS will intercept
+a path.  The value specified in ``cwd`` must match the UnifyFS mount point.
+It does not modify the job's current working directory.
 
 Enabling the ``local_extents`` optimization may significantly improve read
 performance.  However, it should not be used by applications

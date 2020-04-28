@@ -359,6 +359,9 @@ extern unifyfs_filename_t* unifyfs_filelist;
 extern char*  unifyfs_mount_prefix;
 extern size_t unifyfs_mount_prefixlen;
 
+/* tracks current working directory within unifyfs directory namespace */
+extern char* unifyfs_cwd;
+
 /* array of file descriptors */
 extern unifyfs_fd_t unifyfs_fds[UNIFYFS_MAX_FILEDESCS];
 extern rlim_t unifyfs_fd_limit;
