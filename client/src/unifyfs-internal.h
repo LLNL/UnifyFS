@@ -320,10 +320,6 @@ extern unsigned long unifyfs_max_index_entries;
 /* tracks total number of unsync'd segments for all files */
 extern unsigned long unifyfs_segment_count;
 
-extern int local_rank_cnt;
-extern int local_rank_idx;
-extern int local_del_cnt;
-
 /* shmem context for read-request replies data region */
 extern shm_context* shm_recv_ctx;
 
