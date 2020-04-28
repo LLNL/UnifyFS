@@ -390,7 +390,7 @@ AC_OUTPUT
 AC_MSG_RESULT([
 
     ==========================
-    UNIFYFS Checkpoint-Restart
+    UNIFYFS
     ==========================
     prefix      ${prefix}
     compiler    ${CC}
