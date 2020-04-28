@@ -221,6 +221,9 @@ static int release_read_req(reqmgr_thrd_t* thrd_ctrl,
         }
         memset((void*)rdreq, 0, sizeof(server_read_req_t));
         thrd_ctrl->num_read_reqs--;
+        if (0 == thrd_ctrl->num_read_reqs) {
+            thrd_ctrl->next_rdreq_ndx = 0;
+        }
         LOGDBG("after release (active=%d, next=%d)",
                thrd_ctrl->num_read_reqs, thrd_ctrl->next_rdreq_ndx);
         RM_REQ_UNLOCK(thrd_ctrl);

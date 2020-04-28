@@ -12,6 +12,7 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
+#include "margo_server.h"
 #include "unifyfs_inode_tree.h"
 #include "unifyfs_inode.h"
 #include "unifyfs_group_rpc.h"
@@ -301,7 +302,9 @@ int submit_read_request(unifyfs_fops_ctx_t* ctx,
         } else {
             LOGDBG("extent(gfid=%d, offset=%lu, len=%lu) has no data",
                    ext->gfid, ext->offset, ext->length);
-            ret = ENODATA;
+            invoke_client_mread_req_complete_rpc(app_id, client_id,
+                                                 client_mread, extent_ndx,
+                                                 ENODATA);
         }
     }
 

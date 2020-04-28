@@ -275,23 +275,18 @@ enum unifyfs_file_storage {
 };
 
 typedef struct {
-    off_t global_size;            /* Global size of the file */
+    int fid;                      /* local file index in filemetas array */
+    int storage;                  /* FILE_STORAGE type */
+
     pthread_spinlock_t fspinlock; /* file lock variable */
     enum flock_enum flock_status; /* file lock status */
 
-    int storage;                  /* FILE_STORAGE type */
-
-    int fid;                      /* local file index in filemetas array */
-    int gfid;                     /* global file id for this file */
     int needs_sync;               /* have unsynced writes */
-
-    int is_laminated;             /* Is this file laminated */
-    uint32_t mode;                /* st_mode bits.  This has file
-                                   * permission info and will tell you if this
-                                   * is a regular file or directory. */
     struct seg_tree extents_sync; /* Segment tree containing our coalesced
                                    * writes between sync operations */
     struct seg_tree extents;      /* Segment tree of all local data extents */
+
+    unifyfs_file_attr_t attrs;    /* UnifyFS and POSIX file attributes */
 } unifyfs_filemeta_t;
 
 /* struct used to map a full path to its local file id,
@@ -346,14 +341,20 @@ typedef struct {
  * Global variable declarations
  * ------------------------------- */
 
+
+
+extern int global_rank_cnt; /* count of world ranks */
+extern int client_rank;     /* client-provided rank (for debugging) */
+
+extern int unifyfs_mounted;   /* avoid duplicate mounts (for now) */
+extern int unifyfs_app_id;    /* application (aka mountpoint) id */
+extern int unifyfs_client_id; /* client id within application */
+
 extern unifyfs_index_buf_t unifyfs_indices;
 extern unsigned long unifyfs_max_index_entries;
 
 /* log-based I/O context */
 extern logio_context* logio_ctx;
-
-extern int unifyfs_app_id;
-extern int unifyfs_client_id;
 
 /* whether to return UNIFYFS (true) or TMPFS (false) magic value from statfs */
 extern bool unifyfs_super_magic;
@@ -405,6 +406,9 @@ extern bool   unifyfs_local_extents;  /* enable tracking of local extents */
 /* -------------------------------
  * Common functions
  * ------------------------------- */
+
+int unifyfs_init(unifyfs_cfg_t* clnt_cfg);
+int unifyfs_fini(void);
 
 /* single function to route all unsupported wrapper calls through */
 int unifyfs_unsupported(const char* fn_name, const char* file, int line,
@@ -549,9 +553,12 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
 
 int unifyfs_fid_close(int fid);
 
-/* delete a file id and return file its resources to free pools */
+/* unlink file and then delete its associated state */
 int unifyfs_fid_unlink(int fid);
 
+/* delete a file id, free its local storage resources, and return
+ * the file id to free stack */
+int unifyfs_fid_delete(int fid);
 
 /* global metadata functions */
 
@@ -564,11 +571,5 @@ int unifyfs_set_global_file_meta(int gfid,
 
 int unifyfs_get_global_file_meta(int gfid,
                                  unifyfs_file_attr_t* gfattr);
-
-// These require types/structures defined above
-#include "unifyfs-fixed.h"
-#include "unifyfs-stdio.h"
-#include "unifyfs-sysio.h"
-#include "unifyfs-dirops.h"
 
 #endif /* UNIFYFS_INTERNAL_H */

@@ -477,6 +477,14 @@ int compare_read_req(const void* a, const void* b)
  */
 int process_gfid_reads(read_req_t* in_reqs, int in_count)
 {
+    if (0 == in_count) {
+        return UNIFYFS_SUCCESS;
+    }
+
+    if (NULL == in_reqs) {
+        return EINVAL;
+    }
+
     int i, rc, read_rc;
 
     /* assume we'll succeed */

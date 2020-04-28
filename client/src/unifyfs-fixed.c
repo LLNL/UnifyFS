@@ -84,7 +84,7 @@ static int add_write_meta_to_index(unifyfs_filemeta_t* meta,
     if (count_before >= (unifyfs_max_index_entries - 2)) {
         /* this will flush our segments, sync them, and set the running
          * segment count back to 0 */
-        unifyfs_sync(meta->fid);
+        unifyfs_sync_extents(meta->fid);
     }
 
     /* store the write in our segment tree used for syncing with server. */
@@ -124,7 +124,7 @@ off_t unifyfs_rewrite_index_from_seg_tree(unifyfs_filemeta_t* meta)
     /* record maximum write log offset */
     off_t max_log_offset = 0;
 
-    int gfid = meta->gfid;
+    int gfid = meta->attrs.gfid;
 
     seg_tree_rdlock(&meta->extents_sync);
     /* For each write in this file's seg_tree ... */
@@ -189,7 +189,7 @@ int truncate_write_meta(unifyfs_filemeta_t* meta, off_t trunc_sz)
  *
  * Returns 0 on success, nonzero otherwise.
  */
-int unifyfs_sync(int target_fid)
+int unifyfs_sync_extents(int target_fid)
 {
     int tmp_rc;
     int ret = UNIFYFS_SUCCESS;
@@ -232,11 +232,11 @@ int unifyfs_sync(int target_fid)
             }
 
             /* tell the server to grab our new extents */
-            tmp_rc = invoke_client_sync_rpc(meta->gfid);
+            tmp_rc = invoke_client_sync_rpc(meta->attrs.gfid);
             if (UNIFYFS_SUCCESS != tmp_rc) {
                 /* something went wrong when trying to flush extents */
                 LOGERR("failed to flush write index to server for gfid=%d",
-                       meta->gfid);
+                       meta->attrs.gfid);
                 ret = tmp_rc;
             }
 
@@ -262,7 +262,7 @@ int unifyfs_sync(int target_fid)
         }
 
         /* got an open file, sync this file id */
-        tmp_rc = unifyfs_sync(fid);
+        tmp_rc = unifyfs_sync_extents(fid);
         if (UNIFYFS_SUCCESS != tmp_rc) {
             ret = tmp_rc;
         }

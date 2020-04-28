@@ -315,6 +315,8 @@ int unifyfs_stage_transfer(unifyfs_stage_t* ctx)
 
                 ret = unifyfs_transfer_file_serial(src, dst);
                 if (ret) {
+                    fprintf(stderr, "[%d] failed to transfer file (err=%d)\n",
+                            rank, -ret);
                     goto out;
                 }
 
@@ -335,34 +337,21 @@ int unifyfs_stage_transfer(unifyfs_stage_t* ctx)
                 }
             }
         } else {
-            if (0 == rank) {
-                int fd = -1;
-
-                if (verbose) {
-                    fprintf(stdout, "[%d] parallel transfer: src=%s, dst=%s\n",
-                            rank, src, dst);
-                }
-
-                fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0600);
-                if (fd < 0) {
-                    fprintf(stderr, "[%d] failed to create the file %s\n",
-                            rank, dst);
-                    goto out;
-                }
-                close(fd);
+            if (verbose) {
+                fprintf(stdout, "[%d] parallel transfer: src=%s, dst=%s\n",
+                        rank, src, dst);
             }
 
             MPI_Barrier(MPI_COMM_WORLD);
 
             ret = unifyfs_transfer_file_parallel(src, dst);
             if (ret) {
+                fprintf(stderr, "[%d] failed to transfer file (err=%d)\n",
+                        rank, -ret);
                 goto out;
             }
 
             MPI_Barrier(MPI_COMM_WORLD);
-
-            // possible lamination check or force lamination
-            // may need to go here
 
             if (ctx->checksum && 0 == rank) {
                 ret = verify_checksum(src, dst);

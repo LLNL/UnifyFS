@@ -52,7 +52,7 @@ off_t unifyfs_rewrite_index_from_seg_tree(unifyfs_filemeta_t* meta);
 int truncate_write_meta(unifyfs_filemeta_t* meta, off_t trunc_sz);
 
 /* sync all writes for target file(s) with the server */
-int unifyfs_sync(int target_fid);
+int unifyfs_sync_extents(int target_fid);
 
 /* write data to file using log-based I/O */
 int unifyfs_fid_logio_write(

@@ -12,6 +12,8 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
+#include <stdint.h>
+
 /*
  * Store a random string of length @len into buffer @buf.
  */
@@ -35,3 +37,20 @@ char* testutil_get_mount_point(void);
 /* Stat the file associated to by path and store the global size of the
  * file at path in the address of the global pointer passed in. */
 void testutil_get_size(char* path, size_t* global);
+
+/* Sequentially number every 8 bytes (uint64_t) in given buffer */
+void testutil_lipsum_generate(char* buf, uint64_t len, uint64_t offset);
+
+/*
+ * Check buffer contains lipsum generated data.
+ * returns 0 on success, -1 otherwise with @error_offset set.
+ */
+int testutil_lipsum_check(const char* buf, uint64_t len, uint64_t offset,
+                          uint64_t* error_offset);
+
+
+/*
+ * Check buffer contains all zero bytes.
+ * returns 0 on success, -1 otherwise.
+ */
+int testutil_zero_check(const char* buf, size_t len);

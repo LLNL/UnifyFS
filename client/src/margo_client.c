@@ -199,7 +199,7 @@ static hg_handle_t create_handle(hg_id_t id)
 }
 
 /* invokes the attach rpc function */
-int invoke_client_attach_rpc(void)
+int invoke_client_attach_rpc(unifyfs_cfg_t* clnt_cfg)
 {
     /* check that we have initialized margo */
     if (NULL == client_rpc_context) {
@@ -211,7 +211,7 @@ int invoke_client_attach_rpc(void)
 
     /* fill in input struct */
     unifyfs_attach_in_t in;
-    fill_client_attach_info(&in);
+    fill_client_attach_info(clnt_cfg, &in);
 
     /* call rpc function */
     LOGDBG("invoking the attach rpc function in client");
@@ -245,7 +245,7 @@ int invoke_client_attach_rpc(void)
 }
 
 /* invokes the mount rpc function */
-int invoke_client_mount_rpc(void)
+int invoke_client_mount_rpc(unifyfs_cfg_t* clnt_cfg)
 {
     /* check that we have initialized margo */
     if (NULL == client_rpc_context) {
@@ -257,7 +257,7 @@ int invoke_client_mount_rpc(void)
 
     /* fill in input struct */
     unifyfs_mount_in_t in;
-    fill_client_mount_info(&in);
+    fill_client_mount_info(clnt_cfg, &in);
 
     /* pass our margo address to the server */
     in.client_addr_str = strdup(client_rpc_context->client_addr_str);
