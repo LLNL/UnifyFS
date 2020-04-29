@@ -40,6 +40,7 @@
  */
 #define UNIFYFS_ERROR_ENUMERATOR                                       \
     ENUMITEM(BADCONFIG, "Configuration has invalid setting")           \
+    ENUMITEM(GOTCHA, "Gotcha operation error")                         \
     ENUMITEM(KEYVAL, "Key-value store operation error")                \
     ENUMITEM(MARGO, "Mercury/Argobots operation error")                \
     ENUMITEM(MDHIM, "MDHIM operation error")                           \

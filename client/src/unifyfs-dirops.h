@@ -14,11 +14,7 @@
 #ifndef __UNIFYFS_DIROPS_H
 #define __UNIFYFS_DIROPS_H
 
-#include <config.h>
-
-#include <sys/types.h>
-#include <dirent.h>
-#include <pthread.h>
+#include "unifyfs-internal.h"
 
 /*
  * FIXME: is this portable to use the linux dirent structure?

@@ -24,14 +24,16 @@ int issue_write_req(test_cfg* cfg, struct aiocb* req)
 {
     int rc, err;
     ssize_t ss;
-    size_t written, remaining;
     off_t off;
     void* src;
 
     assert(NULL != cfg);
 
-    errno = 0;
+    size_t written = 0;
+    size_t remaining = req->aio_nbytes;
+
     if (cfg->use_aio) { // aio_write(2)
+        errno = 0;
         rc = aio_write(req);
         if (-1 == rc) {
             test_print(cfg, "aio_write() failed");
@@ -39,11 +41,17 @@ int issue_write_req(test_cfg* cfg, struct aiocb* req)
         return rc;
     } else if (cfg->use_mapio) { // mmap(2)
         return ENOTSUP;
+    } else if (cfg->use_mpiio) { // MPI-IO
+        MPI_Status mst;
+        MPI_Offset off = (MPI_Offset) req->aio_offset;
+        void* src_buf = (void*) req->aio_buf;
+        int count = (int) remaining;
+        MPI_CHECK(cfg, (MPI_File_write_at(cfg->mpifh, off, src_buf,
+                                          count, MPI_CHAR, &mst)));
     } else if (cfg->use_prdwr) { // pwrite(2)
-        written = 0;
-        remaining = req->aio_nbytes;
         do {
             src = (void*)((char*)req->aio_buf + written);
+            errno = 0;
             ss = pwrite(req->aio_fildes, src, remaining,
                         (req->aio_offset + written));
             if (-1 == ss) {
@@ -62,8 +70,7 @@ int issue_write_req(test_cfg* cfg, struct aiocb* req)
     } else if (cfg->use_vecio) { // writev(2)
         return EINVAL;
     } else { // write(2)
-        written = 0;
-        remaining = req->aio_nbytes;
+        errno = 0;
         off = lseek(req->aio_fildes, req->aio_offset, SEEK_SET);
         if (-1 == off) {
             test_print(cfg, "lseek() failed");
@@ -71,6 +78,7 @@ int issue_write_req(test_cfg* cfg, struct aiocb* req)
         }
         do {
             src = (void*)((char*)req->aio_buf + written);
+            errno = 0;
             ss = write(req->aio_fildes, src, remaining);
             if (-1 == ss) {
                 err = errno;
@@ -204,6 +212,8 @@ int write_sync(test_cfg* cfg)
             test_print(cfg, "fsync() failed");
             return -1;
         }
+    } else if (cfg->use_mpiio) {
+        MPI_CHECK(cfg, (MPI_File_sync(cfg->mpifh)));
     }
     return 0;
 }
@@ -267,8 +277,8 @@ int issue_read_req(test_cfg* cfg, struct aiocb* req)
 
     assert(NULL != cfg);
 
-    errno = 0;
     if (cfg->use_aio) { // aio_read(2)
+        errno = 0;
         rc = aio_read(req);
         if (-1 == rc) {
             test_print(cfg, "aio_read() failed");
@@ -276,11 +286,19 @@ int issue_read_req(test_cfg* cfg, struct aiocb* req)
         return rc;
     } else if (cfg->use_mapio) { // mmap(2)
         return ENOTSUP;
+    } else if (cfg->use_mpiio) { // MPI-IO
+        MPI_Status mst;
+        MPI_Offset off = (MPI_Offset) req->aio_offset;
+        void* dst_buf = (void*) req->aio_buf;
+        int count = (int) req->aio_nbytes;
+        MPI_CHECK(cfg, (MPI_File_read_at(cfg->mpifh, off, dst_buf,
+                                         count, MPI_CHAR, &mst)));
     } else if (cfg->use_prdwr) { // pread(2)
         nread = 0;
         remaining = req->aio_nbytes;
         do {
             dst = (void*)((char*)req->aio_buf + nread);
+            errno = 0;
             ss = pread(req->aio_fildes, dst, remaining,
                        (req->aio_offset + nread));
             if (-1 == ss) {
@@ -304,6 +322,7 @@ int issue_read_req(test_cfg* cfg, struct aiocb* req)
     } else { // read(2)
         nread = 0;
         remaining = req->aio_nbytes;
+        errno = 0;
         off = lseek(req->aio_fildes, req->aio_offset, SEEK_SET);
         if (-1 == off) {
             test_print(cfg, "lseek() failed");
@@ -311,6 +330,7 @@ int issue_read_req(test_cfg* cfg, struct aiocb* req)
         }
         do {
             dst = (void*)((char*)req->aio_buf + nread);
+            errno = 0;
             ss = read(req->aio_fildes, dst, remaining);
             if (-1 == ss) {
                 err = errno;

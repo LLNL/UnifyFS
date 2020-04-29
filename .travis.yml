@@ -54,7 +54,7 @@ before_install:
 install:
   - . $HOME/spack/share/spack/setup-env.sh
   - spack install leveldb && spack load leveldb
-  - spack install gotcha@0.0.2 && spack load gotcha@0.0.2
+  - spack install gotcha@1.0.3 && spack load gotcha@1.0.3
   - spack install flatcc && spack load flatcc
   - spack install margo^mercury+bmi~boostsys && spack load argobots && spack load mercury && spack load margo
   # prepare build environment

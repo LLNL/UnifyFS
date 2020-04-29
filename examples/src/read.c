@@ -89,6 +89,8 @@ size_t generate_read_reqs(test_cfg* cfg, char* dstbuf,
  *    cfg.use_mapio - support is not yet implemented. When enabled,
  *    direct memory loads will be used for reads.
  *
+ *    cfg.use_mpiio - when enabled, MPI-IO will be used.
+ *
  *    cfg.use_prdwr - when enabled, pread(2) will be used.
  *
  *    cfg.use_stdio - when enabled, fread(3) will be used.

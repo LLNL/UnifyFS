@@ -46,12 +46,6 @@
 
 #include <time.h>
 
-#ifdef UNIFYFS_GOTCHA
-#include "gotcha/gotcha_types.h"
-#include "gotcha/gotcha.h"
-#include "gotcha_map_unifyfs_list.h"
-#endif
-
 #include "unifyfs_client_rpcs.h"
 #include "unifyfs_server_rpcs.h"
 #include "unifyfs_rpc_util.h"
@@ -2184,20 +2178,10 @@ static int unifyfs_init(void)
     if (!unifyfs_initialized) {
 
 #ifdef UNIFYFS_GOTCHA
-        /* insert our I/O wrappers using gotcha */
-        enum gotcha_error_t result;
-        result = gotcha_wrap(wrap_unifyfs_list, GOTCHA_NFUNCS, "unifyfs");
-        if (result != GOTCHA_SUCCESS) {
-            LOGERR("gotcha_wrap returned %d", (int) result);
-        }
-
-        /* check for an errors when registering functions with gotcha */
-        for (i = 0; i < GOTCHA_NFUNCS; i++) {
-            if (*(void**)(wrap_unifyfs_list[i].function_address_pointer) == 0) {
-                LOGERR("This function name failed to be wrapped: %s",
-                       wrap_unifyfs_list[i].name);
-
-            }
+        rc = setup_gotcha_wrappers();
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to setup gotcha wrappers");
+            return rc;
         }
 #endif
 

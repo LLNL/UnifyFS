@@ -118,6 +118,7 @@ typedef struct {
     int verbose;      /* print verbose information to stderr */
     int use_mpi;
     int use_unifyfs;
+    int enable_mpi_mount; /* automount during MPI_Init() */
 
     /* I/O behavior options */
     int io_pattern; /* N1 or NN */
@@ -126,6 +127,7 @@ typedef struct {
     int use_aio;    /* use asynchronous IO */
     int use_lio;    /* use lio_listio instead of read/write */
     int use_mapio;  /* use mmap instead of read/write */
+    int use_mpiio;  /* use MPI-IO instead of POSIX I/O */
     int use_prdwr;  /* use pread/pwrite instead of read/write */
     int use_stdio;  /* use fread/fwrite instead of read/write */
     int use_vecio;  /* use readv/writev instead of read/write */
@@ -139,16 +141,19 @@ typedef struct {
     char*  filename;
     char*  mountpt;
     FILE*  fp;
+    int    fd;
+    int    fd_access;  /* access flags for cfg.fd */
     void*  mapped;     /* address of mapped extent of cfg.fd */
     off_t  mapped_off; /* start offset for mapped extent */
     size_t mapped_sz;  /* size of mapped extent */
-    int    fd;
-    int    fd_access;  /* access flags for cfg.fd */
+    MPI_File mpifh;    /* MPI file handle (when use_mpiio) */
 
     /* MPI info */
-    int app_id;
     int rank;
     int n_ranks;
+
+    /* UnifyFS info */
+    int app_id;
 } test_cfg;
 
 static inline
@@ -167,6 +172,10 @@ void test_config_init(test_cfg* cfg)
     cfg->use_mpi = 1;
     cfg->use_unifyfs = 1;
     cfg->io_pattern = IO_PATTERN_N1;
+
+#if defined(ENABLE_MPI_MOUNT)
+    cfg->enable_mpi_mount = 1;
+#endif
 
     // invalidate file descriptor
     cfg->fd = -1;
@@ -190,6 +199,7 @@ void test_config_print(test_cfg* cfg)
     fprintf(stderr, "\t verbose     = %d\n", cfg->verbose);
     fprintf(stderr, "\t use_mpi     = %d\n", cfg->use_mpi);
     fprintf(stderr, "\t use_unifyfs = %d\n", cfg->use_unifyfs);
+    fprintf(stderr, "\t mpi_mount   = %d\n", cfg->enable_mpi_mount);
 
     fprintf(stderr, "\n-- IO Behavior --\n");
     fprintf(stderr, "\t io_pattern  = %s\n", io_pattern_str(cfg->io_pattern));
@@ -198,6 +208,7 @@ void test_config_print(test_cfg* cfg)
     fprintf(stderr, "\t use_aio     = %d\n", cfg->use_aio);
     fprintf(stderr, "\t use_lio     = %d\n", cfg->use_lio);
     fprintf(stderr, "\t use_mapio   = %d\n", cfg->use_mapio);
+    fprintf(stderr, "\t use_mpiio   = %d\n", cfg->use_mpiio);
     fprintf(stderr, "\t use_prdwr   = %d\n", cfg->use_prdwr);
     fprintf(stderr, "\t use_stdio   = %d\n", cfg->use_stdio);
     fprintf(stderr, "\t use_vecio   = %d\n", cfg->use_vecio);
@@ -447,7 +458,7 @@ int test_is_static(const char* program)
 
 // common options for all tests
 
-static const char* test_short_opts = "a:Ab:c:df:hkLm:Mn:p:PSUvVx";
+static const char* test_short_opts = "a:Ab:c:df:hkLm:MNn:p:PSUvVx";
 
 static const struct option test_long_opts[] = {
     { "appid", 1, 0, 'a' },
@@ -460,8 +471,9 @@ static const struct option test_long_opts[] = {
     { "check", 0, 0, 'k' },
     { "listio", 0, 0, 'L' },
     { "mount", 1, 0, 'm' },
-    { "mapio", 0, 0, 'M' },
+    { "mpiio", 0, 0, 'M' },
     { "nblocks", 1, 0, 'n' },
+    { "mapio", 0, 0, 'N' },
     { "pattern", 1, 0, 'p' },
     { "prdwr", 0, 0, 'P' },
     { "stdio", 0, 0, 'S' },
@@ -495,10 +507,12 @@ static const char* test_usage_str =
     "                                  (default: off)\n"
     " -m, --mount=<mountpoint>         use <mountpoint> for unifyfs\n"
     "                                  (default: /unifyfs)\n"
-    " -M, --mapio                      use mmap instead of read|write\n"
+    " -M, --mpiio                      use MPI-IO instead of POSIX I/O\n"
     "                                  (default: off)\n"
     " -n, --nblocks=<count>            count of blocks each process will read|write\n"
     "                                  (default: 32)\n"
+    " -N, --mapio                      use mmap instead of read|write\n"
+    "                                  (default: off)\n"
     " -p, --pattern=<pattern>          'n1' (N-to-1 shared file) or 'nn' (N-to-N file per process)\n"
     "                                  (default: 'n1')\n"
     " -P, --prdwr                      use pread|pwrite instead of read|write\n"
@@ -573,11 +587,15 @@ int test_process_argv(test_cfg* cfg,
             break;
 
         case 'M':
-            cfg->use_mapio = 1;
+            cfg->use_mpiio = 1;
             break;
 
         case 'n':
             cfg->n_blocks = (uint64_t) strtoul(optarg, NULL, 0);
+            break;
+
+        case 'N':
+            cfg->use_mapio = 1;
             break;
 
         case 'p':
@@ -652,39 +670,48 @@ int test_process_argv(test_cfg* cfg,
 
     // exhaustive check of incompatible I/O modes
     if (cfg->use_aio &&
-       (cfg->use_mapio || cfg->use_prdwr || cfg->use_stdio || cfg->use_vecio)) {
-        test_print_once(cfg, "USAGE ERROR: --aio incompatible with "
-                             "[--mapio, --prdwr, --stdio, --vecio]");
+        (cfg->use_mapio || cfg->use_mpiio || cfg->use_prdwr
+         || cfg->use_stdio || cfg->use_vecio)) {
+        test_print_once(cfg,
+            "USAGE ERROR: --aio incompatible with "
+            "[--mapio, --mpiio, --prdwr, --stdio, --vecio]");
         exit(-1);
     }
-
     if (cfg->use_lio &&
-       (cfg->use_mapio || cfg->use_prdwr || cfg->use_stdio || cfg->use_vecio)) {
-        test_print_once(cfg, "USAGE ERROR: --listio incompatible with "
-                             "[--mapio, --prdwr, --stdio, --vecio]");
+        (cfg->use_mapio || cfg->use_mpiio || cfg->use_prdwr
+         || cfg->use_stdio || cfg->use_vecio)) {
+        test_print_once(cfg,
+            "USAGE ERROR: --listio incompatible with "
+            "[--mapio, --mpiio, --prdwr, --stdio, --vecio]");
         exit(-1);
     }
-
     if (cfg->use_mapio &&
-       (cfg->use_prdwr || cfg->use_stdio || cfg->use_vecio)) {
-        test_print_once(cfg, "USAGE ERROR: --mapio incompatible with "
-                             "[--aio, --listio, --prdwr, --stdio, --vecio]");
+        (cfg->use_mpiio || cfg->use_prdwr || cfg->use_stdio
+         || cfg->use_vecio)) {
+        test_print_once(cfg,
+            "USAGE ERROR: --mapio incompatible with "
+            "[--aio, --listio, --mpiio, --prdwr, --stdio, --vecio]");
         exit(-1);
     }
-
-    if (cfg->use_prdwr &&
-       (cfg->use_stdio || cfg->use_vecio)) {
-        test_print_once(cfg, "USAGE ERROR: --prdwr incompatible with "
-                             "[--aio, --listio, --mapio, --stdio, --vecio]");
+    if (cfg->use_mpiio &&
+        (cfg->use_prdwr || cfg->use_stdio || cfg->use_vecio)) {
+        test_print_once(cfg,
+            "USAGE ERROR: --mpiio incompatible with "
+            "[--aio, --listio, --mpiio, --prdwr, --stdio, --vecio]");
         exit(-1);
     }
-
+    if (cfg->use_prdwr && (cfg->use_stdio || cfg->use_vecio)) {
+        test_print_once(cfg,
+            "USAGE ERROR: --prdwr incompatible with "
+            "[--aio, --listio, --mapio, --mpiio, --stdio, --vecio]");
+        exit(-1);
+    }
     if (cfg->use_stdio && cfg->use_vecio) {
-        test_print_once(cfg, "USAGE ERROR: --stdio incompatible with "
-                             "[--aio, --listio, --mapio, --prdwr, --vecio]");
+        test_print_once(cfg,
+            "USAGE ERROR: --stdio incompatible with "
+            "[--aio, --listio, --mapio, --mpiio, --prdwr, --vecio]");
         exit(-1);
     }
-
 
     if (NULL == cfg->filename) {
         // set filename default
@@ -750,13 +777,37 @@ int lipsum_check(const char* buf, uint64_t len, uint64_t offset,
 
 /* ---------- MPI Utilities ---------- */
 
+/* MPI checker
+ * from: https://stackoverflow.com/questions/22859269/
+ */
+#define MPI_CHECK(cfgp, fncall)              \
+    do {                                     \
+        mpi_error = 0;                       \
+        int _merr = fncall;                  \
+        if (_merr != MPI_SUCCESS) {          \
+            mpi_error = _merr;               \
+            handle_mpi_error(cfgp, #fncall); \
+        }                                    \
+    } while (0)
+
+static int mpi_error;
+
+static inline
+void handle_mpi_error(test_cfg* cfg, char* context)
+{
+    char errstr[MPI_MAX_ERROR_STRING];
+    int len = 0;
+    MPI_Error_string(mpi_error, errstr, &len);
+    test_print(cfg, "MPI ERROR: %s returned %s", context, errstr);
+}
+
 static inline
 void test_barrier(test_cfg* cfg)
 {
     assert(NULL != cfg);
 
     if (cfg->use_mpi) {
-        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_CHECK(cfg, (MPI_Barrier(MPI_COMM_WORLD)));
     }
 }
 
@@ -768,8 +819,9 @@ double test_reduce_double_sum(test_cfg* cfg, double local_val)
     assert(NULL != cfg);
 
     if (cfg->use_mpi) {
-        MPI_Reduce(&local_val, &aggr_val,
-                   1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_CHECK(cfg, (MPI_Reduce(&local_val, &aggr_val,
+                                   1, MPI_DOUBLE, MPI_SUM,
+                                   0, MPI_COMM_WORLD)));
     } else {
         aggr_val = local_val;
     }
@@ -784,8 +836,9 @@ double test_reduce_double_max(test_cfg* cfg, double local_val)
     assert(NULL != cfg);
 
     if (cfg->use_mpi) {
-        MPI_Reduce(&local_val, &aggr_val,
-                   1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+        MPI_CHECK(cfg, (MPI_Reduce(&local_val, &aggr_val,
+                                   1, MPI_DOUBLE, MPI_MAX,
+                                   0, MPI_COMM_WORLD)));
     } else {
         aggr_val = local_val;
     }
@@ -800,8 +853,9 @@ double test_reduce_double_min(test_cfg* cfg, double local_val)
     assert(NULL != cfg);
 
     if (cfg->use_mpi) {
-        MPI_Reduce(&local_val, &aggr_val,
-                   1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+        MPI_CHECK(cfg, (MPI_Reduce(&local_val, &aggr_val,
+                                   1, MPI_DOUBLE, MPI_MIN,
+                                   0, MPI_COMM_WORLD)));
     } else {
         aggr_val = local_val;
     }
@@ -841,6 +895,21 @@ const char* test_access_to_stdio_mode(int access)
     return NULL;
 }
 
+static int test_access_to_mpiio_mode(int access)
+{
+    switch (access) {
+    case O_RDWR:
+        return MPI_MODE_RDWR;
+    case O_RDONLY:
+        return MPI_MODE_RDONLY;
+    case O_WRONLY:
+        return MPI_MODE_WRONLY;
+    default:
+        break;
+    }
+    return 0;
+}
+
 /*
  * open the given file
  */
@@ -853,7 +922,19 @@ int test_open_file(test_cfg* cfg, const char* filepath, int access)
 
     assert(NULL != cfg);
 
-    if (cfg->use_stdio) {
+    if (cfg->use_mpiio) {
+        int amode = test_access_to_mpiio_mode(access);
+        if (cfg->io_pattern == IO_PATTERN_N1) {
+            MPI_CHECK(cfg, (MPI_File_open(MPI_COMM_WORLD, filepath, amode,
+                                          MPI_INFO_NULL, &cfg->mpifh)));
+        } else {
+            MPI_CHECK(cfg, (MPI_File_open(MPI_COMM_SELF, filepath, amode,
+                                          MPI_INFO_NULL, &cfg->mpifh)));
+        }
+        if (mpi_error) {
+            return -1;
+        }
+    } else if (cfg->use_stdio) {
         fmode = test_access_to_stdio_mode(access);
         fp = fopen(filepath, fmode);
         if (NULL == fp) {
@@ -861,16 +942,15 @@ int test_open_file(test_cfg* cfg, const char* filepath, int access)
             return -1;
         }
         cfg->fp = fp;
-        return 0;
+    } else {
+        fd = open(filepath, access);
+        if (-1 == fd) {
+            test_print(cfg, "ERROR: open(%s) failed", filepath);
+            return -1;
+        }
+        cfg->fd = fd;
+        cfg->fd_access = access;
     }
-
-    fd = open(filepath, access);
-    if (-1 == fd) {
-        test_print(cfg, "ERROR: open(%s) failed", filepath);
-        return -1;
-    }
-    cfg->fd = fd;
-    cfg->fd_access = access;
     return 0;
 }
 
@@ -881,6 +961,10 @@ static inline
 int test_close_file(test_cfg* cfg)
 {
     assert(NULL != cfg);
+
+    if (cfg->use_mpiio) {
+        MPI_CHECK(cfg, (MPI_File_close(&cfg->mpifh)));
+    }
 
     if (NULL != cfg->fp) {
         fclose(cfg->fp);
@@ -910,13 +994,29 @@ int test_create_file(test_cfg* cfg, const char* filepath, int access)
 
     assert(NULL != cfg);
 
-    if (cfg->use_stdio) {
-        fmode = test_access_to_stdio_mode(access);
+    if (cfg->use_mpiio) {
+        create_mode = test_access_to_mpiio_mode(access);
+        create_mode |= MPI_MODE_CREATE;
+        if (cfg->io_pattern == IO_PATTERN_N1) {
+            MPI_CHECK(cfg, (MPI_File_open(MPI_COMM_WORLD, filepath, create_mode,
+                                          MPI_INFO_NULL, &cfg->mpifh)));
+        } else {
+            create_mode |= MPI_MODE_EXCL;
+            MPI_CHECK(cfg, (MPI_File_open(MPI_COMM_SELF, filepath, create_mode,
+                                          MPI_INFO_NULL, &cfg->mpifh)));
+        }
+        if (mpi_error) {
+            return -1;
+        }
+        return 0;
     }
 
-    // rank 0 creates or all ranks create if using file-per-process
+    /* POSIX I/O
+     *   N-to-1 - rank 0 creates shared files
+     *   N-to-N - all ranks create per-process files */
     if (cfg->rank == 0 || cfg->io_pattern == IO_PATTERN_NN) {
         if (cfg->use_stdio) {
+            fmode = test_access_to_stdio_mode(access);
             fp = fopen(filepath, fmode);
             if (NULL == fp) {
                 test_print(cfg, "ERROR: fopen(%s) failed", filepath);
@@ -1036,7 +1136,7 @@ int test_init(int argc, char** argv,
     }
 
     if (cfg->use_mpi) {
-        MPI_Init(&argc, &argv);
+        MPI_CHECK(cfg, (MPI_Init(&argc, &argv)));
         MPI_Comm_size(MPI_COMM_WORLD, &(cfg->n_ranks));
         MPI_Comm_rank(MPI_COMM_WORLD, &(cfg->rank));
     } else {
@@ -1048,7 +1148,7 @@ int test_init(int argc, char** argv,
         test_config_print(cfg);
     }
 
-    if (cfg->use_unifyfs) {
+    if (cfg->use_unifyfs && !cfg->enable_mpi_mount) {
 #ifndef DISABLE_UNIFYFS
         if (cfg->debug) {
             test_pause(cfg, "Before unifyfs_mount()");
@@ -1060,10 +1160,10 @@ int test_init(int argc, char** argv,
         }
 #endif
         test_barrier(cfg);
-    } else {
-        if (cfg->debug) {
-            test_pause(cfg, "Finished test initialization");
-        }
+    }
+
+    if (cfg->debug) {
+        test_pause(cfg, "Finished test initialization");
     }
 
     return 0;
@@ -1082,7 +1182,7 @@ void test_fini(test_cfg* cfg)
 
     test_close_file(cfg);
 
-    if (cfg->use_unifyfs) {
+    if (cfg->use_unifyfs && !cfg->enable_mpi_mount) {
 #ifndef DISABLE_UNIFYFS
         int rc = unifyfs_unmount();
         if (rc) {
@@ -1092,7 +1192,7 @@ void test_fini(test_cfg* cfg)
     }
 
     if (cfg->use_mpi) {
-        MPI_Finalize();
+        MPI_CHECK(cfg, (MPI_Finalize()));
     }
 
     if (NULL != cfg->filename) {

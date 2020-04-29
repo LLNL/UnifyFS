@@ -92,6 +92,10 @@
 #include <pthread.h>
 #include <sched.h>
 
+#ifdef HAVE_SYS_STATFS_H
+#include <sys/statfs.h>
+#endif
+
 // common headers
 #include "unifyfs_configurator.h"
 #include "unifyfs_const.h"
@@ -119,26 +123,32 @@
       unifyfs_unsupported(__func__, __FILE__, __LINE__, fmt, ##args)
 
 #ifdef UNIFYFS_GOTCHA
+#include <gotcha/gotcha.h>
 
-/* gotcha fills in address of original/real function
- * and we need to declare function prototype for each
- * wrapper */
-#define UNIFYFS_DECL(name,ret,args) \
-      extern ret(*__real_ ## name)args;  \
-      ret __wrap_ ## name args;
-
-/* define each DECL function in a .c file */
-#define UNIFYFS_DEF(name,ret,args) \
-      ret(*__real_ ## name)args = NULL;
-
-/* we define our wrapper function as __wrap_<iofunc> instead of <iofunc> */
+/* the name of our wrapper - we use __wrap_<iofunc> instead of <iofunc> */
 #define UNIFYFS_WRAP(name) __wrap_ ## name
 
-/* gotcha maps the <iofunc> call to __real_<iofunc>() */
+/* the name of the real function pointer */
 #define UNIFYFS_REAL(name) __real_ ## name
 
-/* no need to look up the address of the real function (gotcha does that) */
-#define MAP_OR_FAIL(func)
+/* declare anything that will be used externally */
+#define UNIFYFS_DECL(name, ret, args)  \
+    extern gotcha_wrappee_handle_t wrappee_handle_ ## name; \
+    extern ret (*__real_ ## name) args; \
+    ret __wrap_ ## name args
+
+/* ask gotcha for the address of the real function */
+#define MAP_OR_FAIL(name) \
+do { \
+    if (NULL == __real_ ## name) { \
+        __real_ ## name = gotcha_get_wrappee(wrappee_handle_ ## name); \
+        if (NULL == __real_ ## name) { \
+            assert(!"missing Gotcha wrappee for " #name); \
+        } \
+    } \
+} while (0)
+
+int setup_gotcha_wrappers(void);
 
 #elif UNIFYFS_PRELOAD
 

@@ -527,6 +527,77 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
 }
 #endif
 
+
+#ifdef HAVE_SYS_STATFS_H
+
+/* tmpfs seems like a safe choice for something like UnifyFS */
+#ifndef TMPFS_MAGIC
+#define TMPFS_MAGIC 0x01021994
+#endif
+
+static int unifyfs_statfs(struct statfs* fsbuf)
+{
+    if (NULL != fsbuf) {
+        memset(fsbuf, 0, sizeof(*fsbuf));
+
+        fsbuf->f_type = TMPFS_MAGIC; /* File system type */
+        fsbuf->f_bsize = UNIFYFS_LOGIO_CHUNK_SIZE; /* Optimal block size */
+        //fsbuf->f_blocks = ??;  /* Total data blocks in filesystem */
+        //fsbuf->f_bfree = ??;   /* Free blocks in filesystem */
+        //fsbuf->f_bavail = ??;  /* Free blocks available */
+        fsbuf->f_files = unifyfs_max_files;   /* Total file nodes */
+        //fsbuf->f_ffree = ??;   /* Free file nodes in filesystem */
+        fsbuf->f_namelen = UNIFYFS_MAX_FILENAME; /* Max filename length */
+        return 0;
+    } else {
+        return EFAULT;
+    }
+}
+
+#ifdef HAVE_STATFS
+int UNIFYFS_WRAP(statfs)(const char* path, struct statfs* fsbuf)
+{
+    LOGDBG("statfs() was called for %s", path);
+
+    int ret;
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        ret = unifyfs_statfs(fsbuf);
+        if (ret) {
+            errno = ret;
+            ret = -1;
+        }
+    } else {
+        MAP_OR_FAIL(statfs);
+        ret = UNIFYFS_REAL(statfs)(path, fsbuf);
+    }
+    return ret;
+}
+#endif
+
+#ifdef HAVE_FSTATFS
+int UNIFYFS_WRAP(fstatfs)(int fd, struct statfs* fsbuf)
+{
+    LOGDBG("fstatfs() was called for fd: %d", fd);
+
+    /* check whether we should intercept this file descriptor */
+    int ret;
+    if (unifyfs_intercept_fd(&fd)) {
+        ret = unifyfs_statfs(fsbuf);
+        if (ret) {
+            errno = ret;
+            ret = -1;
+        }
+    } else {
+        MAP_OR_FAIL(fstatfs);
+        ret = UNIFYFS_REAL(fstatfs)(fd, fsbuf);
+    }
+    return ret;
+}
+#endif
+
+#endif /* HAVE_SYS_STATFS_H */
+
 /* ---------------------------------------
  * POSIX wrappers: file descriptors
  * --------------------------------------- */

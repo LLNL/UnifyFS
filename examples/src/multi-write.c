@@ -130,7 +130,7 @@ int do_test(test_cfg* cfg)
 
     /* Write our files */
     for (i = 0; i < NUM_WRITES; i++) {
-        /* Randomly pick on of our files to write to */
+        /* Randomly pick one of our files to write to */
         rnd = rand() % NUM_FILES;
         fd = fds[rnd];
 
