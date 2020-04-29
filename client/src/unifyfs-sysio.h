@@ -60,10 +60,10 @@ UNIFYFS_DECL(remove, int, (const char* path));
 UNIFYFS_DECL(rename, int, (const char* oldpath, const char* newpath));
 UNIFYFS_DECL(truncate, int, (const char* path, off_t length));
 UNIFYFS_DECL(stat, int, (const char* path, struct stat* buf));
-UNIFYFS_DECL(fstat, int, (int fd, struct stat* buf));
 UNIFYFS_DECL(__xstat, int, (int vers, const char* path, struct stat* buf));
 UNIFYFS_DECL(__lxstat, int, (int vers, const char* path, struct stat* buf));
-UNIFYFS_DECL(__fxstat, int, (int vers, int fd, struct stat* buf));
+UNIFYFS_DECL(statfs, int, (const char* path, struct statfs* fsbuf));
+
 
 /* ---------------------------------------
  * POSIX wrappers: file descriptors
@@ -89,6 +89,9 @@ UNIFYFS_DECL(posix_fadvise, int, (int fd, off_t offset, off_t len, int advice));
 UNIFYFS_DECL(lseek, off_t, (int fd, off_t offset, int whence));
 UNIFYFS_DECL(lseek64, off64_t, (int fd, off64_t offset, int whence));
 UNIFYFS_DECL(ftruncate, int, (int fd, off_t length));
+UNIFYFS_DECL(fstat, int, (int fd, struct stat* buf));
+UNIFYFS_DECL(__fxstat, int, (int vers, int fd, struct stat* buf));
+UNIFYFS_DECL(fstatfs, int, (int fd, struct statfs* fsbuf));
 UNIFYFS_DECL(fsync, int, (int fd));
 UNIFYFS_DECL(fdatasync, int, (int fd));
 UNIFYFS_DECL(flock, int, (int fd, int operation));

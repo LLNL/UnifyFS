@@ -12,9 +12,12 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
+
+#include <stdio.h>
+
 #include "pmpi_wrappers.h"
 #include "unifyfs.h"
-#include <stdio.h>
+#include "unifyfs_rc.h"
 
 int unifyfs_mpi_init(int* argc, char*** argv)
 {

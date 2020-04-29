@@ -102,6 +102,8 @@ size_t generate_write_reqs(test_cfg* cfg, char* srcbuf,
  *    cfg.use_mapio - support is not yet implemented. When enabled,
  *    direct memory loads and stores will be used for writes.
  *
+ *    cfg.use_mpiio - when enabled, MPI-IO will be used.
+ *
  *    cfg.use_prdwr - when enabled, pwrite(2) will be used.
  *
  *    cfg.use_stdio - when enabled, fwrite(2) will be used.

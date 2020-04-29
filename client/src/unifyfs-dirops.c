@@ -11,7 +11,6 @@
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
-#include <config.h>
 
 #include "unifyfs-sysio.h"
 

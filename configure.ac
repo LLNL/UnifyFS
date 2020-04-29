@@ -60,10 +60,12 @@ AC_CHECK_MEMBERS([struct stat.st_rdev])
 AC_CHECK_TYPES([ptrdiff_t])
 
 # Checks for header files.
-AC_CHECK_HEADERS([fcntl.h limits.h stdlib.h string.h sys/socket.h sys/time.h])
-AC_CHECK_HEADERS([unistd.h arpa/inet.h inttypes.h netdb.h netinet/in.h])
-AC_CHECK_HEADERS([stddef.h stdint.h libgen.h strings.h syslog.h])
-AC_CHECK_HEADERS([inttypes.h wchar.h wctype.h])
+AC_CHECK_HEADERS([stddef.h stdint.h stdlib.h string.h unistd.h])
+AC_CHECK_HEADERS([fcntl.h inttypes.h libgen.h limits.h mntent.h strings.h syslog.h])
+AC_CHECK_HEADERS([wchar.h wctype.h])
+AC_CHECK_HEADERS([sys/mount.h sys/socket.h sys/statfs.h sys/time.h])
+AC_CHECK_HEADERS([arpa/inet.h netdb.h netinet/in.h])
+
 AC_CHECK_HEADER([openssl/md5.h], [],
                 [AC_MSG_FAILURE([*** openssl/md5.h missing, openssl-devel package required])])
 
@@ -198,7 +200,6 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>]],[[void* __wrap_malloc(si
 ])
 LDFLAGS=$OLD_LDFLAGS
 
-AC_CHECK_HEADERS(mntent.h sys/mount.h)
 
 # HDF found?
 AX_LIB_HDF5
@@ -216,6 +217,7 @@ AC_CHECK_FUNCS(lio_listio,[
     CP_WRAPPERS+=",-wrap,lio_listio"
 ], [])
 LIBS=$OLD_LIBS
+
 CP_WRAPPERS+=",-wrap,mkdir"
 CP_WRAPPERS+=",-wrap,rmdir"
 CP_WRAPPERS+=",-wrap,unlink"
@@ -225,13 +227,20 @@ CP_WRAPPERS+=",-wrap,truncate"
 CP_WRAPPERS+=",-wrap,stat"
 CP_WRAPPERS+=",-wrap,fstat"
 
+
+AC_CHECK_FUNCS(statfs,[
+    CP_WRAPPERS+=",-wrap,statfs"
+],[])
+AC_CHECK_FUNCS(fstatfs,[
+    CP_WRAPPERS+=",-wrap,fstatfs"
+],[])
+
 AC_CHECK_FUNCS(__lxstat,[
     CP_WRAPPERS+=",-wrap,__lxstat"
 ],[])
 AC_CHECK_FUNCS(__xstat,[
     CP_WRAPPERS+=",-wrap,__xstat"
 ],[])
-
 AC_CHECK_FUNCS(__fxstat,[
     CP_WRAPPERS+=",-wrap,__fxstat"
 ],[])

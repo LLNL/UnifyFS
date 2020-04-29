@@ -74,6 +74,10 @@ noinst_HEADERS = \
 test_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) \
    -I$(top_srcdir)/client/src -I$(top_srcdir)/common/src
 
+if USE_PMPI_WRAPPERS
+test_cppflags += -DENABLE_MPI_MOUNT
+endif
+
 if HAVE_FORTRAN
 test_ftn_flags   = $(AM_FCFLAGS) $(MPI_FFLAGS) \
    -I$(top_srcdir)/client/src -I$(top_srcdir)/common/src
