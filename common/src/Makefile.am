@@ -17,8 +17,6 @@ BASE_SRCS = \
   arraylist.c \
   extent_tree.h \
   extent_tree.c \
-  seg_tree.h \
-  seg_tree.c \
   slotmap.h \
   slotmap.c \
   tinyexpr.h \

@@ -163,7 +163,6 @@ static void extbcast_request_rpc(hg_handle_t handle)
     /* expose local bulk buffer */
     hg_bulk_t extent_data;
     void* datap = extents;
->>>>>>> Implementation of collective operations in the server for removing mdhim
     margo_bulk_create(mid, 1, &datap, &buf_size,
                       HG_BULK_READWRITE, &extent_data);
 

@@ -329,6 +329,7 @@ int main(int argc, char** argv)
 
     if (pattern == IO_PATTERN_NN) {
         sprintf(&targetfile[strlen(targetfile)], "-%d", rank);
+    }
 
     if (rank == 0) {
         fd = open(targetfile, O_RDWR | O_CREAT | O_TRUNC, 0600);
