@@ -274,7 +274,7 @@ inline int unifyfs_stack_unlock(void)
     return 0;
 }
 
-inline void unifyfs_normalize_path(const char* path, char* normalized)
+static void unifyfs_normalize_path(const char* path, char* normalized)
 {
     /* if we have a relative path, prepend the current working directory */
     if (path[0] != '/' && unifyfs_cwd != NULL) {
@@ -2210,6 +2210,13 @@ static int unifyfs_init(void)
         cfgval = client_cfg.client_cwd;
         if (cfgval != NULL) {
             unifyfs_cwd = strdup(cfgval);
+
+            /* check that cwd falls somewhere under the mount point */
+            if (strncmp(unifyfs_cwd, unifyfs_mount_prefix,
+                unifyfs_mount_prefixlen) != 0) {
+                LOGERR("UNIFYFS_CLIENT_CWD '%s' must be within the mount '%s'",
+                    unifyfs_cwd, unifyfs_mount_prefix);
+            }
         }
 
         /* determine max number of files to store in file system */
