@@ -301,10 +301,19 @@ inline int unifyfs_intercept_path(const char* path)
     unifyfs_normalize_path(path, target);
 
     /* if the path starts with our mount point, intercept it */
+    int intercept = 0;
     if (strncmp(target, unifyfs_mount_prefix, unifyfs_mount_prefixlen) == 0) {
-        return 1;
+        /* characters in target up through mount point match,
+         * assume we match */ 
+        intercept = 1;
+
+        /* if we have another character, it must be '/' */
+        if (strlen(target) > unifyfs_mount_prefixlen &&
+            target[unifyfs_mount_prefixlen] != '/') {
+            intercept = 0;
+        }
     }
-    return 0;
+    return intercept;
 }
 
 /* given an fd, return 1 if we should intercept this file, 0 otherwise,
@@ -2212,10 +2221,27 @@ static int unifyfs_init(void)
             unifyfs_cwd = strdup(cfgval);
 
             /* check that cwd falls somewhere under the mount point */
+            int cwd_within_mount = 0;
             if (strncmp(unifyfs_cwd, unifyfs_mount_prefix,
-                unifyfs_mount_prefixlen) != 0) {
+                unifyfs_mount_prefixlen) == 0) {
+                /* characters in target up through mount point match,
+                 * assume we match */ 
+                cwd_within_mount = 1;
+
+                /* if we have another character, it must be '/' */
+                if (strlen(unifyfs_cwd) > unifyfs_mount_prefixlen &&
+                    unifyfs_cwd[unifyfs_mount_prefixlen] != '/') {
+                    cwd_within_mount = 0;
+                }
+            }
+            if (!cwd_within_mount) {
+                /* path given in CWD is outside of the UnifyFS mount point */
                 LOGERR("UNIFYFS_CLIENT_CWD '%s' must be within the mount '%s'",
                     unifyfs_cwd, unifyfs_mount_prefix);
+
+                /* ignore setting and set back to NULL */
+                free(unifyfs_cwd);
+                unifyfs_cwd = NULL;
             }
         }
 
