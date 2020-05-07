@@ -218,6 +218,12 @@ static int lsf_read_resource(unifyfs_resource_t* resource)
 
     lsb_hosts = strdup(val);
 
+    // get length of host string
+    size_t hosts_len = strlen(lsb_hosts) + 1;
+
+    // pointer to character just past terminating NULL
+    char* hosts_end = lsb_hosts + hosts_len;
+
     // replace spaces with zeroes
     for (pos = lsb_hosts; *pos; pos++) {
         if (isspace(*pos)) {
@@ -232,7 +238,7 @@ static int lsf_read_resource(unifyfs_resource_t* resource)
     } else {
         pos += (strlen(pos) + 1);    // skip launch node slot count
     }
-    for (n_nodes = 0; *pos;) {
+    for (n_nodes = 0; pos < hosts_end;) {
         node = pos;
         if (!mcpu) {
             if (strcmp(last_node, node) != 0) {
@@ -259,7 +265,7 @@ static int lsf_read_resource(unifyfs_resource_t* resource)
     } else {
         pos += (strlen(pos) + 1);    // skip launch node slot count
     }
-    for (i = 0; *pos && i < n_nodes;) {
+    for (i = 0; pos < hosts_end && i < n_nodes;) {
         node = pos;
         if (!mcpu) {
             if (strcmp(last_node, node) != 0) {
