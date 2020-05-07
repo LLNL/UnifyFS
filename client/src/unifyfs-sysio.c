@@ -155,6 +155,353 @@ int UNIFYFS_WRAP(rmdir)(const char* path)
     }
 }
 
+int UNIFYFS_WRAP(chdir)(const char* path)
+{
+    /* determine whether we should intercept this path */
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        /* TODO: check that path is not a file? */
+        /* we're happy to change into any directory in unifyfs */
+        if (unifyfs_cwd != NULL) {
+            free(unifyfs_cwd);
+        }
+        unifyfs_cwd = strdup(upath);
+        return 0;
+    } else {
+        MAP_OR_FAIL(chdir);
+        int ret = UNIFYFS_REAL(chdir)(path);
+
+        /* if the change dir was successful,
+         * update our current working direcotry */
+        if (unifyfs_initialized && ret == 0) {
+            if (unifyfs_cwd != NULL) {
+                free(unifyfs_cwd);
+            }
+
+            /* if we did a real chdir, let's use a real getcwd
+             * to get the current working directory */
+            MAP_OR_FAIL(getcwd);
+            char* cwd = UNIFYFS_REAL(getcwd)(NULL, 0);
+            if (cwd != NULL) {
+                unifyfs_cwd = cwd;
+
+                /* parts of the code may assume unifyfs_cwd is a max size */
+                size_t len = strlen(cwd) + 1;
+                if (len > UNIFYFS_MAX_FILENAME) {
+                    LOGERR("Current working dir longer (%lu bytes) "
+                        "than UNIFYFS_MAX_FILENAME=%d",
+                        (unsigned long) len, UNIFYFS_MAX_FILENAME);
+                }
+            } else {
+                /* ERROR */
+                LOGERR("Failed to getcwd after chdir(%s) errno=%d %s",
+                    path, errno, strerror(errno));
+            }
+        }
+
+        return ret;
+    }
+}
+
+char* UNIFYFS_WRAP(__getcwd_chk)(char* path, size_t size, size_t buflen)
+{
+    /* if we're initialized, we're tracking the current working dir */
+    if (unifyfs_initialized) {
+        /* check that we have a string,
+         * return unusual error in case we don't */
+        if (unifyfs_cwd == NULL) {
+            errno = EACCES;
+            return NULL;
+        }
+
+        /* If unifyfs_cwd is in unifyfs space, handle the cwd logic.
+         * Otherwise, call the real getcwd, and if actual cwd does
+         * not match what we expect, throw an error (the user somehow
+         * changed dir without us noticing, so there is a bug here) */
+        char upath[UNIFYFS_MAX_FILENAME];
+        if (unifyfs_intercept_path(unifyfs_cwd, upath)) {
+            /* man page if size=0 and path not NULL, return EINVAL */
+            if (size == 0 && path != NULL) {
+                errno = EINVAL;
+                return NULL;
+            }
+
+            /* get length of current working dir */
+            size_t len = strlen(unifyfs_cwd) + 1;
+
+            /* if user didn't provide a buffer,
+             * we attempt to allocate and return one for them */
+            if (path == NULL) {
+                /* we'll allocate a buffer to return to the caller */
+                char* buf = NULL;
+
+                /* if path is NULL and size is positive, we must
+                 * allocate a buffer of length size and copy into it */
+                if (size > 0) {
+                    /* check that size is big enough for the string */
+                    if (len <= size) {
+                        /* path will fit, allocate buffer and copy */
+                        buf = (char*) malloc(size);
+                        if (buf != NULL) {
+                            strncpy(buf, unifyfs_cwd, size);
+                        } else {
+                            errno = ENOMEM;
+                        }
+                        return buf;
+                    } else {
+                        /* user's buffer limit is too small */
+                        errno = ERANGE;
+                        return NULL;
+                    }
+                }
+
+                /* otherwise size == 0, so allocate a buffer
+                 * that is big enough */
+                buf = (char*) malloc(len);
+                if (buf != NULL) {
+                    strncpy(buf, unifyfs_cwd, len);
+                } else {
+                    errno = ENOMEM;
+                }
+                return buf;
+            }
+
+            /* to get here, caller provided an actual buffer,
+             * check that path fits in the caller's buffer */
+            if (len <= size) {
+                /* current working dir fits, copy and return */
+                strncpy(path, unifyfs_cwd, size);
+                return path;
+            } else {
+                /* user's buffer is too small */
+                errno = ERANGE;
+                return NULL;
+            }
+        } else {
+            /* current working dir is in real file system,
+             * fall through to real getcwd call */
+            MAP_OR_FAIL(__getcwd_chk);
+            char* ret = UNIFYFS_REAL(__getcwd_chk)(path, size, buflen);
+
+            /* check that current working dir is what we think
+             * it should be as a sanity check */
+            if (ret != NULL && strcmp(unifyfs_cwd, ret) != 0) {
+                LOGERR("Expcted cwd=%s vs actual=%s",
+                    unifyfs_cwd, ret);
+            }
+
+            return ret;
+        }
+    } else {
+        /* not initialized, so fall through to real __getcwd_chk */
+        MAP_OR_FAIL(__getcwd_chk);
+        char* ret = UNIFYFS_REAL(__getcwd_chk)(path, size, buflen);
+        return ret;
+    }
+}
+
+char* UNIFYFS_WRAP(getcwd)(char* path, size_t size)
+{
+    /* if we're initialized, we're tracking the current working dir */
+    if (unifyfs_initialized) {
+
+        /* check that we have a string,
+         * return unusual error in case we don't */
+        if (unifyfs_cwd == NULL) {
+            errno = EACCES;
+            return NULL;
+        }
+
+        /* If unifyfs_cwd is in unifyfs space, handle the cwd logic.
+         * Otherwise, call the real getcwd, and if actual cwd does
+         * not match what we expect, throw an error (the user somehow
+         * changed dir without us noticing, so there is a bug here) */
+        char upath[UNIFYFS_MAX_FILENAME];
+        if (unifyfs_intercept_path(unifyfs_cwd, upath)) {
+            /* man page if size=0 and path not NULL, return EINVAL */
+            if (size == 0 && path != NULL) {
+                errno = EINVAL;
+                return NULL;
+            }
+
+            /* get length of current working dir */
+            size_t len = strlen(unifyfs_cwd) + 1;
+
+            /* if user didn't provide a buffer,
+             * we attempt to allocate and return one for them */
+            if (path == NULL) {
+                /* we'll allocate a buffer to return to the caller */
+                char* buf = NULL;
+
+                /* if path is NULL and size is positive, we must
+                 * allocate a buffer of length size and copy into it */
+                if (size > 0) {
+                    /* check that size is big enough for the string */
+                    if (len <= size) {
+                        /* path will fit, allocate buffer and copy */
+                        buf = (char*) malloc(size);
+                        if (buf != NULL) {
+                            strncpy(buf, unifyfs_cwd, size);
+                        } else {
+                            errno = ENOMEM;
+                        }
+                        return buf;
+                    } else {
+                        /* user's buffer limit is too small */
+                        errno = ERANGE;
+                        return NULL;
+                    }
+                }
+
+                /* otherwise size == 0, so allocate a buffer
+                 * that is big enough */
+                buf = (char*) malloc(len);
+                if (buf != NULL) {
+                    strncpy(buf, unifyfs_cwd, len);
+                } else {
+                    errno = ENOMEM;
+                }
+                return buf;
+            }
+
+            /* to get here, caller provided an actual buffer,
+             * check that path fits in the caller's buffer */
+            if (len <= size) {
+                /* current working dir fits, copy and return */
+                strncpy(path, unifyfs_cwd, size);
+                return path;
+            } else {
+                /* user's buffer is too small */
+                errno = ERANGE;
+                return NULL;
+            }
+        } else {
+            /* current working dir is in real file system,
+             * fall through to real getcwd call */
+            MAP_OR_FAIL(getcwd);
+            char* ret = UNIFYFS_REAL(getcwd)(path, size);
+
+            /* check that current working dir is what we think
+             * it should be as a sanity check */
+            if (ret != NULL && strcmp(unifyfs_cwd, ret) != 0) {
+                LOGERR("Expcted cwd=%s vs actual=%s",
+                    unifyfs_cwd, ret);
+            }
+
+            return ret;
+        }
+    } else {
+        /* not initialized, so fall through to real getcwd */
+        MAP_OR_FAIL(getcwd);
+        char* ret = UNIFYFS_REAL(getcwd)(path, size);
+        return ret;
+    }
+}
+
+char* UNIFYFS_WRAP(getwd)(char* path)
+{
+    /* if we're initialized, we're tracking the current working dir */
+    if (unifyfs_initialized) {
+        /* check that we have a string,
+         * return unusual error in case we don't */
+        if (unifyfs_cwd == NULL) {
+            errno = EACCES;
+            return NULL;
+        }
+
+        /* If unifyfs_cwd is in unifyfs space, handle the cwd logic.
+         * Otherwise, call the real getwd, and if actual cwd does
+         * not match what we expect, throw an error (the user somehow
+         * changed dir without us noticing, so there is a bug here) */
+        char upath[UNIFYFS_MAX_FILENAME];
+        if (unifyfs_intercept_path(unifyfs_cwd, upath)) {
+            /* check that we got a valid path */
+            if (path == NULL) {
+                errno = EINVAL;
+                return NULL;
+            }
+
+            /* finally get length of current working dir and check
+             * that it fits in the caller's buffer */
+            size_t len = strlen(unifyfs_cwd) + 1;
+            if (len <= PATH_MAX) {
+                strncpy(path, unifyfs_cwd, PATH_MAX);
+                return path;
+            } else {
+                /* user's buffer is too small */
+                errno = ENAMETOOLONG;
+                return NULL;
+            }
+        } else {
+            /* current working dir is in real file system,
+             * fall through to real getwd call */
+            MAP_OR_FAIL(getwd);
+            char* ret = UNIFYFS_REAL(getwd)(path);
+
+            /* check that current working dir is what we think
+             * it should be as a sanity check */
+            if (ret != NULL && strcmp(unifyfs_cwd, ret) != 0) {
+                LOGERR("Expcted cwd=%s vs actual=%s",
+                    unifyfs_cwd, ret);
+            }
+
+            return ret;
+        }
+    } else {
+        /* not initialized, so fall through to real getwd */
+        MAP_OR_FAIL(getwd);
+        char* ret = UNIFYFS_REAL(getwd)(path);
+        return ret;
+    }
+}
+
+char* UNIFYFS_WRAP(get_current_dir_name)(void)
+{
+    /* if we're initialized, we're tracking the current working dir */
+    if (unifyfs_initialized) {
+        /* check that we have a string, return unusual error
+         * in case we don't */
+        if (unifyfs_cwd == NULL) {
+            errno = EACCES;
+            return NULL;
+        }
+
+        /* If unifyfs_cwd is in unifyfs space, handle the cwd logic.
+         * Otherwise, call real get_current_dir_name, and if actual cwd does
+         * not match what we expect, throw an error (the user somehow
+         * changed dir without us noticing, so there is a bug here) */
+        char upath[UNIFYFS_MAX_FILENAME];
+        if (unifyfs_intercept_path(unifyfs_cwd, upath)) {
+            /* supposed to allocate a copy of the current working dir
+             * and return that to caller, to be freed by caller */
+            char* ret = strdup(unifyfs_cwd);
+            if (ret == NULL) {
+                errno = ENOMEM;
+            }
+            return ret;
+        } else {
+            /* current working dir is in real file system,
+             * fall through to real get_current_dir_name call */
+            MAP_OR_FAIL(get_current_dir_name);
+            char* ret = UNIFYFS_REAL(get_current_dir_name)();
+
+            /* check that current working dir is what we think
+             * it should be as a sanity check */
+            if (ret != NULL && strcmp(unifyfs_cwd, ret) != 0) {
+                LOGERR("Expcted cwd=%s vs actual=%s",
+                    unifyfs_cwd, ret);
+            }
+
+            return ret;
+        }
+    } else {
+        /* not initialized, so fall through to real get_current_dir_name */
+        MAP_OR_FAIL(get_current_dir_name);
+        char* ret = UNIFYFS_REAL(get_current_dir_name)();
+        return ret;
+    }
+}
+
 int UNIFYFS_WRAP(rename)(const char* oldpath, const char* newpath)
 {
     /* TODO: allow oldpath / newpath to split across memfs and normal
@@ -1436,6 +1783,65 @@ ssize_t UNIFYFS_WRAP(pwrite64)(int fd, const void* buf, size_t count,
     } else {
         MAP_OR_FAIL(pwrite64);
         ssize_t ret = UNIFYFS_REAL(pwrite64)(fd, buf, count, offset);
+        return ret;
+    }
+}
+
+int UNIFYFS_WRAP(fchdir)(int fd)
+{
+    /* determine whether we should intercept this path */
+    if (unifyfs_intercept_fd(&fd)) {
+        /* lookup file id for file descriptor */
+        int fid = unifyfs_get_fid_from_fd(fd);
+        if (fid < 0) {
+            errno = EBADF;
+            return -1;
+        }
+
+        /* lookup path for fd */
+        const char* path = unifyfs_path_from_fid(fid);
+
+        /* TODO: test that path is not a file? */
+
+        /* we're happy to change into any directory in unifyfs
+         * should we check that we don't change into a file at least? */
+        if (unifyfs_cwd != NULL) {
+            free(unifyfs_cwd);
+        }
+        unifyfs_cwd = strdup(path);
+        return 0;
+    } else {
+        MAP_OR_FAIL(fchdir);
+        int ret = UNIFYFS_REAL(fchdir)(fd);
+
+        /* if the change dir was successful,
+         * update our current working direcotry */
+        if (unifyfs_initialized && ret == 0) {
+            if (unifyfs_cwd != NULL) {
+                free(unifyfs_cwd);
+            }
+
+            /* if we did a real chdir, let's use a real getcwd
+             * to get the current working directory */
+            MAP_OR_FAIL(getcwd);
+            char* cwd = UNIFYFS_REAL(getcwd)(NULL, 0);
+            if (cwd != NULL) {
+                unifyfs_cwd = cwd;
+
+                /* parts of the code may assume unifyfs_cwd is a max size */
+                size_t len = strlen(cwd) + 1;
+                if (len > UNIFYFS_MAX_FILENAME) {
+                    LOGERR("Current working dir longer (%lu bytes) "
+                        "than UNIFYFS_MAX_FILENAME=%d",
+                        (unsigned long) len, UNIFYFS_MAX_FILENAME);
+                }
+            } else {
+                /* ERROR */
+                LOGERR("Failed to getcwd after fchdir(%d) errno=%d %s",
+                    fd, errno, strerror(errno));
+            }
+        }
+
         return ret;
     }
 }

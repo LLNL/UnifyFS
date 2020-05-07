@@ -223,6 +223,11 @@ LIBS=$OLD_LIBS
 
 CP_WRAPPERS+=",-wrap,mkdir"
 CP_WRAPPERS+=",-wrap,rmdir"
+CP_WRAPPERS+=",-wrap,chdir"
+CP_WRAPPERS+=",-wrap,__getcwd_chk"
+CP_WRAPPERS+=",-wrap,getcwd"
+CP_WRAPPERS+=",-wrap,getwd"
+CP_WRAPPERS+=",-wrap,get_current_dir_name"
 CP_WRAPPERS+=",-wrap,unlink"
 CP_WRAPPERS+=",-wrap,remove"
 CP_WRAPPERS+=",-wrap,rename"
@@ -268,6 +273,7 @@ AC_CHECK_FUNCS(posix_fadvise, [
 ],[])
 CP_WRAPPERS+=",-wrap,lseek"
 CP_WRAPPERS+=",-wrap,lseek64"
+CP_WRAPPERS+=",-wrap,fchdir"
 CP_WRAPPERS+=",-wrap,ftruncate"
 CP_WRAPPERS+=",-wrap,fsync"
 CP_WRAPPERS+=",-wrap,fdatasync"

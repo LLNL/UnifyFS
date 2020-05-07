@@ -17,6 +17,7 @@ addons:
       - libtool-bin
       - m4
       - openmpi-bin
+      - numactl
 
 before_install:
   # The default environment variable $CC is known to interfere with
@@ -49,6 +50,10 @@ before_install:
         buildable: False
         paths:
           m4@4.17: /usr
+      numactl:
+        buildable: False
+        paths:
+          numactl: /usr
     EOF
 
 install:
@@ -57,6 +62,7 @@ install:
   - spack install gotcha@1.0.3 && spack load gotcha@1.0.3
   - spack install flatcc && spack load flatcc
   - spack install margo^mercury+bmi~boostsys && spack load argobots && spack load mercury && spack load margo
+  - spack install spath && spack load spath
   # prepare build environment
   - eval $(./scripts/git_log_test_env.sh)
   - export TEST_CHECKPATCH_SKIP_FILES

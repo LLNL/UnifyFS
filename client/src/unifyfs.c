@@ -146,7 +146,7 @@ void* unifyfs_dirstream_stack;
 char*  unifyfs_mount_prefix;
 size_t unifyfs_mount_prefixlen = 0;
 
-/* to track current working directory within unifyfs namespace */
+/* to track current working directory */
 char* unifyfs_cwd;
 
 /* mutex to lock stack operations */
@@ -2241,6 +2241,17 @@ static int unifyfs_init(void)
                 /* ignore setting and set back to NULL */
                 free(unifyfs_cwd);
                 unifyfs_cwd = NULL;
+            }
+        } else {
+            /* user did not specify a CWD, so initialize with the actual
+             * current working dir */
+            //MAP_OR_FAIL(getcwd);
+            //int cwd_rc = UNIFYFS_REAL(getcwd)(cwdpath, sizeof(cwdpath));
+            char* cwd = getcwd(NULL, 0);
+            if (cwd != NULL) {
+                unifyfs_cwd = cwd;
+            } else {
+                LOGERR("Failed getcwd (%s)", strerror(errno));
             }
         }
 
