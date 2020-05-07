@@ -407,8 +407,10 @@ int unifyfs_stack_lock(void);
 
 int unifyfs_stack_unlock(void);
 
-/* sets flag if the path is a special path */
-int unifyfs_intercept_path(const char* path);
+/* sets flag if the path should be intercept as a unifyfs path,
+ * and if so, writes normalized path in upath, which should
+ * be a buffer of size UNIFYFS_MAX_FILENAME */
+int unifyfs_intercept_path(const char* path, char* upath);
 
 /* given an fd, return 1 if we should intercept this file, 0 otherwise,
  * convert fd to new fd value if needed */
