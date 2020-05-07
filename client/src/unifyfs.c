@@ -53,6 +53,10 @@
 #include "seg_tree.h"
 #include "ucr_read_builder.h"
 
+#ifdef HAVE_SPATH
+#include "spath.h"
+#endif /* HAVE_SPATH */
+
 /* avoid duplicate mounts (for now) */
 static int unifyfs_mounted = -1;
 
@@ -278,8 +282,13 @@ static void unifyfs_normalize_path(const char* path, char* normalized)
         snprintf(normalized, UNIFYFS_MAX_FILENAME, "%s", path);
     }
 
-    /* TODO: normalize path to handle '.', '..',
+#ifdef HAVE_SPATH
+    /* normalize path to handle '.', '..',
      * and extra or trailing '/' characters */
+    char* str = spath_strdup_reduce_str(normalized);
+    snprintf(normalized, UNIFYFS_MAX_FILENAME, "%s", str);
+    free(str);
+#endif /* HAVE_SPATH */
 }
 
 /* sets flag if the path is a special path */
