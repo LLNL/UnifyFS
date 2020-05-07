@@ -32,6 +32,21 @@ UNIFYFS_DEF(mkdir, int,
 UNIFYFS_DEF(rmdir, int,
             (const char* path),
             (path))
+UNIFYFS_DEF(chdir, int,
+            (const char* path),
+            (path))
+UNIFYFS_DEF(__getcwd_chk, char*,
+            (char* path, size_t size, size_t buflen),
+            (path, size, buflen))
+UNIFYFS_DEF(getcwd, char*,
+            (char* path, size_t size),
+            (path, size))
+UNIFYFS_DEF(getwd, char*,
+            (char* path),
+            (path))
+UNIFYFS_DEF(get_current_dir_name, char*,
+            (void),
+            ())
 UNIFYFS_DEF(rename, int,
             (const char* oldpath, const char* newpath),
             (oldpath, newpath))
@@ -83,9 +98,12 @@ UNIFYFS_DEF(__open_2, int,
             (const char* path, int flags, ...),
             (path, flags))
 
+#ifdef HAVE_LIO_LISTIO
 UNIFYFS_DEF(lio_listio, int,
             (int m, struct aiocb* const cblist[], int n, struct sigevent* sep),
             (m, cblist, n, sep))
+#endif
+
 UNIFYFS_DEF(lseek, off_t,
             (int fd, off_t offset, int whence),
             (fd, offset, whence))
@@ -122,6 +140,9 @@ UNIFYFS_DEF(pwrite64, ssize_t,
             (int fd, const void* buf, size_t count, off64_t off),
             (fd, buf, count, off))
 UNIFYFS_DEF(close, int,
+            (int fd),
+            (fd))
+UNIFYFS_DEF(fchdir, int,
             (int fd),
             (fd))
 UNIFYFS_DEF(ftruncate, int,
@@ -315,6 +336,13 @@ struct gotcha_binding_t unifyfs_wrappers[] = {
     { "chmod", UNIFYFS_WRAP(chmod), &wrappee_handle_chmod },
     { "mkdir", UNIFYFS_WRAP(mkdir), &wrappee_handle_mkdir },
     { "rmdir", UNIFYFS_WRAP(rmdir), &wrappee_handle_rmdir },
+    { "chdir", UNIFYFS_WRAP(chdir), &wrappee_handle_chdir },
+    { "__getcwd_chk", UNIFYFS_WRAP(__getcwd_chk),
+        &wrappee_handle___getcwd_chk },
+    { "getcwd", UNIFYFS_WRAP(getcwd), &wrappee_handle_getcwd },
+    { "getwd", UNIFYFS_WRAP(getwd), &wrappee_handle_getwd },
+    { "get_current_dir_name", UNIFYFS_WRAP(get_current_dir_name),
+        &wrappee_handle_get_current_dir_name },
     { "rename", UNIFYFS_WRAP(rename), &wrappee_handle_rename },
     { "truncate", UNIFYFS_WRAP(truncate), &wrappee_handle_truncate },
     { "unlink", UNIFYFS_WRAP(unlink), &wrappee_handle_unlink },
@@ -331,7 +359,9 @@ struct gotcha_binding_t unifyfs_wrappers[] = {
     { "open", UNIFYFS_WRAP(open), &wrappee_handle_open },
     { "open64", UNIFYFS_WRAP(open64), &wrappee_handle_open64 },
     { "__open_2", UNIFYFS_WRAP(__open_2), &wrappee_handle___open_2 },
+#ifdef HAVE_LIO_LISTIO
     { "lio_listio", UNIFYFS_WRAP(lio_listio), &wrappee_handle_lio_listio },
+#endif
     { "lseek", UNIFYFS_WRAP(lseek), &wrappee_handle_lseek },
     { "lseek64", UNIFYFS_WRAP(lseek64), &wrappee_handle_lseek64 },
     { "posix_fadvise", UNIFYFS_WRAP(posix_fadvise), &wrappee_handle_posix_fadvise },
@@ -343,6 +373,7 @@ struct gotcha_binding_t unifyfs_wrappers[] = {
     { "pread64", UNIFYFS_WRAP(pread64), &wrappee_handle_pread64 },
     { "pwrite", UNIFYFS_WRAP(pwrite), &wrappee_handle_pwrite },
     { "pwrite64", UNIFYFS_WRAP(pwrite64), &wrappee_handle_pwrite64 },
+    { "fchdir", UNIFYFS_WRAP(fchdir), &wrappee_handle_fchdir },
     { "ftruncate", UNIFYFS_WRAP(ftruncate), &wrappee_handle_ftruncate },
     { "fsync", UNIFYFS_WRAP(fsync), &wrappee_handle_fsync },
     { "fdatasync", UNIFYFS_WRAP(fdatasync), &wrappee_handle_fdatasync },

@@ -77,11 +77,10 @@ a given section and key.
 The ``cwd`` setting is used to emulate the behavior one
 expects when changing into a working directory before starting a job
 and then using relative file names within the application.
-If set, the value specified in ``cwd`` is prepended to any
-relative path name when determining whether UnifyFS will intercept
-a path.  The value specified in ``cwd`` must be within the directory space
+If set, the application changes its working directory to
+the value specified in ``cwd`` when ``unifyfs_mount`` is called.
+The value specified in ``cwd`` must be within the directory space
 of the UnifyFS mount point.
-Setting ``cwd`` does not modify the job's actual current working directory.
 
 Enabling the ``local_extents`` optimization may significantly improve read
 performance.  However, it should not be used by applications

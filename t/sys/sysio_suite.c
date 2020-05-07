@@ -100,6 +100,8 @@ int main(int argc, char* argv[])
 
     unlink_test(unifyfs_root);
 
+    chdir_test(unifyfs_root);
+
     MPI_Finalize();
 
     done_testing();
