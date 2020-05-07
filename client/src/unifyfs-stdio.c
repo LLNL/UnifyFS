@@ -980,9 +980,10 @@ static int unifyfs_fseek(FILE* stream, off_t offset, int whence)
 FILE* UNIFYFS_WRAP(fopen)(const char* path, const char* mode)
 {
     /* check whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         FILE* stream;
-        int rc = unifyfs_fopen(path, mode, &stream);
+        int rc = unifyfs_fopen(upath, mode, &stream);
         if (rc != UNIFYFS_SUCCESS) {
             errno = unifyfs_rc_errno(rc);
             return NULL;

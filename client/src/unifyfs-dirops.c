@@ -89,7 +89,8 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
 {
     /* call real opendir and return early if this is
      * not one of our paths */
-    if (!unifyfs_intercept_path(name)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (!unifyfs_intercept_path(name, upath)) {
         MAP_OR_FAIL(opendir);
         return UNIFYFS_REAL(opendir)(name);
     }
@@ -99,8 +100,8 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
      * if valid, populate the local file meta cache accordingly.
      */
 
-    int fid  = unifyfs_get_fid_from_path(name);
-    int gfid = unifyfs_generate_gfid(name);
+    int fid  = unifyfs_get_fid_from_path(upath);
+    int gfid = unifyfs_generate_gfid(upath);
 
     unifyfs_file_attr_t gfattr = { 0, };
     int ret = unifyfs_get_global_file_meta(gfid, &gfattr);
@@ -132,7 +133,7 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
             return NULL;
         }
     } else {
-        fid = unifyfs_fid_create_file(name);
+        fid = unifyfs_fid_create_file(upath);
         if (fid < 0) {
             errno = EIO;
             return NULL;
@@ -235,7 +236,8 @@ int UNIFYFS_WRAP(scandir)(const char* path, struct dirent** namelist,
                           int (*compar)(const struct dirent**,
                                         const struct dirent**))
 {
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         fprintf(stderr, "Function not yet supported @ %s:%d\n",
                 __FILE__, __LINE__);
         errno = ENOSYS;

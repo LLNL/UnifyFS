@@ -294,7 +294,7 @@ static void unifyfs_normalize_path(const char* path, char* normalized)
 }
 
 /* sets flag if the path is a special path */
-inline int unifyfs_intercept_path(const char* path)
+inline int unifyfs_intercept_path(const char* path, char* upath)
 {
     /* don't intecept anything until we're initialized */
     if (!unifyfs_initialized) {
@@ -318,6 +318,12 @@ inline int unifyfs_intercept_path(const char* path)
             intercept = 0;
         }
     }
+
+    /* copy normalized path into upath */
+    if (intercept) {
+        strncpy(upath, target, UNIFYFS_MAX_FILENAME);
+    }
+
     return intercept;
 }
 
@@ -3038,7 +3044,8 @@ int unifyfs_transfer_file(const char* src, const char* dst, int parallel)
         return -ENOMEM;
     }
 
-    if (unifyfs_intercept_path(src)) {
+    char src_upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(src, src_upath)) {
         dir = UNIFYFS_TX_STAGE_OUT;
         unify_src = 1;
     }
@@ -3050,7 +3057,8 @@ int unifyfs_transfer_file(const char* src, const char* dst, int parallel)
 
     pos += sprintf(pos, "%s", dst);
 
-    if (unifyfs_intercept_path(dst)) {
+    char dst_upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(dst, dst_upath)) {
         dir = UNIFYFS_TX_STAGE_IN;
         unify_dst = 1;
     }

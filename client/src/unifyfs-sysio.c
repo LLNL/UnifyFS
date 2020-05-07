@@ -51,17 +51,18 @@
 int UNIFYFS_WRAP(access)(const char* path, int mode)
 {
     /* determine whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* check if path exists */
-        if (unifyfs_get_fid_from_path(path) < 0) {
+        if (unifyfs_get_fid_from_path(upath) < 0) {
             LOGDBG("access: unifyfs_get_id_from path failed, returning -1, %s",
-                   path);
+                   upath);
             errno = ENOENT;
             return -1;
         }
 
         /* currently a no-op */
-        LOGDBG("access: path intercepted, returning 0, %s", path);
+        LOGDBG("access: path intercepted, returning 0, %s", upath);
         return 0;
     } else {
         LOGDBG("access: calling MAP_OR_FAIL, %s", path);
@@ -80,15 +81,16 @@ int UNIFYFS_WRAP(mkdir)(const char* path, mode_t mode)
      * It doesn't check to see if parent directory exists */
 
     /* determine whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* check if it already exists */
-        if (unifyfs_get_fid_from_path(path) >= 0) {
+        if (unifyfs_get_fid_from_path(upath) >= 0) {
             errno = EEXIST;
             return -1;
         }
 
         /* add directory to file list */
-        int ret = unifyfs_fid_create_directory(path);
+        int ret = unifyfs_fid_create_directory(upath);
         if (ret != UNIFYFS_SUCCESS) {
             /* failed to create the directory,
              * set errno and return */
@@ -108,15 +110,16 @@ int UNIFYFS_WRAP(mkdir)(const char* path, mode_t mode)
 int UNIFYFS_WRAP(rmdir)(const char* path)
 {
     /* determine whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* check if the mount point itself is being deleted */
-        if (!strcmp(path, unifyfs_mount_prefix)) {
+        if (!strcmp(upath, unifyfs_mount_prefix)) {
             errno = EBUSY;
             return -1;
         }
 
         /* check if path exists */
-        int fid = unifyfs_get_fid_from_path(path);
+        int fid = unifyfs_get_fid_from_path(upath);
         if (fid < 0) {
             errno = ENOENT;
             return -1;
@@ -129,7 +132,7 @@ int UNIFYFS_WRAP(rmdir)(const char* path)
         }
 
         /* is it empty? */
-        if (!unifyfs_fid_is_dir_empty(path)) {
+        if (!unifyfs_fid_is_dir_empty(upath)) {
             errno = ENOTEMPTY;
             return -1;
         }
@@ -158,26 +161,28 @@ int UNIFYFS_WRAP(rename)(const char* oldpath, const char* newpath)
      * linux fs, which means we'll need to do a read / write */
 
     /* check whether the old path is in our file system */
-    if (unifyfs_intercept_path(oldpath)) {
+    char old_upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(oldpath, old_upath)) {
         /* for now, we can only rename within our file system */
-        if (!unifyfs_intercept_path(newpath)) {
+        char new_upath[UNIFYFS_MAX_FILENAME];
+        if (!unifyfs_intercept_path(newpath, new_upath)) {
             /* ERROR: can't yet rename across file systems */
             errno = EXDEV;
             return -1;
         }
 
         /* verify that we really have a file by the old name */
-        int fid = unifyfs_get_fid_from_path(oldpath);
+        int fid = unifyfs_get_fid_from_path(old_upath);
         if (fid < 0) {
             /* ERROR: oldname does not exist */
-            LOGDBG("Couldn't find entry for %s in UNIFYFS", oldpath);
+            LOGDBG("Couldn't find entry for %s in UNIFYFS", old_upath);
             errno = ENOENT;
             return -1;
         }
         LOGDBG("orig file in position %d", fid);
 
         /* check that new name is within bounds */
-        size_t newpathlen = strlen(newpath) + 1;
+        size_t newpathlen = strlen(new_upath) + 1;
         if (newpathlen > UNIFYFS_MAX_FILENAME) {
             errno = ENAMETOOLONG;
             return -1;
@@ -186,7 +191,7 @@ int UNIFYFS_WRAP(rename)(const char* oldpath, const char* newpath)
         /* TODO: rename should replace existing file atomically */
 
         /* verify that we don't already have a file by the new name */
-        int newfid = unifyfs_get_fid_from_path(newpath);
+        int newfid = unifyfs_get_fid_from_path(new_upath);
         if (newfid >= 0) {
             /* something exists in newpath, need to delete it */
             int ret = UNIFYFS_WRAP(unlink)(newpath);
@@ -199,14 +204,15 @@ int UNIFYFS_WRAP(rename)(const char* oldpath, const char* newpath)
 
         /* finally overwrite the old name with the new name */
         LOGDBG("Changing %s to %s",
-               (char*)&unifyfs_filelist[fid].filename, newpath);
-        strcpy((void*)&unifyfs_filelist[fid].filename, newpath);
+               (char*)&unifyfs_filelist[fid].filename, new_upath);
+        strcpy((void*)&unifyfs_filelist[fid].filename, new_upath);
 
         /* success */
         return 0;
     } else {
         /* for now, we can only rename within our file system */
-        if (unifyfs_intercept_path(newpath)) {
+        char upath[UNIFYFS_MAX_FILENAME];
+        if (unifyfs_intercept_path(newpath, upath)) {
             /* ERROR: can't yet rename across file systems */
             errno = EXDEV;
             return -1;
@@ -222,9 +228,10 @@ int UNIFYFS_WRAP(rename)(const char* oldpath, const char* newpath)
 int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
 {
     /* determine whether we should intercept this path or not */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* get file id for path name */
-        int fid = unifyfs_get_fid_from_path(path);
+        int fid = unifyfs_get_fid_from_path(upath);
         if (fid >= 0) {
             /* before we truncate, sync any data cached this file id */
             int ret = unifyfs_fid_sync(fid);
@@ -242,10 +249,10 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
             }
         } else {
             /* invoke truncate rpc */
-            int gfid = unifyfs_generate_gfid(path);
+            int gfid = unifyfs_generate_gfid(upath);
             int rc = invoke_client_truncate_rpc(gfid, length);
             if (rc != UNIFYFS_SUCCESS) {
-                LOGDBG("truncate rpc failed %s in UNIFYFS", path);
+                LOGDBG("truncate rpc failed %s in UNIFYFS", upath);
                 errno = EIO;
                 return -1;
             }
@@ -263,12 +270,13 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
 int UNIFYFS_WRAP(unlink)(const char* path)
 {
     /* determine whether we should intercept this path or not */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* get file id for path name */
-        int fid = unifyfs_get_fid_from_path(path);
+        int fid = unifyfs_get_fid_from_path(upath);
         if (fid < 0) {
             /* ERROR: file does not exist */
-            LOGDBG("Couldn't find entry for %s in UNIFYFS", path);
+            LOGDBG("Couldn't find entry for %s in UNIFYFS", upath);
             errno = ENOENT;
             return -1;
         }
@@ -276,7 +284,7 @@ int UNIFYFS_WRAP(unlink)(const char* path)
         /* check that it's not a directory */
         if (unifyfs_fid_is_dir(fid)) {
             /* ERROR: is a directory */
-            LOGDBG("Attempting to unlink a directory %s in UNIFYFS", path);
+            LOGDBG("Attempting to unlink a directory %s in UNIFYFS", upath);
             errno = EISDIR;
             return -1;
         }
@@ -300,12 +308,13 @@ int UNIFYFS_WRAP(unlink)(const char* path)
 int UNIFYFS_WRAP(remove)(const char* path)
 {
     /* determine whether we should intercept this path or not */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* get file id for path name */
-        int fid = unifyfs_get_fid_from_path(path);
+        int fid = unifyfs_get_fid_from_path(upath);
         if (fid < 0) {
             /* ERROR: file does not exist */
-            LOGDBG("Couldn't find entry for %s in UNIFYFS", path);
+            LOGDBG("Couldn't find entry for %s in UNIFYFS", upath);
             errno = ENOENT;
             return -1;
         }
@@ -314,7 +323,7 @@ int UNIFYFS_WRAP(remove)(const char* path)
         if (unifyfs_fid_is_dir(fid)) {
             /* TODO: shall be equivalent to rmdir(path) */
             /* ERROR: is a directory */
-            LOGDBG("Attempting to remove a directory %s in UNIFYFS", path);
+            LOGDBG("Attempting to remove a directory %s in UNIFYFS", upath);
             errno = EISDIR;
             return -1;
         }
@@ -415,8 +424,9 @@ static int __stat(const char* path, struct stat* buf)
 int UNIFYFS_WRAP(stat)(const char* path, struct stat* buf)
 {
     LOGDBG("stat was called for %s", path);
-    if (unifyfs_intercept_path(path)) {
-        int ret = __stat(path, buf);
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        int ret = __stat(upath, buf);
         return ret;
     } else {
         MAP_OR_FAIL(stat);
@@ -456,12 +466,13 @@ int UNIFYFS_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
 {
     LOGDBG("xstat was called for %s", path);
 
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         if (vers != _STAT_VER) {
             errno = EINVAL;
             return -1;
         }
-        int ret = __stat(path, buf);
+        int ret = __stat(upath, buf);
         return ret;
     } else {
         MAP_OR_FAIL(__xstat);
@@ -476,12 +487,13 @@ int UNIFYFS_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
 {
     LOGDBG("lxstat was called for %s", path);
 
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         if (vers != _STAT_VER) {
             errno = EINVAL;
             return -1;
         }
-        int ret = __stat(path, buf);
+        int ret = __stat(upath, buf);
         return ret;
     } else {
         MAP_OR_FAIL(__lxstat);
@@ -635,13 +647,14 @@ int UNIFYFS_WRAP(creat)(const char* path, mode_t mode)
     /* equivalent to open(path, O_WRONLY|O_CREAT|O_TRUNC, mode) */
 
     /* check whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* TODO: handle relative paths using current working directory */
 
         /* create the file */
         int fid;
         off_t pos;
-        int rc = unifyfs_fid_open(path, O_WRONLY | O_CREAT | O_TRUNC, mode, &fid, &pos);
+        int rc = unifyfs_fid_open(upath, O_WRONLY | O_CREAT | O_TRUNC, mode, &fid, &pos);
         if (rc != UNIFYFS_SUCCESS) {
             errno = unifyfs_rc_errno(rc);
             return -1;
@@ -661,7 +674,7 @@ int UNIFYFS_WRAP(creat)(const char* path, mode_t mode)
         filedesc->pos   = pos;
         filedesc->read  = 0;
         filedesc->write = 1;
-        LOGDBG("UNIFYFS_open generated fd %d for file %s", fd, path);
+        LOGDBG("UNIFYFS_open generated fd %d for file %s", fd, upath);
 
         /* don't conflict with active system fds that range from 0 - (fd_limit) */
         int ret = fd + unifyfs_fd_limit;
@@ -676,7 +689,8 @@ int UNIFYFS_WRAP(creat)(const char* path, mode_t mode)
 int UNIFYFS_WRAP(creat64)(const char* path, mode_t mode)
 {
     /* check whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* ERROR: fn not yet supported */
         fprintf(stderr, "Function not yet supported @ %s:%d\n",
                 __FILE__, __LINE__);
@@ -702,13 +716,14 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
 
     /* determine whether we should intercept this path */
     int ret;
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* TODO: handle relative paths using current working directory */
 
         /* create the file */
         int fid;
         off_t pos;
-        int rc = unifyfs_fid_open(path, flags, mode, &fid, &pos);
+        int rc = unifyfs_fid_open(upath, flags, mode, &fid, &pos);
         if (rc != UNIFYFS_SUCCESS) {
             errno = unifyfs_rc_errno(rc);
             return -1;
@@ -731,7 +746,7 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
         filedesc->write = ((flags & O_WRONLY) == O_WRONLY)
                           || ((flags & O_RDWR) == O_RDWR);
         filedesc->append = ((flags & O_APPEND));
-        LOGDBG("UNIFYFS_open generated fd %d for file %s", fd, path);
+        LOGDBG("UNIFYFS_open generated fd %d for file %s", fd, upath);
 
         /* don't conflict with active system fds that range from 0 - (fd_limit) */
         ret = fd + unifyfs_fd_limit;
@@ -761,7 +776,8 @@ int UNIFYFS_WRAP(open64)(const char* path, int flags, ...)
 
     /* check whether we should intercept this path */
     int ret;
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* Call open wrapper with LARGEFILE flag set*/
         if (flags & O_CREAT) {
             ret = UNIFYFS_WRAP(open)(path, flags | O_LARGEFILE, mode);
@@ -797,8 +813,9 @@ int UNIFYFS_WRAP(__open_2)(const char* path, int flags, ...)
     }
 
     /* check whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
-        LOGDBG("__open_2 was intercepted for path %s", path);
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        LOGDBG("__open_2 was intercepted for path %s", upath);
 
         /* Call open wrapper */
         if (flags & O_CREAT) {
@@ -1751,17 +1768,18 @@ int UNIFYFS_WRAP(fchmod)(int fd, mode_t mode)
 int UNIFYFS_WRAP(chmod)(const char* path, mode_t mode)
 {
     /* determine whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* check if path exists */
-        int fid = unifyfs_get_fid_from_path(path);
+        int fid = unifyfs_get_fid_from_path(upath);
         if (fid < 0) {
             LOGDBG("chmod: unifyfs_get_id_from path failed, returning -1, %s",
-                   path);
+                   upath);
             errno = ENOENT;
             return -1;
         }
 
-        LOGDBG("chmod: setting %s to %o", path, mode);
+        LOGDBG("chmod: setting %s to %o", upath, mode);
         return __chmod(fid, mode);
     } else {
         MAP_OR_FAIL(chmod);
