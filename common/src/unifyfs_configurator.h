@@ -90,6 +90,7 @@
     UNIFYFS_CFG_CLI(runstate, dir, STRING, RUNDIR, "runstate file directory", configurator_directory_check, 'R', "specify full path to directory to contain server runstate file") \
     UNIFYFS_CFG_CLI(server, hostfile, STRING, NULLSTRING, "server hostfile name", NULL, 'H', "specify full path to server hostfile") \
     UNIFYFS_CFG_CLI(sharedfs, dir, STRING, NULLSTRING, "shared file system directory", configurator_directory_check, 'S', "specify full path to directory to contain server shared files") \
+    UNIFYFS_CFG_CLI(server, init_timeout, INT, UNIFYFS_DEFAULT_INIT_TIMEOUT, "timeout of waiting for server initialization", NULL, 't', "timeout in seconds to wait for servers to be ready for clients") \
 
 
 #ifdef __cplusplus

@@ -17,6 +17,7 @@
 
 typedef struct ServerRpcIds {
     hg_id_t hello_id;
+    hg_id_t server_pid_id;
     hg_id_t request_id;
     hg_id_t chunk_read_request_id;
     hg_id_t chunk_read_response_id;

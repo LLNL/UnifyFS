@@ -48,6 +48,7 @@
 /* PMI information */
 int glb_pmi_rank; /* = 0 */
 int glb_pmi_size = 1; // for standalone server tests
+int server_pid;
 
 char glb_host[UNIFYFS_MAX_HOSTNAME];
 size_t glb_host_ndx;        // index of localhost in glb_servers
@@ -58,6 +59,14 @@ server_info_t* glb_servers; // array of server_info_t
 unifyfs_cfg_t server_cfg;
 
 app_config* app_configs[MAX_NUM_APPS]; /* list of apps */
+
+/**
+ * @brief create a ready status file to notify that all servers are ready for
+ * accepting client requests.
+ *
+ * @return 0 on success, error otherwise
+ */
+int unifyfs_publish_server_pids(void);
 
 static int unifyfs_exit(void);
 
@@ -265,6 +274,8 @@ int main(int argc, char* argv[])
         daemonize();
     }
 
+    server_pid = getpid();
+
     /* unifyfs default log level is LOG_ERR */
     if (server_cfg.log_verbosity != NULL) {
         long l;
@@ -370,6 +381,13 @@ int main(int argc, char* argv[])
     }
 
     LOGDBG("finished service initialization");
+
+    rc = unifyfs_publish_server_pids();
+    if (rc != 0) {
+        LOGERR("failed to publish server pid file: %s",
+               unifyfs_rc_enum_description(rc));
+        exit(1);
+    }
 
     while (1) {
         sleep(1);

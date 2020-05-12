@@ -136,11 +136,12 @@ files.
 .. table:: ``[server]`` section - server settings
    :widths: auto
 
-   ==========  ======  ========================
-   Key         Type    Description
-   ==========  ======  ========================
-   hostfile    STRING  path to server hostfile
-   ==========  ======  ========================
+   ============  ======  =============================================================================
+   Key           Type    Description
+   ============  ======  =============================================================================
+   hostfile      STRING  path to server hostfile
+   init_timeout  INT     timeout in seconds to wait for servers to be ready for clients (default: 120)
+   ============  ======  =============================================================================
 
 .. table:: ``[sharedfs]`` section - server shared files settings
    :widths: auto

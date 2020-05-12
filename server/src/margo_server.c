@@ -87,6 +87,11 @@ static void register_server_server_rpcs(margo_instance_id mid)
                        server_hello_in_t, server_hello_out_t,
                        server_hello_rpc);
 
+    unifyfsd_rpc_context->rpcs.server_pid_id =
+        MARGO_REGISTER(mid, "server_pid_rpc",
+                       server_pid_in_t, server_pid_out_t,
+                       server_pid_handle_rpc);
+
     unifyfsd_rpc_context->rpcs.request_id =
         MARGO_REGISTER(mid, "server_request_rpc",
                        server_request_in_t, server_request_out_t,
