@@ -57,6 +57,7 @@
 struct _unifyfs_args {
     int debug;                 /* enable debug output */
     int cleanup;               /* cleanup on termination? (0 or 1) */
+    int timeout;               /* timeout of server initialization */
     unifyfs_cm_e consistency;  /* consistency model */
     char* mountpoint;          /* mountpoint */
     char* server_path;         /* full path to installed unifyfsd */

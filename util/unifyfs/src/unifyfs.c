@@ -75,11 +75,12 @@ static struct option const long_opts[] = {
     { "share-dir", required_argument, NULL, 'S' },
     { "stage-in", required_argument, NULL, 'i' },
     { "stage-out", required_argument, NULL, 'o' },
+    { "timeout", required_argument, NULL, 't' },
     { 0, 0, 0, 0 },
 };
 
 static char* program;
-static char* short_opts = ":cC:de:hi:m:o:s:S:";
+static char* short_opts = ":cC:de:hi:m:o:s:S:t:";
 static char* usage_str =
     "\n"
     "Usage: %s <command> [options...]\n"
@@ -97,6 +98,7 @@ static char* usage_str =
     "  -e, --exe=<path>          [OPTIONAL] <path> where unifyfsd is installed\n"
     "  -m, --mount=<path>        [OPTIONAL] mount UnifyFS at <path>\n"
     "  -s, --script=<path>       [OPTIONAL] <path> to custom launch script\n"
+    "  -t, --timeout=<sec>       [OPTIONAL] wait <sec> until all servers become ready\n"
     "  -S, --share-dir=<path>    [REQUIRED] shared file system <path> for use by servers\n"
     "  -c, --cleanup             [OPTIONAL] clean up the UnifyFS storage upon server exit\n"
     "  -i, --stage-in=<path>     [OPTIONAL, NOT YET SUPPORTED] stage in file(s) at <path>\n"
@@ -119,6 +121,7 @@ static void parse_cmd_arguments(int argc, char** argv)
     int ch = 0;
     int optidx = 2;
     int cleanup = 0;
+    int timeout = UNIFYFS_DEFAULT_INIT_TIMEOUT;
     unifyfs_cm_e consistency = UNIFYFS_CM_LAMINATED;
     char* mountpoint = NULL;
     char* script = NULL;
@@ -162,6 +165,10 @@ static void parse_cmd_arguments(int argc, char** argv)
             share_dir = strdup(optarg);
             break;
 
+        case 't':
+            timeout = atoi(optarg);
+            break;
+
         case 'i':
             printf("WARNING: stage-in not yet supported!\n");
             stage_in = strdup(optarg);
@@ -188,6 +195,7 @@ static void parse_cmd_arguments(int argc, char** argv)
     cli_args.share_dir = share_dir;
     cli_args.stage_in = stage_in;
     cli_args.stage_out = stage_out;
+    cli_args.timeout = timeout;
 }
 
 int main(int argc, char** argv)

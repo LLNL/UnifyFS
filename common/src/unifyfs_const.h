@@ -65,6 +65,9 @@
 // Server - General
 #define MAX_NUM_APPS 64    /* max # apps supported by a single server */
 #define MAX_APP_CLIENTS 64 /* app processes per server */
+/* timeout (in seconds) of waiting for initialization of all servers */
+#define UNIFYFS_DEFAULT_INIT_TIMEOUT 120
+#define UNIFYFSD_PID_FILENAME "unifyfsd.pids"
 
 // Client
 #define UNIFYFS_MAX_FILES 128

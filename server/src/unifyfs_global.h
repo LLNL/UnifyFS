@@ -64,6 +64,7 @@
 /* PMI server rank and server count */
 extern int glb_pmi_rank;
 extern int glb_pmi_size;
+extern int server_pid;
 
 /* hostname for this server */
 extern char glb_host[UNIFYFS_MAX_HOSTNAME];
@@ -196,6 +197,5 @@ unifyfs_rc attach_app_client(app_client* client,
 unifyfs_rc disconnect_app_client(app_client* clnt);
 
 unifyfs_rc cleanup_app_client(app_client* clnt);
-
 
 #endif // UNIFYFS_GLOBAL_H

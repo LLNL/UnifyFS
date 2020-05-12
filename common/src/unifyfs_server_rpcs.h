@@ -24,6 +24,16 @@ MERCURY_GEN_PROC(server_hello_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(server_hello_rpc)
 
+/* server_pid_rpc (server => server, n:1)
+ *
+ * notify readiness with pid to the master server (rank:0) */
+MERCURY_GEN_PROC(server_pid_in_t,
+                 ((int32_t)(rank))
+                 ((int32_t)(pid)))
+MERCURY_GEN_PROC(server_pid_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(server_pid_handle_rpc)
+
 /* server_request_rpc (server => server)
  *
  * request from one server to another */

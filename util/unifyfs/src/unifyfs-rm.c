@@ -44,6 +44,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <unistd.h>
 
 #include "unifyfs.h"
@@ -180,6 +181,92 @@ static int write_hostfile(unifyfs_resource_t* resource,
     }
     fclose(fp);
     args->share_hostfile = strdup(hostfile);
+
+    return ret;
+}
+
+/**
+ * @brief wait until servers become ready for client connections
+ *
+ * @param resource  The job resource record
+ * @param args      The command-line options
+ *
+ * @return 0 on success, negative errno otherwise
+ */
+static int wait_server_initialization(unifyfs_resource_t* resource,
+                                      unifyfs_args_t* args)
+{
+    int ret = UNIFYFS_SUCCESS;
+    int count = 0;
+    unsigned int interval = 3;
+    unsigned int wait_time = 0;
+    FILE* fp = NULL;
+    char linebuf[32] = { 0, };
+    char filename[PATH_MAX] = { 0, };
+
+    sprintf(filename, "%s/%s", args->share_dir, UNIFYFSD_PID_FILENAME);
+
+    while (1) {
+        fp = fopen(filename, "r");
+        if (fp) {
+            while (fgets(linebuf, 31, fp) != NULL) {
+                count++;
+            }
+
+            if (count != resource->n_nodes) {
+                fprintf(stderr,
+                        "incorrect server initialization: "
+                        "expected %lu processes but only %u processes found\n",
+                        resource->n_nodes, count);
+                ret = UNIFYFS_FAILURE;
+            }
+
+            fclose(fp);
+            break;
+        }
+
+        if (errno != ENOENT) {
+            fprintf(stderr, "failed to open file %s (%s)\n",
+                            filename, strerror(errno));
+            ret = -errno;
+            break;
+        }
+
+        wait_time += interval;
+        sleep(interval);
+
+        if (wait_time > args->timeout) {
+            ret = UNIFYFS_FAILURE;
+            break;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * @brief remove server pid file if exists (possibly from previous run).
+ * returns 0 (success) if the pid file does not exist.
+ *
+ * @return 0 on success, negative errno otherwise
+ */
+static int remove_server_pid_file(unifyfs_args_t* args)
+{
+    int ret = 0;
+    char filename[PATH_MAX] = { 0, };
+
+    sprintf(filename, "%s/%s", args->share_dir, UNIFYFSD_PID_FILENAME);
+
+    ret = unlink(filename);
+    if (ret) {
+        if (ENOENT == errno) {
+            ret = 0;
+        } else {
+            fprintf(stderr, "failed to unlink existing pid file %s (%s)\n",
+                            filename, strerror(errno));
+            ret = -errno;
+        }
+    }
 
     return ret;
 }
@@ -796,6 +883,7 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
                           unifyfs_args_t* args)
 {
     int rc;
+    pid_t pid;
 
     if ((resource == NULL) || (args == NULL)) {
         return -EINVAL;
@@ -807,11 +895,31 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
         return rc;
     }
 
-    if (args->script != NULL) {
-        return script_launch(resource, args);
-    } else {
-        return resource_managers[resource->rm].launch(resource, args);
+    rc = remove_server_pid_file(args);
+    if (rc) {
+        fprintf(stderr, "ERROR: failed to remove server pid file\n");
+        return rc;
     }
+
+    pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "failed to create server launch server process (%s)\n",
+                        strerror(errno));
+        return -errno;
+    } else if (pid == 0) {
+        if (args->script != NULL) {
+            return script_launch(resource, args);
+        } else {
+            return resource_managers[resource->rm].launch(resource, args);
+        }
+    }
+
+    rc = wait_server_initialization(resource, args);
+    if (rc) {
+        fprintf(stderr, "ERROR: failed to wait for server initialization\n");
+    }
+
+    return rc;
 }
 
 int unifyfs_stop_servers(unifyfs_resource_t* resource,
