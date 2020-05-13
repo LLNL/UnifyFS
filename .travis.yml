@@ -52,14 +52,12 @@ before_install:
     EOF
 
 install:
-  - $HOME/spack/bin/spack bootstrap
   - . $HOME/spack/share/spack/setup-env.sh
-  - spack install leveldb
-  - spack install gotcha@0.0.2
-  - spack install flatcc
-  - spack install margo^mercury+bmi~boostsys
+  - spack install leveldb && spack load leveldb
+  - spack install gotcha@0.0.2 && spack load gotcha@0.0.2
+  - spack install flatcc && spack load flatcc
+  - spack install margo^mercury+bmi~boostsys && spack load argobots && spack load mercury && spack load margo
   # prepare build environment
-  - source <(spack module tcl loads leveldb gotcha@0.0.2 flatcc mercury argobots margo)
   - eval $(./scripts/git_log_test_env.sh)
   - export TEST_CHECKPATCH_SKIP_FILES
 
