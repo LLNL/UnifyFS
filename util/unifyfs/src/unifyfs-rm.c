@@ -236,6 +236,8 @@ static int wait_server_initialization(unifyfs_resource_t* resource,
         sleep(interval);
 
         if (wait_time > args->timeout) {
+	    fprintf(stderr,
+		    "Exceeding timeout while waiting for servers to start.\n");
             ret = UNIFYFS_FAILURE;
             break;
         }
@@ -483,58 +485,120 @@ static int slurm_read_resource(unifyfs_resource_t* resource)
 static size_t construct_server_argv(unifyfs_args_t* args,
                                     char** server_argv)
 {
-    size_t argc;
+    size_t argc = 0;
     char number[16];
 
-    if (server_argv != NULL) {
-        if (args->server_path != NULL) {
-            server_argv[0] = strdup(args->server_path);
-        } else {
-            server_argv[0] = strdup(BINDIR "/unifyfsd");
-        }
-    }
-    argc = 1;
-
-    if (args->debug) {
+    switch (args->arg_type) {
+    case UNIFYFS_CONSTRUCT_ARGS_UNIFYFSD:
         if (server_argv != NULL) {
-            server_argv[argc] = strdup("-v");
-            snprintf(number, sizeof(number), "%d", args->debug);
-            server_argv[argc + 1] = strdup(number);
+            if (args->server_path != NULL) {
+                server_argv[0] = strdup(args->server_path);
+            } else {
+                server_argv[0] = strdup(BINDIR "/unifyfsd");
+            }
         }
-        argc += 2;
-    }
+        argc = 1;
 
-    if (args->cleanup) {
+	if (args->debug) {
+            if (server_argv != NULL) {
+	        server_argv[argc] = strdup("-v");
+		snprintf(number, sizeof(number), "%d", args->debug);
+		server_argv[argc + 1] = strdup(number);
+            }
+	    argc += 2;
+	}
+
+	if (args->cleanup) {
+            if (server_argv != NULL) {
+	        server_argv[argc] = strdup("-C");
+            }
+	    argc++;
+	}
+
+	if (args->consistency != UNIFYFS_CM_LAMINATED) {
+            if (server_argv != NULL) {
+	        server_argv[argc] = strdup("-c");
+		server_argv[argc + 1] =
+		    strdup(unifyfs_cm_enum_str(args->consistency));
+            }
+	    argc += 2;
+	}
+
+	if (args->mountpoint != NULL) {
+            if (server_argv != NULL) {
+	        server_argv[argc] = strdup("-m");
+                server_argv[argc + 1] = strdup(args->mountpoint);
+            }
+	    argc += 2;
+	}
+
+	if (server_argv != NULL) {
+	    server_argv[argc] = strdup("-S");
+	    server_argv[argc + 1] = strdup(args->share_dir);
+	    server_argv[argc + 2] = strdup("-H");
+	    server_argv[argc + 3] = strdup(args->share_hostfile);
+	    argc += 4;
+	}
+	break;
+    case UNIFYFS_CONSTRUCT_ARGS_STAGE_IN:
         if (server_argv != NULL) {
-            server_argv[argc] = strdup("-C");
-        }
-        argc++;
-    }
+            if (args->transfer_exe == NULL) {
+	        fprintf(stderr,
+			"%s: args->transfer_exe is NULL!\n",
+			__func__);
+                return -1;
+            }
+            if (args->stage_in == NULL) {
+                fprintf(stderr, "%s: args->stage_in is NULL!\n",
+			__func__);
+	        return -1;
+            }
 
-    if (args->consistency != UNIFYFS_CM_LAMINATED) {
+	    //	    if (args->server_path != NULL) {
+	    server_argv[0] = strdup(args->transfer_exe);
+	    //    } else {
+	    //	        server_argv[0] = strdup(BINDIR "/unifyfsd");
+	    //	    }
+	    argc = 1;
+
+	    // if we need to add arguments betwen the command and the
+	    // manifest file name they get added here.
+
+	    server_argv[argc] = strdup(args->stage_in);
+	    argc++;
+	}
+	break;
+    case UNIFYFS_CONSTRUCT_ARGS_STAGE_OUT:
         if (server_argv != NULL) {
-            server_argv[argc] = strdup("-c");
-            server_argv[argc + 1] =
-                strdup(unifyfs_cm_enum_str(args->consistency));
-        }
-        argc += 2;
-    }
+            if (args->transfer_exe == NULL) {
+	        fprintf(stderr, "%s: args->transfer_exe is NULL!\n",
+			__func__);
+	        return -1;
+            }
+            if (args->stage_in == NULL) {
+	        fprintf(stderr, "%s: args->stage_out is NULL!\n",
+			__func__);
+	        return -1;
+            }
 
-    if (args->mountpoint != NULL) {
-        if (server_argv != NULL) {
-            server_argv[argc] = strdup("-m");
-            server_argv[argc + 1] = strdup(args->mountpoint);
-        }
-        argc += 2;
-    }
+	    //	    if (args->server_path != NULL) {
+	    server_argv[0] = strdup(args->transfer_exe);
+	    //    } else {
+	    //	        server_argv[0] = strdup(BINDIR "/unifyfsd");
+	    //	    }
+	    argc = 1;
 
-    if (server_argv != NULL) {
-        server_argv[argc] = strdup("-S");
-        server_argv[argc + 1] = strdup(args->share_dir);
-        server_argv[argc + 2] = strdup("-H");
-        server_argv[argc + 3] = strdup(args->share_hostfile);
+	    // if we need to add arguments betwen the command and the
+	    // manifest file name they get added here.
+
+	    server_argv[argc] = strdup(args->stage_out);
+	    argc++;
+	}
+	break;
+    default:
+        fprintf(stderr, "%s: Invalid args->arg_type!\n", __func__);
+        return -1;
     }
-    argc += 4;
 
     return argc;
 }
@@ -898,8 +962,10 @@ int unifyfs_detect_resources(unifyfs_resource_t* resource)
 int unifyfs_start_servers(unifyfs_resource_t* resource,
                           unifyfs_args_t* args)
 {
-    int rc;
     pid_t pid;
+    int unifyfsd_return_val;
+    int transfer_return_val;
+    int rc;
 
     if ((resource == NULL) || (args == NULL)) {
         return -EINVAL;
@@ -922,30 +988,79 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
         fprintf(stderr, "failed to create server launch server process (%s)\n",
                         strerror(errno));
         return -errno;
-    } else if (pid == 0) {
+    }
+
+    args->arg_type = UNIFYFS_CONSTRUCT_ARGS_UNIFYFSD;
+    if (pid == 0) {
         if (args->script != NULL) {
-            return script_launch(resource, args);
+            unifyfsd_return_val = script_launch(resource, args);
         } else {
-            return resource_managers[resource->rm].launch(resource, args);
+            unifyfsd_return_val =
+	      resource_managers[resource->rm].launch(resource, args);
+        }
+    } else {
+        unifyfsd_return_val = wait_server_initialization(resource, args);
+        if (unifyfsd_return_val) {
+	    fprintf(stderr,
+		    "ERROR: failed to wait for server initialization: (%d s)\n",
+		    unifyfsd_return_val);
         }
     }
 
-    rc = wait_server_initialization(resource, args);
-    if (rc) {
-        fprintf(stderr, "ERROR: failed to wait for server initialization\n");
+    if (args->stage_in) {
+        if (args->script) {
+	    fprintf(stderr,
+		    "Simultaneous stage_in and script options not supported yet.\n");
+            return -EINVAL;
+        }
+        if (args->transfer_exe == NULL) {
+            // this should never ever happen, but to avoid a seg fault
+            fprintf(stderr,
+		    "ERROR!  stage_in set but transfer_exe is NULL!!!\n");
+            return -EINVAL;
+        }
+        args->arg_type = UNIFYFS_CONSTRUCT_ARGS_STAGE_IN;
+        transfer_return_val =
+	  resource_managers[resource->rm].launch(resource, args);
+	// If there's any possibility that the stage-in happens asynchronously,
+	// here's where we would put the check to wait until it was all done.
     }
 
-    return rc;
+    // Possibly we should combine the two return values in the future?
+    transfer_return_val++;
+    transfer_return_val--;
+    return unifyfsd_return_val;
 }
 
 int unifyfs_stop_servers(unifyfs_resource_t* resource,
                          unifyfs_args_t* args)
 {
+    int transfer_return_val;
 
     if ((resource == NULL) || (args == NULL)) {
         return -EINVAL;
     }
 
+    if (args->stage_out) {
+        if (args->transfer_exe == NULL) {
+            // this should never ever happen, but to avoid a seg fault
+            fprintf(stderr,
+		    "ERROR!  stage_out set but transfer_exe is NULL!!!\n");
+            return -EINVAL;
+        }
+        args->arg_type = UNIFYFS_CONSTRUCT_ARGS_STAGE_OUT;
+	// and yes, this is supposed to be .launch
+	// we're "launch"ing
+	// the transfer application to pull files out before
+	// we then terminate the servers below.
+        transfer_return_val =
+	  resource_managers[resource->rm].launch(resource, args);
+    }
+    transfer_return_val++;
+
+    // Place stage-out logic here.
+
+    args->arg_type = UNIFYFS_CONSTRUCT_ARGS_UNIFYFSD;
     if (args->script != NULL) {
         return script_terminate(resource, args);
     } else {
