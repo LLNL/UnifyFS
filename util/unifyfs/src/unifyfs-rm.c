@@ -271,6 +271,20 @@ static int remove_server_pid_file(unifyfs_args_t* args)
     return ret;
 }
 
+static inline char* str_rtrim(char* str)
+{
+    if (str) {
+        char* pos = &str[strlen(str) - 1];
+
+        while (pos >= str && isspace(*pos)) {
+            *pos = '\0';
+            pos--;
+        }
+    }
+
+    return str;
+}
+
 /**
  * @brief Get node list from $LSB_HOSTS or $LSB_MCPU_HOSTS.
  *
@@ -303,7 +317,9 @@ static int lsf_read_resource(unifyfs_resource_t* resource)
         }
     }
 
-    lsb_hosts = strdup(val);
+    // LSB_MCPU_HOSTS string includes a space at the end, which causes extra
+    // node count (n_nodes).
+    lsb_hosts = str_rtrim(strdup(val));
 
     // get length of host string
     size_t hosts_len = strlen(lsb_hosts) + 1;
