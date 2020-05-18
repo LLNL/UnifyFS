@@ -2,7 +2,7 @@
 UnifyFS Dependencies
 ====================
 
-- `GOTCHA <https://github.com/LLNL/GOTCHA/releases>`_ version 0.0.2 (compatibility with latest release in progress)
+- `GOTCHA <https://github.com/LLNL/GOTCHA/releases>`_ version 1.0.3
 
 - `leveldb <https://github.com/google/leveldb/releases/tag/1.22>`_ version 1.22
 
