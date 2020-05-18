@@ -54,7 +54,7 @@ cd ..
 echo "### building GOTCHA ###"
 cd GOTCHA
 # Unify won't build against latest GOTCHA, so use a known compatible version.
-git checkout 0.0.2
+git checkout 1.0.3
 mkdir -p build && cd build
 cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" ..
 make -j $(nproc) && make install
