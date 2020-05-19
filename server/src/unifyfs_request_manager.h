@@ -53,7 +53,7 @@ typedef struct reqmgr_thrd {
 
     /* condition variable to synchronize request manager thread
      * and main thread delivering work */
-    pthread_cond_t  thrd_cond;
+    pthread_cond_t thrd_cond;
 
     /* lock for shared data structures (variables below) */
     pthread_mutex_t thrd_lock;

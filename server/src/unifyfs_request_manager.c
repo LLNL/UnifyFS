@@ -1430,14 +1430,13 @@ int rm_cmd_mread(
  * returns UNIFYFS_SUCCESS on success */
 int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl)
 {
-    /* grab the lock */
-    RM_LOCK(thrd_ctrl);
-
     if (thrd_ctrl->exited) {
         /* already done */
-        RM_UNLOCK(thrd_ctrl);
         return UNIFYFS_SUCCESS;
     }
+
+    /* grab the lock */
+    RM_LOCK(thrd_ctrl);
 
     /* if delegator thread is not waiting in critical
      * section, let's wait on it to come back */
@@ -1461,10 +1460,12 @@ int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl)
     RM_UNLOCK(thrd_ctrl);
 
     /* wait for delegator thread to exit */
-    void* status;
-    pthread_join(thrd_ctrl->thrd, &status);
-    thrd_ctrl->exited = 1;
-
+    int rc = pthread_join(thrd_ctrl->thrd, NULL);
+    if (0 == rc) {
+        pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
+        pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
+        thrd_ctrl->exited = 1;
+    }
     return UNIFYFS_SUCCESS;
 }
 

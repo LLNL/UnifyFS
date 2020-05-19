@@ -817,7 +817,6 @@ unifyfs_rc attach_app_client(app_client* client,
 
     if (failure) {
         LOGERR("failed to attach application client");
-        cleanup_app_client(client);
         return UNIFYFS_FAILURE;
     }
 
@@ -838,13 +837,16 @@ unifyfs_rc disconnect_app_client(app_client* client)
         return EINVAL;
     }
 
+    if (!client->connected) {
+        /* already done */
+        return UNIFYFS_SUCCESS;
+    }
+
     client->connected = 0;
 
     /* stop client request manager thread */
     if (NULL != client->reqmgr) {
         rm_cmd_exit(client->reqmgr);
-        free(client->reqmgr);
-        client->reqmgr = NULL;
     }
 
     /* free margo client address */
@@ -888,6 +890,7 @@ unifyfs_rc cleanup_app_client(app_client* client)
     /* close client logio context */
     if (NULL != client->logio) {
         unifyfs_logio_close(client->logio);
+        client->logio = NULL;
     }
 
     /* reset app->clients array index if set */
@@ -900,6 +903,9 @@ unifyfs_rc cleanup_app_client(app_client* client)
     }
 
     /* free client structure */
+    if (NULL != client->reqmgr) {
+        free(client->reqmgr);
+    }
     free(client);
 
     return UNIFYFS_SUCCESS;

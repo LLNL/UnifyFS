@@ -298,7 +298,7 @@ inline int unifyfs_intercept_path(const char* path, char* upath)
     int intercept = 0;
     if (strncmp(target, unifyfs_mount_prefix, unifyfs_mount_prefixlen) == 0) {
         /* characters in target up through mount point match,
-         * assume we match */ 
+         * assume we match */
         intercept = 1;
 
         /* if we have another character, it must be '/' */
@@ -2215,7 +2215,7 @@ static int unifyfs_init(void)
             if (strncmp(unifyfs_cwd, unifyfs_mount_prefix,
                 unifyfs_mount_prefixlen) == 0) {
                 /* characters in target up through mount point match,
-                 * assume we match */ 
+                 * assume we match */
                 cwd_within_mount = 1;
 
                 /* if we have another character, it must be '/' */
@@ -2371,7 +2371,10 @@ static int unifyfs_finalize(void)
     }
 
     /* close spillover files */
-    unifyfs_logio_close(logio_ctx);
+    if (NULL != logio_ctx) {
+        unifyfs_logio_close(logio_ctx);
+        logio_ctx = NULL;
+    }
     if (unifyfs_spillmetablock != -1) {
         close(unifyfs_spillmetablock);
         unifyfs_spillmetablock = -1;
