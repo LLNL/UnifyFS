@@ -396,6 +396,7 @@ int unifyfs_logio_close(logio_context* ctx)
                 LOGERR("Failed to unmap logio spill file header (errno=%s)",
                        strerror(err));
             }
+            ctx->spill_hdr = NULL;
         }
         if (-1 != ctx->spill_fd) {
             /* close spill file */
@@ -405,6 +406,7 @@ int unifyfs_logio_close(logio_context* ctx)
                 LOGERR("Failed to close logio spill file (errno=%s)",
                        strerror(err));
             }
+            ctx->spill_fd = -1;
         }
     }
 
