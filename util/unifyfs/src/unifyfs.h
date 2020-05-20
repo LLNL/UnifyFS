@@ -65,6 +65,7 @@ struct _unifyfs_args {
     char* share_hostfile;      /* full path to shared server hostfile */
     char* stage_in;            /* data path to stage-in */
     char* stage_out;           /* data path to stage-out (drain) */
+    int stage_timeout;         /* timeout of (in or out) file staging*/
     char* script;              /* path to custom launch/terminate script */
 };
 typedef struct _unifyfs_args unifyfs_args_t;

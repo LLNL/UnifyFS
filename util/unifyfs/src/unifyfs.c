@@ -44,6 +44,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <getopt.h>
+#include <unistd.h>
 
 #include "unifyfs.h"
 
@@ -80,7 +81,7 @@ static struct option const long_opts[] = {
 };
 
 static char* program;
-static char* short_opts = ":cC:de:hi:m:o:s:S:t:";
+static char* short_opts = ":cC:de:hi:m:o:s:S:t:T:";
 static char* usage_str =
     "\n"
     "Usage: %s <command> [options...]\n"
@@ -94,18 +95,21 @@ static char* usage_str =
     "  -h, --help                print usage\n"
     "\n"
     "Command options for \"start\":\n"
-    "  -C, --consistency=<model> [OPTIONAL] consistency model (NONE | LAMINATED | POSIX)\n"
-    "  -e, --exe=<path>          [OPTIONAL] <path> where unifyfsd is installed\n"
-    "  -m, --mount=<path>        [OPTIONAL] mount UnifyFS at <path>\n"
-    "  -s, --script=<path>       [OPTIONAL] <path> to custom launch script\n"
-    "  -t, --timeout=<sec>       [OPTIONAL] wait <sec> until all servers become ready\n"
-    "  -S, --share-dir=<path>    [REQUIRED] shared file system <path> for use by servers\n"
-    "  -c, --cleanup             [OPTIONAL] clean up the UnifyFS storage upon server exit\n"
-    "  -i, --stage-in=<path>     [OPTIONAL, NOT YET SUPPORTED] stage in file(s) at <path>\n"
-    "  -o, --stage-out=<path>    [OPTIONAL, NOT YET SUPPORTED] stage out file(s) to <path> on termination\n"
+    "  -C, --consistency=<model>  [OPTIONAL] consistency model (NONE | LAMINATED | POSIX)\n"
+    "  -e, --exe=<path>           [OPTIONAL] <path> where unifyfsd is installed\n"
+    "  -m, --mount=<path>         [OPTIONAL] mount UnifyFS at <path>\n"
+    "  -s, --script=<path>        [OPTIONAL] <path> to custom launch script\n"
+    "  -t, --timeout=<sec>        [OPTIONAL] wait <sec> until all servers become ready\n"
+    "  -S, --share-dir=<path>     [REQUIRED] shared file system <path> for use by servers\n"
+    "  -c, --cleanup              [OPTIONAL] clean up the UnifyFS storage upon server exit\n"
+    "  -i, --stage-in=<manifest>  [OPTIONAL] stage in file(s) listed in <manifest> file\n"
+    "  -T, --stage-timeout=<sec>  [OPTIONAL] timeout for stage-in operation\n"
     "\n"
     "Command options for \"terminate\":\n"
-    "  -s, --script=<path>       <path> to custom termination script\n"
+    "  -o, --stage-out=<manifest> [OPTIONAL] stage out file(s) listed in <manifest> on termination\n"
+    "  -T, --stage-timeout=<sec>  [OPTIONAL] timeout for stage-out operation\n"
+    "  -s, --script=<path>        [OPTIONAL] <path> to custom termination script\n"
+    "  -S, --share-dir=<path>     [REQUIRED for --stage-out] shared file system <path> for use by servers\n"
     "\n";
 
 static int debug;
@@ -122,6 +126,7 @@ static void parse_cmd_arguments(int argc, char** argv)
     int optidx = 2;
     int cleanup = 0;
     int timeout = UNIFYFS_DEFAULT_INIT_TIMEOUT;
+    int stage_timeout = -1;
     unifyfs_cm_e consistency = UNIFYFS_CM_LAMINATED;
     char* mountpoint = NULL;
     char* script = NULL;
@@ -129,6 +134,8 @@ static void parse_cmd_arguments(int argc, char** argv)
     char* srvr_exe = NULL;
     char* stage_in = NULL;
     char* stage_out = NULL;
+
+    int argument_count = 1;
 
     while ((ch = getopt_long(argc, argv,
                              short_opts, long_opts, &optidx)) >= 0) {
@@ -169,21 +176,28 @@ static void parse_cmd_arguments(int argc, char** argv)
             timeout = atoi(optarg);
             break;
 
+        case 'T':
+            stage_timeout = atoi(optarg);
+            break;
+
         case 'i':
-            printf("WARNING: stage-in not yet supported!\n");
             stage_in = strdup(optarg);
             break;
 
         case 'o':
-            printf("WARNING: stage-out not yet supported!\n");
             stage_out = strdup(optarg);
             break;
 
         case 'h':
-        default:
             usage(0);
             break;
+
+        default:
+            printf("\n\nArgument %d is invalid!\n", argument_count);
+            usage(-EINVAL);
+            break;
         }
+        argument_count++;
     }
 
     cli_args.debug = debug;
@@ -195,6 +209,7 @@ static void parse_cmd_arguments(int argc, char** argv)
     cli_args.share_dir = share_dir;
     cli_args.stage_in = stage_in;
     cli_args.stage_out = stage_out;
+    cli_args.stage_timeout = stage_timeout;
     cli_args.timeout = timeout;
 }
 
@@ -237,6 +252,7 @@ int main(int argc, char** argv)
         printf("server:\t%s\n", cli_args.server_path);
         printf("stage_in:\t%s\n", cli_args.stage_in);
         printf("stage_out:\t%s\n", cli_args.stage_out);
+        printf("stage_timeout:\t%d\n", cli_args.stage_timeout);
     }
 
     ret = unifyfs_detect_resources(&resource);
@@ -258,9 +274,47 @@ int main(int argc, char** argv)
         if (NULL == cli_args.share_dir) {
             printf("USAGE ERROR: shared directory (-S) is required!\n");
             usage(1);
+            return -EINVAL;
+        }
+        if (cli_args.stage_in != NULL) {
+            if (cli_args.script) {
+                fprintf(stderr,
+                        "WARNING! You are using a script with --stage-in.\n");
+                fprintf(stderr, "This is won't work.\n");
+                return -EINVAL;
+            }
+            if (access(cli_args.stage_in, R_OK)) {
+                fprintf(stderr,
+                        "Cannot read stagein manifest file:%s\n",
+                        cli_args.stage_in);
+                return -ENOENT;
+            }
         }
         return unifyfs_start_servers(&resource, &cli_args);
     } else if (action == ACT_TERMINATE) {
+        if (cli_args.stage_out != NULL) {
+            // status directory isn't required just to terminate the servers
+            // but it IS required if we're calling for stage-out, so that
+            // the stage-out can be started, then the server terminate waits
+            // until the stage-out is done.
+            if (NULL == cli_args.share_dir) {
+                printf("USAGE ERROR: shared directory (-S) is required!\n");
+                usage(1);
+                return -EINVAL;
+            }
+            if (cli_args.script) {
+                fprintf(stderr,
+                        "WARNING! You are using a script with --stage-out.\n");
+                fprintf(stderr, "This won't work.\n");
+                return -EINVAL;
+            }
+            if (access(cli_args.stage_out, R_OK)) {
+                fprintf(stderr,
+                        "Cannot read stageout manifest file:%s\n",
+                        cli_args.stage_out);
+                return -ENOENT;
+            }
+        }
         return unifyfs_stop_servers(&resource, &cli_args);
     } else {
         fprintf(stderr, "INTERNAL ERROR: unhandled action %d\n", (int)action);
