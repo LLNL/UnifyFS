@@ -66,9 +66,6 @@ AC_CHECK_HEADERS([wchar.h wctype.h])
 AC_CHECK_HEADERS([sys/mount.h sys/socket.h sys/statfs.h sys/time.h])
 AC_CHECK_HEADERS([arpa/inet.h netdb.h netinet/in.h])
 
-AC_CHECK_HEADER([openssl/md5.h], [],
-                [AC_MSG_FAILURE([*** openssl/md5.h missing, openssl-devel package required])])
-
 # Checks for library functions.
 AC_FUNC_MALLOC
 AC_FUNC_MMAP
@@ -167,6 +164,9 @@ UNIFYFS_AC_SPATH
 
 UNIFYFS_AC_MARGO
 UNIFYFS_AC_FLATCC
+
+# openssl for md5 checksum
+UNIFYFS_AC_OPENSSL
 
 # checks to see how we can print 64 bit values on this architecture
 gt_INTTYPES_PRI
@@ -389,7 +389,9 @@ AC_CONFIG_FILES([Makefile
                  util/scripts/Makefile
                  util/scripts/lsfcsm/Makefile
                  util/unifyfs/Makefile
-                 util/unifyfs/src/Makefile])
+                 util/unifyfs/src/Makefile
+                 util/unifyfs-stage/Makefile
+                 util/unifyfs-stage/src/Makefile])
 
 AC_CONFIG_FILES([client/unifyfs-config], [chmod +x client/unifyfs-config])
 AC_CONFIG_FILES([util/scripts/lsfcsm/unifyfs_lsfcsm_prolog], [chmod +x util/scripts/lsfcsm/unifyfs_lsfcsm_prolog])

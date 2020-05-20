@@ -68,6 +68,7 @@
 /* timeout (in seconds) of waiting for initialization of all servers */
 #define UNIFYFS_DEFAULT_INIT_TIMEOUT 120
 #define UNIFYFSD_PID_FILENAME "unifyfsd.pids"
+#define UNIFYFS_STAGE_STATUS_FILENAME "unifyfs-stage.status"
 
 // Client
 #define UNIFYFS_MAX_FILES 128

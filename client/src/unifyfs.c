@@ -2672,7 +2672,7 @@ int unifyfs_unmount(void)
     return ret;
 }
 
-#define UNIFYFS_TX_BUFSIZE (64*(1<<10))
+#define UNIFYFS_TX_BUFSIZE (1<<20)
 
 enum {
     UNIFYFS_TX_STAGE_OUT = 0,
@@ -2695,14 +2695,14 @@ ssize_t do_transfer_data(int fd_src, int fd_dst, off_t offset, size_t count)
     pos = lseek(fd_src, offset, SEEK_SET);
     if (pos == (off_t) -1) {
         LOGERR("lseek failed (%d: %s)\n", errno, strerror(errno));
-        ret = -1;
+        ret = errno;
         goto out;
     }
 
     pos = lseek(fd_dst, offset, SEEK_SET);
     if (pos == (off_t) -1) {
         LOGERR("lseek failed (%d: %s)\n", errno, strerror(errno));
-        ret = -1;
+        ret = errno;
         goto out;
     }
 
@@ -2762,6 +2762,9 @@ static int do_transfer_file_serial(const char* src, const char* dst,
         goto out_close_src;
     }
 
+    LOGDBG("serial transfer (%d/%d): offset=0, length=%lu",
+           client_rank, global_rank_cnt, (unsigned long) sb_src->st_size);
+
     ret = do_transfer_data(fd_src, fd_dst, 0, sb_src->st_size);
     if (ret < 0) {
         LOGERR("do_transfer_data failed!");
@@ -2792,13 +2795,8 @@ static int do_transfer_file_parallel(const char* src, const char* dst,
 
     fd_src = open(src, O_RDONLY);
     if (fd_src < 0) {
+        LOGERR("failed to open file %s", src);
         return errno;
-    }
-
-    fd_dst = open(dst, O_CREAT | O_WRONLY | O_TRUNC, 0644);
-    if (fd_dst < 0) {
-        ret = errno;
-        goto out_close_src;
     }
 
     /*
@@ -2838,18 +2836,35 @@ static int do_transfer_file_parallel(const char* src, const char* dst,
 
     if (client_rank == (global_rank_cnt - 1)) {
         len = (n_chunks - 1) * UNIFYFS_TX_BUFSIZE;
-        len += size % UNIFYFS_TX_BUFSIZE;
+        remainder = size % UNIFYFS_TX_BUFSIZE;
+        len += (remainder > 0 ? remainder : UNIFYFS_TX_BUFSIZE);
     } else {
         len = n_chunks * UNIFYFS_TX_BUFSIZE;
     }
 
-    LOGDBG("parallel transfer (%d/%d): offset=%lu, length=%lu",
-           client_rank, global_rank_cnt,
-           (unsigned long) offset, (unsigned long) len);
+    if (len > 0) {
+        LOGDBG("parallel transfer (%d/%d): "
+               "nchunks=%lu, offset=%lu, length=%lu",
+               client_rank, global_rank_cnt,
+               n_chunks, (unsigned long) offset, (unsigned long) len);
 
-    ret = do_transfer_data(fd_src, fd_dst, offset, len);
+        fd_dst = open(dst, O_WRONLY);
+        if (fd_dst < 0) {
+            LOGERR("failed to open file %s", dst);
+            ret = errno;
+            goto out_close_src;
+        }
 
-    close(fd_dst);
+        ret = do_transfer_data(fd_src, fd_dst, offset, len);
+        if (ret) {
+            LOGERR("failed to transfer data (ret=%d, %s)", ret, strerror(ret));
+        } else {
+            fsync(fd_dst);
+        }
+
+        close(fd_dst);
+    }
+
 out_close_src:
     close(fd_src);
 
@@ -2904,7 +2919,8 @@ int unifyfs_transfer_file(const char* src, const char* dst, int parallel)
     }
 
     if (unify_src + unify_dst != 1) {
-        return -EINVAL;
+        // we may fail the operation with EINVAL, but useful for testing
+        LOGDBG("WARNING: none of pathnames points to unifyfs volume");
     }
 
     if (parallel) {
