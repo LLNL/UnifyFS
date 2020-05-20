@@ -10,10 +10,12 @@ UnifyFS Dependencies
 
 - `Margo <https://xgitlab.cels.anl.gov/sds/margo>`_ version 0.4.3 and its dependencies:
 
-  - `Argobots <https://github.com/pmodels/argobots/releases/tag/v1.0rc1>`_ version 1.0rc1
+  - `Argobots <https://github.com/pmodels/argobots/releases/tag/v1.0>`_ version 1.0
   - `Mercury <https://github.com/mercury-hpc/mercury/releases/tag/v1.0.1>`_ version 1.0.1
 
     - `bmi <https://xgitlab.cels.anl.gov/sds/bmi.git>`_
+
+- `OpenSSL <https://www.openssl.org/source/>`_
 
 .. important::
 

@@ -40,16 +40,15 @@ for further details on customizing the UnifyFS runtime configuration.
 .. code-block:: Bash
     :linenos:
 
-        #!/bin/bash
+    #!/bin/bash
 
-        # spillover checkpoint data to node-local ssd storage
-        export UNIFYFS_SPILLOVER_DATA_DIR=/mnt/ssd/$USER/data
-        export UNIFYFS_SPILLOVER_META_DIR=/mnt/ssd/$USER/meta
+    # spillover data to node-local ssd storage
+    export UNIFYFS_LOGIO_SPILL_DIR=/mnt/ssd/$USER/data
 
-        # store server logs in job-specific scratch area
-        export UNIFYFS_LOG_DIR=$JOBSCRATCH/logs
+    # store server logs in job-specific scratch area
+    export UNIFYFS_LOG_DIR=$JOBSCRATCH/logs
 
-        unifyfs start --share-dir=/path/to/shared/file/system &
+    unifyfs start --share-dir=/path/to/shared/file/system
 
 
 ``unifyfs`` provides command-line options to choose the client mountpoint,
@@ -59,30 +58,31 @@ The full usage for ``unifyfs`` is as follows:
 .. code-block:: Bash
     :linenos:
 
-        [prompt]$ unifyfs --help
+    [prompt]$ unifyfs --help
 
-        Usage: unifyfs <command> [options...]
+    Usage: unifyfs <command> [options...]
 
-        <command> should be one of the following:
-          start       start the UnifyFS server daemons
-          terminate   terminate the UnifyFS server daemons
+    <command> should be one of the following:
+      start       start the UnifyFS server daemons
+      terminate   terminate the UnifyFS server daemons
 
-        Common options:
-          -d, --debug               enable debug output
-          -h, --help                print usage
+    Common options:
+      -d, --debug               enable debug output
+      -h, --help                print usage
 
-        Command options for "start":
-          -c, --cleanup             [OPTIONAL] clean up the UnifyFS storage upon server exit
-          -C, --consistency=<model> [OPTIONAL] consistency model (NONE | LAMINATED | POSIX)
-          -e, --exe=<path>          [OPTIONAL] <path> where unifyfsd is installed
-          -m, --mount=<path>        [OPTIONAL] mount UnifyFS at <path>
-          -s, --script=<path>       [OPTIONAL] <path> to custom launch script
-          -S, --share-dir=<path>    [REQUIRED] shared file system <path> for use by servers
-          -i, --stage-in=<path>     [OPTIONAL] stage in file(s) at <path>
-          -o, --stage-out=<path>    [OPTIONAL] stage out file(s) to <path> on termination
+    Command options for "start":
+      -C, --consistency=<model> [OPTIONAL] consistency model (NONE | LAMINATED | POSIX)
+      -e, --exe=<path>          [OPTIONAL] <path> where unifyfsd is installed
+      -m, --mount=<path>        [OPTIONAL] mount UnifyFS at <path>
+      -s, --script=<path>       [OPTIONAL] <path> to custom launch script
+      -t, --timeout=<sec>       [OPTIONAL] wait <sec> until all servers become ready
+      -S, --share-dir=<path>    [REQUIRED] shared file system <path> for use by servers
+      -c, --cleanup             [OPTIONAL] clean up the UnifyFS storage upon server exit
+      -i, --stage-in=<path>     [OPTIONAL] stage in manifest file(s) at <path>
 
-        Command options for "terminate":
-          -s, --script=<path>       <path> to custom termination script
+    Command options for "terminate":
+      -s, --script=<path>       [OPTIONAL] <path> to custom termination script
+      -o, --stage-out=<path>    [OPTIONAL] stage out manifest file(s) at <path>
 
 
 After UnifyFS servers have been successfully started, you may run your
