@@ -188,11 +188,12 @@ is used, the value must immediately follow the option character (e.g., ``-Cyes``
    --unifyfs-consistency     -c
    --unifyfs-daemonize       -D
    --unifyfs-mountpoint      -m
-   --log-dir                 -L
-   --log-file                -l
    --log-verbosity           -v
+   --log-file                -l
+   --log-dir                 -L
    --runstate-dir            -R
    --server-hostfile         -H
    --sharedfs-dir            -S
+   --server-init_timeout     -t
    ======================  ========
 

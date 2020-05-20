@@ -31,8 +31,8 @@ To easily navigate to this location and find the examples, do:
     $ spack cd -i unifyfs
     $ cd libexec
 
-Installed without Spack
-^^^^^^^^^^^^^^^^^^^^^^^
+Installed with Autotools
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 The autotools installation of UnifyFS will place the example programs in the
 *libexec/* directory of the path provided to ``--prefix=/path/to/install`` during
@@ -67,8 +67,8 @@ The GOTCHA examples are one directory deeper in
 
     ``spack cd unifyfs+hdf5 ^hdf5~mpi``
 
-Built without Spack
-^^^^^^^^^^^^^^^^^^^
+Built with Autotools
+^^^^^^^^^^^^^^^^^^^^
 
 The autotools build of UnifyFS will place the static and POSIX example programs
 in the *examples/src* directory and the GOTCHA example programs in the
@@ -113,10 +113,12 @@ to aid in this process.
                                (default: off)
      -m, --mount=<mountpoint>  use <mountpoint> for unifyfs
                                (default: /unifyfs)
-     -M, --mapio               use mmap instead of read|write
+     -M, --mpiio               use MPI-IO instead of POSIX I/O
                                (default: off)
      -n, --nblocks=<count>     count of blocks each process will read|write
                                (default: 32)
+     -N, --mapio               use mmap instead of read|write
+                               (default: off)
      -p, --pattern=<pattern>   'n1' (N-to-1 shared file) or 'nn' (N-to-N file per process)
                                (default: 'n1')
      -P, --prdwr               use pread|pwrite instead of read|write
