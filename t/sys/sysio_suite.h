@@ -50,6 +50,8 @@ int lseek_test(char* unifyfs_root);
 
 int write_read_test(char* unifyfs_root);
 
+int write_pre_existing_file_test(char* unifyfs_root);
+
 /* test reading from file with holes */
 int write_read_hole_test(char* unifyfs_root);
 
