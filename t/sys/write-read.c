@@ -175,3 +175,59 @@ int write_read_test(char* unifyfs_root)
 
     return 0;
 }
+
+/* Test to reproduce issue 488 */
+int write_pre_existing_file_test(char* unifyfs_root)
+{
+    diag("Starting write-to-pre-existing-file tests");
+
+    char path[64];
+    char buf[300] = {0};
+    int fd = -1;
+    size_t global;
+
+    errno = 0;
+
+    testutil_rand_path(path, sizeof(path), unifyfs_root);
+
+    fd = open(path, O_RDWR | O_CREAT, 0222);
+    ok(fd != -1, "%s:%d open(%s) (fd=%d): %s",
+       __FILE__, __LINE__, path, fd, strerror(errno));
+
+    /* Write 300 bytes to a file */
+    ok(write(fd, "a", 300) == 300,
+       "%s:%d write() a 300 byte file: %s",
+       __FILE__, __LINE__, strerror(errno));
+
+    ok(close(fd) == 0, "%s:%d close() worked: %s",
+       __FILE__, __LINE__, strerror(errno));
+
+    /* Check global size is 300 */
+    testutil_get_size(path, &global);
+    ok(global == 300, "%s:%d global size of 300 byte file is %d: %s",
+       __FILE__, __LINE__, global, strerror(errno));
+
+    /* Reopen the same file */
+    fd = open(path, O_RDWR, 0222);
+    ok(fd != -1, "%s:%d open(%s) (fd=%d): %s",
+       __FILE__, __LINE__, path, fd, strerror(errno));
+
+    /* Overwrite the first 100 bytes of same file */
+    ok(write(fd, buf, 100) == 100,
+       "%s:%d overwrite first 100 bytes of same file: %s",
+       __FILE__, __LINE__, strerror(errno));
+
+    ok(close(fd) == 0, "%s:%d close() worked: %s",
+       __FILE__, __LINE__, strerror(errno));
+
+    /* Check global size is 300 */
+    testutil_get_size(path, &global);
+    todo("File is now 100 bytes instead of 300. See issue #488 for details");
+    ok(global == 300, "%s:%d global size of 300 byte file is %d: %s",
+       __FILE__, __LINE__, global, strerror(errno));
+    end_todo;
+
+    diag("Finished write-to-pre-existing-file tests");
+
+    return 0;
+}

@@ -84,6 +84,7 @@ int main(int argc, char* argv[])
     lseek_test(unifyfs_root);
 
     write_read_test(unifyfs_root);
+    write_pre_existing_file_test(unifyfs_root);
 
     write_read_hole_test(unifyfs_root);
 
