@@ -975,8 +975,8 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
                           unifyfs_args_t* args)
 {
     pid_t pid;
-    int unifyfsd_return_val;
-    int transfer_return_val;
+    int unifyfsd_return_val = 0;
+    int transfer_return_val = 0;
     int rc;
 
     if ((resource == NULL) || (args == NULL)) {
@@ -1038,10 +1038,7 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
 	// here's where we would put the check to wait until it was all done.
     }
 
-    // Possibly we should combine the two return values in the future?
-    transfer_return_val++;
-    transfer_return_val--;
-    return unifyfsd_return_val;
+    return unifyfsd_return_val + transfer_return_val;
 }
 
 int unifyfs_stop_servers(unifyfs_resource_t* resource,
