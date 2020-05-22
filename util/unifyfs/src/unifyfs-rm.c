@@ -554,14 +554,20 @@ static size_t construct_server_argv(unifyfs_args_t* args,
 	        return -1;
             }
 
-	    //	    if (args->server_path != NULL) {
+	    //  The commented-out code lines will be uncommented once the
+	    //  transfer-stage infrastructure is stable enough that we can
+	    //  count on it being in the right place in the install.  For
+	    //  now, while we're rolling it out, we're requiring the user
+	    //  to explicitly supply the location of the transfer-stage
+	    //  binary.
+	    //	    if (args->transfer_exe != NULL) {
 	    server_argv[0] = strdup(args->transfer_exe);
 	    //    } else {
-	    //	        server_argv[0] = strdup(BINDIR "/unifyfsd");
+	    //	        server_argv[0] = strdup(LIBEXECDIR "/transfer-stage");
 	    //	    }
 	    argc = 1;
 
-	    // if we need to add arguments betwen the command and the
+	    // if we need to add arguments between the command and the
 	    // manifest file name they get added here.
 
 	    server_argv[argc] = strdup(args->stage_in);
@@ -581,14 +587,20 @@ static size_t construct_server_argv(unifyfs_args_t* args,
 	        return -1;
             }
 
-	    //	    if (args->server_path != NULL) {
+	    //  The commented-out code lines will be uncommented once the
+	    //  transfer-stage infrastructure is stable enough that we can
+	    //  count on it being in the right place in the install.  For
+	    //  now, while we're rolling it out, we're requiring the user
+	    //  to explicitly supply the location of the transfer-stage
+	    //  binary.
+	    //	    if (args->transfer_exe != NULL) {
 	    server_argv[0] = strdup(args->transfer_exe);
 	    //    } else {
-	    //	        server_argv[0] = strdup(BINDIR "/unifyfsd");
+	    //	        server_argv[0] = strdup(LIBEXECDIR "/transfer-stage");
 	    //	    }
 	    argc = 1;
 
-	    // if we need to add arguments betwen the command and the
+	    // if we need to add arguments between the command and the
 	    // manifest file name they get added here.
 
 	    server_argv[argc] = strdup(args->stage_out);

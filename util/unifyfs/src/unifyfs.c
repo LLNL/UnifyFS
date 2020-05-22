@@ -84,7 +84,7 @@ static struct option const long_opts[] = {
 };
 
 static char* program;
-static char* short_opts = ":cC:de:hi:m:o:s:S:t:";
+static char* short_opts = ":cC:de:hi:m:o:s:S:t:x:";
 static char* usage_str =
     "\n"
     "Usage: %s <command> [options...]\n"
@@ -383,7 +383,6 @@ int main(int argc, char** argv)
         return -1;
     }
 } // int main(...
-
 
 // validates that the named manifest file exists and is readable
 // and returns the number of lines in it.
