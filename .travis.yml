@@ -17,7 +17,6 @@ addons:
       - libtool-bin
       - m4
       - openmpi-bin
-      - numactl
 
 before_install:
   # The default environment variable $CC is known to interfere with
@@ -30,6 +29,8 @@ before_install:
     packages:
       all:
         target: [x86_64]
+        providers:
+            mpi: [openmpi]
       autoconf:
         buildable: False
         paths:
@@ -37,7 +38,7 @@ before_install:
       automake:
         buildable: False
         paths:
-          automake@1.15: /usr
+          automake@1.15.1: /usr
       cmake:
         buildable: False
         paths:
@@ -49,11 +50,11 @@ before_install:
       m4:
         buildable: False
         paths:
-          m4@4.17: /usr
-      numactl:
+          m4@1.4.18: /usr
+      openmpi:
         buildable: False
         paths:
-          numactl: /usr
+          openmpi@2.1.1: /usr
     EOF
 
 install:
@@ -61,7 +62,7 @@ install:
   - spack install leveldb && spack load leveldb
   - spack install gotcha@1.0.3 && spack load gotcha@1.0.3
   - spack install flatcc && spack load flatcc
-  - spack install margo^mercury+bmi~boostsys && spack load argobots && spack load mercury && spack load margo
+  - spack install margo^mercury+bmi~ofi~boostsys && spack load argobots && spack load mercury && spack load margo
   - spack install spath && spack load spath
   # prepare build environment
   - eval $(./scripts/git_log_test_env.sh)
