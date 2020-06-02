@@ -79,7 +79,7 @@ int chdir_test(char* unifyfs_root)
     str = getcwd(path, sizeof(path));
     ok(str != NULL, "%s:%d getcwd: %s",
        __FILE__, __LINE__, strerror(errno));
-    ok(str != NULL && strcmp(str, unifyfs_root) == 0,
+    is(str, unifyfs_root,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, unifyfs_root);
 
@@ -139,7 +139,7 @@ int chdir_test(char* unifyfs_root)
     str = getcwd(path, sizeof(path));
     ok(str != NULL, "%s:%d getcwd: %s",
        __FILE__, __LINE__, strerror(errno));
-    ok(str != NULL && strcmp(str, buf) == 0,
+    is(str, buf,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, buf);
 
@@ -152,7 +152,7 @@ int chdir_test(char* unifyfs_root)
     str = getcwd(path, sizeof(path));
     ok(str != NULL, "%s:%d getcwd: %s",
        __FILE__, __LINE__, strerror(errno));
-    ok(str != NULL && strcmp(str, unifyfs_root) == 0,
+    is(str, unifyfs_root,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, unifyfs_root);
 
@@ -165,7 +165,7 @@ int chdir_test(char* unifyfs_root)
     str = getcwd(path, sizeof(path));
     ok(str != NULL, "%s:%d getcwd: %s",
        __FILE__, __LINE__, strerror(errno));
-    ok(str != NULL && strcmp(str, buf) == 0,
+    is(str, buf,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, buf);
 
@@ -178,7 +178,7 @@ int chdir_test(char* unifyfs_root)
     str = getcwd(path, sizeof(path));
     ok(str != NULL, "%s:%d getcwd: %s",
        __FILE__, __LINE__, strerror(errno));
-    ok(str != NULL && strcmp(str, buf2) == 0,
+    is(str, buf2,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, buf2);
 
@@ -209,7 +209,7 @@ int chdir_test(char* unifyfs_root)
     str = getwd(pathmax);
     ok(str != NULL, "%s:%d getcwd: %s",
        __FILE__, __LINE__, strerror(errno));
-    ok(str != NULL && strcmp(str, unifyfs_root) == 0,
+    is(str, unifyfs_root,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, unifyfs_root);
 
@@ -222,7 +222,7 @@ int chdir_test(char* unifyfs_root)
     str = getwd(pathmax);
     ok(str != NULL, "%s:%d getcwd: %s",
        __FILE__, __LINE__, strerror(errno));
-    ok(str != NULL && strcmp(str, buf) == 0,
+    is(str, buf,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, buf);
 
@@ -235,7 +235,7 @@ int chdir_test(char* unifyfs_root)
     str = getwd(pathmax);
     ok(str != NULL, "%s:%d getcwd: %s",
        __FILE__, __LINE__, strerror(errno));
-    ok(str != NULL && strcmp(str, unifyfs_root) == 0,
+    is(str, unifyfs_root,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, unifyfs_root);
 #endif
@@ -265,7 +265,7 @@ int chdir_test(char* unifyfs_root)
     str = get_current_dir_name();
     ok(str != NULL, "%s:%d get_current_dir_name: %s",
        __FILE__, __LINE__, strerror(errno));
-    ok(str != NULL && strcmp(str, unifyfs_root) == 0,
+    is(str, unifyfs_root,
        "%s:%d get_current_dir_name returned %s expected %s",
        __FILE__, __LINE__, str, unifyfs_root);
     if (str != NULL) {
@@ -281,7 +281,7 @@ int chdir_test(char* unifyfs_root)
     str = get_current_dir_name();
     ok(str != NULL, "%s:%d get_current_dir_name: %s",
        __FILE__, __LINE__, strerror(errno));
-    ok(str != NULL && strcmp(str, buf) == 0,
+    is(str, buf,
        "%s:%d get_current_dir_name returned %s expected %s",
        __FILE__, __LINE__, str, buf);
     if (str != NULL) {
@@ -297,7 +297,7 @@ int chdir_test(char* unifyfs_root)
     str = get_current_dir_name();
     ok(str != NULL, "%s:%d get_current_dir_name: %s",
        __FILE__, __LINE__, strerror(errno));
-    ok(str != NULL && strcmp(str, unifyfs_root) == 0,
+    is(str, unifyfs_root,
        "%s:%d get_current_dir_name returned %s expected %s",
        __FILE__, __LINE__, str, unifyfs_root);
     if (str != NULL) {
@@ -313,7 +313,7 @@ int chdir_test(char* unifyfs_root)
     str = get_current_dir_name();
     ok(str != NULL, "%s:%d get_current_dir_name: %s",
        __FILE__, __LINE__, strerror(errno));
-    ok(str != NULL && strcmp(str, buf2) == 0,
+    is(str, buf2,
        "%s:%d get_current_dir_name returned %s expected %s",
        __FILE__, __LINE__, str, buf2);
     if (str != NULL) {
