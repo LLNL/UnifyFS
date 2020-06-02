@@ -203,6 +203,68 @@ int UNIFYFS_WRAP(chdir)(const char* path)
     }
 }
 
+/* common logic for getcwd and __getcwd_chk */
+static char* _getcwd_impl(char* path, size_t size)
+{
+    /* man page if size=0 and path not NULL, return EINVAL */
+    if (size == 0 && path != NULL) {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    /* get length of current working dir */
+    size_t len = strlen(unifyfs_cwd) + 1;
+
+    /* if user didn't provide a buffer,
+     * we attempt to allocate and return one for them */
+    if (path == NULL) {
+        /* we'll allocate a buffer to return to the caller */
+        char* buf = NULL;
+
+        /* if path is NULL and size is positive, we must
+         * allocate a buffer of length size and copy into it */
+        if (size > 0) {
+            /* check that size is big enough for the string */
+            if (len <= size) {
+                /* path will fit, allocate buffer and copy */
+                buf = (char*) malloc(size);
+                if (buf != NULL) {
+                    strncpy(buf, unifyfs_cwd, size);
+                } else {
+                    errno = ENOMEM;
+                }
+                return buf;
+            } else {
+                /* user's buffer limit is too small */
+                errno = ERANGE;
+                return NULL;
+            }
+        }
+
+        /* otherwise size == 0, so allocate a buffer
+         * that is big enough */
+        buf = (char*) malloc(len);
+        if (buf != NULL) {
+            strncpy(buf, unifyfs_cwd, len);
+        } else {
+            errno = ENOMEM;
+        }
+        return buf;
+    }
+
+    /* to get here, caller provided an actual buffer,
+     * check that path fits in the caller's buffer */
+    if (len <= size) {
+        /* current working dir fits, copy and return */
+        strncpy(path, unifyfs_cwd, size);
+        return path;
+    } else {
+        /* user's buffer is too small */
+        errno = ERANGE;
+        return NULL;
+    }
+}
+
 char* UNIFYFS_WRAP(__getcwd_chk)(char* path, size_t size, size_t buflen)
 {
     /* if we're initialized, we're tracking the current working dir */
@@ -220,63 +282,15 @@ char* UNIFYFS_WRAP(__getcwd_chk)(char* path, size_t size, size_t buflen)
          * changed dir without us noticing, so there is a bug here) */
         char upath[UNIFYFS_MAX_FILENAME];
         if (unifyfs_intercept_path(unifyfs_cwd, upath)) {
-            /* man page if size=0 and path not NULL, return EINVAL */
-            if (size == 0 && path != NULL) {
-                errno = EINVAL;
-                return NULL;
+#if 0
+            /* TODO: what to do here? */
+            if (size > buflen) {
+                __chk_fail();
             }
+#endif
 
-            /* get length of current working dir */
-            size_t len = strlen(unifyfs_cwd) + 1;
-
-            /* if user didn't provide a buffer,
-             * we attempt to allocate and return one for them */
-            if (path == NULL) {
-                /* we'll allocate a buffer to return to the caller */
-                char* buf = NULL;
-
-                /* if path is NULL and size is positive, we must
-                 * allocate a buffer of length size and copy into it */
-                if (size > 0) {
-                    /* check that size is big enough for the string */
-                    if (len <= size) {
-                        /* path will fit, allocate buffer and copy */
-                        buf = (char*) malloc(size);
-                        if (buf != NULL) {
-                            strncpy(buf, unifyfs_cwd, size);
-                        } else {
-                            errno = ENOMEM;
-                        }
-                        return buf;
-                    } else {
-                        /* user's buffer limit is too small */
-                        errno = ERANGE;
-                        return NULL;
-                    }
-                }
-
-                /* otherwise size == 0, so allocate a buffer
-                 * that is big enough */
-                buf = (char*) malloc(len);
-                if (buf != NULL) {
-                    strncpy(buf, unifyfs_cwd, len);
-                } else {
-                    errno = ENOMEM;
-                }
-                return buf;
-            }
-
-            /* to get here, caller provided an actual buffer,
-             * check that path fits in the caller's buffer */
-            if (len <= size) {
-                /* current working dir fits, copy and return */
-                strncpy(path, unifyfs_cwd, size);
-                return path;
-            } else {
-                /* user's buffer is too small */
-                errno = ERANGE;
-                return NULL;
-            }
+            /* delegate the rest to our common getcwd function */
+            return _getcwd_impl(path, size);
         } else {
             /* current working dir is in real file system,
              * fall through to real getcwd call */
@@ -318,63 +332,8 @@ char* UNIFYFS_WRAP(getcwd)(char* path, size_t size)
          * changed dir without us noticing, so there is a bug here) */
         char upath[UNIFYFS_MAX_FILENAME];
         if (unifyfs_intercept_path(unifyfs_cwd, upath)) {
-            /* man page if size=0 and path not NULL, return EINVAL */
-            if (size == 0 && path != NULL) {
-                errno = EINVAL;
-                return NULL;
-            }
-
-            /* get length of current working dir */
-            size_t len = strlen(unifyfs_cwd) + 1;
-
-            /* if user didn't provide a buffer,
-             * we attempt to allocate and return one for them */
-            if (path == NULL) {
-                /* we'll allocate a buffer to return to the caller */
-                char* buf = NULL;
-
-                /* if path is NULL and size is positive, we must
-                 * allocate a buffer of length size and copy into it */
-                if (size > 0) {
-                    /* check that size is big enough for the string */
-                    if (len <= size) {
-                        /* path will fit, allocate buffer and copy */
-                        buf = (char*) malloc(size);
-                        if (buf != NULL) {
-                            strncpy(buf, unifyfs_cwd, size);
-                        } else {
-                            errno = ENOMEM;
-                        }
-                        return buf;
-                    } else {
-                        /* user's buffer limit is too small */
-                        errno = ERANGE;
-                        return NULL;
-                    }
-                }
-
-                /* otherwise size == 0, so allocate a buffer
-                 * that is big enough */
-                buf = (char*) malloc(len);
-                if (buf != NULL) {
-                    strncpy(buf, unifyfs_cwd, len);
-                } else {
-                    errno = ENOMEM;
-                }
-                return buf;
-            }
-
-            /* to get here, caller provided an actual buffer,
-             * check that path fits in the caller's buffer */
-            if (len <= size) {
-                /* current working dir fits, copy and return */
-                strncpy(path, unifyfs_cwd, size);
-                return path;
-            } else {
-                /* user's buffer is too small */
-                errno = ERANGE;
-                return NULL;
-            }
+            /* delegate the rest to our common getcwd function */
+            return _getcwd_impl(path, size);
         } else {
             /* current working dir is in real file system,
              * fall through to real getcwd call */
