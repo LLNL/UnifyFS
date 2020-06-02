@@ -172,7 +172,7 @@ int UNIFYFS_WRAP(chdir)(const char* path)
         int ret = UNIFYFS_REAL(chdir)(path);
 
         /* if the change dir was successful,
-         * update our current working direcotry */
+         * update our current working directory */
         if (unifyfs_initialized && ret == 0) {
             if (unifyfs_cwd != NULL) {
                 free(unifyfs_cwd);
@@ -1815,7 +1815,7 @@ int UNIFYFS_WRAP(fchdir)(int fd)
         int ret = UNIFYFS_REAL(fchdir)(fd);
 
         /* if the change dir was successful,
-         * update our current working direcotry */
+         * update our current working directory */
         if (unifyfs_initialized && ret == 0) {
             if (unifyfs_cwd != NULL) {
                 free(unifyfs_cwd);

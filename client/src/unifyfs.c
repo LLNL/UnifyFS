@@ -2245,8 +2245,6 @@ static int unifyfs_init(void)
         } else {
             /* user did not specify a CWD, so initialize with the actual
              * current working dir */
-            //MAP_OR_FAIL(getcwd);
-            //int cwd_rc = UNIFYFS_REAL(getcwd)(cwdpath, sizeof(cwdpath));
             char* cwd = getcwd(NULL, 0);
             if (cwd != NULL) {
                 unifyfs_cwd = cwd;
