@@ -177,8 +177,12 @@ UnifyFS dependencies can then be installed.
 Build UnifyFS
 ^^^^^^^^^^^^^
 
+Download the latest UnifyFS release from the `Releases
+<https://github.com/LLNL/UnifyFS/releases>`_ page or clone the develop branch
+from the `UnifyFS repository <https://github.com/LLNL/UnifyFS>`_.
+
 Once the dependencies are installed, load them into your environment and then
-manually build UnifyFS.
+manually build UnifyFS from inside the source code directory.
 
 .. code-block:: Bash
 
