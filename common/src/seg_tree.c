@@ -27,12 +27,14 @@
   * segments in the tree are non-overlapping.  Added segments overwrite the old
   * segments in the tree.  This is used to coalesce writes before an fsync.
   */
+
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <pthread.h>
+
 #include "seg_tree.h"
 #include "tree.h"
 
@@ -277,7 +279,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
 
     /* Check whether we can coalesce new extent with any preceding extent. */
     prev = RB_PREV(inttree, &seg_tree->head, target);
-    if (prev != NULL && prev->end + 1 == target->start) {
+    if ((prev != NULL) && ((prev->end + 1) == target->start)) {
         /*
          * We found a extent that ends just before the new extent starts.
          * Check whether they are also contiguous in the log.
@@ -306,7 +308,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
 
     /* Check whether we can coalesce new extent with any trailing extent. */
     next = RB_NEXT(inttree, &seg_tree->head, target);
-    if (next != NULL && target->end + 1 == next->start) {
+    if ((next != NULL) && ((target->end + 1) == next->start)) {
         /*
          * We found a extent that starts just after the new extent ends.
          * Check whether they are also contiguous in the log.
@@ -415,6 +417,7 @@ struct seg_tree_node*
 seg_tree_iter(struct seg_tree* seg_tree, struct seg_tree_node* start)
 {
     struct seg_tree_node* next = NULL;
+    struct seg_tree_node* tmp = NULL;
     if (start == NULL) {
         /* Initial case, no starting node */
         next = RB_MIN(inttree, &seg_tree->head);
@@ -425,8 +428,8 @@ seg_tree_iter(struct seg_tree* seg_tree, struct seg_tree_node* start)
      * We were given a valid start node.  Look it up to start our traversal
      * from there.
      */
-    next = RB_FIND(inttree, &seg_tree->head, start);
-    if (!next) {
+    tmp = RB_FIND(inttree, &seg_tree->head, start);
+    if (!tmp) {
         /* Some kind of error */
         return NULL;
     }

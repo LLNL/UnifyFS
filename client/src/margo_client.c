@@ -290,6 +290,7 @@ int invoke_client_mount_rpc(void)
         LOGWARN("mismatch on app_id - using %d, server returned %d",
                 unifyfs_app_id, srvr_app_id);
     }
+    LOGDBG("My client id is %d", unifyfs_client_id);
 
     /* free resources */
     margo_free_output(handle, &out);

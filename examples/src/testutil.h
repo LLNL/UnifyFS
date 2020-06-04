@@ -1157,6 +1157,7 @@ int test_init(int argc, char** argv,
         if (rc) {
             test_print(cfg, "ERROR: unifyfs_mount() failed (rc=%d)", rc);
             test_abort(cfg, rc);
+            return -1;
         }
 #endif
         test_barrier(cfg);
