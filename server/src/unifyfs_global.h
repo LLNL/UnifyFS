@@ -138,7 +138,7 @@ struct reqmgr_thrd;
  * logio and shared memory contexts, margo rpc address, etc.
  */
 typedef struct app_client {
-    int app_id;              /* index of associated app in app_configs */
+    int app_id;              /* index of app in server app_configs array */
     int client_id;           /* this client's index in app's clients array */
     int dbg_rank;            /* client debug rank - NOT CURRENTLY USED */
     int connected;           /* is client currently connected? */
@@ -172,16 +172,16 @@ typedef struct app_config {
     app_client* clients[MAX_APP_CLIENTS];
 } app_config;
 
-extern app_config* app_configs[MAX_NUM_APPS]; /* list of apps */
-
 app_config* get_application(int app_id);
 
-unifyfs_rc new_application(app_config* new_app);
+app_config* new_application(int app_id);
+
+unifyfs_rc cleanup_application(app_config* app);
 
 app_client* get_app_client(int app_id,
                            int client_id);
 
-app_client* create_app_client(app_config* app,
+app_client* new_app_client(app_config* app,
                               const char* margo_addr_str,
                               const int dbg_rank);
 

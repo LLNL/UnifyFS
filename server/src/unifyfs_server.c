@@ -58,7 +58,8 @@ server_info_t* glb_servers; // array of server_info_t
 
 unifyfs_cfg_t server_cfg;
 
-app_config* app_configs[MAX_NUM_APPS]; /* list of apps */
+static ABT_mutex app_configs_abt_sync;
+static app_config* app_configs[MAX_NUM_APPS]; /* list of apps */
 
 /**
  * @brief create a ready status file to notify that all servers are ready for
@@ -351,6 +352,8 @@ int main(int argc, char* argv[])
     }
 
     LOGDBG("initializing rpc service");
+    ABT_init(argc, argv);
+    ABT_mutex_create(&app_configs_abt_sync);
     rc = configurator_bool_val(server_cfg.margo_tcp, &margo_use_tcp);
     rc = margo_server_rpc_init();
     if (rc != UNIFYFS_SUCCESS) {
@@ -571,26 +574,19 @@ static int unifyfs_exit(void)
     int ret = UNIFYFS_SUCCESS;
 
     /* iterate over each active application and free resources */
+    ABT_mutex_lock(app_configs_abt_sync);
     for (int i = 0; i < MAX_NUM_APPS; i++) {
         /* get pointer to app config for this app_id */
         app_config* app = app_configs[i];
-        if (NULL == app) {
-            /* skip to next app_id if this slot is empty */
-            continue;
-        }
-
-        /* free resources allocated for each client */
-        int app_id = app->app_id;
-        for (int j = 1; j <= MAX_APP_CLIENTS; j++) {
-            app_client* client = get_app_client(app_id, j);
-            if (NULL != client) {
-                int rc = cleanup_app_client(client);
-                if (rc != UNIFYFS_SUCCESS) {
-                    ret = rc;
-                }
+        if (NULL != app) {
+            app_configs[i] = NULL;
+            unifyfs_rc rc = cleanup_application(app);
+            if (rc != UNIFYFS_SUCCESS) {
+                ret = rc;
             }
         }
     }
+    ABT_mutex_unlock(app_configs_abt_sync);
 
     /* TODO: notify the service threads to exit */
 
@@ -621,41 +617,84 @@ static int unifyfs_exit(void)
 /* get pointer to app config for this app_id */
 app_config* get_application(int app_id)
 {
+    ABT_mutex_lock(app_configs_abt_sync);
     for (int i = 0; i < MAX_NUM_APPS; i++) {
         app_config* app_cfg = app_configs[i];
         if ((NULL != app_cfg) && (app_cfg->app_id == app_id)) {
+            ABT_mutex_unlock(app_configs_abt_sync);
             return app_cfg;
         }
     }
+    ABT_mutex_unlock(app_configs_abt_sync);
     return NULL;
 }
 
 /* insert a new app config in app_configs[] */
-unifyfs_rc new_application(app_config* new_app)
+app_config* new_application(int app_id)
 {
+    ABT_mutex_lock(app_configs_abt_sync);
+
+    /* don't have an app_config for this app_id,
+     * so allocate and fill a new one */
+    app_config* new_app = (app_config*) calloc(1, sizeof(app_config));
     if (NULL == new_app) {
-        LOGERR("NULL app_config pointer");
-        return EINVAL;
+        LOGERR("failed to allocate application structure")
+        ABT_mutex_unlock(app_configs_abt_sync);
+        return NULL;
     }
 
-    /* check for existing app structure with given app_id */
-    int app_id = new_app->app_id;
-    app_config* existing = get_application(app_id);
-    if (NULL != existing) {
-        LOGERR("application with app_id %d already exists", app_id);
-        return EINVAL;
-    }
+    new_app->app_id = app_id;
 
     /* insert the given app_config in an empty slot */
     for (int i = 0; i < MAX_NUM_APPS; i++) {
-        existing = app_configs[i];
+        app_config* existing = app_configs[i];
         if (NULL == existing) {
             app_configs[i] = new_app;
-            return UNIFYFS_SUCCESS;
+            ABT_mutex_unlock(app_configs_abt_sync);
+            return new_app;
+        } else if (existing->app_id == app_id) {
+            /* someone beat us to it, use existing */
+            LOGDBG("found existing application for id=%d", app_id);
+            ABT_mutex_unlock(app_configs_abt_sync);
+            free(new_app);
+            return existing;
         }
     }
+
+    ABT_mutex_unlock(app_configs_abt_sync);
+
+    /* no empty slots found */
     LOGERR("insert into app_configs[] failed");
-    return UNIFYFS_FAILURE;
+    free(new_app);
+    return NULL;
+}
+
+/* free application state */
+unifyfs_rc cleanup_application(app_config* app)
+{
+    unifyfs_rc ret = UNIFYFS_SUCCESS;
+
+    if (NULL == app) {
+        return EINVAL;
+    }
+
+    int app_id = app->app_id;
+    LOGDBG("cleaning application %d", app_id);
+
+    /* free resources allocated for each client */
+    for (int j = 1; j <= MAX_APP_CLIENTS; j++) {
+        app_client* client = get_app_client(app_id, j);
+        if (NULL != client) {
+            unifyfs_rc rc = cleanup_app_client(client);
+            if (rc != UNIFYFS_SUCCESS) {
+                ret = rc;
+            }
+        }
+    }
+
+    free(app);
+
+    return ret;
 }
 
 app_client* get_app_client(int app_id,
@@ -728,9 +767,9 @@ static unifyfs_rc attach_to_client_shmem(app_client* client,
  * Sets up logio and shmem region contexts, request manager thread,
  * margo rpc address, etc.
  */
-app_client* create_app_client(app_config* app,
-                              const char* margo_addr_str,
-                              const int debug_rank)
+app_client* new_app_client(app_config* app,
+                           const char* margo_addr_str,
+                           const int debug_rank)
 {
     if ((NULL == app) || (NULL == margo_addr_str)) {
         return NULL;
@@ -740,6 +779,8 @@ app_client* create_app_client(app_config* app,
         LOGERR("reached maximum number of application clients");
         return NULL;
     }
+
+    ABT_mutex_lock(app_configs_abt_sync);
 
     int app_id = app->app_id;
     int client_id = app->num_clients + 1; /* next client id */
@@ -768,13 +809,19 @@ app_client* create_app_client(app_config* app,
 
         if (failure) {
             LOGERR("failed to initialize application client");
+            ABT_mutex_unlock(app_configs_abt_sync);
             cleanup_app_client(client);
-            client = NULL;
-        } else {
-            app->num_clients++;
-            app->clients[client_ndx] = client;
+            return NULL;
         }
+
+        /* update app state */
+        app->num_clients++;
+        app->clients[client_ndx] = client;
+    } else {
+        LOGERR("failed to allocate client structure");
     }
+
+    ABT_mutex_unlock(app_configs_abt_sync);
 
     return client;
 }
@@ -885,6 +932,9 @@ unifyfs_rc cleanup_app_client(app_client* client)
         return EINVAL;
     }
 
+    LOGDBG("cleaning application client %d:%d",
+           client->app_id, client->client_id);
+
     disconnect_app_client(client);
 
     /* close client logio context */
@@ -897,9 +947,11 @@ unifyfs_rc cleanup_app_client(app_client* client)
     app_config* app = get_application(client->app_id);
     if (NULL != app) {
         int client_ndx = client->client_id - 1; /* client ids start at 1 */
+        ABT_mutex_lock(app_configs_abt_sync);
         if (client == app->clients[client_ndx]) {
             app->clients[client_ndx] = NULL;
         }
+        ABT_mutex_unlock(app_configs_abt_sync);
     }
 
     /* free client structure */

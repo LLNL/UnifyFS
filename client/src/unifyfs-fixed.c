@@ -101,7 +101,7 @@ static int unifyfs_coalesce_index(
 
     /* determine number of bytes in next index that lie in current slice,
      * assume all bytes in the index will fit */
-    long length = next_idx->length;
+    size_t length = next_idx->length;
     if (next_end > slice_end) {
         /* current index writes beyond end of slice,
          * so we can only coalesce bytes that fall within slice */
@@ -400,8 +400,9 @@ int unifyfs_fid_logio_write(int fid,
         LOGWARN("partial logio_write() @ offset=%zu (%zu of %zu bytes)",
                 (size_t)log_off, *nwritten, count);
     } else {
-        LOGDBG("successful logio_write() @ log offset=%zu (%zu bytes)",
-               (size_t)log_off, count);
+        LOGDBG("fid=%d pos=%zu - successful logio_write() "
+               "@ log offset=%zu (%zu bytes)",
+               fid, (size_t)pos, (size_t)log_off, count);
     }
 
     /* update our write metadata for this write */

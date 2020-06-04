@@ -58,7 +58,6 @@
  * client */
 static void unifyfs_mount_rpc(hg_handle_t handle)
 {
-    int rc;
     int ret = (int)UNIFYFS_SUCCESS;
 
     /* get input params */
@@ -73,34 +72,28 @@ static void unifyfs_mount_rpc(hg_handle_t handle)
     /* lookup app_config for given app_id */
     app_config* app_cfg = get_application(app_id);
     if (app_cfg == NULL) {
-        /* don't have an app_config for this app_id,
-         * so allocate and fill a new one */
-        app_cfg = (app_config*) calloc(1, sizeof(app_config));
-        app_cfg->app_id = app_id;
-
         /* insert new app_config into our app_configs array */
-        LOGDBG("creating new application");
-        rc = new_application(app_cfg);
-        if (rc != UNIFYFS_SUCCESS) {
-            ret = rc;
-            free(app_cfg);
-            app_cfg = NULL;
+        LOGDBG("creating new application for app_id=%d", app_id);
+        app_cfg = new_application(app_id);
+        if (NULL == app_cfg) {
+            ret = UNIFYFS_FAILURE;
         }
     } else {
         LOGDBG("using existing app_config for app_id=%d", app_id);
     }
 
     if (NULL != app_cfg) {
-        LOGDBG("creating new client");
-        app_client* client = create_app_client(app_cfg,
-                                               in.client_addr_str,
-                                               in.dbg_rank);
+        LOGDBG("creating new app client for %s", in.client_addr_str);
+        app_client* client = new_app_client(app_cfg,
+                                            in.client_addr_str,
+                                            in.dbg_rank);
         if (NULL == client) {
-            LOGERR("create_app_client() failed for app_id=%d dbg_rank=%d",
+            LOGERR("failed to create new client for app_id=%d dbg_rank=%d",
                    app_id, (int)in.dbg_rank);
             ret = (int)UNIFYFS_FAILURE;
         } else {
             client_id = client->client_id;
+            LOGDBG("created new application client %d:%d", app_id, client_id);
         }
     }
 
@@ -139,8 +132,7 @@ static void unifyfs_attach_rpc(hg_handle_t handle)
     /* lookup client structure and attach it */
     app_client* client = get_app_client(app_id, client_id);
     if (NULL != client) {
-        LOGDBG("attaching client (app_id=%d, client_id=%d)",
-               app_id, client_id);
+        LOGDBG("attaching client %d:%d", app_id, client_id);
         ret = attach_app_client(client,
                                 in.logio_spill_dir,
                                 in.logio_spill_size,
