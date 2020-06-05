@@ -28,12 +28,17 @@
  */
 size_t strlcpy(char* dest, const char* src, size_t size)
 {
-    size_t src_len = strnlen(src, size);
+    size_t src_len;
+
+    src_len = strnlen(src, size);
+    if (src_len == size) {
+            /* Our string is too long, have to truncate */
+            src_len = size - 1;
+    }
 
     memcpy(dest, src, src_len);
-    if (src_len == size) {
-        dest[size - 1] = '\0';
-    }
+    dest[src_len] = '\0';
+
     return strlen(dest);
 }
 
