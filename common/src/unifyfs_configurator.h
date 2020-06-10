@@ -91,7 +91,7 @@
     UNIFYFS_CFG(server, local_extents, BOOL, off, "track extents to read back local data", NULL) \
     UNIFYFS_CFG_CLI(sharedfs, dir, STRING, NULLSTRING, "shared file system directory", configurator_directory_check, 'S', "specify full path to directory to contain server shared files") \
     UNIFYFS_CFG_CLI(server, init_timeout, INT, UNIFYFS_DEFAULT_INIT_TIMEOUT, "timeout of waiting for server initialization", NULL, 't', "timeout in seconds to wait for servers to be ready for clients") \
-    UNIFYFS_CFG_CLI(server, fops, STRING, mdhim, \
+    UNIFYFS_CFG_CLI(server, fops, STRING, rpc, \
                     "server file operation implementation", \
                     NULL, 'z', "mdhim|rpc") \
 

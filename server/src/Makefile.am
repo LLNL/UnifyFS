@@ -33,9 +33,7 @@ libunifyfsd_a_SOURCES = \
     unifyfs_inode_tree.c \
     unifyfs_inode_tree.h \
     unifyfs_group_rpc.c \
-    unifyfs_group_rpc.h \
-    int2void.c \
-    int2void.h
+    unifyfs_group_rpc.h
 
 bin_PROGRAMS = unifyfsd
 
