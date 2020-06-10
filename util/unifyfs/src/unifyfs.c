@@ -279,8 +279,8 @@ int main(int argc, char** argv)
         if (cli_args.stage_in != NULL) {
             if (cli_args.script) {
                 fprintf(stderr,
-                        "WARNING! You are using a script with --stage-in.\n");
-                fprintf(stderr, "This is won't work.\n");
+                        "WARNING! You are using a script with --stage-in.\n"
+                        "This will not work.\n");
                 return -EINVAL;
             }
             if (access(cli_args.stage_in, R_OK)) {
@@ -304,8 +304,8 @@ int main(int argc, char** argv)
             }
             if (cli_args.script) {
                 fprintf(stderr,
-                        "WARNING! You are using a script with --stage-out.\n");
-                fprintf(stderr, "This won't work.\n");
+                        "WARNING! You are using a script with --stage-out.\n"
+                        "This will not work.\n");
                 return -EINVAL;
             }
             if (access(cli_args.stage_out, R_OK)) {

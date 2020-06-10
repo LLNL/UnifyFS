@@ -9,12 +9,14 @@ TESTS = \
 	0200-stdio-gotcha.t \
 	0500-sysio-static.t \
 	0600-stdio-static.t \
+	0700-unifyfs-stage-full.t \
 	9005-unifyfs-unmount.t \
 	9010-stop-unifyfsd.t \
 	9020-mountpoint-empty.t \
 	9100-metadata-api.t \
 	9200-seg-tree-test.t \
 	9201-slotmap-test.t \
+	9300-unifyfs-stage-isolated.t \
 	9999-cleanup.t
 
 check_SCRIPTS = \
@@ -23,12 +25,14 @@ check_SCRIPTS = \
 	0200-stdio-gotcha.t \
 	0500-sysio-static.t \
 	0600-stdio-static.t \
+	0700-unifyfs-stage-full.t \
 	9005-unifyfs-unmount.t \
 	9010-stop-unifyfsd.t \
 	9020-mountpoint-empty.t \
 	9100-metadata-api.t \
 	9200-seg-tree-test.t \
 	9201-slotmap-test.t \
+	9300-unifyfs-stage-isolated.t \
 	9999-cleanup.t
 
 EXTRA_DIST = \
