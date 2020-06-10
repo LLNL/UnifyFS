@@ -261,13 +261,9 @@ enum {
     UNIFYFS_STAGE_OUT = 1,
 };
 
-static inline unsigned int estimate_timeout(const char* manifest_file, int op)
+static inline unsigned int estimate_timeout(const char* manifest_file)
 {
-    /* FIXME: we just wait for 20 mins.
-     * In fact, we can roughly estimate time for stage in by looking at the
-     * total file size. However, such a method is not possible for stage out
-     * because we have no idea on what the total transfer size is.
-     */
+    /* crude guess: 20 minutes */
     return 20 * 60;
 }
 
@@ -281,7 +277,7 @@ static inline unsigned int estimate_timeout(const char* manifest_file, int op)
  * @return
  */
 static
-int wait_stage(unifyfs_resource_t* resource, unifyfs_args_t* args, int op)
+int wait_stage(unifyfs_resource_t* resource, unifyfs_args_t* args)
 {
     int ret = UNIFYFS_SUCCESS;
     unsigned int interval = 5;
@@ -301,17 +297,10 @@ int wait_stage(unifyfs_resource_t* resource, unifyfs_args_t* args, int op)
         return -ENOMEM;
     }
 
-
-    if (op == UNIFYFS_STAGE_IN) {
-        manifest_file = args->stage_in;
-    } else {
-        manifest_file = args->stage_out;
-    }
-
     if (args->stage_timeout > 0) {
         timeout = args->stage_timeout;
     } else {
-        timeout = estimate_timeout(manifest_file, op);
+        timeout = estimate_timeout(manifest_file);
     }
 
     while (1) {
@@ -319,9 +308,13 @@ int wait_stage(unifyfs_resource_t* resource, unifyfs_args_t* args, int op)
         if (fp) {
             char* line = fgets(linebuf, 15, fp);
             if (0 == strncmp("success", line, strlen("success"))) {
+                fclose(fp);
+                fp = NULL;
                 ret = 0;
                 break;      // transfer completed
             } else if (0 == strncmp("fail", line, strlen("fail"))) {
+                fclose(fp);
+                fp = NULL;
                 ret = -EIO;
                 break;      // transfer failed
             } else {
@@ -347,18 +340,6 @@ int wait_stage(unifyfs_resource_t* resource, unifyfs_args_t* args, int op)
     }
 
     return ret;
-}
-
-static inline int wait_stage_in(unifyfs_resource_t* resource,
-                                unifyfs_args_t* args)
-{
-    return wait_stage(resource, args, UNIFYFS_STAGE_IN);
-}
-
-static inline int wait_stage_out(unifyfs_resource_t* resource,
-                                 unifyfs_args_t* args)
-{
-    return wait_stage(resource, args, UNIFYFS_STAGE_OUT);
 }
 
 /**
@@ -1279,19 +1260,19 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
 
     rc = write_hostfile(resource, args);
     if (rc) {
-        fprintf(stderr, "ERROR: failed to write shared server hostfile\n");
+        fprintf(stderr, "Failed to write shared server hostfile!\n");
         return rc;
     }
 
     rc = remove_server_pid_file(args);
     if (rc) {
-        fprintf(stderr, "ERROR: failed to remove server pid file\n");
+        fprintf(stderr, "Failed to remove server pid file!\n");
         return rc;
     }
 
     pid = fork();
     if (pid < 0) {
-        fprintf(stderr, "failed to create server launch process (%s)\n",
+        fprintf(stderr, "Failed to create server launch process (%s)\n",
                 strerror(errno));
         return -errno;
     } else if (pid == 0) {
@@ -1304,13 +1285,13 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
 
     rc = wait_server_initialization(resource, args);
     if (rc) {
-        fprintf(stderr, "ERROR: failed to wait for server initialization\n");
+        fprintf(stderr, "Failed to wait for server initialization\n");
     }
 
     if (args->stage_in) {
         rc = remove_stage_status_file(args);
         if (rc) {
-            fprintf(stderr, "ERROR: failed to remove stage status file\n");
+            fprintf(stderr, "Failed to remove stage status file\n");
             return rc;
         }
 
@@ -1323,7 +1304,7 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
             return resource_managers[resource->rm].stage(resource, args);
         }
 
-        rc = wait_stage_in(resource, args);
+        rc = wait_stage(resource, args);
         if (rc) {
             fprintf(stderr, "failed to detect the stage in status (rc=%d)\n",
                     rc);
@@ -1346,7 +1327,7 @@ int unifyfs_stop_servers(unifyfs_resource_t* resource,
     if (args->stage_out) {
         rc = remove_stage_status_file(args);
         if (rc) {
-            fprintf(stderr, "ERROR: failed to remove stage status file\n");
+            fprintf(stderr, "Failed to remove stage status file\n");
             return rc;
         }
 
@@ -1359,7 +1340,7 @@ int unifyfs_stop_servers(unifyfs_resource_t* resource,
             return resource_managers[resource->rm].stage(resource, args);
         }
 
-        rc = wait_stage_out(resource, args);
+        rc = wait_stage(resource, args);
         if (rc) {
             fprintf(stderr, "failed to detect the data out status (rc=%d)\n",
                     rc);
