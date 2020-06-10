@@ -50,6 +50,7 @@ for further details on customizing the UnifyFS runtime configuration.
 
     unifyfs start --share-dir=/path/to/shared/file/system
 
+.. _unifyfs_utility_label:
 
 ``unifyfs`` provides command-line options to choose the client mountpoint,
 adjust the consistency model, and control stage-in and stage-out of files.
