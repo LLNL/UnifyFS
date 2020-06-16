@@ -1784,16 +1784,7 @@ int rm_cmd_sync_mdhim(int app_id, int client_id)
     }
 #endif
 
-    struct extent_tree_node *local_extents = calloc(extent_num_entries,
-                                                     sizeof(*local_extents));
-    if (!local_extents) {
-        LOGERR("failed to allocate memory for local_extents");
-        ret = ENOMEM;
-        goto rm_cmd_fsync_exit;
-    }
-
     /* create file extent key/values for insertion into MDHIM */
-    int gfid_wrong = 0;
     int count = 0;
     for (i = 0; i < extent_num_entries; i++) {
         /* get file offset, length, and log offset for this entry */
@@ -1813,34 +1804,6 @@ int rm_cmd_sync_mdhim(int app_id, int client_id)
         /* count up the number of keys we used for this index */
         count += used;
 #endif
-
-        unsigned long end = (unsigned long) (offset + length - 1);
-        struct extent_tree_node *current = &local_extents[i];
-
-        current->start = offset;
-        current->end = end;
-        current->svr_rank = glb_pmi_rank;
-        current->app_id = app_id;
-        current->cli_id = client_id;
-        current->pos = (unsigned long) logpos;
-
-        /* TODO: using the gfid of the last entry for the gfid below (buggy hack)*/
-        gfid_wrong = gfid;
-    }
-
-    ret = unifyfs_inode_add_local_extents(gfid_wrong,
-                                          extent_num_entries, local_extents);
-    if (ret) {
-        LOGERR("failed to add local extent to inode (gfid=%d, ret=%d)",
-                gfid_wrong, ret);
-        goto rm_cmd_fsync_exit;
-    }
-
-    /* distribute the extend tree */
-    ret = unifyfs_broadcast_extent_tree(gfid_wrong);
-    if (UNIFYFS_SUCCESS != ret) {
-        LOGERR("Error distributing extend tree");
-        goto rm_cmd_fsync_exit;
     }
 
 #if HAVE_MDHIM
@@ -1910,28 +1873,18 @@ int rm_cmd_sync_rpc(int app_id, int client_id)
 
     /* indices are stored in the superblock shared memory
      * created by the client, these are stored as index_t
-     * structs starting one page size offset into meta region */
+     * structs starting one page size offset into meta region
+     *
+     * Is it safe to assume that the index information in this superblock is
+     * not going to be modified by the client while we perform this operation?
+     */
     char* ptr_extents = meta + page_sz;
 
     if (extent_num_entries == 0) {
-        /* Nothing to do */
-        return UNIFYFS_SUCCESS;
+        return UNIFYFS_SUCCESS;  /* Nothing to do */
     }
 
     unifyfs_index_t* meta_payload = (unifyfs_index_t*)(ptr_extents);
-
-    /* total up number of key/value pairs we'll need for this
-     * set of index values */
-    size_t slices = 0;
-    for (i = 0; i < extent_num_entries; i++) {
-        size_t offset = meta_payload[i].file_pos;
-        size_t length = meta_payload[i].length;
-        slices += num_slices(offset, length);
-    }
-    if (slices >= UNIFYFS_MAX_SPLIT_CNT) {
-        LOGERR("Error allocating buffers");
-        return ENOMEM;
-    }
 
     struct extent_tree_node* local_extents = calloc(extent_num_entries,
                                                     sizeof(*local_extents));
@@ -1968,16 +1921,17 @@ int rm_cmd_sync_rpc(int app_id, int client_id)
         current_count++;
 
         if (gfid != current_gfid) {
-            ret = unifyfs_inode_add_local_extents(current_gfid,
-                                                  current_count - 1,
-                                                  current_extents);
+            ret = unifyfs_inode_add_extents(current_gfid,
+                                            current_count - 1,
+                                            current_extents);
             if (ret) {
                 LOGERR("failed to add extents (gfid=%d, ret=%d)",
                         current_gfid, ret);
                 return ret;
             }
 
-            ret = unifyfs_invoke_broadcast_extents_rpc(current_gfid);
+            ret = unifyfs_invoke_broadcast_extents_rpc(current_gfid,
+                       current_count - 1, current_extents);
             if (ret) {
                 LOGERR("failed to broadcast extents (gfid=%d, ret=%d)",
                         current_gfid, ret);
@@ -1990,16 +1944,17 @@ int rm_cmd_sync_rpc(int app_id, int client_id)
         }
 
         if (current_count == extent_num_entries) {
-            ret = unifyfs_inode_add_local_extents(current_gfid,
-                                                  current_count,
-                                                  current_extents);
+            ret = unifyfs_inode_add_extents(current_gfid,
+                                            current_count,
+                                            current_extents);
             if (ret) {
                 LOGERR("failed to add extents (gfid=%d, ret=%d)",
                         current_gfid, ret);
                 return ret;
             }
 
-            ret = unifyfs_invoke_broadcast_extents_rpc(current_gfid);
+            ret = unifyfs_invoke_broadcast_extents_rpc(current_gfid,
+                    current_count, current_extents);
             if (ret) {
                 LOGERR("failed to broadcast extents (gfid=%d, ret=%d)",
                         current_gfid, ret);

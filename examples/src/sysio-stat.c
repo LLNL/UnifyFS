@@ -40,8 +40,8 @@ static int debug;
 
 static char* mountpoint = "/unifyfs";  /* unifyfs mountpoint */
 static char* filename = "/unifyfs";
-static int unmount;                /* unmount unifyfs after running the test */
-static int testrank = -1;
+static int unmount;        /* unmount unifyfs after running the test */
+static int testrank = -1;  /* if negative, execute from all ranks */
 
 #define FP_SPECIAL 1
 
@@ -107,6 +107,20 @@ static void dump_stat(int rank, const struct stat* sb)
     printf("Last file access:         %s", ctime(&sb->st_atime));
     printf("Last file modification:   %s", ctime(&sb->st_mtime));
     printf("Last status change:       %s\n\n", ctime(&sb->st_ctime));
+}
+
+static void do_stat(int rank)
+{
+    int ret = 0;
+    struct stat sb;
+
+    ret = stat(filename, &sb);
+    if (ret < 0) {
+        test_print(rank, "stat failed on \"%s\" (%d:%s)",
+                   filename, errno, strerror(errno));
+    } else {
+        dump_stat(rank, &sb);
+    }
 }
 
 static struct option const long_opts[] = {
@@ -204,13 +218,20 @@ int main(int argc, char** argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (testrank < 0 || (testrank >= 0 && rank == testrank)) {
-        ret = stat(filename, &sb);
-        if (ret < 0) {
-            test_print(rank, "stat failed on \"%s\" (%d:%s)",
-                       filename, errno, strerror(errno));
-        } else {
-            dump_stat(rank, &sb);
+    if (testrank < 0) { /* execute from all ranks in order */
+        int i = 0;
+
+        for (i = 0; i < total_ranks; i++) {
+            if (rank == i) {
+                do_stat(rank);
+            }
+
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+
+    } else {
+        if (rank == testrank) {
+            do_stat(rank);
         }
     }
 

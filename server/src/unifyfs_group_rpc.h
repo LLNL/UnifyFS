@@ -3,7 +3,8 @@
 
 #include "unifyfs_tree.h"
 
-int unifyfs_broadcast_extent_tree(int gfid);
+int unifyfs_broadcast_extents(int gfid, unsigned int len,
+                              struct extent_tree_node* extents);
 
 /**
  * @brief
@@ -12,9 +13,10 @@ int unifyfs_broadcast_extent_tree(int gfid);
  *
  * @return
  */
-static inline int unifyfs_invoke_broadcast_extents_rpc(int gfid)
+static inline int unifyfs_invoke_broadcast_extents_rpc(int gfid,
+    unsigned int len, struct extent_tree_node* extents)
 {
-    return unifyfs_broadcast_extent_tree(gfid);
+    return unifyfs_broadcast_extents(gfid, len, extents);
 }
 
 /**

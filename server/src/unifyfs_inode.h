@@ -18,8 +18,7 @@ struct unifyfs_inode {
     unifyfs_file_attr_t attr;     /* file attributes */
     pthread_rwlock_t rwlock;      /* rwlock for accessing this structure */
 
-    struct extent_tree* local_extents;  /* tree for local data segments */
-    struct extent_tree* remote_extents; /* tree for remote data segments */
+    struct extent_tree* extents;  /* extent information */
 };
 
 /**
@@ -99,18 +98,6 @@ int unifyfs_inode_unlink(int gfid);
 int unifyfs_inode_truncate(int gfid, unsigned long size);
 
 /**
- * @brief adds local extents to the inode
- *
- * @param gfid global file identifier
- * @param num_extents the number of extents to be added (size of @nodes)
- * @param nodes the array of extent_tree_node
- *
- * @return 0 on success, errno otherwise
- */
-int unifyfs_inode_add_local_extents(int gfid, int num_extents,
-                                    struct extent_tree_node* nodes);
-
-/**
  * @brief get the local extent array from the target inode
  *
  * @param gfid the global file identifier
@@ -119,8 +106,19 @@ int unifyfs_inode_add_local_extents(int gfid, int num_extents,
  *
  * @return 0 on success, errno otherwise
  */
-int unifyfs_inode_get_local_extents(int gfid, size_t* n,
-                                    struct extent_tree_node** nodes);
+int unifyfs_inode_get_extents(int gfid, size_t* n,
+                              struct extent_tree_node** nodes);
+
+/**
+ * @brief add new extents to the inode
+ *
+ * @param gfid the global file identifier
+ * @param n the number of new extents in @nodes
+ * @param nodes an array of extents to be added
+ *
+ * @return
+ */
+int unifyfs_inode_add_extents(int gfid, int n, struct extent_tree_node* nodes);
 
 /**
  * @brief get the maximum file size from the local extent tree of given file
@@ -131,18 +129,6 @@ int unifyfs_inode_get_local_extents(int gfid, size_t* n,
  * @return 0 on success, errno otherwise
  */
 int unifyfs_inode_get_filesize(int gfid, size_t* offset);
-
-/**
- * @brief adds remote extents to the inode
- *
- * @param gfid global file identifier
- * @param num_extents the number of extents to be added (size of @nodes)
- * @param nodes the array of extent_tree_node
- *
- * @return 0 on success, errno otherwise
- */
-int unifyfs_inode_add_remote_extents(int gfid, int n,
-                                     struct extent_tree_node* nodes);
 
 /**
  * @brief calls extents_tree_span, which will do:

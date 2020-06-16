@@ -210,8 +210,8 @@ void unifyfs_inode_tree_clear(
     while ((node = unifyfs_inode_tree_iter(tree, node))) {
         if (oldnode) {
             RB_REMOVE(rb_inode_tree, &tree->head, oldnode);
-            if (oldnode->local_extents != NULL) {
-                extent_tree_destroy(oldnode->local_extents);
+            if (oldnode->extents != NULL) {
+                extent_tree_destroy(oldnode->extents);
             }
             free(oldnode);
         }
@@ -219,8 +219,8 @@ void unifyfs_inode_tree_clear(
     }
     if (oldnode) {
         RB_REMOVE(rb_inode_tree, &tree->head, oldnode);
-        if (oldnode->local_extents != NULL) {
-            extent_tree_destroy(oldnode->local_extents);
+        if (oldnode->extents != NULL) {
+            extent_tree_destroy(oldnode->extents);
         }
         free(oldnode);
     }

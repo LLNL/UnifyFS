@@ -118,9 +118,15 @@ unifyfs_file_attr_update(unifyfs_file_attr_t* dst, unifyfs_file_attr_t* src)
         dst->gid = src->gid;
     }
 
+#if 0
+    /* this function is curretnly used in the server context, when
+     * the server receives attributes from client. the file size should be
+     * maintained by the server, so we skip updating the size.
+     */
     if (src->size != (uint64_t) -1) {
         dst->size = src->size;
     }
+#endif
 
     if (src->atime.tv_sec != (uint64_t) -1) {
         dst->atime = src->atime;

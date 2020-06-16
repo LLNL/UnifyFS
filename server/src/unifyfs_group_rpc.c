@@ -205,19 +205,13 @@ static void extbcast_request_rpc(hg_handle_t handle)
     LOGDBG("received %d extents (%lu bytes) from %d",
            num_extents, buf_size, in.root);
 
-    for (i = 0; i < num_extents; i++) {
-        struct extent_tree_node* n = &extents[i];
-        LOGDBG("[%lu,%lu] { svr: %d, app: %d, cli: %d, pos: %lu }",
-                n->start, n->end, n->svr_rank, n->app_id, n->cli_id, n->pos);
-    }
-
     /* forward request down the tree */
     for (i = 0; i < bcast_tree.child_count; i++) {
         /* invoke filesize request rpc on child */
         ret = rpc_invoke_extbcast_request(&in, &requests[i]);
     }
 
-    ret = unifyfs_inode_add_remote_extents(gfid, num_extents, extents);
+    ret = unifyfs_inode_add_extents(gfid, num_extents, extents);
     if (ret) {
         LOGERR("filling remote extent failed (ret=%d)\n", ret);
         // what do we do now?
@@ -260,9 +254,10 @@ DEFINE_MARGO_RPC_HANDLER(extbcast_request_rpc)
  *
  * @return int UnifyFS return code
  */
-int unifyfs_broadcast_extent_tree(int gfid)
+int unifyfs_broadcast_extents(int gfid, unsigned int len,
+                              struct extent_tree_node* extents)
 {
-    LOGDBG("%d: BUCKEYES unifyfs_broadcast_extend_tree\n", glb_pmi_rank);
+    LOGDBG("%d: BUCKEYES unifyfs_broadcast_extents\n", glb_pmi_rank);
 
     /* assuming success */
     int ret = UNIFYFS_SUCCESS;
@@ -272,24 +267,11 @@ int unifyfs_broadcast_extent_tree(int gfid)
     unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, glb_pmi_rank,
                       UNIFYFS_BCAST_K_ARY, &bcast_tree);
 
-    hg_size_t num_extents = 0;
-    struct extent_tree_node* extents = NULL;
-
-    ret = unifyfs_inode_get_local_extents(gfid, &num_extents, &extents);
-    if (ret) {
-        LOGERR("reading all extents failed (gfid=%d, ret=%d)\n", gfid, ret);
-        // abort function?
-    }
-
+    hg_size_t num_extents = len;
     hg_size_t buf_size = num_extents * sizeof(*extents);
 
-    LOGDBG("broadcasting %lu extents (%lu bytes): ", num_extents, buf_size);
-
-    for (int i = 0; i < num_extents; i++) {
-        struct extent_tree_node* n = &extents[i];
-        LOGDBG("[%lu,%lu] { svr: %d, app: %d, cli: %d, pos: %lu }",
-                n->start, n->end, n->svr_rank, n->app_id, n->cli_id, n->pos);
-    }
+    LOGDBG("broadcasting %lu extents (%lu bytes, gfid=%d): ",
+           num_extents, buf_size, gfid);
 
     /* create bulk data structure containing the extends
      * NOTE: bulk data is always read only at the root of the broadcast tree */
