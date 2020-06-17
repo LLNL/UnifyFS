@@ -1907,9 +1907,8 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
            (NULL != del_reads->resp));
 
     /* look up client shared memory region */
-    app_config* app_cfg = get_application(rdreq->app_id);
     app_client* clnt = get_app_client(rdreq->app_id, rdreq->client_id);
-    if ((NULL == app_cfg) || (NULL == clnt)) {
+    if (NULL == clnt) {
         return (int)UNIFYFS_FAILURE;
     }
     client_shm = clnt->shmem_data;
