@@ -2456,9 +2456,19 @@ void fill_client_attach_info(unifyfs_attach_in_t* in)
     in->shmem_super_size  = shm_super_ctx->size;
     in->meta_offset       = meta_offset;
     in->meta_size         = meta_size;
-    in->logio_mem_size    = logio_ctx->shmem->size;
-    in->logio_spill_size  = logio_ctx->spill_sz;
-    in->logio_spill_dir   = strdup(client_cfg.logio_spill_dir);
+
+    if (NULL != logio_ctx->shmem) {
+        in->logio_mem_size = logio_ctx->shmem->size;
+    } else {
+        in->logio_mem_size = 0;
+    }
+
+    in->logio_spill_size = logio_ctx->spill_sz;
+    if (logio_ctx->spill_sz) {
+        in->logio_spill_dir = strdup(client_cfg.logio_spill_dir);
+    } else {
+        in->logio_spill_dir = NULL;
+    }
 }
 
 /**
