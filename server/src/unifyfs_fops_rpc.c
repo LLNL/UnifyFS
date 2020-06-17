@@ -94,11 +94,7 @@ static int rpc_truncate(unifyfs_fops_ctx_t* ctx, int gfid, off_t len)
 
 static int rpc_laminate(unifyfs_fops_ctx_t* ctx, int gfid)
 {
-    int ret = 0;
-
-    LOGDBG("%s is called but not implemented yet", __func__);
-
-    return ret;
+    return unifyfs_invoke_laminate_rpc(gfid);
 }
 
 static int rpc_unlink(unifyfs_fops_ctx_t* ctx, int gfid)

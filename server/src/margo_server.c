@@ -131,6 +131,11 @@ static void register_server_server_rpcs(margo_instance_id mid)
         MARGO_REGISTER(mid, "unlink_rpc",
                        unlink_in_t, unlink_out_t,
                        unlink_rpc);
+
+    unifyfsd_rpc_context->rpcs.laminate_id =
+        MARGO_REGISTER(mid, "laminate_rpc",
+                       laminate_in_t, laminate_out_t,
+                       laminate_rpc);
 }
 
 /* setup_local_target - Initializes the client-server margo target */

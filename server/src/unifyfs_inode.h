@@ -15,6 +15,7 @@ struct unifyfs_inode {
     RB_ENTRY(unifyfs_inode) inode_tree_entry;
 
     int gfid;                     /* global file identifier */
+    int laminated;                /* is this file laminated? */
     unifyfs_file_attr_t attr;     /* file attributes */
     pthread_rwlock_t rwlock;      /* rwlock for accessing this structure */
 
@@ -129,6 +130,15 @@ int unifyfs_inode_add_extents(int gfid, int n, struct extent_tree_node* nodes);
  * @return 0 on success, errno otherwise
  */
 int unifyfs_inode_get_filesize(int gfid, size_t* offset);
+
+/**
+ * @brief set the given file as laminated
+ *
+ * @param gfid global file identifier
+ *
+ * @return 0 on success, errno otherwise
+ */
+int unifyfs_inode_laminate(int gfid);
 
 /**
  * @brief calls extents_tree_span, which will do:

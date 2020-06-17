@@ -210,11 +210,18 @@ int unifyfs_inode_truncate(int gfid, unsigned long size)
 
         unifyfs_inode_rdlock(ino);
         {
+            if (ino->laminated) {
+                LOGERR("cannot truncate a laminated file (gfid=%d)", gfid);
+                ret = EINVAL;
+                goto unlock_inode;
+            }
+
             ret = extent_tree_truncate(ino->extents, size);
             if (ret == 0) {
                 ino->attr.size = size;
             }
         }
+unlock_inode:
         unifyfs_inode_unlock(ino);
     }
 out_unlock_tree:
@@ -279,6 +286,13 @@ int unifyfs_inode_add_extents(int gfid, int num_extents,
 
         unifyfs_inode_wrlock(ino);
         {
+            if (ino->laminated) {
+                LOGERR("trying to add extents to a laminated file (gfid=%d)",
+                       gfid);
+                ret = EINVAL;
+                goto out_unlock_inode;
+            }
+
             tree = inode_get_extent_tree(ino);
 
             if (!tree) { /* failed to create one */
@@ -343,6 +357,33 @@ int unifyfs_inode_get_filesize(int gfid, size_t* offset)
         *offset = filesize;
 
         LOGDBG("local file size (gfid=%d): %lu", gfid, filesize);
+    }
+out_unlock_tree:
+    unifyfs_inode_tree_unlock(global_inode_tree);
+
+    return ret;
+}
+
+int unifyfs_inode_laminate(int gfid)
+{
+    int ret = 0;
+    struct unifyfs_inode* ino = NULL;
+
+    unifyfs_inode_tree_rdlock(global_inode_tree);
+    {
+        ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
+        if (!ino) {
+            ret = ENOENT;
+            goto out_unlock_tree;
+        }
+
+        unifyfs_inode_wrlock(ino);
+        {
+            ino->laminated = 1;
+        }
+        unifyfs_inode_unlock(ino);
+
+        LOGDBG("file laminated (gfid=%d)", gfid);
     }
 out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);

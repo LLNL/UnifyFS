@@ -26,6 +26,7 @@ typedef struct ServerRpcIds {
     hg_id_t truncate_id;
     hg_id_t metaset_id;
     hg_id_t unlink_id;
+    hg_id_t laminate_id;
 } server_rpcs_t;
 
 typedef struct ServerRpcContext {

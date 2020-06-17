@@ -138,6 +138,16 @@ MERCURY_GEN_PROC(unlink_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unlink_rpc)
 
+/*
+ * laminate (server => server)
+ */
+MERCURY_GEN_PROC(laminate_in_t,
+                 ((int32_t)(root))
+                 ((int32_t)(gfid)))
+MERCURY_GEN_PROC(laminate_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(laminate_rpc)
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

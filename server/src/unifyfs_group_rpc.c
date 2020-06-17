@@ -903,3 +903,151 @@ int unifyfs_invoke_unlink_rpc(int gfid)
     return ret;
 }
 
+/*************************************************************************
+ * laminate
+ *************************************************************************/
+
+static
+int laminate_forward(const unifyfs_tree_t* broadcast_tree, laminate_in_t* in)
+{
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    fflush(stdout);
+
+    hg_return_t hret;
+    int ret;
+    int i;
+
+    /* get info for tree */
+    int child_count  = broadcast_tree->child_count;
+    int* child_ranks = broadcast_tree->child_ranks;
+
+    ret = unifyfs_inode_laminate(in->gfid);
+    if (ret) {
+        goto out;
+    }
+
+    printf("%d:BUCKEYES sending laminate to %d children\n",
+            glb_pmi_rank, child_count);
+
+    if (child_count > 0) {
+        /* allocate memory for request objects
+         * TODO: possibly get this from memory pool */
+        unifyfs_coll_request_t* requests =
+            calloc(child_count, sizeof(unifyfs_coll_request_t));
+        if (!requests) {
+            ret = ENOMEM;
+            goto out;
+        }
+
+        /* forward request down the tree */
+        for (i = 0; i < child_count; i++) {
+            /* get rank of this child */
+            int child = child_ranks[i];
+            unifyfs_coll_request_t* req = &requests[i];
+
+            printf("children[%d]: %s\n",
+                   child, glb_servers[child].margo_svr_addr_str);
+
+            /* allocate handle */
+            hret = margo_create(unifyfsd_rpc_context->svr_mid,
+                                glb_servers[child].margo_svr_addr,
+                                unifyfsd_rpc_context->rpcs.laminate_id,
+                                &req->handle);
+            assert(hret == HG_SUCCESS);
+
+            hret = margo_iforward(req->handle, in, &req->request);
+            assert(hret == HG_SUCCESS);
+        }
+
+        /* wait for the requests to finish */
+        laminate_out_t out;
+        for (i = 0; i < child_count; i++) {
+            /* TODO: get outputs */
+            hret = margo_wait(requests[i].request);
+
+            /* get the output of the rpc */
+            hret = margo_get_output(requests[i].handle, &out);
+
+            printf("laminate got response from child (rank=%d): ret=%d\n",
+                    child_ranks[i], out.ret);
+
+            /* set return value
+             * TODO: check if we have an error and handle it */
+            ret = out.ret;
+        }
+
+        free(requests);
+    }
+
+out:
+    return ret;
+}
+
+static void laminate_rpc(hg_handle_t handle)
+{
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    fflush(stdout);
+
+    hg_return_t hret;
+
+    /* assume we'll succeed */
+    int32_t ret = UNIFYFS_SUCCESS;
+
+    /* get input params */
+    laminate_in_t in;
+
+    hret = margo_get_input(handle, &in);
+    assert(hret == HG_SUCCESS);
+
+    /* create communication tree */
+    unifyfs_tree_t bcast_tree;
+    unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, in.root,
+                      UNIFYFS_BCAST_K_ARY, &bcast_tree);
+
+    ret = laminate_forward(&bcast_tree, &in);
+
+    /* build our output values */
+    laminate_out_t out;
+    out.ret = ret;
+
+    /* send output back to caller */
+    hret = margo_respond(handle, &out);
+    assert(hret == HG_SUCCESS);
+
+    unifyfs_tree_free(&bcast_tree);
+
+    /* free margo resources */
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(laminate_rpc)
+
+int unifyfs_invoke_laminate_rpc(int gfid)
+{
+    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    fflush(stdout);
+
+    /* assuming success */
+    int ret = UNIFYFS_SUCCESS;
+
+    /* create communication tree */
+    unifyfs_tree_t bcast_tree;
+    unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, glb_pmi_rank,
+                      UNIFYFS_BCAST_K_ARY, &bcast_tree);
+
+    /* fill in input struct */
+    laminate_in_t in;
+
+    in.root = (int32_t) glb_pmi_rank;
+    in.gfid = gfid;
+
+    ret = laminate_forward(&bcast_tree, &in);
+    if (ret) {
+        LOGERR("laminate_forward failed: (ret=%d)", ret);
+    }
+
+    unifyfs_tree_free(&bcast_tree);
+
+    return ret;
+}
+

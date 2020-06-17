@@ -60,4 +60,13 @@ int unifyfs_invoke_metaset_rpc(int gfid, int create,
  */
 int unifyfs_invoke_unlink_rpc(int gfid);
 
+/**
+ * @brief
+ *
+ * @param gfid
+ *
+ * @return
+ */
+int unifyfs_invoke_laminate_rpc(int gfid);
+
 #endif /* __UNIFYFS_GROUP_RPC_H */
