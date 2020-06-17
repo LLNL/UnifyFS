@@ -182,8 +182,8 @@ app_client* get_app_client(int app_id,
                            int client_id);
 
 app_client* new_app_client(app_config* app,
-                              const char* margo_addr_str,
-                              const int dbg_rank);
+                           const char* margo_addr_str,
+                           const int dbg_rank);
 
 unifyfs_rc attach_app_client(app_client* client,
                              const char* logio_spill_dir,
@@ -196,6 +196,6 @@ unifyfs_rc attach_app_client(app_client* client,
 
 unifyfs_rc disconnect_app_client(app_client* clnt);
 
-unifyfs_rc cleanup_app_client(app_client* clnt);
+unifyfs_rc cleanup_app_client(app_config* app, app_client* clnt);
 
 #endif // UNIFYFS_GLOBAL_H

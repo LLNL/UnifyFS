@@ -669,7 +669,11 @@ app_config* new_application(int app_id)
     return NULL;
 }
 
-/* free application state */
+/* free application state
+ *
+ * NOTE: the application state mutex (app_configs_abt_sync) should be locked
+ *       before calling this function
+ */
 unifyfs_rc cleanup_application(app_config* app)
 {
     unifyfs_rc ret = UNIFYFS_SUCCESS;
@@ -682,10 +686,10 @@ unifyfs_rc cleanup_application(app_config* app)
     LOGDBG("cleaning application %d", app_id);
 
     /* free resources allocated for each client */
-    for (int j = 1; j <= MAX_APP_CLIENTS; j++) {
-        app_client* client = get_app_client(app_id, j);
+    for (int j = 0; j < MAX_APP_CLIENTS; j++) {
+        app_client* client = app->clients[j];
         if (NULL != client) {
-            unifyfs_rc rc = cleanup_app_client(client);
+            unifyfs_rc rc = cleanup_app_client(app, client);
             if (rc != UNIFYFS_SUCCESS) {
                 ret = rc;
             }
@@ -809,8 +813,8 @@ app_client* new_app_client(app_config* app,
 
         if (failure) {
             LOGERR("failed to initialize application client");
+            cleanup_app_client(app, client);
             ABT_mutex_unlock(app_configs_abt_sync);
-            cleanup_app_client(client);
             return NULL;
         }
 
@@ -925,10 +929,13 @@ unifyfs_rc disconnect_app_client(app_client* client)
  *
  * This function may be called due to a failed initialization, so we can't
  * assume any particular state is valid, other than app_id and client_id.
+ *
+ * NOTE: the application state mutex (app_configs_abt_sync) should be locked
+ *       before calling this function
  */
-unifyfs_rc cleanup_app_client(app_client* client)
+unifyfs_rc cleanup_app_client(app_config* app, app_client* client)
 {
-    if (NULL == client) {
+    if ((NULL == app) || (NULL == client)) {
         return EINVAL;
     }
 
@@ -944,14 +951,9 @@ unifyfs_rc cleanup_app_client(app_client* client)
     }
 
     /* reset app->clients array index if set */
-    app_config* app = get_application(client->app_id);
-    if (NULL != app) {
-        int client_ndx = client->client_id - 1; /* client ids start at 1 */
-        ABT_mutex_lock(app_configs_abt_sync);
-        if (client == app->clients[client_ndx]) {
-            app->clients[client_ndx] = NULL;
-        }
-        ABT_mutex_unlock(app_configs_abt_sync);
+    int client_ndx = client->client_id - 1; /* client ids start at 1 */
+    if (client == app->clients[client_ndx]) {
+        app->clients[client_ndx] = NULL;
     }
 
     /* free client structure */
