@@ -842,7 +842,7 @@ unifyfs_rc attach_app_client(app_client* client,
                              const size_t super_meta_offset,
                              const size_t super_meta_size)
 {
-    if ((NULL == client) || (NULL == logio_spill_dir)) {
+    if (NULL == client) {
         return EINVAL;
     }
 

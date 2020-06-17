@@ -229,15 +229,17 @@ int invoke_client_attach_rpc(void)
     hg_return_t hret = margo_forward(handle, &in);
     assert(hret == HG_SUCCESS);
 
-    /* free memory on input struct */
-    free((void*)in.logio_spill_dir);
-
     /* decode response */
     unifyfs_attach_out_t out;
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
     int32_t ret = out.ret;
     LOGDBG("Got response ret=%" PRIi32, ret);
+
+    /* free memory on input struct */
+    if (NULL != in.logio_spill_dir) {
+        free((void*)in.logio_spill_dir);
+    }
 
     /* free resources */
     margo_free_output(handle, &out);
