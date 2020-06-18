@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -276,6 +276,7 @@ typedef struct {
 
     int storage;                  /* FILE_STORAGE type */
 
+    int fid;                      /* local file index in filemetas array */
     int gfid;                     /* global file id for this file */
     int needs_sync;               /* have unsynced writes */
 
@@ -327,9 +328,6 @@ typedef struct {
 extern unifyfs_index_buf_t unifyfs_indices;
 extern unsigned long unifyfs_max_index_entries;
 
-/* tracks total number of unsync'd segments for all files */
-extern unsigned long unifyfs_segment_count;
-
 /* shmem context for read-request replies data region */
 extern shm_context* shm_recv_ctx;
 
@@ -338,7 +336,6 @@ extern logio_context* logio_ctx;
 
 extern int unifyfs_app_id;
 extern int unifyfs_client_id;
-extern size_t unifyfs_key_slice_range;
 
 /* -------------------------------
  * Global varaible declarations
@@ -394,7 +391,6 @@ extern void* unifyfs_dirstream_stack;
 extern pthread_mutex_t unifyfs_stack_mutex;
 
 extern int    unifyfs_max_files;  /* maximum number of files to store */
-extern bool   unifyfs_flatten_writes; /* enable write flattening */
 extern bool   unifyfs_local_extents;  /* enable tracking of local extents */
 
 /* -------------------------------

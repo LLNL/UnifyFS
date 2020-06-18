@@ -15,65 +15,31 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
     /* shorter name for our margo instance id */
     margo_instance_id mid = ctx->mid;
 
-    ctx->rpcs.attach_id = MARGO_REGISTER(mid, "unifyfs_attach_rpc",
-                       unifyfs_attach_in_t,
-                       unifyfs_attach_out_t,
-                       NULL);
+    hg_id_t hgid;
 
-    ctx->rpcs.mount_id = MARGO_REGISTER(mid, "unifyfs_mount_rpc",
-                       unifyfs_mount_in_t,
-                       unifyfs_mount_out_t,
-                       NULL);
+#define CLIENT_REGISTER_RPC(name) \
+    do { \
+        hgid = MARGO_REGISTER(mid, "unifyfs_" #name "_rpc", \
+                              unifyfs_##name##_in_t, \
+                              unifyfs_##name##_out_t, \
+                              NULL); \
+        ctx->rpcs.name##_id = hgid; \
+    } while (0)
 
-    ctx->rpcs.unmount_id = MARGO_REGISTER(mid, "unifyfs_unmount_rpc",
-                       unifyfs_unmount_in_t,
-                       unifyfs_unmount_out_t,
-                       NULL);
+    CLIENT_REGISTER_RPC(attach);
+    CLIENT_REGISTER_RPC(mount);
+    CLIENT_REGISTER_RPC(unmount);
+    CLIENT_REGISTER_RPC(metaset);
+    CLIENT_REGISTER_RPC(metaget);
+    CLIENT_REGISTER_RPC(filesize);
+    CLIENT_REGISTER_RPC(truncate);
+    CLIENT_REGISTER_RPC(unlink);
+    CLIENT_REGISTER_RPC(laminate);
+    CLIENT_REGISTER_RPC(sync);
+    CLIENT_REGISTER_RPC(read);
+    CLIENT_REGISTER_RPC(mread);
 
-    ctx->rpcs.metaset_id = MARGO_REGISTER(mid, "unifyfs_metaset_rpc",
-                       unifyfs_metaset_in_t,
-                       unifyfs_metaset_out_t,
-                       NULL);
-
-    ctx->rpcs.metaget_id = MARGO_REGISTER(mid, "unifyfs_metaget_rpc",
-                       unifyfs_metaget_in_t,
-                       unifyfs_metaget_out_t,
-                       NULL);
-
-    ctx->rpcs.filesize_id = MARGO_REGISTER(mid, "unifyfs_filesize_rpc",
-                       unifyfs_filesize_in_t,
-                       unifyfs_filesize_out_t,
-                       NULL);
-
-    ctx->rpcs.truncate_id = MARGO_REGISTER(mid, "unifyfs_truncate_rpc",
-                       unifyfs_truncate_in_t,
-                       unifyfs_truncate_out_t,
-                       NULL);
-
-    ctx->rpcs.unlink_id = MARGO_REGISTER(mid, "unifyfs_unlink_rpc",
-                       unifyfs_unlink_in_t,
-                       unifyfs_unlink_out_t,
-                       NULL);
-
-    ctx->rpcs.laminate_id = MARGO_REGISTER(mid, "unifyfs_laminate_rpc",
-                       unifyfs_laminate_in_t,
-                       unifyfs_laminate_out_t,
-                       NULL);
-
-    ctx->rpcs.sync_id = MARGO_REGISTER(mid, "unifyfs_sync_rpc",
-                       unifyfs_sync_in_t,
-                       unifyfs_sync_out_t,
-                       NULL);
-
-    ctx->rpcs.read_id = MARGO_REGISTER(mid, "unifyfs_read_rpc",
-                       unifyfs_read_in_t,
-                       unifyfs_read_out_t,
-                       NULL);
-
-    ctx->rpcs.mread_id = MARGO_REGISTER(mid, "unifyfs_mread_rpc",
-                       unifyfs_mread_in_t,
-                       unifyfs_mread_out_t,
-                       NULL);
+#undef CLIENT_REGISTER_RPC
 }
 
 /* initialize margo client-server rpc */
@@ -280,10 +246,6 @@ int invoke_client_mount_rpc(void)
     assert(hret == HG_SUCCESS);
     int32_t ret = out.ret;
     LOGDBG("Got response ret=%" PRIi32, ret);
-
-    /* get slice size for write index key/value store */
-    unifyfs_key_slice_range = out.meta_slice_sz;
-    LOGDBG("set unifyfs_key_slice_range=%zu", unifyfs_key_slice_range);
 
     /* get assigned client id, and verify app_id */
     unifyfs_client_id = (int) out.client_id;
@@ -497,7 +459,7 @@ int invoke_client_truncate_rpc(int gfid, size_t filesize)
     assert(hret == HG_SUCCESS);
 
     /* decode response */
-    unifyfs_filesize_out_t out;
+    unifyfs_truncate_out_t out;
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
     int32_t ret = out.ret;
@@ -532,7 +494,7 @@ int invoke_client_unlink_rpc(int gfid)
     assert(hret == HG_SUCCESS);
 
     /* decode response */
-    unifyfs_filesize_out_t out;
+    unifyfs_unlink_out_t out;
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
     int32_t ret = out.ret;
@@ -556,7 +518,7 @@ int invoke_client_laminate_rpc(int gfid)
     hg_handle_t handle = create_handle(client_rpc_context->rpcs.laminate_id);
 
     /* fill in input struct */
-    unifyfs_unlink_in_t in;
+    unifyfs_laminate_in_t in;
     in.app_id    = (int32_t) unifyfs_app_id;
     in.client_id = (int32_t) unifyfs_client_id;
     in.gfid      = (int32_t) gfid;
@@ -567,7 +529,7 @@ int invoke_client_laminate_rpc(int gfid)
     assert(hret == HG_SUCCESS);
 
     /* decode response */
-    unifyfs_filesize_out_t out;
+    unifyfs_laminate_out_t out;
     hret = margo_get_output(handle, &out);
     assert(hret == HG_SUCCESS);
     int32_t ret = out.ret;

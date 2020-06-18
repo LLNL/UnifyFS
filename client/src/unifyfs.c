@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -68,9 +68,6 @@ unifyfs_index_buf_t unifyfs_indices;
 static size_t unifyfs_index_buf_size;    /* size of metadata log */
 unsigned long unifyfs_max_index_entries; /* max metadata log entries */
 
-/* tracks total number of unsync'd segments for all files */
-unsigned long unifyfs_segment_count;
-
 int global_rank_cnt;  /* count of world ranks */
 int client_rank;      /* client-provided rank (for debugging) */
 
@@ -80,7 +77,6 @@ shm_context* shm_recv_ctx; // = NULL
 
 int unifyfs_app_id;
 int unifyfs_client_id;
-size_t unifyfs_key_slice_range;
 
 static int unifyfs_use_single_shm = 0;
 static int unifyfs_page_size      = 0;
@@ -92,7 +88,6 @@ static off_t unifyfs_min_long;
 
 /* TODO: moved these to fixed file */
 int    unifyfs_max_files;  /* maximum number of files to store */
-bool   unifyfs_flatten_writes; /* flatten our writes (true = enabled) */
 bool   unifyfs_local_extents;  /* track data extents in client to read local */
 
 /* log-based I/O context */
@@ -505,7 +500,10 @@ unifyfs_filemeta_t* unifyfs_get_meta_from_fid(int fid)
 int unifyfs_fid_is_laminated(int fid)
 {
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    return meta->is_laminated;
+    if ((meta != NULL) && (meta->fid == fid)) {
+        return meta->is_laminated;
+    }
+    return 0;
 }
 
 int unifyfs_fd_is_laminated(int fd)
@@ -523,11 +521,28 @@ static int fid_store_alloc(int fid)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    if ((meta != NULL) && (meta->fid == fid)) {
+        /* indicate that we're using LOGIO to store data for this file */
+        meta->storage = FILE_STORAGE_LOGIO;
 
-    /* indicate that we're using LOGIO to store data for this file */
-    meta->storage = FILE_STORAGE_LOGIO;
+        /* Initialize our segment tree that will record our writes */
+        int rc = seg_tree_init(&meta->extents_sync);
+        if (rc != 0) {
+            return rc;
+        }
 
-    return UNIFYFS_SUCCESS;
+        /* Initialize our segment tree to track extents for all writes
+         * by this process, can be used to read back local data */
+        if (unifyfs_local_extents) {
+            rc = seg_tree_init(&meta->extents);
+            if (rc != 0) {
+                return rc;
+            }
+        }
+
+        return UNIFYFS_SUCCESS;
+    }
+    return UNIFYFS_FAILURE;
 }
 
 /* free data management resource for file */
@@ -535,21 +550,21 @@ static int fid_store_free(int fid)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    if ((meta != NULL) && (meta->fid == fid)) {
+        /* set storage type back to NULL */
+        meta->storage = FILE_STORAGE_NULL;
 
-    /* set storage type back to NULL */
-    meta->storage = FILE_STORAGE_NULL;
-
-    /* Free our write seg_tree */
-    if (unifyfs_flatten_writes) {
+        /* Free our write seg_tree */
         seg_tree_destroy(&meta->extents_sync);
-    }
 
-    /* Free our extent seg_tree */
-    if (unifyfs_local_extents) {
-        seg_tree_destroy(&meta->extents);
-    }
+        /* Free our extent seg_tree */
+        if (unifyfs_local_extents) {
+            seg_tree_destroy(&meta->extents);
+        }
 
-    return UNIFYFS_SUCCESS;
+        return UNIFYFS_SUCCESS;
+    }
+    return UNIFYFS_FAILURE;
 }
 
 /* =======================================
@@ -803,6 +818,7 @@ static void service_local_reqs(
 
         /* get pointer to extents for this file */
         unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+        assert(meta != NULL);
         struct seg_tree* extents = &meta->extents;
 
         /* lock the extent tree for reading */
@@ -1208,7 +1224,7 @@ int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count)
 int unifyfs_fid_is_dir(int fid)
 {
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    if (meta && meta->mode & S_IFDIR) {
+    if ((meta != NULL) && (meta->mode & S_IFDIR)) {
         return 1;
     } else {
         /* if it doesn't exist, then it's not a directory? */
@@ -1225,7 +1241,11 @@ int unifyfs_gfid_from_fid(const int fid)
 
     /* return global file id, cached in file meta struct */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    return meta->gfid;
+    if (meta != NULL) {
+        return meta->gfid;
+    } else {
+        return -1;
+    }
 }
 
 /* scan list of files and return fid corresponding to target gfid,
@@ -1291,7 +1311,7 @@ off_t unifyfs_fid_global_size(int fid)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    if (NULL != meta) {
+    if (meta != NULL) {
         return meta->global_size;
     }
     return (off_t)-1;
@@ -1361,7 +1381,7 @@ int unifyfs_fid_update_file_meta(int fid, unifyfs_file_attr_t* gfattr)
 
     /* lookup local metadata for file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    if (NULL != meta) {
+    if (meta != NULL) {
         /* update lamination state */
         meta->is_laminated = gfattr->is_laminated;
         if (meta->is_laminated) {
@@ -1443,6 +1463,7 @@ int unifyfs_set_global_file_meta_from_fid(int fid, int create)
 
     /* lookup local metadata for file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    assert(meta != NULL);
 
     /* copy our file name */
     const char* path = unifyfs_path_from_fid(fid);
@@ -1525,37 +1546,20 @@ int unifyfs_fid_create_file(const char* path)
 
     /* copy file name into slot */
     strcpy((void*)&unifyfs_filelist[fid].filename, path);
-    LOGDBG("Filename %s got unifyfs fd %d",
+    LOGDBG("Filename %s got unifyfs fid %d",
            unifyfs_filelist[fid].filename, fid);
 
     /* initialize meta data */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    assert(meta != NULL);
     meta->global_size  = 0;
     meta->flock_status = UNLOCKED;
     meta->storage      = FILE_STORAGE_NULL;
+    meta->fid          = fid;
     meta->gfid         = unifyfs_generate_gfid(path);
     meta->needs_sync   = 0;
     meta->is_laminated = 0;
     meta->mode         = UNIFYFS_STAT_DEFAULT_FILE_MODE;
-
-    if (unifyfs_flatten_writes) {
-        /* Initialize our segment tree that will record our writes */
-        rc = seg_tree_init(&meta->extents_sync);
-        if (rc != 0) {
-            errno = rc;
-            fid = -1;
-        }
-    }
-
-    /* Initialize our segment tree to track extents for all writes
-     * by this process, can be used to read back local data */
-    if (unifyfs_local_extents) {
-        rc = seg_tree_init(&meta->extents);
-        if (rc != 0) {
-            errno = rc;
-            fid = -1;
-        }
-    }
 
     /* PTHREAD_PROCESS_SHARED allows Process-Shared Synchronization */
     pthread_spin_init(&meta->fspinlock, PTHREAD_PROCESS_SHARED);
@@ -1619,6 +1623,7 @@ int unifyfs_fid_create_directory(const char* path)
 
     /* Set as directory */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    assert(meta != NULL);
     meta->mode = (meta->mode & ~S_IFREG) | S_IFDIR;
 
     /* insert global meta data for directory */
@@ -1655,6 +1660,7 @@ int unifyfs_fid_write(
 
     /* get meta for this file id */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    assert(meta != NULL);
 
     /* determine storage type to write file data */
     if (meta->storage == FILE_STORAGE_LOGIO) {
@@ -1680,6 +1686,7 @@ int unifyfs_fid_truncate(int fid, off_t length)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    assert(meta != NULL);
     if (meta->is_laminated) {
         /* Can't truncate a laminated file */
         return EINVAL;
@@ -1713,16 +1720,10 @@ int unifyfs_fid_sync(int fid)
 
     /* sync any writes to disk */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    assert(meta != NULL);
     if (meta->needs_sync) {
-        /* TODO: no way to just sync data for this file,
-         * so we sync every file for now */
         /* sync data with server */
-        ret = unifyfs_sync();
-
-        /* just synced writes for this file */
-        if (ret == UNIFYFS_SUCCESS) {
-            meta->needs_sync = 0;
-        }
+        ret = unifyfs_sync(fid);
     }
 
     return ret;
@@ -2124,11 +2125,10 @@ static int init_superblock_shm(size_t super_sz)
             if (unifyfs_filelist[i].in_use) {
                 /* got a live file, get pointer to its metadata */
                 unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(i);
+                assert(meta != NULL);
 
                 /* Reset our segment tree that will record our writes */
-                if (unifyfs_flatten_writes) {
-                    seg_tree_init(&meta->extents_sync);
-                }
+                seg_tree_init(&meta->extents_sync);
 
                 /* Reset our segment tree to track extents for all writes
                  * by this process, can be used to read back local data */
@@ -2260,16 +2260,6 @@ static int unifyfs_init(void)
             rc = configurator_int_val(cfgval, &l);
             if (rc == 0) {
                 unifyfs_max_files = (int)l;
-            }
-        }
-
-        /* Determine if we should flatten writes or not */
-        unifyfs_flatten_writes = 1;
-        cfgval = client_cfg.client_flatten_writes;
-        if (cfgval != NULL) {
-            rc = configurator_bool_val(cfgval, &b);
-            if (rc == 0) {
-                unifyfs_flatten_writes = (bool)b;
             }
         }
 
@@ -2625,6 +2615,14 @@ int unifyfs_unmount(void)
 
     if (-1 == unifyfs_mounted) {
         return UNIFYFS_SUCCESS;
+    }
+
+    /* sync any outstanding writes */
+    LOGDBG("syncing data");
+    rc = unifyfs_sync(-1);
+    if (rc) {
+        LOGERR("client sync failed");
+        ret = UNIFYFS_FAILURE;
     }
 
     /************************

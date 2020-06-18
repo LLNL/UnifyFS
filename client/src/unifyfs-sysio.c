@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -2113,15 +2113,15 @@ static int __chmod(int fid, mode_t mode)
 
     /* lookup metadata for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    if (!meta) {
-        LOGDBG("chmod: %s no metadata info", path);
+    if (NULL == meta) {
+        LOGDBG("no metadata info for %s", path);
         errno = ENOENT;
         return -1;
     }
 
     /* Once a file is laminated, you can't modify it in any way */
     if (meta->is_laminated) {
-        LOGDBG("chmod: %s is already laminated", path);
+        LOGDBG("%s is already laminated", path);
         errno = EROFS;
         return -1;
     }

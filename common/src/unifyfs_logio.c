@@ -805,3 +805,31 @@ int unifyfs_logio_sync(logio_context* ctx)
     }
     return UNIFYFS_SUCCESS;
 }
+
+/* Get the shmem and spill data sizes */
+int unifyfs_logio_get_sizes(logio_context* ctx,
+                            off_t* shmem_sz,
+                            off_t* spill_sz)
+{
+    if (NULL == ctx) {
+        return EINVAL;
+    }
+
+    if (NULL != shmem_sz) {
+        *shmem_sz = 0;
+        if (NULL != ctx->shmem) {
+            log_header* shmem_hdr = (log_header*) ctx->shmem->addr;
+            *shmem_sz = (off_t) shmem_hdr->data_sz;
+        }
+    }
+
+    if (NULL != spill_sz) {
+        *spill_sz = 0;
+        if (NULL != ctx->spill_hdr) {
+            log_header* spill_hdr = (log_header*) ctx->spill_hdr;
+            *spill_sz = (off_t) spill_hdr->data_sz;
+        }
+    }
+
+    return UNIFYFS_SUCCESS;
+}

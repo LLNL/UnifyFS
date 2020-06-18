@@ -1,5 +1,19 @@
-#ifndef __UNIFYFS_CLIENT_RPCS_H
-#define __UNIFYFS_CLIENT_RPCS_H
+/*
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
+ * Produced at the Lawrence Livermore National Laboratory.
+ *
+ * Copyright 2020, UT-Battelle, LLC.
+ *
+ * LLNL-CODE-741539
+ * All rights reserved.
+ *
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
+ */
+
+#ifndef UNIFYFS_CLIENT_RPCS_H
+#define UNIFYFS_CLIENT_RPCS_H
 
 /*
  * Declarations for client-server margo RPCs (shared-memory)
@@ -40,7 +54,6 @@ MERCURY_GEN_PROC(unifyfs_mount_in_t,
                  ((hg_const_string_t)(mount_prefix))
                  ((hg_const_string_t)(client_addr_str)))
 MERCURY_GEN_PROC(unifyfs_mount_out_t,
-                 ((hg_size_t)(meta_slice_sz))
                  ((int32_t)(app_id))
                  ((int32_t)(client_id))
                  ((int32_t)(ret)))
@@ -102,9 +115,9 @@ DECLARE_MARGO_RPC_HANDLER(unifyfs_metaget_rpc)
 
 /* unifyfs_sync_rpc (client => server)
  *
- * given app_id and client_id as input, read all write extents
- * from client index in shared memory and insert corresponding
- * key/value pairs into our global metadata */
+ * given a client identified by (app_id, client_id) as input, read the write
+ * extents for one or more of the client's files from the shared memory index
+ * and update the global metadata for the file(s) */
 MERCURY_GEN_PROC(unifyfs_sync_in_t,
                  ((int32_t)(app_id))
                  ((int32_t)(client_id)))

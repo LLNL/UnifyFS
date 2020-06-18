@@ -68,7 +68,6 @@ a given section and key.
    ================  ======  =================================================================
    cwd               STRING  effective starting current working directory
    max_files         INT     maximum number of open files per client process (default: 128)
-   flatten_writes    BOOL    enable flattening writes (optimization for overwrite-heavy codes)
    local_extents     BOOL    service reads from local data if possible (default: off)
    recv_data_size    INT     maximum size (B) of memory buffer for receiving data from server
    write_index_size  INT     maximum size (B) of memory buffer for storing write log metadata
