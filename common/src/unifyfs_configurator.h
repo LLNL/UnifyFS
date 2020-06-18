@@ -70,7 +70,6 @@
     UNIFYFS_CFG_CLI(unifyfs, daemonize, BOOL, on, "enable server daemonization", NULL, 'D', "on|off") \
     UNIFYFS_CFG_CLI(unifyfs, mountpoint, STRING, /unifyfs, "mountpoint directory", NULL, 'm', "specify full path to desired mountpoint") \
     UNIFYFS_CFG(client, max_files, INT, UNIFYFS_MAX_FILES, "client max file count", NULL) \
-    UNIFYFS_CFG(client, flatten_writes, BOOL, on, "flatten writes", NULL) \
     UNIFYFS_CFG(client, local_extents, BOOL, off, "track extents to service reads of local data", NULL) \
     UNIFYFS_CFG(client, recv_data_size, INT, UNIFYFS_DATA_RECV_SIZE, "shared memory segment size in bytes for receiving data from server", NULL) \
     UNIFYFS_CFG(client, write_index_size, INT, UNIFYFS_INDEX_BUF_SIZE, "write metadata index buffer size", NULL) \

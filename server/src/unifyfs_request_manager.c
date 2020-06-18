@@ -1550,7 +1550,7 @@ int rm_cmd_sync(int app_id, int client_id)
         (NULL == val_lens)) {
         LOGERR("failed to allocate memory for file extents");
         ret = ENOMEM;
-        goto rm_cmd_fsync_exit;
+        goto rm_cmd_sync_exit;
     }
 
     /* create file extent key/values for insertion into MDHIM */
@@ -1579,10 +1579,10 @@ int rm_cmd_sync(int app_id, int client_id)
     if (ret != UNIFYFS_SUCCESS) {
         /* TODO: need proper error handling */
         LOGERR("unifyfs_set_file_extents() failed");
-        goto rm_cmd_fsync_exit;
+        goto rm_cmd_sync_exit;
     }
 
-rm_cmd_fsync_exit:
+rm_cmd_sync_exit:
     /* clean up memory */
 
     if (NULL != keys) {

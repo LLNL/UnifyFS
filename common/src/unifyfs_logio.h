@@ -136,6 +136,18 @@ int unifyfs_logio_write(logio_context* ctx,
  */
 int unifyfs_logio_sync(logio_context* ctx);
 
+/**
+ * Get the shmem and spill data sizes.
+ *
+ * @param ctx pointer to logio context
+ * @param[out] shmem_sz if non-NULL, set to size of shmem data storage
+ * @param[out] spill_sz if non-NULL, set to size of spillover data storage
+ * @return UNIFYFS_SUCCESS, or error code
+ */
+int unifyfs_logio_get_sizes(logio_context* ctx,
+                            off_t* shmem_sz,
+                            off_t* spill_sz);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

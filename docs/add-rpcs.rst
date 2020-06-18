@@ -30,19 +30,10 @@ Common
 
 .. code-block:: C
   MERCURY_GEN_PROC(unifyfs_mount_in_t,
-                   ((int32_t)(client_id))
                    ((int32_t)(dbg_rank))
-                   ((hg_size_t)(shmem_data_size))
-                   ((hg_size_t)(shmem_super_size))
-                   ((hg_size_t)(meta_offset))
-                   ((hg_size_t)(meta_size))
-                   ((hg_size_t)(logio_mem_size))
-                   ((hg_size_t)(logio_spill_size))
-                   ((hg_const_string_t)(logio_spill_dir))
                    ((hg_const_string_t)(mount_prefix))
                    ((hg_const_string_t)(client_addr_str)))
   MERCURY_GEN_PROC(unifyfs_mount_out_t,
-                   ((hg_size_t)(meta_slice_sz))
                    ((int32_t)(app_id))
                    ((int32_t)(client_id))
                    ((int32_t)(ret)))

@@ -99,7 +99,6 @@ static void unifyfs_mount_rpc(hg_handle_t handle)
 
     /* build output structure to return to caller */
     unifyfs_mount_out_t out;
-    out.meta_slice_sz = meta_slice_sz;
     out.app_id = (int32_t) app_id;
     out.client_id = (int32_t) client_id;
     out.ret = ret;
@@ -279,9 +278,9 @@ static void unifyfs_metaset_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(unifyfs_metaset_rpc)
 
-/* given app_id and client_id as input, read all extents from client
- * write index in shared memory and insert corresponding key/value pairs
- * into the global metadata */
+/* given a client identified by (app_id, client_id) as input, read the write
+ * extents for one or more of the client's files from the shared memory index
+ * and update the global metadata for the file(s) */
 static void unifyfs_sync_rpc(hg_handle_t handle)
 {
     /* get input params */
@@ -289,12 +288,12 @@ static void unifyfs_sync_rpc(hg_handle_t handle)
     hg_return_t hret = margo_get_input(handle, &in);
     assert(hret == HG_SUCCESS);
 
-    /* given global file id, read index metadata from client and
-     * insert into global index key/value store */
+    /* read the write indices for all client files from shmem and
+     * propagate their extents to our global metadata */
     int ret = rm_cmd_sync(in.app_id, in.client_id);
 
     /* build our output values */
-    unifyfs_metaset_out_t out;
+    unifyfs_sync_out_t out;
     out.ret = ret;
 
     /* return to caller */
@@ -306,7 +305,6 @@ static void unifyfs_sync_rpc(hg_handle_t handle)
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(unifyfs_sync_rpc)
-
 
 /* given an app_id, client_id, global file id,
  * return current file size */
@@ -370,7 +368,7 @@ DEFINE_MARGO_RPC_HANDLER(unifyfs_truncate_rpc)
 static void unifyfs_unlink_rpc(hg_handle_t handle)
 {
     /* get input params */
-    unifyfs_truncate_in_t in;
+    unifyfs_unlink_in_t in;
     hg_return_t hret = margo_get_input(handle, &in);
     assert(hret == HG_SUCCESS);
 
@@ -378,7 +376,7 @@ static void unifyfs_unlink_rpc(hg_handle_t handle)
     int ret = rm_cmd_unlink(in.app_id, in.client_id, in.gfid);
 
     /* build our output values */
-    unifyfs_truncate_out_t out;
+    unifyfs_unlink_out_t out;
     out.ret = (int32_t) ret;
 
     /* return to caller */
@@ -396,7 +394,7 @@ DEFINE_MARGO_RPC_HANDLER(unifyfs_unlink_rpc)
 static void unifyfs_laminate_rpc(hg_handle_t handle)
 {
     /* get input params */
-    unifyfs_truncate_in_t in;
+    unifyfs_laminate_in_t in;
     hg_return_t hret = margo_get_input(handle, &in);
     assert(hret == HG_SUCCESS);
 
@@ -404,7 +402,7 @@ static void unifyfs_laminate_rpc(hg_handle_t handle)
     int ret = rm_cmd_laminate(in.app_id, in.client_id, in.gfid);
 
     /* build our output values */
-    unifyfs_truncate_out_t out;
+    unifyfs_laminate_out_t out;
     out.ret = (int32_t) ret;
 
     /* return to caller */

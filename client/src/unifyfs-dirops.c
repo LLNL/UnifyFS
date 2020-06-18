@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -121,6 +121,7 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
     unifyfs_filemeta_t* meta = NULL;
     if (fid >= 0) {
         meta = unifyfs_get_meta_from_fid(fid);
+        assert(meta != NULL);
 
         /*
          * FIXME: We found an inconsistent status between local cache and
@@ -139,6 +140,7 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
         }
 
         meta = unifyfs_get_meta_from_fid(fid);
+        assert(meta != NULL);
         meta->mode = (meta->mode & ~S_IFREG) | S_IFDIR; /* set as directory */
     }
 
