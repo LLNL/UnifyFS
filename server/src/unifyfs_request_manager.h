@@ -31,6 +31,9 @@
 #define UNIFYFS_REQUEST_MANAGER_H
 
 #include "unifyfs_global.h"
+#include "ucr_read_builder.h"
+
+extern bool unifyfs_local_extents;
 
 typedef struct {
     readreq_status_e status;   /* aggregate request status */
@@ -86,6 +89,17 @@ typedef struct reqmgr_thrd {
     int client_id;
 } reqmgr_thrd_t;
 
+/* reserve/release read requests */
+server_read_req_t* rm_reserve_read_req(reqmgr_thrd_t* thrd_ctrl);
+int rm_release_read_req(reqmgr_thrd_t* thrd_ctrl,
+                        server_read_req_t* rdreq);
+
+/* issue remote chunk read requests for extent chunks
+ * listed within keyvals */
+int rm_create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
+                             server_read_req_t* rdreq,
+                             int num_vals,
+                             unifyfs_keyval_t* keyvals);
 
 /* create Request Manager thread for application client */
 reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id,
@@ -94,38 +108,10 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id,
 /* Request Manager pthread main */
 void* rm_delegate_request_thread(void* arg);
 
-/* functions called by rpc handlers to assign work
- * to request manager threads */
-int rm_cmd_mread(int app_id, int client_id,
-                 size_t req_num, void* reqbuf);
-
-int rm_cmd_read(int app_id, int client_id, int gfid,
-                size_t offset, size_t length);
-
-int rm_cmd_filesize(int app_id, int client_id, int gfid, size_t* outsize);
-
-/* create a file or update attribute */
-int rm_cmd_metaset(int app_id, int client_id, int gfid, int create,
-                   unifyfs_file_attr_t* attr);
-
-/* truncate file to specified size */
-int rm_cmd_truncate(int app_id, int client_id, int gfid, size_t size);
-
-/* delete file */
-int rm_cmd_unlink(int app_id, int client_id, int gfid);
-
-/* laminate file */
-int rm_cmd_laminate(int app_id, int client_id, int gfid);
-
 /* function called by main thread to instruct
  * resource manager thread to exit,
  * returns UNIFYFS_SUCCESS on success */
 int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl);
-
-/* retrieve all write index entries for app-client and
- * store them in global metadata */
-int rm_cmd_sync_mdhim(int app_id, int client_side_id);
-int rm_cmd_sync_rpc(int app_id, int client_side_id);
 
 /* update state for remote chunk reads with received response data */
 int rm_post_chunk_read_responses(int app_id,

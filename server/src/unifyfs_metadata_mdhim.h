@@ -79,6 +79,10 @@ typedef struct {
 } unifyfs_keyval_t;
 
 int unifyfs_key_compare(unifyfs_key_t* a, unifyfs_key_t* b);
+int unifyfs_keyval_compare(const void* a, const void* b);
+
+/* return number of slice ranges needed to cover range */
+size_t meta_num_slices(size_t offset, size_t length);
 
 void debug_log_key_val(const char* ctx,
                        unifyfs_key_t* key,
@@ -171,5 +175,50 @@ int unifyfs_delete_file_extents(int num_entries,
 int unifyfs_set_file_extents(int num_entries, unifyfs_key_t** keys,
                              int* key_lens, unifyfs_val_t** vals,
                              int* val_lens);
+
+
+
+static inline unifyfs_key_t** alloc_key_array(int elems)
+{
+    int size = elems * (sizeof(unifyfs_key_t*) + sizeof(unifyfs_key_t));
+
+    void* mem_block = calloc(size, sizeof(char));
+
+    unifyfs_key_t** array_ptr = mem_block;
+    unifyfs_key_t* key_ptr = (unifyfs_key_t*)(array_ptr + elems);
+
+    for (int i = 0; i < elems; i++) {
+        array_ptr[i] = &key_ptr[i];
+    }
+
+    return (unifyfs_key_t**)mem_block;
+}
+
+static inline unifyfs_val_t** alloc_value_array(int elems)
+{
+    int size = elems * (sizeof(unifyfs_val_t*) + sizeof(unifyfs_val_t));
+
+    void* mem_block = calloc(size, sizeof(char));
+
+    unifyfs_val_t** array_ptr = mem_block;
+    unifyfs_val_t* key_ptr = (unifyfs_val_t*)(array_ptr + elems);
+
+    for (int i = 0; i < elems; i++) {
+        array_ptr[i] = &key_ptr[i];
+    }
+
+    return (unifyfs_val_t**)mem_block;
+}
+
+static inline void free_key_array(unifyfs_key_t** array)
+{
+    free(array);
+}
+
+static inline void free_value_array(unifyfs_val_t** array)
+{
+    free(array);
+}
+
 
 #endif // UNIFYFS_METADATA_MDHIM_H

@@ -57,6 +57,15 @@ struct index_t* unifyfs_indexes[2];
 
 size_t meta_slice_sz;
 
+/* return number of slice ranges needed to cover range */
+size_t meta_num_slices(size_t offset, size_t length)
+{
+    size_t start = offset / meta_slice_sz;
+    size_t end   = (offset + length - 1) / meta_slice_sz;
+    size_t count = end - start + 1;
+    return count;
+}
+
 void debug_log_key_val(const char* ctx,
                        unifyfs_key_t* key,
                        unifyfs_val_t* val)
@@ -85,6 +94,33 @@ int unifyfs_key_compare(unifyfs_key_t* a, unifyfs_key_t* b)
             return 1;
         }
     } else if (a->gfid < b->gfid) {
+        return -1;
+    } else {
+        return 1;
+    }
+}
+
+/* order keyvals by gfid, then host delegator rank */
+int unifyfs_keyval_compare(const void* a, const void* b)
+{
+    assert((NULL != a) && (NULL != b));
+
+    const unifyfs_keyval_t* kv_a = a;
+    const unifyfs_keyval_t* kv_b = b;
+
+    int gfid_a = kv_a->key.gfid;
+    int gfid_b = kv_b->key.gfid;
+    if (gfid_a == gfid_b) {
+        int rank_a = kv_a->val.delegator_rank;
+        int rank_b = kv_b->val.delegator_rank;
+        if (rank_a == rank_b) {
+            return 0;
+        } else if (rank_a < rank_b) {
+            return -1;
+        } else {
+            return 1;
+        }
+    } else if (gfid_a < gfid_b) {
         return -1;
     } else {
         return 1;
