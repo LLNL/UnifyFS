@@ -70,15 +70,18 @@ cd ..
 
 echo "### building mercury ###"
 cd mercury
+git checkout v1.0.1
+git submodule update --init
 mkdir -p build && cd build
 cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+      -DMERCURY_USE_SELF_FORWARD=ON \
       -DMERCURY_USE_BOOST_PP=ON \
       -DMERCURY_USE_CHECKSUMS=ON \
       -DMERCURY_USE_EAGER_BULK=ON \
       -DMERCURY_USE_SYSTEM_MCHECKSUM=OFF \
       -DNA_USE_BMI=ON \
       -DMERCURY_USE_XDR=OFF \
-      -DBUILD_SHARED_LIBS=on ..
+      -DBUILD_SHARED_LIBS=ON ..
 make -j $(nproc) && make install
 cd ..
 cd ..
@@ -88,7 +91,7 @@ cd margo
 git checkout v0.4.3
 export PKG_CONFIG_PATH="$INSTALL_DIR/lib/pkgconfig"
 ./prepare.sh
-./configure --prefix="$INSTALL_DIR"
+./configure --prefix="$INSTALL_DIR" --enable-shared
 make -j $(nproc) && make install
 cd ..
 
