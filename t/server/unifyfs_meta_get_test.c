@@ -2,7 +2,7 @@
 
 #include "metadata_suite.h"
 #include "unifyfs_meta.h"
-#include "unifyfs_metadata.h"
+#include "unifyfs_metadata_mdhim.h"
 #include "t/lib/tap.h"
 
 #define TEST_META_GFID_VALUE 0xbeef

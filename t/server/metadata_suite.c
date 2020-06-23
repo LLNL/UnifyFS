@@ -1,5 +1,5 @@
 #include "unifyfs_configurator.h"
-#include "unifyfs_metadata.h"
+#include "unifyfs_metadata_mdhim.h"
 
 #include "t/lib/tap.h"
 #include "metadata_suite.h"

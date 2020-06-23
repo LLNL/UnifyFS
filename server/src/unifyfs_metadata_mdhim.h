@@ -27,8 +27,8 @@
  * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
-#ifndef UNIFYFS_METADATA_H
-#define UNIFYFS_METADATA_H
+#ifndef UNIFYFS_METADATA_MDHIM_H
+#define UNIFYFS_METADATA_MDHIM_H
 
 #include "unifyfs_configurator.h"
 #include "unifyfs_global.h"
@@ -172,4 +172,4 @@ int unifyfs_set_file_extents(int num_entries, unifyfs_key_t** keys,
                              int* key_lens, unifyfs_val_t** vals,
                              int* val_lens);
 
-#endif
+#endif // UNIFYFS_METADATA_MDHIM_H

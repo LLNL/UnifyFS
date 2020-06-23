@@ -41,7 +41,7 @@
 // server components
 #include "unifyfs_request_manager.h"
 #include "unifyfs_service_manager.h"
-#include "unifyfs_metadata.h"
+#include "unifyfs_metadata_mdhim.h"
 #include "unifyfs_group_rpc.h"
 
 // margo rpcs
@@ -530,7 +530,7 @@ int rm_cmd_filesize(
     int gfid,      /* global file id of read request */
     size_t* outsize) /* output file size */
 {
-    
+
     size_t filesize = 0;
     int ret = unifyfs_invoke_filesize_rpc(gfid, &filesize);
 

@@ -47,7 +47,7 @@
 #include "partitioner.h"
 #include "data_store.h"
 
-#include "unifyfs_metadata.h"
+#include "unifyfs_metadata_mdhim.h"
 
 /* Function pointer for comparator in C */
 typedef int (*mdhim_store_cmp_fn_t)(void* arg, const char* a, size_t alen,

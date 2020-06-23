@@ -564,7 +564,7 @@ unsigned long extent_tree_get_size(struct extent_tree* extent_tree)
 
 /*
  * FIXME: the extent_tree_span requires the definition of the following
- * (copied from server/src/unifyfs_metadata.h).
+ * (copied from server/src/unifyfs_metadata_mdhim.h).
  */
 typedef struct {
     int gfid;

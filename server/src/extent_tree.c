@@ -35,7 +35,7 @@
 #include <pthread.h>
 #include "extent_tree.h"
 #include "tree.h"
-#include "unifyfs_metadata.h"
+#include "unifyfs_metadata_mdhim.h"
 
 #undef MIN
 #define MIN(a, b) (a < b ? a : b)

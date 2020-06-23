@@ -27,7 +27,7 @@
 #include "unifyfs_inode_tree.h"
 #include "unifyfs_inode.h"
 #include "unifyfs_group_rpc.h"
-#include "unifyfs_metadata.h"
+#include "unifyfs_metadata_mdhim.h"
 #include "unifyfs_request_manager.h"
 #include "unifyfs_fops.h"
 

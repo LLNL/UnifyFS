@@ -37,7 +37,7 @@
 
 // server headers
 #include "unifyfs_global.h"
-#include "unifyfs_metadata.h"
+#include "unifyfs_metadata_mdhim.h"
 
 // MDHIM headers
 #include "indexes.h"

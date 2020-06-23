@@ -38,7 +38,7 @@
 
 // server components
 #include "unifyfs_global.h"
-#include "unifyfs_metadata.h"
+#include "unifyfs_metadata_mdhim.h"
 #include "unifyfs_request_manager.h"
 #include "unifyfs_service_manager.h"
 
