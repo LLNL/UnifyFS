@@ -209,18 +209,18 @@ unify_test_read $runmode "$app_args"
 runmode=static
 unify_test_read $runmode "$app_args"
 
-# Increase sizes: -n 32 -c 1MB -b 16MB
+# Increase sizes: -n 32 -c 4MB -b 16MB
 
-# read-static -p n1 -n 32 -c 1MB -b 16MB
-io_sizes="-n 32 -c $MB -b $((16 * $MB))"
+# read-static -p n1 -n 32 -c 4MB -b 16MB
+io_sizes="-n 32 -c $((4 * $MB)) -b $((16 * $MB))"
 app_args="$io_pattern $io_sizes"
 unify_test_read $runmode "$app_args"
 
-# read-gotcha -p n1 -n 32 -c 1MB -b 16MB
+# read-gotcha -p n1 -n 32 -c 4MB -b 16MB
 runmode=gotcha
 unify_test_read $runmode "$app_args"
 
-# read-posix -p n1 -n 32 -c 1MB -b 16MB
+# read-posix -p n1 -n 32 -c 4MB -b 16MB
 runmode=posix
 unify_test_read_posix "$app_args"
 
@@ -228,13 +228,13 @@ unify_test_read_posix "$app_args"
 io_pattern="-p nn"
 app_args="$io_pattern $io_sizes"
 
-# read-posix -p n1 -n 32 -c 1MB -b 16MB
+# read-posix -p n1 -n 32 -c 4MB -b 16MB
 unify_test_read_posix "$app_args"
 
-# read-gotcha -p n1 -n 32 -c 1MB -b 16MB
+# read-gotcha -p n1 -n 32 -c 4MB -b 16MB
 runmode=gotcha
 unify_test_read $runmode "$app_args"
 
-# read-static -p n1 -n 32 -c 1MB -b 16MB
+# read-static -p n1 -n 32 -c 4MB -b 16MB
 runmode=static
 unify_test_read $runmode "$app_args"

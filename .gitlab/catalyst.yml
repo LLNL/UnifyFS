@@ -1,0 +1,45 @@
+# Catalyst Templates
+
+# The RUN_CATALYST variable can be toggled in the Gitlab interface to
+# toggle whether jobs should be run on this system.
+.catalyst-template:
+  rules:
+    - if: '$RUN_CATALYST != "ON"'
+      when: never
+
+.catalyst-shell-template:
+  extends: .catalyst-template
+  tags:
+    - catalyst
+    - shell
+
+.catalyst-batch-template:
+  extends: .catalyst-template
+  tags:
+    - catalyst
+    - batch
+
+##### All Catalyst Jobs #####
+
+catalyst-gcc-4_9_3-build:
+  variables:
+    COMPILER: gcc/4.9.3
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+  extends: [.catalyst-shell-template, .build-template]
+
+catalyst-gcc-4_9_3-unit-test:
+  variables:
+    COMPILER: gcc/4.9.3
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+  extends: [.slurm-single-node-template, .catalyst-batch-template, .unit-test-template]
+  needs: ["catalyst-gcc-4_9_3-build"]
+
+catalyst-gcc-4_9_3-integ-test:
+  variables:
+    COMPILER: gcc/4.9.3
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .integ-test-template]
+  needs: ["catalyst-gcc-4_9_3-build"]

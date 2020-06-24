@@ -1,0 +1,45 @@
+##### Lassen Templates #####
+
+# The RUN_LASSEN variable can be toggled in the Gitlab interface to
+# toggle whether jobs should be run on this system.
+.lassen-template:
+  rules:
+    - if: '$RUN_LASSEN != "ON"'
+      when: never
+
+.lassen-shell-template:
+  extends: .lassen-template
+  tags:
+    - lassen
+    - shell
+
+.lassen-batch-template:
+  extends: .lassen-template
+  tags:
+    - lassen
+    - batch
+
+##### All Lassen Jobs #####
+
+lassen-gcc-4_9_3-build:
+  variables:
+    COMPILER: gcc/4.9.3
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+  extends: [.lassen-shell-template, .build-template]
+
+lassen-gcc-4_9_3-unit-test:
+  variables:
+    COMPILER: gcc/4.9.3
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+  extends: [.lsf-single-node-template, .lassen-batch-template, .unit-test-template]
+  needs: ["lassen-gcc-4_9_3-build"]
+
+lassen-gcc-4_9_3-integ-test:
+  variables:
+    COMPILER: gcc/4.9.3
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .integ-test-template]
+  needs: ["lassen-gcc-4_9_3-build"]

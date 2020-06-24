@@ -204,14 +204,10 @@ echo "$infomsg Set CI_TEMP_DIR to change both of these to same path"
 
 # storage
 nls=$nlt
-export CI_STORAGE_DIR=${CI_STORAGE_DIR:-$nls}
-export UNIFYFS_SPILLOVER_SIZE=${UNIFYFS_SPILLOVER_SIZE:-$((5 * GB))}
-export UNIFYFS_SPILLOVER_ENABLED=${UNIFYFS_SPILLOVER_ENABLED:-yes}
-export UNIFYFS_SPILLOVER_DATA_DIR=${UNIFYFS_SPILLOVER_DATA_DIR:-$CI_STORAGE_DIR}
-export UNIFYFS_SPILLOVER_META_DIR=${UNIFYFS_SPILLOVER_META_DIR:-$CI_STORAGE_DIR}
-echo "$infomsg UNIFYFS_SPILLOVER_DATA_DIR set as $UNIFYFS_SPILLOVER_DATA_DIR"
-echo "$infomsg UNIFYFS_SPILLOVER_META_DIR set as $UNIFYFS_SPILLOVER_META_DIR"
-echo "$infomsg Set CI_STORAGE_DIR to change both of these to same path"
+export UNIFYFS_LOGIO_SPILL_SIZE=${UNIFYFS_LOGIO_SPILL_SIZE:-$((5 * GB))}
+export UNIFYFS_LOGIO_SPILL_DIR=${UNIFYFS_LOGIO_SPILL_DIR:-$nls}
+echo "$infomsg UNIFYFS_LOGIO_SPILL_SIZE set as $UNIFYFS_LOGIO_SPILL_SIZE"
+echo "$infomsg UNIFYFS_LOGIO_SPILL_DIR set as $UNIFYFS_LOGIO_SPILL_DIR"
 
 
 ########## Set up mountpoints and sharness testing prereqs ##########

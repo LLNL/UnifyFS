@@ -55,7 +55,7 @@ test_expect_success "unifyfsd hasn't started yet" '
 '
 
 $UNIFYFS_BIN/unifyfs start -c -d -S $UNIFYFS_SHAREDFS_DIR \
-    -e $UNIFYFS_BIN/unifyfsd &> ${UNIFYFS_LOG_DIR}/unifyfs.start.out &
+    -e $UNIFYFS_BIN/unifyfsd &> ${UNIFYFS_LOG_DIR}/unifyfs.start.out
 
 test_expect_success "unifyfsd started" '
     process_is_running unifyfsd 10 ||
@@ -95,3 +95,5 @@ clean_fail() {
     cleanup_hosts
 }
 trap 'clean_fail $BASH_SOURCE' EXIT
+
+#TODO: can't call cleanup_hosts if PDSH prereq isn't set...
