@@ -576,15 +576,6 @@ Can be used as a shortcut to set ``UNIFYFS_RUNSTATE_DIR`` and
 ``UNIFYFS_META_DB_PATH`` to the same path.  This envar defaults to
 ``CI_TEMP_DIR=${TMPDIR}/unifyfs.${USER}.${JOB_ID}``.
 
-``CI_STORAGE_DIR``
-"""""""""""""""""""
-
-USAGE: ``CI_STORAGE_DIR=/path/for/storage/files/``
-
-Can be used as a shortcut to set ``UNIFYFS_SPILLOVER_DATA_DIR`` and
-``UNIFYFS_SPILLOVER_META_DIR`` to the same path.  This envar defaults to
-``CI_STORAGE_DIR=${TMPDIR}/unifyfs.${USER}.${JOB_ID}``.
-
 ``CI_TEST_POSIX``
 """""""""""""""""
 

@@ -215,18 +215,18 @@ unify_test_writeread $runmode "$app_args"
 runmode=static
 unify_test_writeread $runmode "$app_args"
 
-# Increase sizes: -n 32 -c 1MB -b 16MB
+# Increase sizes: -n 32 -c 4MB -b 16MB
 
-# writeread-static -p n1 -n 32 -c 1MB -b 16MB
-io_sizes="-n 32 -c $MB -b $((16 * $MB))"
+# writeread-static -p n1 -n 32 -c 4MB -b 16MB
+io_sizes="-n 32 -c $((4 * $MB)) -b $((16 * $MB))"
 app_args="$io_pattern $io_sizes"
 unify_test_writeread $runmode "$app_args"
 
-# writeread-gotcha -p n1 -n 32 -c 1MB -b 16MB
+# writeread-gotcha -p n1 -n 32 -c 4MB -b 16MB
 runmode=gotcha
 unify_test_writeread $runmode "$app_args"
 
-# writeread-posix -p n1 -n 32 -c 1MB -b 16MB
+# writeread-posix -p n1 -n 32 -c 4MB -b 16MB
 runmode=posix
 unify_test_writeread_posix "$app_args"
 
@@ -234,13 +234,13 @@ unify_test_writeread_posix "$app_args"
 io_pattern="-p nn"
 app_args="$io_pattern $io_sizes"
 
-# writeread-posix -p nn -n 32 -c 1MB -b 16MB
+# writeread-posix -p nn -n 32 -c 4MB -b 16MB
 unify_test_writeread_posix "$app_args"
 
-# writeread-gotcha -p nn -n 32 -c 1MB -b 16MB
+# writeread-gotcha -p nn -n 32 -c 4MB -b 16MB
 runmode=gotcha
 unify_test_writeread $runmode "$app_args"
 
-# writeread-static -p nn -n 32 -c 1MB -b 16MB
+# writeread-static -p nn -n 32 -c 4MB -b 16MB
 runmode=static
 unify_test_writeread $runmode "$app_args"

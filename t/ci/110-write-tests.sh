@@ -215,18 +215,18 @@ unify_test_write $runmode "$app_args"
 runmode=static
 unify_test_write $runmode "$app_args"
 
-# Increase sizes: -n 32 -c 1MB -b 16MB
+# Increase sizes: -n 32 -c 4MB -b 16MB
 
-# write-static -p n1 -n 32 -c 1MB -b 16MB
-io_sizes="-n 32 -c $MB -b $((16 * $MB))"
+# write-static -p n1 -n 32 -c 4MB -b 16MB
+io_sizes="-n 32 -c $((4 * $MB)) -b $((16 * $MB))"
 app_args="$io_pattern $io_sizes"
 unify_test_write $runmode "$app_args"
 
-# write-gotcha -p n1 -n 32 -c 1MB -b 16MB
+# write-gotcha -p n1 -n 32 -c 4MB -b 16MB
 runmode=gotcha
 unify_test_write $runmode "$app_args"
 
-# write-posix -p n1 -n 32 -c 1MB -b 16MB
+# write-posix -p n1 -n 32 -c 4MB -b 16MB
 runmode=posix
 unify_test_write_posix "$app_args"
 
@@ -234,13 +234,13 @@ unify_test_write_posix "$app_args"
 io_pattern="-p nn"
 app_args="$io_pattern $io_sizes"
 
-# write-posix -p nn -n 32 -c 1MB -b 16MB
+# write-posix -p nn -n 32 -c 4MB -b 16MB
 unify_test_write_posix "$app_args"
 
-# write-gotcha -p nn -n 32 -c 1MB -b 16MB
+# write-gotcha -p nn -n 32 -c 4MB -b 16MB
 runmode=gotcha
 unify_test_write $runmode "$app_args"
 
-# write-static -p nn -n 32 -c 1MB -b 16MB
+# write-static -p nn -n 32 -c 4MB -b 16MB
 runmode=static
 unify_test_write $runmode "$app_args"
