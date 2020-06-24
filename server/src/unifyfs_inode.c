@@ -439,6 +439,41 @@ out_unlock_tree:
     return ret;
 }
 
+int unifyfs_inode_get_chunk_list(
+    int gfid,
+    unsigned long offset,
+    unsigned long len,
+    unsigned int* n_chunks,
+    chunk_read_req_t** chunks)
+{
+    int ret = 0;
+    struct unifyfs_inode* ino = NULL;
+
+    unifyfs_inode_tree_rdlock(global_inode_tree);
+    {
+        ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
+        if (!ino) {
+            ret = ENOENT;
+            goto out_unlock_tree;
+        }
+
+        unifyfs_inode_rdlock(ino);
+        {
+            ret = extent_tree_get_chunk_list(ino->extents, offset, len,
+                                             n_chunks, chunks);
+            if (ret) {
+                LOGERR("extent_tree_get_chunk_list failed (gfid=%d, ret=%d)",
+                        gfid, ret);
+            }
+        }
+        unifyfs_inode_unlock(ino);
+    }
+out_unlock_tree:
+    unifyfs_inode_tree_unlock(global_inode_tree);
+
+    return ret;
+}
+
 int unifyfs_inode_span_extents(
     int gfid,                      /* global file id we're looking in */
     unsigned long start,           /* starting logical offset */

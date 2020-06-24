@@ -2,6 +2,7 @@
 #define __UNIFYFS_GROUP_RPC_H
 
 #include "unifyfs_tree.h"
+#include "unifyfs_inode.h"
 
 int unifyfs_broadcast_extents(int gfid, unsigned int len,
                               struct extent_tree_node* extents);

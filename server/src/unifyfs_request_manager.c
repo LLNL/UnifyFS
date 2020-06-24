@@ -390,6 +390,53 @@ int rm_create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
     return UNIFYFS_SUCCESS;
 }
 
+int rm_submit_read_request(server_read_req_t* req)
+{
+    int ret = UNIFYFS_SUCCESS;
+    int i = 0;
+    app_client* client = NULL;
+    reqmgr_thrd_t* thrd_ctrl = NULL;
+    server_read_req_t* rdreq = NULL;
+
+    if (!req || !req->chunks || !req->remote_reads) {
+        return EINVAL;
+    }
+
+    client = get_app_client(req->app_id, req->client_id);
+    if (NULL == client) {
+        return (int) UNIFYFS_FAILURE;
+    }
+
+    thrd_ctrl = client->reqmgr;
+
+    rdreq = rm_reserve_read_req(thrd_ctrl);
+    if (!rdreq) {
+        LOGERR("failed to allocate a request");
+        return EIO;
+    }
+
+    RM_LOCK(thrd_ctrl);
+
+    rdreq->app_id = req->app_id;
+    rdreq->client_id = req->client_id;
+    rdreq->num_remote_reads = req->num_remote_reads;
+    rdreq->extent = req->extent;
+    rdreq->chunks = req->chunks;
+    rdreq->remote_reads = req->remote_reads;
+
+    for (i = 0; i < rdreq->num_remote_reads; i++) {
+        remote_chunk_reads_t* read = &rdreq->remote_reads[i];
+        read->rdreq_id = rdreq->req_ndx;
+    }
+
+    rdreq->status = READREQ_READY;
+    signal_new_requests(thrd_ctrl);
+
+    RM_UNLOCK(thrd_ctrl);
+
+    return ret;
+}
+
 /* signal the client process for it to start processing read
  * data in shared memory */
 static int client_signal(shm_data_header* hdr,

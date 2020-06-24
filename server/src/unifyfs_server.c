@@ -41,6 +41,7 @@
 #include "unifyfs_metadata_mdhim.h"
 #include "unifyfs_request_manager.h"
 #include "unifyfs_service_manager.h"
+#include "unifyfs_inode_tree.h"
 
 // margo rpcs
 #include "margo_server.h"

@@ -2,6 +2,7 @@
 #define __EXTENT_TREE_H__
 #include <pthread.h>
 #include "tree.h"
+#include "unifyfs_global.h"
 
 struct extent_tree_node {
     RB_ENTRY(extent_tree_node) entry;
@@ -145,6 +146,13 @@ int extent_tree_span(
     void* keys,             /* array of length max for output keys */
     void* vals,             /* array of length max for output values */
     int* outnum);                    /* number of entries returned */
+
+int extent_tree_get_chunk_list(
+    struct extent_tree* extent_tree, /* extent tree to search */
+    unsigned long offset,            /* starting logical offset */
+    unsigned long len,               /* ending logical offset */
+    unsigned int* n_chunks,          /* [out] number of extents returned */
+    chunk_read_req_t** chunks);      /* [out] extent array */
 
 /*
  * for debugging

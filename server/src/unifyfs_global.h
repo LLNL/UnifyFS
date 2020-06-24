@@ -50,7 +50,6 @@
 #include "unifyfs_logio.h"
 #include "unifyfs_meta.h"
 #include "unifyfs_shm.h"
-#include "unifyfs_inode_tree.h"
 #include "unifyfs_fops.h"
 
 #include <margo.h>
@@ -104,6 +103,7 @@ typedef struct {
     size_t log_offset;  /* remote log offset */
     int log_app_id;     /* remote log application id */
     int log_client_id;  /* remote log client id */
+    int rank;           /* remote server rank who holds data */
 } chunk_read_req_t;
 
 typedef struct {

@@ -141,6 +141,24 @@ int unifyfs_inode_get_filesize(int gfid, size_t* offset);
 int unifyfs_inode_laminate(int gfid);
 
 /**
+* @brief
+*
+* @param gfid
+* @param offset
+* @param len
+* @param n_chunks
+* @param chunks
+*
+* @return
+*/
+int unifyfs_inode_get_chunk_list(
+    int gfid,
+    unsigned long offset,
+    unsigned long len,
+    unsigned int* n_chunks,
+    chunk_read_req_t** chunks);
+
+/**
  * @brief calls extents_tree_span, which will do:
  *
  * given an extent tree and starting and ending logical offsets, fill in

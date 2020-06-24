@@ -619,3 +619,89 @@ int extent_tree_span(
     return 0;
 }
 
+static void chunk_req_from_extent(
+    unsigned long req_offset,
+    unsigned long req_len,
+    struct extent_tree_node* n,
+    chunk_read_req_t* chunk)
+{
+    unsigned long offset = n->start;
+    unsigned long nbytes = n->end - n->start + 1;
+    unsigned long log_offset = n->pos;
+    unsigned long last = req_offset + req_len - 1;
+
+    if (offset < req_offset) {
+        unsigned long diff = req_offset - offset;
+
+        offset = req_offset;
+        log_offset += diff;
+        nbytes -= diff;
+    }
+
+    if (n->end > last) {
+        unsigned long diff = n->end - last;
+        nbytes -= diff;
+    }
+
+    chunk->offset = offset;
+    chunk->nbytes = nbytes;
+    chunk->log_offset = log_offset;
+    chunk->rank = n->svr_rank;
+    chunk->log_client_id = n->cli_id;
+    chunk->log_app_id = n->app_id;
+}
+
+int extent_tree_get_chunk_list(
+    struct extent_tree* extent_tree, /* extent tree to search */
+    unsigned long offset,            /* starting logical offset */
+    unsigned long len,               /* ending logical offset */
+    unsigned int* n_chunks,          /* [out] number of extents returned */
+    chunk_read_req_t** chunks)       /* [out] extent array */
+{
+    int ret = 0;
+    unsigned int count = 0;
+    unsigned long end = offset + len - 1;
+    struct extent_tree_node* first = NULL;
+    struct extent_tree_node* next = NULL;
+    chunk_read_req_t* out_chunks = NULL;
+    chunk_read_req_t* current = NULL;
+
+    extent_tree_rdlock(extent_tree);
+
+    first = extent_tree_find(extent_tree, offset, end);
+    next = first;
+    while (next && next->start <= end) {
+        count++;
+        next = extent_tree_iter(extent_tree, next);
+    }
+
+    *n_chunks = count;
+    if (0 == count) {
+        goto out_unlock;
+    }
+
+    out_chunks = calloc(count, sizeof(*out_chunks));
+    if (!out_chunks) {
+        ret = ENOMEM;
+        goto out_unlock;
+    }
+
+    next = first;
+    current = out_chunks;
+    while (next && next->start <= end) {
+        /* trim out the extent so it does not include the data that is not
+         * requested */
+        chunk_req_from_extent(offset, len, next, current);
+
+        next = extent_tree_iter(extent_tree, next);
+        current += 1;
+    }
+
+    *chunks = out_chunks;
+
+out_unlock:
+    extent_tree_unlock(extent_tree);
+
+    return ret;
+}
+

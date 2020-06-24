@@ -144,4 +144,15 @@ int invoke_chunk_read_request_rpc(int dst_srvr_rank,
                                   int num_chunks,
                                   void* data_buf, size_t buf_sz);
 
+/**
+ * @brief hand over a read request to the request manager thread.
+ *
+ * @param req all members except for status and req_ndx need to be filled by
+ * the caller. @req->chunks and @req->remote_reads should be allocated from
+ * heap, and should not be freed by the caller.
+ *
+ * @return 0 on success, errno otherwise
+ */
+int rm_submit_read_request(server_read_req_t* req);
+
 #endif
