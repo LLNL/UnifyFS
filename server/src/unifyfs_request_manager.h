@@ -31,6 +31,7 @@
 #define UNIFYFS_REQUEST_MANAGER_H
 
 #include "unifyfs_global.h"
+#include "unifyfs_metadata_mdhim.h"
 #include "ucr_read_builder.h"
 
 extern bool unifyfs_local_extents;
