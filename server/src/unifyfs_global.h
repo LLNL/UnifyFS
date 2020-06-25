@@ -91,8 +91,7 @@ typedef enum {
     READREQ_NULL = 0,          /* request not initialized */
     READREQ_READY,             /* request ready to be issued */
     READREQ_STARTED,           /* chunk requests issued */
-    READREQ_PARTIAL_COMPLETE,  /* some reads completed */
-    READREQ_COMPLETE           /* all reads completed */
+    READREQ_COMPLETE,          /* all reads completed */
 } readreq_status_e;
 
 typedef struct {

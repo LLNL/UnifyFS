@@ -1961,15 +1961,15 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
             }
             data_buf += data_sz;
         }
+
         /* cleanup */
         free((void*)responses);
         del_reads->resp = NULL;
 
         /* update request status */
         del_reads->status = READREQ_COMPLETE;
-        if (rdreq->status == READREQ_STARTED) {
-            rdreq->status = READREQ_PARTIAL_COMPLETE;
-        }
+
+        /* if all remote reads are complete, mark the request as complete */
         int completed_remote_reads = 0;
         for (i = 0; i < rdreq->num_remote_reads; i++) {
             if (rdreq->remote_reads[i].status != READREQ_COMPLETE) {
