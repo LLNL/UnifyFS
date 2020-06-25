@@ -25,7 +25,8 @@ if HAVE_LD_WRAP
   size-static \
   simul-static \
   chmod-static \
-  multi-write-static
+  multi-write-static \
+  read-data-static
 endif
 
 if HAVE_GOTCHA
@@ -46,9 +47,10 @@ if HAVE_GOTCHA
     app-tileio-gotcha \
     transfer-gotcha \
     size-gotcha \
-	simul-gotcha \
+    simul-gotcha \
     chmod-gotcha \
-	multi-write-gotcha
+    multi-write-gotcha \
+    read-data-gotcha
 endif
 
 if HAVE_FORTRAN
@@ -338,3 +340,12 @@ multi_write_static_CPPFLAGS = $(test_cppflags)
 multi_write_static_LDADD    = $(test_static_ldadd)
 multi_write_static_LDFLAGS  = $(test_static_ldflags)
 
+read_data_gotcha_SOURCES  = read-data.c
+read_data_gotcha_CPPFLAGS = $(test_cppflags)
+read_data_gotcha_LDADD    = $(test_gotcha_ldadd)
+read_data_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+read_data_static_SOURCES  = read-data.c
+read_data_static_CPPFLAGS = $(test_cppflags)
+read_data_static_LDADD    = $(test_static_ldadd)
+read_data_static_LDFLAGS  = $(test_static_ldflags)
