@@ -29,41 +29,70 @@
 #include "unifyfs_server_rpcs.h"
 #include "unifyfs_group_rpc.h"
 
-/*
- * Broadcast operation for file extends
- */
+
+#define UNIFYFS_BCAST_K_ARY 2
+
 typedef struct {
     margo_request request;
     hg_handle_t   handle;
 } unifyfs_coll_request_t;
 
-static
-int rpc_allocate_extbcast_handle(int rank, unifyfs_coll_request_t* request)
+/* helper method to initialize collective request rpc handle */
+static int get_request_handle(hg_id_t request_hgid,
+                              int peer_rank,
+                              unifyfs_coll_request_t* creq)
 {
-    int rc = (int)UNIFYFS_SUCCESS;
+    int rc = UNIFYFS_SUCCESS;
 
     /* get address for specified server rank */
-    hg_addr_t addr = glb_servers[rank].margo_svr_addr;
+    hg_addr_t addr = glb_servers[peer_rank].margo_svr_addr;
 
     /* get handle to rpc function */
     hg_return_t hret = margo_create(unifyfsd_rpc_context->svr_mid, addr,
-        unifyfsd_rpc_context->rpcs.extbcast_request_id, &request->handle);
-    assert(hret == HG_SUCCESS);
+                                    request_hgid, &(creq->handle));
+    if (hret != HG_SUCCESS) {
+        LOGERR("failed to get handle for request %p", creq);
+        rc = UNIFYFS_ERROR_MARGO;
+    }
 
     return rc;
 }
 
-static int rpc_invoke_extbcast_request(extbcast_request_in_t* in,
-                                       unifyfs_coll_request_t* request)
+/* helper method to forward collective rpc request */
+static int forward_request(void* input_ptr,
+                           unifyfs_coll_request_t* creq)
 {
-    int rc = (int)UNIFYFS_SUCCESS;
+    int rc = UNIFYFS_SUCCESS;
 
     /* call rpc function */
-    hg_return_t hret = margo_iforward(request->handle, in, &request->request);
-    assert(hret == HG_SUCCESS);
+    hg_return_t hret = margo_iforward(creq->handle, input_ptr,
+                                      &(creq->request));
+    if (hret != HG_SUCCESS) {
+        LOGERR("failed to forward request %p", creq);
+        rc = UNIFYFS_ERROR_MARGO;
+    }
 
     return rc;
 }
+
+/* helper method to wait for collective rpc request completion */
+static int wait_for_request(unifyfs_coll_request_t* creq)
+{
+    int rc = UNIFYFS_SUCCESS;
+
+    /* call rpc function */
+    hg_return_t hret = margo_wait(creq->request);
+    if (hret != HG_SUCCESS) {
+        LOGERR("wait on request %p failed", creq);
+        rc = UNIFYFS_ERROR_MARGO;
+    }
+
+    return rc;
+}
+
+/*
+ * Broadcast file extents
+ */
 
 /**
  * @brief Blocking function to forward extent broadcast request
@@ -75,10 +104,11 @@ static int rpc_invoke_extbcast_request(extbcast_request_in_t* in,
 static int extbcast_request_forward(const unifyfs_tree_t* broadcast_tree,
                                     extbcast_request_in_t* in)
 {
-    printf("%d: BUCKEYES request_forward\n", glb_pmi_rank);
+    printf("MARGOTREE: %d: extbcast request_forward\n", glb_pmi_rank);
     fflush(stdout);
 
-    int ret;
+    int rc;
+    int ret = UNIFYFS_SUCCESS;
 
     /* get info for tree */
     int child_count  = broadcast_tree->child_count;
@@ -90,50 +120,56 @@ static int extbcast_request_forward(const unifyfs_tree_t* broadcast_tree,
                                               sizeof(unifyfs_coll_request_t));
     /* forward request down the tree */
     int i;
+    unifyfs_coll_request_t* req;
+    hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.extbcast_request_id;
     for (i = 0; i < child_count; i++) {
-        /* get rank of this child */
-        int child = child_ranks[i];
+        req = requests + i;
 
         /* allocate handle */
-        ret = rpc_allocate_extbcast_handle(child, &requests[i]);
-
-        /* invoke filesize request rpc on child */
-        ret = rpc_invoke_extbcast_request(in, &requests[i]);
+        rc = get_request_handle(req_hgid, child_ranks[i], req);
+        if (rc == UNIFYFS_SUCCESS) {
+            /* invoke extbcast request rpc on child */
+            rc = forward_request((void*)in, req);
+        } else {
+            ret = rc;
+        }
     }
 
     /* wait for the requests to finish */
-    extbcast_request_out_t out;
     for (i = 0; i < child_count; i++) {
-        hg_return_t hret;
+        req = requests + i;
+        rc = wait_for_request(req);
+        if (rc == UNIFYFS_SUCCESS) {
+            /* get the output of the rpc */
+            extbcast_request_out_t out;
+            hg_return_t hret = margo_get_output(req->handle, &out);
+            assert(HG_SUCCESS == hret);
 
-        /* TODO: get outputs */
-        hret = margo_wait(requests[i].request);
-        assert(HG_SUCCESS == hret);
+            /* set return value */
+            ret = out.ret;
 
-        /* get the output of the rpc */
-        hret = margo_get_output(requests[i].handle, &out);
-        assert(HG_SUCCESS == hret);
-
-        /* set return value
-         * TODO: check if we have an error and handle it */
-        ret = out.ret;
+            /* free margo resources */
+            margo_free_output(req->handle, &out);
+            margo_destroy(req->handle);
+        } else {
+            ret = rc;
+        }
     }
 
     return ret;
 }
 
-#define UNIFYFS_BCAST_K_ARY 2
-
-/* request a filesize operation to all servers for a given file
- * from a given server */
+/* update local extents for file given input data, and forward the
+ * request to any children */
 static void extbcast_request_rpc(hg_handle_t handle)
 {
-    printf("%d: BUCKEYES request_rpc (extbcast)\n", glb_pmi_rank);
+    printf("MARGOTREE: %d:  request_rpc (extbcast)\n", glb_pmi_rank);
     fflush(stdout);
 
     hg_return_t hret;
 
     /* assume we'll succeed */
+    int rc;
     int32_t ret = UNIFYFS_SUCCESS;
 
     /* get instance id */
@@ -147,10 +183,10 @@ static void extbcast_request_rpc(hg_handle_t handle)
     /* get root of tree and global file id to lookup filesize
      * record tag calling process wants us to include in our
      * later response */
-    int gfid     = (int) in.gfid;
-    int32_t num_extents = (int32_t) in.num_extends;
+    int gfid = (int) in.gfid;
+    int32_t num_extents = (int32_t) in.num_extents;
 
-    /* allocate memory for extends */
+    /* allocate memory for extents */
     struct extent_tree_node* extents;
     extents = calloc(num_extents, sizeof(struct extent_tree_node));
 
@@ -158,9 +194,9 @@ static void extbcast_request_rpc(hg_handle_t handle)
     const struct hg_info* info = margo_get_info(handle);
     hg_addr_t client_address = info->addr;
 
-    hg_size_t buf_size = num_extents*sizeof(struct extent_tree_node);
 
     /* expose local bulk buffer */
+    hg_size_t buf_size = num_extents * sizeof(struct extent_tree_node);
     hg_bulk_t extent_data;
     void* datap = extents;
     margo_bulk_create(mid, 1, &datap, &buf_size,
@@ -169,8 +205,7 @@ static void extbcast_request_rpc(hg_handle_t handle)
     /* request for bulk transfer */
     margo_request bulk_request;
 
-    /* initiate data transfer
-     * TODO: see if we can make this asynchronous */
+    /* initiate data transfer */
     margo_bulk_itransfer(mid, HG_BULK_PULL, client_address,
                          in.exttree, 0,
                          extent_data, 0,
@@ -188,27 +223,28 @@ static void extbcast_request_rpc(hg_handle_t handle)
     /* allocate memory for request objects
      * TODO: possibly get this from memory pool */
     unifyfs_coll_request_t* requests =
-        malloc(sizeof(unifyfs_coll_request_t) * bcast_tree.child_count);
+        calloc(bcast_tree.child_count, sizeof(unifyfs_coll_request_t));
 
     /* allogate mercury handles for forwarding the request */
     int i;
+    hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.extbcast_request_id;
     for (i = 0; i < bcast_tree.child_count; i++) {
         /* get rank of this child */
         int child = bcast_tree.child_ranks[i];
         /* allocate handle */
-        ret = rpc_allocate_extbcast_handle(child, &requests[i]);
+        rc = get_request_handle(req_hgid, child, requests+i);
     }
 
-    /* wait for bulk request to finish */
+    /* wait for data transfer to finish */
     hret = margo_wait(bulk_request);
 
-    LOGDBG("received %d extents (%lu bytes) from %d",
-           num_extents, buf_size, in.root);
+    LOGDBG("received %d extents (%zu bytes) from %d",
+           num_extents, (size_t)buf_size, (int)in.root);
 
     /* forward request down the tree */
     for (i = 0; i < bcast_tree.child_count; i++) {
         /* invoke filesize request rpc on child */
-        ret = rpc_invoke_extbcast_request(&in, &requests[i]);
+        rc = forward_request((void*)&in, requests+i);
     }
 
     ret = unifyfs_inode_add_extents(gfid, num_extents, extents);
@@ -219,16 +255,22 @@ static void extbcast_request_rpc(hg_handle_t handle)
 
     /* wait for the requests to finish */
     for (i = 0; i < bcast_tree.child_count; i++) {
-        extbcast_request_out_t out;
-        /* TODO: get outputs */
-        hret = margo_wait(requests[i].request);
+        req = requests + i;
+        rc = wait_for_request(req);
+        if (rc == UNIFYFS_SUCCESS) {
+            /* get the output of the rpc */
+            extbcast_request_out_t out;
+            hret = margo_get_output(req->handle, &out);
 
-        /* get the output of the rpc */
-        hret = margo_get_output(requests[i].handle, &out);
+            /* set return value */
+            ret = out.ret;
 
-        /* set return value
-         * TODO: check if we have an error and handle it */
-        ret = out.ret;
+            /* free margo resources */
+            margo_free_output(req->handle, &out);
+            margo_destroy(req->handle);
+        } else {
+            ret = rc;
+        }
     }
 
     unifyfs_tree_free(&bcast_tree);
@@ -254,10 +296,10 @@ DEFINE_MARGO_RPC_HANDLER(extbcast_request_rpc)
  *
  * @return int UnifyFS return code
  */
-int unifyfs_broadcast_extents(int gfid, unsigned int len,
-                              struct extent_tree_node* extents)
+int unifyfs_invoke_broadcast_extents_rpc(int gfid, unsigned int len,
+                                         struct extent_tree_node* extents)
 {
-    LOGDBG("%d: BUCKEYES unifyfs_broadcast_extents\n", glb_pmi_rank);
+    LOGDBG("%d:  unifyfs_broadcast_extents\n", glb_pmi_rank);
 
     /* assuming success */
     int ret = UNIFYFS_SUCCESS;
@@ -273,7 +315,7 @@ int unifyfs_broadcast_extents(int gfid, unsigned int len,
     LOGDBG("broadcasting %lu extents (%lu bytes, gfid=%d): ",
            num_extents, buf_size, gfid);
 
-    /* create bulk data structure containing the extends
+    /* create bulk data structure containing the extents
      * NOTE: bulk data is always read only at the root of the broadcast tree */
     hg_bulk_t extent_data;
     void* datap = (void*) extents;
@@ -285,10 +327,9 @@ int unifyfs_broadcast_extents(int gfid, unsigned int len,
     extbcast_request_in_t in;
     in.root = (int32_t)glb_pmi_rank;
     in.gfid = gfid;
-    in.num_extends = num_extents;
+    in.num_extents = num_extents;
     in.exttree = extent_data;
 
-    /*  */
     extbcast_request_forward(&bcast_tree, &in);
 
     /* free bulk data handle */
@@ -307,11 +348,11 @@ int unifyfs_broadcast_extents(int gfid, unsigned int len,
 static int filesize_forward(const unifyfs_tree_t* broadcast_tree,
                             filesize_in_t* in, hg_size_t* filesize)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
-    int ret;
+    int rc, ret;
     int i;
 
     /* get info for tree */
@@ -325,56 +366,63 @@ static int filesize_forward(const unifyfs_tree_t* broadcast_tree,
         goto out;
     }
 
-    printf("%d:BUCKEYES sending filesize to %d children\n",
+    printf("MARGOTREE: %d: sending filesize to %d children\n",
             glb_pmi_rank, child_count);
 
     if (child_count > 0) {
         /* allocate memory for request objects
          * TODO: possibly get this from memory pool */
-        unifyfs_coll_request_t* requests = calloc(child_count,
-                                      sizeof(unifyfs_coll_request_t));
+        unifyfs_coll_request_t* requests =
+            calloc(child_count, sizeof(unifyfs_coll_request_t));
         if (!requests) {
             ret = ENOMEM;
             goto out;
         }
 
         /* forward request down the tree */
+        unifyfs_coll_request_t* req;
         for (i = 0; i < child_count; i++) {
+            req = requests + i;
+
             /* get rank of this child */
             int child = child_ranks[i];
-            unifyfs_coll_request_t* req = &requests[i];
-
-            printf("children[%d]: %s\n",
+            printf("MARGOTREE: children[%d]: %s\n",
                    child, glb_servers[child].margo_svr_addr_str);
 
             /* allocate handle */
-            hret = margo_create(unifyfsd_rpc_context->svr_mid,
-                                glb_servers[child].margo_svr_addr,
-                                unifyfsd_rpc_context->rpcs.filesize_id,
-                                &req->handle);
-            assert(hret == HG_SUCCESS);
-
-            /* invoke filesize request rpc on child */
-            hret = margo_iforward(req->handle, in, &req->request);
-            assert(hret == HG_SUCCESS);
+            rc = get_request_handle(unifyfsd_rpc_context->rpcs.filesize_id,
+                                    child, req);
+            if (rc == UNIFYFS_SUCCESS) {
+                /* invoke filesize request rpc on child */
+                rc = forward_request((void*)in, req);
+            }
         }
 
         /* wait for the requests to finish */
-        filesize_out_t out;
         for (i = 0; i < child_count; i++) {
-            /* TODO: get outputs */
-            hret = margo_wait(requests[i].request);
+            req = requests + i;
+            rc = wait_for_request(req);
+            if (rc == UNIFYFS_SUCCESS) {
+                /* get the output of the rpc */
+                filesize_out_t out;
+                hret = margo_get_output(req->handle, &out);
 
-            /* get the output of the rpc */
-            hret = margo_get_output(requests[i].handle, &out);
+                printf("MARGOTREE: get response: ret=%d, filesize=%lu\n",
+                        out.ret, out.filesize);
 
-            printf("get response: ret=%d, filesize=%lu\n",
-                    out.ret, out.filesize);
+                /* set return values */
+                ret = out.ret;
+                if ((ret == UNIFYFS_SUCCESS) && (out.filesize > _filesize)) {
+                    /* QUESTION: why is max size always the right choice? */
+                    _filesize = out.filesize;
+                }
 
-            /* set return value
-             * TODO: check if we have an error and handle it */
-            ret = out.ret;
-            _filesize = out.filesize > _filesize ? out.filesize : _filesize;
+                /* free margo resources */
+                margo_free_output(req->handle, &out);
+                margo_destroy(req->handle);
+            } else {
+               ret = rc;
+            }
         }
 
         free(requests);
@@ -387,7 +435,7 @@ out:
 
 static void filesize_rpc(hg_handle_t handle)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -427,7 +475,7 @@ DEFINE_MARGO_RPC_HANDLER(filesize_rpc)
 
 int unifyfs_invoke_filesize_rpc(int gfid, size_t* filesize)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     /* assuming success */
@@ -446,7 +494,6 @@ int unifyfs_invoke_filesize_rpc(int gfid, size_t* filesize)
     hg_size_t _filesize = 0;
 
     ret = filesize_forward(&bcast_tree, &in, &_filesize);
-
     if (ret) {
         LOGERR("filesize_forward failed: (ret=%d)", ret);
     } else {
@@ -465,11 +512,11 @@ int unifyfs_invoke_filesize_rpc(int gfid, size_t* filesize)
 static
 int truncate_forward(const unifyfs_tree_t* broadcast_tree, truncate_in_t* in)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
-    int ret;
+    int rc, ret;
     int i;
 
     /* get info for tree */
@@ -483,7 +530,7 @@ int truncate_forward(const unifyfs_tree_t* broadcast_tree, truncate_in_t* in)
         goto out;
     }
 
-    printf("%d:BUCKEYES sending truncate to %d children\n",
+    printf("MARGOTREE: %d: sending truncate to %d children\n",
             glb_pmi_rank, child_count);
 
     if (child_count > 0) {
@@ -497,40 +544,45 @@ int truncate_forward(const unifyfs_tree_t* broadcast_tree, truncate_in_t* in)
         }
 
         /* forward request down the tree */
+        unifyfs_coll_request_t* req;
         for (i = 0; i < child_count; i++) {
+            req = requests + i;
+
             /* get rank of this child */
             int child = child_ranks[i];
-            unifyfs_coll_request_t* req = &requests[i];
-
-            printf("children[%d]: %s\n",
+            printf("MARGOTREE: children[%d]: %s\n",
                    child, glb_servers[child].margo_svr_addr_str);
 
             /* allocate handle */
-            hret = margo_create(unifyfsd_rpc_context->svr_mid,
-                                glb_servers[child].margo_svr_addr,
-                                unifyfsd_rpc_context->rpcs.truncate_id,
-                                &req->handle);
-            assert(hret == HG_SUCCESS);
-
-            /* invoke filesize request rpc on child */
-            hret = margo_iforward(req->handle, in, &req->request);
-            assert(hret == HG_SUCCESS);
+            rc = get_request_handle(unifyfsd_rpc_context->rpcs.truncate_id,
+                                    child, req);
+            if (rc == UNIFYFS_SUCCESS) {
+                /* invoke truncate request rpc on child */
+                rc = forward_request((void*)in, req);
+            } else {
+                ret = rc;
+            }
         }
 
         /* wait for the requests to finish */
-        truncate_out_t out;
         for (i = 0; i < child_count; i++) {
-            /* TODO: get outputs */
-            hret = margo_wait(requests[i].request);
+            req = requests + i;
+            rc = wait_for_request(req);
+            if (rc == UNIFYFS_SUCCESS) {
+                /* get the output of the rpc */
+                truncate_out_t out;
+                hret = margo_get_output(req->handle, &out);
 
-            /* get the output of the rpc */
-            hret = margo_get_output(requests[i].handle, &out);
+                /* set return value */
+                ret = out.ret;
+                printf("MARGOTREE: got response: ret=%d\n", out.ret);
 
-            printf("get response: ret=%d\n", out.ret);
-
-            /* set return value
-             * TODO: check if we have an error and handle it */
-            ret = out.ret;
+                /* free margo resources */
+                margo_free_output(req->handle, &out);
+                margo_destroy(req->handle);
+            } else {
+                ret = rc;
+            }
         }
 
         free(requests);
@@ -542,7 +594,7 @@ out:
 
 static void truncate_rpc(hg_handle_t handle)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -580,7 +632,7 @@ DEFINE_MARGO_RPC_HANDLER(truncate_rpc)
 
 int unifyfs_invoke_truncate_rpc(int gfid, size_t filesize)
 {
-    LOGDBG("%d: BUCKEYES truncate\n", glb_pmi_rank);
+    LOGDBG("%d:  truncate\n", glb_pmi_rank);
 
     /* assuming success */
     int ret = UNIFYFS_SUCCESS;
@@ -614,11 +666,11 @@ int unifyfs_invoke_truncate_rpc(int gfid, size_t filesize)
 static
 int metaset_forward(const unifyfs_tree_t* broadcast_tree, metaset_in_t* in)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
-    int ret;
+    int rc, ret;
     int i;
 
     /* get info for tree */
@@ -630,7 +682,7 @@ int metaset_forward(const unifyfs_tree_t* broadcast_tree, metaset_in_t* in)
         goto out;
     }
 
-    printf("%d:BUCKEYES sending metaset to %d children\n",
+    printf("MARGOTREE: %d: sending metaset to %d children\n",
             glb_pmi_rank, child_count);
 
     if (child_count > 0) {
@@ -644,40 +696,45 @@ int metaset_forward(const unifyfs_tree_t* broadcast_tree, metaset_in_t* in)
         }
 
         /* forward request down the tree */
+        unifyfs_coll_request_t* req;
         for (i = 0; i < child_count; i++) {
+            req = requests + i;
+
             /* get rank of this child */
             int child = child_ranks[i];
-            unifyfs_coll_request_t* req = &requests[i];
-
-            printf("children[%d]: %s\n",
+            printf("MARGOTREE: children[%d]: %s\n",
                    child, glb_servers[child].margo_svr_addr_str);
 
             /* allocate handle */
-            hret = margo_create(unifyfsd_rpc_context->svr_mid,
-                                glb_servers[child].margo_svr_addr,
-                                unifyfsd_rpc_context->rpcs.metaset_id,
-                                &req->handle);
-            assert(hret == HG_SUCCESS);
-
-            /* invoke filesize request rpc on child */
-            hret = margo_iforward(req->handle, in, &req->request);
-            assert(hret == HG_SUCCESS);
+            rc = get_request_handle(unifyfsd_rpc_context->rpcs.metaset_id,
+                                    child, req);
+            if (rc == UNIFYFS_SUCCESS) {
+                /* invoke metaset request rpc on child */
+                rc = forward_request((void*)in, req);
+            } else {
+                ret = rc;
+            }
         }
 
         /* wait for the requests to finish */
-        metaset_out_t out;
         for (i = 0; i < child_count; i++) {
-            /* TODO: get outputs */
-            hret = margo_wait(requests[i].request);
+            req = requests + i;
+            rc = wait_for_request(req);
+            if (rc == UNIFYFS_SUCCESS) {
+                /* get the output of the rpc */
+                metaset_out_t out;
+                hret = margo_get_output(req->handle, &out);
 
-            /* get the output of the rpc */
-            hret = margo_get_output(requests[i].handle, &out);
+                /* set return value */
+                ret = out.ret;
+                printf("MARGOTREE: got response: ret=%d", out.ret);
 
-            printf("get response: ret=%d", out.ret);
-
-            /* set return value
-             * TODO: check if we have an error and handle it */
-            ret = out.ret;
+                /* free margo resources */
+                margo_free_output(req->handle, &out);
+                margo_destroy(req->handle);
+            } else {
+                ret = rc;
+            }
         }
 
         free(requests);
@@ -688,7 +745,7 @@ out:
 
 static void metaset_rpc(hg_handle_t handle)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -727,7 +784,7 @@ DEFINE_MARGO_RPC_HANDLER(metaset_rpc)
 int unifyfs_invoke_metaset_rpc(int gfid, int create,
                                 unifyfs_file_attr_t* fattr)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     /* assuming success */
@@ -762,11 +819,11 @@ int unifyfs_invoke_metaset_rpc(int gfid, int create,
 static
 int unlink_forward(const unifyfs_tree_t* broadcast_tree, unlink_in_t* in)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
-    int ret;
+    int rc, ret;
     int i;
 
     /* get info for tree */
@@ -778,7 +835,7 @@ int unlink_forward(const unifyfs_tree_t* broadcast_tree, unlink_in_t* in)
         goto out;
     }
 
-    printf("%d:BUCKEYES sending unlink to %d children\n",
+    printf("MARGOTREE: %d: sending unlink to %d children\n",
             glb_pmi_rank, child_count);
 
     if (child_count > 0) {
@@ -792,40 +849,46 @@ int unlink_forward(const unifyfs_tree_t* broadcast_tree, unlink_in_t* in)
         }
 
         /* forward request down the tree */
+        unifyfs_coll_request_t* req;
         for (i = 0; i < child_count; i++) {
+            req = requests + i;
+
             /* get rank of this child */
             int child = child_ranks[i];
-            unifyfs_coll_request_t* req = &requests[i];
-
-            printf("children[%d]: %s\n",
+            printf("MARGOTREE: children[%d]: %s\n",
                    child, glb_servers[child].margo_svr_addr_str);
 
             /* allocate handle */
-            hret = margo_create(unifyfsd_rpc_context->svr_mid,
-                                glb_servers[child].margo_svr_addr,
-                                unifyfsd_rpc_context->rpcs.unlink_id,
-                                &req->handle);
-            assert(hret == HG_SUCCESS);
-
-            hret = margo_iforward(req->handle, in, &req->request);
-            assert(hret == HG_SUCCESS);
+            rc = get_request_handle(unifyfsd_rpc_context->rpcs.unlink_id,
+                                    child, req);
+            if (rc == UNIFYFS_SUCCESS) {
+                /* invoke unlink request rpc on child */
+                rc = forward_request((void*)in, req);
+            } else {
+                ret = rc;
+            }
         }
 
         /* wait for the requests to finish */
-        unlink_out_t out;
         for (i = 0; i < child_count; i++) {
-            /* TODO: get outputs */
-            hret = margo_wait(requests[i].request);
+            req = requests + i;
+            rc = wait_for_request(req);
+            if (rc == UNIFYFS_SUCCESS) {
+                /* get the output of the rpc */
+                unlink_out_t out;
+                hret = margo_get_output(req->handle, &out);
 
-            /* get the output of the rpc */
-            hret = margo_get_output(requests[i].handle, &out);
+                /* set return value */
+                ret = out.ret;
+                printf("MARGOTREE: unlink got response from child[%d]: ret=%d\n",
+                        child_ranks[i], out.ret);
 
-            printf("unlink got response from child (rank=%d): ret=%d\n",
-                    child_ranks[i], out.ret);
-
-            /* set return value
-             * TODO: check if we have an error and handle it */
-            ret = out.ret;
+                /* free margo resources */
+                margo_free_output(req->handle, &out);
+                margo_destroy(req->handle);
+            } else {
+                ret = rc;
+            }
         }
 
         free(requests);
@@ -837,7 +900,7 @@ out:
 
 static void unlink_rpc(hg_handle_t handle)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -876,7 +939,7 @@ DEFINE_MARGO_RPC_HANDLER(unlink_rpc)
 
 int unifyfs_invoke_unlink_rpc(int gfid)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     /* assuming success */
@@ -910,11 +973,11 @@ int unifyfs_invoke_unlink_rpc(int gfid)
 static
 int laminate_forward(const unifyfs_tree_t* broadcast_tree, laminate_in_t* in)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
-    int ret;
+    int rc, ret;
     int i;
 
     /* get info for tree */
@@ -926,7 +989,7 @@ int laminate_forward(const unifyfs_tree_t* broadcast_tree, laminate_in_t* in)
         goto out;
     }
 
-    printf("%d:BUCKEYES sending laminate to %d children\n",
+    printf("MARGOTREE: %d: sending laminate to %d children\n",
             glb_pmi_rank, child_count);
 
     if (child_count > 0) {
@@ -940,40 +1003,46 @@ int laminate_forward(const unifyfs_tree_t* broadcast_tree, laminate_in_t* in)
         }
 
         /* forward request down the tree */
+        unifyfs_coll_request_t* req;
         for (i = 0; i < child_count; i++) {
+            req = requests + i;
+
             /* get rank of this child */
             int child = child_ranks[i];
-            unifyfs_coll_request_t* req = &requests[i];
-
-            printf("children[%d]: %s\n",
+            printf("MARGOTREE: children[%d]: %s\n",
                    child, glb_servers[child].margo_svr_addr_str);
 
             /* allocate handle */
-            hret = margo_create(unifyfsd_rpc_context->svr_mid,
-                                glb_servers[child].margo_svr_addr,
-                                unifyfsd_rpc_context->rpcs.laminate_id,
-                                &req->handle);
-            assert(hret == HG_SUCCESS);
-
-            hret = margo_iforward(req->handle, in, &req->request);
-            assert(hret == HG_SUCCESS);
+            rc = get_request_handle(unifyfsd_rpc_context->rpcs.laminate_id,
+                                    child, req);
+            if (rc == UNIFYFS_SUCCESS) {
+                /* invoke laminate request rpc on child */
+                rc = forward_request((void*)in, req);
+            } else {
+                ret = rc;
+            }
         }
 
         /* wait for the requests to finish */
-        laminate_out_t out;
         for (i = 0; i < child_count; i++) {
-            /* TODO: get outputs */
-            hret = margo_wait(requests[i].request);
+            req = requests + i;
+            rc = wait_for_request(req);
+            if (rc == UNIFYFS_SUCCESS) {
+                /* get the output of the rpc */
+                laminate_out_t out;
+                hret = margo_get_output(req->handle, &out);
 
-            /* get the output of the rpc */
-            hret = margo_get_output(requests[i].handle, &out);
+                /* set return value */
+                ret = out.ret;
+                printf("MARGOTREE: laminate got response from child[%d]: ret=%d\n",
+                        child_ranks[i], out.ret);
 
-            printf("laminate got response from child (rank=%d): ret=%d\n",
-                    child_ranks[i], out.ret);
-
-            /* set return value
-             * TODO: check if we have an error and handle it */
-            ret = out.ret;
+                /* free margo resources */
+                margo_free_output(req->handle, &out);
+                margo_destroy(req->handle);
+            } else {
+                ret = rc;
+            }
         }
 
         free(requests);
@@ -985,7 +1054,7 @@ out:
 
 static void laminate_rpc(hg_handle_t handle)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     hg_return_t hret;
@@ -1024,7 +1093,7 @@ DEFINE_MARGO_RPC_HANDLER(laminate_rpc)
 
 int unifyfs_invoke_laminate_rpc(int gfid)
 {
-    printf("%d: BUCKEYES %s\n", glb_pmi_rank, __func__);
+    printf("MARGOTREE: %d:  %s\n", glb_pmi_rank, __func__);
     fflush(stdout);
 
     /* assuming success */

@@ -4,50 +4,47 @@
 #include "unifyfs_tree.h"
 #include "unifyfs_inode.h"
 
-int unifyfs_broadcast_extents(int gfid, unsigned int len,
-                              struct extent_tree_node* extents);
-
 /**
  * @brief
  *
- * @param gfid
+ * @param gfid     target file
+ * @param len      length of file extents array
+ * @param extents  array of extents to broadcast
  *
- * @return
+ * @return success|failure
  */
-static inline int unifyfs_invoke_broadcast_extents_rpc(int gfid,
-    unsigned int len, struct extent_tree_node* extents)
-{
-    return unifyfs_broadcast_extents(gfid, len, extents);
-}
+int unifyfs_invoke_broadcast_extents_rpc(int gfid,
+                                         unsigned int len,
+                                         struct extent_tree_node* extents);
 
 /**
  * @brief
  *
- * @param gfid
- * @param filesize
+ * @param gfid      target file
+ * @param filesize  [out] file size
  *
- * @return
+ * @return success|failure
  */
 int unifyfs_invoke_filesize_rpc(int gfid, size_t* filesize);
 
 /**
  * @brief
  *
- * @param gfid
- * @param filesize
+ * @param gfid      target file
+ * @param filesize  requested new file size
  *
- * @return
+ * @return success|failure
  */
 int unifyfs_invoke_truncate_rpc(int gfid, size_t filesize);
 
 /**
  * @brief
  *
- * @param gfid
- * @param create
- * @param attr
+ * @param gfid    target file
+ * @param create  flag indicating if this is a newly created file
+ * @param attr    file attributes to update
  *
- * @return
+ * @return success|failure
  */
 int unifyfs_invoke_metaset_rpc(int gfid, int create,
                                unifyfs_file_attr_t* attr);
@@ -55,18 +52,18 @@ int unifyfs_invoke_metaset_rpc(int gfid, int create,
 /**
  * @brief
  *
- * @param gfid
+ * @param gfid  target file
  *
- * @return
+ * @return success|failure
  */
 int unifyfs_invoke_unlink_rpc(int gfid);
 
 /**
  * @brief
  *
- * @param gfid
+ * @param gfid  target file
  *
- * @return
+ * @return success|failure
  */
 int unifyfs_invoke_laminate_rpc(int gfid);
 

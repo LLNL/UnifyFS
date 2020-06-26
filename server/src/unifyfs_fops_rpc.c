@@ -245,7 +245,7 @@ static int rpc_read(unifyfs_fops_ctx_t* ctx,
     client_read_req_t* req = NULL;
     unsigned int n_chunks = 0;
     chunk_read_req_t* chunks = NULL;
-    int num_remote_reads;
+    int num_remote_reads = 0;
     remote_chunk_reads_t* remote_reads = NULL;
     server_read_req_t rdreq = { 0, };
 
@@ -253,7 +253,7 @@ static int rpc_read(unifyfs_fops_ctx_t* ctx,
      * we now use the inode structure instead of mdhim and can skip all
      * key-value data structures. Basically:
      *
-     * 1) get the list of extents (@chunks) from the inode extent tree 
+     * 1) get the list of extents (@chunks) from the inode extent tree
      * 2) sort the @chunks according to the server ranks
      * 3) fill the server_read_req_t
      * 4) hand over the server_read_req_t to the delegator thread
