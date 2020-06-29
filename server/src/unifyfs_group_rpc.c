@@ -237,6 +237,7 @@ static void extbcast_request_rpc(hg_handle_t handle)
 
     /* wait for data transfer to finish */
     hret = margo_wait(bulk_request);
+    assert(hret == HG_SUCCESS);
 
     LOGDBG("received %d extents (%zu bytes) from %d",
            num_extents, (size_t)buf_size, (int)in.root);
@@ -254,6 +255,7 @@ static void extbcast_request_rpc(hg_handle_t handle)
     }
 
     /* wait for the requests to finish */
+    unifyfs_coll_request_t* req;
     for (i = 0; i < bcast_tree.child_count; i++) {
         req = requests + i;
         rc = wait_for_request(req);
@@ -261,6 +263,7 @@ static void extbcast_request_rpc(hg_handle_t handle)
             /* get the output of the rpc */
             extbcast_request_out_t out;
             hret = margo_get_output(req->handle, &out);
+            assert(hret == HG_SUCCESS);
 
             /* set return value */
             ret = out.ret;
@@ -406,6 +409,7 @@ static int filesize_forward(const unifyfs_tree_t* broadcast_tree,
                 /* get the output of the rpc */
                 filesize_out_t out;
                 hret = margo_get_output(req->handle, &out);
+                assert(hret == HG_SUCCESS);
 
                 printf("MARGOTREE: get response: ret=%d, filesize=%lu\n",
                         out.ret, out.filesize);
@@ -572,6 +576,7 @@ int truncate_forward(const unifyfs_tree_t* broadcast_tree, truncate_in_t* in)
                 /* get the output of the rpc */
                 truncate_out_t out;
                 hret = margo_get_output(req->handle, &out);
+                assert(hret == HG_SUCCESS);
 
                 /* set return value */
                 ret = out.ret;
@@ -724,6 +729,7 @@ int metaset_forward(const unifyfs_tree_t* broadcast_tree, metaset_in_t* in)
                 /* get the output of the rpc */
                 metaset_out_t out;
                 hret = margo_get_output(req->handle, &out);
+                assert(hret == HG_SUCCESS);
 
                 /* set return value */
                 ret = out.ret;
@@ -877,6 +883,7 @@ int unlink_forward(const unifyfs_tree_t* broadcast_tree, unlink_in_t* in)
                 /* get the output of the rpc */
                 unlink_out_t out;
                 hret = margo_get_output(req->handle, &out);
+                assert(hret == HG_SUCCESS);
 
                 /* set return value */
                 ret = out.ret;
@@ -1031,6 +1038,7 @@ int laminate_forward(const unifyfs_tree_t* broadcast_tree, laminate_in_t* in)
                 /* get the output of the rpc */
                 laminate_out_t out;
                 hret = margo_get_output(req->handle, &out);
+                assert(hret == HG_SUCCESS);
 
                 /* set return value */
                 ret = out.ret;
