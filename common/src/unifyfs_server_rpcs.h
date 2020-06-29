@@ -88,7 +88,7 @@ DECLARE_MARGO_RPC_HANDLER(chunk_read_response_rpc)
 MERCURY_GEN_PROC(extbcast_request_in_t,
         ((int32_t)(root))
         ((int32_t)(gfid))
-        ((int32_t)(num_extends))
+        ((int32_t)(num_extents))
         ((hg_bulk_t)(exttree)))
 MERCURY_GEN_PROC(extbcast_request_out_t,
         ((int32_t)(ret)))
