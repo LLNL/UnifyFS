@@ -3,9 +3,11 @@
 # The RUN_CATALYST variable can be toggled in the Gitlab interface to
 # toggle whether jobs should be run on this system.
 .catalyst-template:
+  extends: .base-template
   rules:
     - if: '$RUN_CATALYST != "ON"'
       when: never
+    - when: on_success
 
 .catalyst-shell-template:
   extends: .catalyst-template
