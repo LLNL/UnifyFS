@@ -6,6 +6,16 @@ stages:
   - test-unit
   - test-integ
 
+# Rules to determine when a pipeline will be generated. If none of these rules
+# match, no pipeline will be generated.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
+    - if: '$CI_PIPELINE_SOURCE == "external_pull_request_event" && $CI_EXTERNAL_PULL_REQUEST_TARGET_BRANCH_NAME == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH == "dev"'
+
 ##### System Templates #####
 
 # Generic system templates used to contruct the final jobs on specific
@@ -17,10 +27,6 @@ stages:
 # Gitlab interface if/when the defaults need to be changed.
 
 .base-template:
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH == "dev"'
-    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev" && $CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev" && $CI_PIPELINE_SOURCE == "external_pull_request_event"'
   retry:
     max: 1
     when:
@@ -28,22 +34,18 @@ stages:
       - stuck_or_timeout_failure
 
 .slurm-single-node-template:
-  extends: .base-template
   variables:
     LLNL_SLURM_SCHEDULER_PARAMETERS: "-N 1 -p pbatch -t $UNIT_WALL_TIME -J unifyfs-unit-tests"
 
 .slurm-multi-node-template:
-  extends: .base-template
   variables:
     LLNL_SLURM_SCHEDULER_PARAMETERS: "-N $NNODES -p pbatch -t $INTEG_WALL_TIME -J unifyfs-integ-tests"
 
 .lsf-single-node-template:
-  extends: .base-template
   variables:
     LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes 1 -q pbatch -W $UNIT_WALL_TIME -J unifyfs-unit-tests"
 
 .lsf-multi-node-template:
-  extends: .base-template
   variables:
     LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes $NNODES -stage storage=${STORAGE_SIZE} -q pbatch -W $INTEG_WALL_TIME -J unifyfs-integ-tests"
 

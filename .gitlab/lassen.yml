@@ -3,9 +3,11 @@
 # The RUN_LASSEN variable can be toggled in the Gitlab interface to
 # toggle whether jobs should be run on this system.
 .lassen-template:
+  extends: .base-template
   rules:
     - if: '$RUN_LASSEN != "ON"'
       when: never
+    - when: on_success
 
 .lassen-shell-template:
   extends: .lassen-template
