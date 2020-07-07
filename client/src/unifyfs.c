@@ -42,7 +42,6 @@
 
 #include "unifyfs-internal.h"
 #include "unifyfs-fixed.h"
-#include "unifyfs_runstate.h"
 
 #include <time.h>
 
@@ -2523,19 +2522,12 @@ int unifyfs_mount(const char prefix[], int rank, size_t size,
                l_app_id, unifyfs_app_id);
     }
 
-    // update configuration from runstate file
-    rc = unifyfs_read_runstate(&client_cfg, NULL);
-    if (rc) {
-        LOGERR("failed to update configuration from runstate.");
-        return UNIFYFS_FAILURE;
-    }
-
     // initialize k-v store access
     kv_rank = client_rank;
     kv_nranks = size;
     rc = unifyfs_keyval_init(&client_cfg, &kv_rank, &kv_nranks);
     if (rc) {
-        LOGERR("failed to update configuration from runstate.");
+        LOGERR("failed to initialize kvstore");
         return UNIFYFS_FAILURE;
     }
     if ((client_rank != kv_rank) || (size != kv_nranks)) {

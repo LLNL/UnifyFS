@@ -66,15 +66,5 @@ if process_is_not_running unifyfsd 5; then
     exit 1
 fi
 
-#
-# Make sure unifyfsd successfully generated client runstate file
-#
-uid=$(id -u)
-if ! test -f $UNIFYFS_RUNSTATE_DIR/unifyfs-runstate.conf.$uid ; then
-    cat $UNIFYFS_LOG_DIR/${UNIFYFS_LOG_FILE}* >&3
-    echo not ok 1 - unifyfsd runstate
-    exit 1
-fi
-
 echo ok 1 - unifyfsd running
 exit 0
