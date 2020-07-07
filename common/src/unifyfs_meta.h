@@ -15,9 +15,10 @@
 #ifndef UNIFYFS_META_H
 #define UNIFYFS_META_H
 
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -29,6 +30,13 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+
+/* extent slice size used for metadata */
+extern size_t meta_slice_sz;
+
+/* calculate number of slices in an extent given by start offset and length */
+size_t meta_num_slices(size_t offset, size_t length);
 
 /* structure used to detect clients/servers colocated on a host */
 typedef struct {

@@ -1,46 +1,21 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
+ *
+ * Copyright 2020, UT-Battelle, LLC.
+ *
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
 #include "unifyfs_fops.h"
 
-struct unifyfs_fops* unifyfs_fops_get(const char* name)
-{
-    int i = 0;
-    struct unifyfs_fops* fops[] = {
-        unifyfs_fops_mdhim,
-        unifyfs_fops_rpc
-    };
-
-    for (i = 0; i < sizeof(fops)/sizeof(fops[0]); i++) {
-        struct unifyfs_fops* current = fops[i];
-
-        if (0 == strncmp(name, current->name, strlen(current->name))) {
-            return current;
-        }
-    }
-
-    return NULL;
-}
-
+#if defined(USE_MDHIM)
+# include "unifyfs_fops_mdhim.c"
+#else
+# include "unifyfs_fops_rpc.c"
+#endif

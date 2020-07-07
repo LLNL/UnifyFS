@@ -84,6 +84,9 @@ static int server_pid_invoke_rpc(void)
 
     ret = out.ret;
 
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+
     return ret;
 }
 

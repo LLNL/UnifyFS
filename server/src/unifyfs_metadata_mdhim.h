@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017-2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -31,13 +31,9 @@
 #define UNIFYFS_METADATA_MDHIM_H
 
 #include "unifyfs_configurator.h"
-#include "unifyfs_global.h"
+#include "unifyfs_log.h"
+#include "unifyfs_meta.h"
 
-#define MANIFEST_FILE_NAME "mdhim_manifest_"
-
-
-/* extent slice size used for metadata */
-extern size_t meta_slice_sz;
 
 /* Key for file attributes */
 typedef int fattr_key_t;
@@ -83,10 +79,6 @@ int unifyfs_keyval_compare(const void* a, const void* b);
 
 /* return number of slice ranges needed to cover range */
 size_t meta_num_slices(size_t offset, size_t length);
-
-void debug_log_key_val(const char* ctx,
-                       unifyfs_key_t* key,
-                       unifyfs_val_t* val);
 
 int meta_sanitize(void);
 int meta_init_store(unifyfs_cfg_t* cfg);
@@ -178,7 +170,8 @@ int unifyfs_set_file_extents(int num_entries, unifyfs_key_t** keys,
 
 
 
-static inline unifyfs_key_t** alloc_key_array(int elems)
+static inline
+unifyfs_key_t** alloc_key_array(int elems)
 {
     int size = elems * (sizeof(unifyfs_key_t*) + sizeof(unifyfs_key_t));
 
@@ -194,7 +187,8 @@ static inline unifyfs_key_t** alloc_key_array(int elems)
     return (unifyfs_key_t**)mem_block;
 }
 
-static inline unifyfs_val_t** alloc_value_array(int elems)
+static inline
+unifyfs_val_t** alloc_value_array(int elems)
 {
     int size = elems * (sizeof(unifyfs_val_t*) + sizeof(unifyfs_val_t));
 
@@ -210,14 +204,33 @@ static inline unifyfs_val_t** alloc_value_array(int elems)
     return (unifyfs_val_t**)mem_block;
 }
 
-static inline void free_key_array(unifyfs_key_t** array)
+static inline
+void free_key_array(unifyfs_key_t** array)
 {
     free(array);
 }
 
-static inline void free_value_array(unifyfs_val_t** array)
+static inline
+void free_value_array(unifyfs_val_t** array)
 {
     free(array);
+}
+
+static inline
+void debug_log_key_val(const char* ctx,
+                       unifyfs_key_t* key,
+                       unifyfs_val_t* val)
+{
+    if ((key != NULL) && (val != NULL)) {
+        LOGDBG("@%s - key(gfid=%d, offset=%lu), "
+               "val(del=%d, len=%lu, addr=%lu, app=%d, rank=%d)",
+               ctx, key->gfid, key->offset,
+               val->delegator_rank, val->len, val->addr,
+               val->app_id, val->rank);
+    } else if (key != NULL) {
+        LOGDBG("@%s - key(gfid=%d, offset=%lu)",
+               ctx, key->gfid, key->offset);
+    }
 }
 
 

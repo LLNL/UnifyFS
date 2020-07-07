@@ -1,11 +1,23 @@
+/*
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
+ * Produced at the Lawrence Livermore National Laboratory.
+ *
+ * Copyright 2020, UT-Battelle, LLC.
+ *
+ * LLNL-CODE-741539
+ * All rights reserved.
+ *
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
+ */
+
 #ifndef __UNIFYFS_FOPS_H
 #define __UNIFYFS_FOPS_H
 
-#include <errno.h>
-
+#include "unifyfs_configurator.h"
 #include "unifyfs_log.h"
 #include "unifyfs_meta.h"
-#include "unifyfs_configurator.h"
 
 /*
  * extra information that we need to pass for file operations.
@@ -62,28 +74,18 @@ struct unifyfs_fops {
 };
 
 /* available file operations.  */
-extern struct unifyfs_fops* unifyfs_fops_mdhim;
-extern struct unifyfs_fops* unifyfs_fops_rpc;
+extern struct unifyfs_fops* unifyfs_fops_impl;
 
 /* the one that is configured to be used: defined in unifyfs_server.c */
 extern struct unifyfs_fops* global_fops_tab;
 
-/**
- * @brief
- *
- * @param name
- *
- * @return
- */
-struct unifyfs_fops* unifyfs_fops_get(const char* name);
-
 static inline int unifyfs_fops_init(unifyfs_cfg_t* cfg)
 {
     int ret = UNIFYFS_SUCCESS;
-    struct unifyfs_fops* fops = unifyfs_fops_get(cfg->server_fops);
+    struct unifyfs_fops* fops = unifyfs_fops_impl;
 
     if (!fops) {
-        LOGERR("failed to get the file operation table: %s", cfg->server_fops);
+        LOGERR("failed to get the file operation table");
     }
 
     if (fops->init) {

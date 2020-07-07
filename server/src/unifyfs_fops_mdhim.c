@@ -1,33 +1,20 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
+ *
+ * Copyright 2020, UT-Battelle, LLC.
+ *
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
-#include "unifyfs_global.h"
+
+#include "unifyfs_group_rpc.h"
 #include "unifyfs_metadata_mdhim.h"
 #include "unifyfs_request_manager.h"
-#include "unifyfs_fops.h"
-#include "unifyfs_group_rpc.h"
-
 
 /* given an extent corresponding to a write index, create new key/value
  * pairs for that extent, splitting into multiple keys at the slice
@@ -331,15 +318,20 @@ static int mdhim_filesize(unifyfs_fops_ctx_t* ctx, int gfid, size_t* outsize)
     size_t filesize = 0;
     int ret = unifyfs_invoke_filesize_rpc(gfid, &filesize);
     if (ret) {
-        LOGERR("unifyfs_invoke_filesize failed (ret=%d)", ret);
+        LOGERR("filesize rpc failed (ret=%d)", ret);
+    } else {
+        LOGDBG("filesize rpc returned %zu", filesize);
+        *outsize = filesize;
     }
-    LOGDBG("filesize rpc returned %zu\n", filesize);
 
     unifyfs_file_attr_t attr = { 0, };
-    unifyfs_inode_metaget(gfid, &attr);
+    mdhim_metaget(ctx, gfid, &attr);
 
-    /* return greater of rpc value and local metadata size */
-    *outsize = attr.size > filesize ? attr.size : filesize;
+    /* return greater of rpc value and mdhim metadata size */
+    size_t asize = (size_t) attr.size;
+    if (asize > filesize) {
+        *outsize = asize;
+    }
 
     return ret;
 }
@@ -681,8 +673,8 @@ static int mdhim_laminate(unifyfs_fops_ctx_t* ctx, int gfid)
 
     /* given the global file id, look up file attributes
      * from key/value store */
-    unifyfs_file_attr_t attr;
-    int ret = unifyfs_get_file_attribute(gfid, &attr);
+    unifyfs_file_attr_t attr = { 0, };
+    int ret = mdhim_metaget(ctx, gfid, &attr);
     if (ret != UNIFYFS_SUCCESS) {
         /* failed to find attributes for the file */
         return ret;
@@ -765,7 +757,7 @@ static int mdhim_unlink(unifyfs_fops_ctx_t* ctx, int gfid)
  * holes that will be queried against the global key/value store,
  * the list of output keys, key lengths, and keyvals are allocated
  * and returned to be freed by the caller */
-int get_local_keyvals(
+static int get_local_keyvals(
     int num_keys,               /* number of input keys */
     unifyfs_key_t** keys,       /* list of input keys */
     int* keylens,               /* list of input key lengths */
@@ -953,9 +945,9 @@ int get_local_keyvals(
     return UNIFYFS_SUCCESS;
 }
 
-int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl,
-                            int gfid, int app_id, int client_id,
-                            int num_keys, unifyfs_key_t** keys, int* keylens)
+static int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl, int gfid,
+                                   int app_id, int client_id, int num_keys,
+                                   unifyfs_key_t** keys, int* keylens)
 {
     int rc = UNIFYFS_SUCCESS;
 
@@ -1273,5 +1265,5 @@ static struct unifyfs_fops _fops_mdhim = {
     .mread = mdhim_mread,
 };
 
-struct unifyfs_fops* unifyfs_fops_mdhim = &_fops_mdhim;
+struct unifyfs_fops* unifyfs_fops_impl = &_fops_mdhim;
 

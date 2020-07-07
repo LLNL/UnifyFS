@@ -32,6 +32,9 @@
 #include "unifyfs_inode.h"
 #include "unifyfs_inode_tree.h"
 
+struct unifyfs_inode_tree _global_inode_tree;
+struct unifyfs_inode_tree* global_inode_tree = &_global_inode_tree;
+
 static inline
 struct unifyfs_inode* unifyfs_inode_alloc(int gfid, unifyfs_file_attr_t* attr)
 {

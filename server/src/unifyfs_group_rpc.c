@@ -355,24 +355,17 @@ static int filesize_forward(const unifyfs_tree_t* broadcast_tree,
     fflush(stdout);
 
     hg_return_t hret;
-    int rc, ret;
-    int i;
-
-    /* get info for tree */
-    int child_count  = broadcast_tree->child_count;
-    int* child_ranks = broadcast_tree->child_ranks;
+    int i, rc;
+    int ret = UNIFYFS_SUCCESS;
 
     hg_size_t _filesize = 0;
+    unifyfs_inode_get_filesize(in->gfid, &_filesize);
 
-    ret = unifyfs_inode_get_filesize(in->gfid, &_filesize);
-    if (ret) {
-        goto out;
-    }
-
-    printf("MARGOTREE: %d: sending filesize to %d children\n",
-            glb_pmi_rank, child_count);
-
+    /* get info for tree */
+    int child_count = broadcast_tree->child_count;
     if (child_count > 0) {
+        int* child_ranks = broadcast_tree->child_ranks;
+
         /* allocate memory for request objects
          * TODO: possibly get this from memory pool */
         unifyfs_coll_request_t* requests =
@@ -383,6 +376,8 @@ static int filesize_forward(const unifyfs_tree_t* broadcast_tree,
         }
 
         /* forward request down the tree */
+        printf("MARGOTREE: %d: sending filesize to %d children\n",
+            glb_pmi_rank, child_count);
         unifyfs_coll_request_t* req;
         for (i = 0; i < child_count; i++) {
             req = requests + i;
@@ -411,7 +406,7 @@ static int filesize_forward(const unifyfs_tree_t* broadcast_tree,
                 hret = margo_get_output(req->handle, &out);
                 assert(hret == HG_SUCCESS);
 
-                printf("MARGOTREE: get response: ret=%d, filesize=%lu\n",
+                printf("MARGOTREE: got response: ret=%d, filesize=%lu\n",
                         out.ret, out.filesize);
 
                 /* set return values */
@@ -733,7 +728,7 @@ int metaset_forward(const unifyfs_tree_t* broadcast_tree, metaset_in_t* in)
 
                 /* set return value */
                 ret = out.ret;
-                printf("MARGOTREE: got response: ret=%d", out.ret);
+                printf("MARGOTREE: got response: ret=%d\n", out.ret);
 
                 /* free margo resources */
                 margo_free_output(req->handle, &out);

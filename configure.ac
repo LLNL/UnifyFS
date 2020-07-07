@@ -103,6 +103,14 @@ AS_IF([test "x$enable_pmi" = "xyes"],[
     AM_CONDITIONAL([USE_PMI2], [false])
 ])
 
+# MDHIM support build option
+AC_ARG_ENABLE([mdhim],[AS_HELP_STRING([--enable-mdhim],[Enable MDHIM build options.])])
+AS_IF([test "x$enable_mdhim" = "xyes"],[
+    AM_CONDITIONAL([USE_MDHIM], [true])
+],[
+    AM_CONDITIONAL([USE_MDHIM], [false])
+])
+
 AC_ARG_WITH(pkgconfigdir,
     [AS_HELP_STRING([--with-pkgconfigdir=DIR],[pkgconfig file in DIR @<:@LIBDIR/pkgconfig@:>@])],
             [pkgconfigdir=$withval],

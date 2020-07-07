@@ -56,32 +56,6 @@ struct mdhim_t* md;
 #define IDX_FILE_ATTR    (1)
 struct index_t* unifyfs_indexes[2];
 
-size_t meta_slice_sz;
-
-/* return number of slice ranges needed to cover range */
-size_t meta_num_slices(size_t offset, size_t length)
-{
-    size_t start = offset / meta_slice_sz;
-    size_t end   = (offset + length - 1) / meta_slice_sz;
-    size_t count = end - start + 1;
-    return count;
-}
-
-void debug_log_key_val(const char* ctx,
-                       unifyfs_key_t* key,
-                       unifyfs_val_t* val)
-{
-    if ((key != NULL) && (val != NULL)) {
-        LOGDBG("@%s - key(gfid=%d, offset=%lu), "
-               "val(del=%d, len=%lu, addr=%lu, app=%d, rank=%d)",
-               ctx, key->gfid, key->offset,
-               val->delegator_rank, val->len, val->addr,
-               val->app_id, val->rank);
-    } else if (key != NULL) {
-        LOGDBG("@%s - key(gfid=%d, offset=%lu)",
-               ctx, key->gfid, key->offset);
-    }
-}
 
 int unifyfs_key_compare(unifyfs_key_t* a, unifyfs_key_t* b)
 {

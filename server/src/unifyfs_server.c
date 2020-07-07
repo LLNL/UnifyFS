@@ -405,14 +405,16 @@ int main(int argc, char* argv[])
     /* initialize our tree that maps a gfid to its extent tree */
     unifyfs_inode_tree_init(global_inode_tree);
 
-    LOGDBG("finished service initialization");
 
+    LOGDBG("publishing server pid");
     rc = unifyfs_publish_server_pids();
     if (rc != 0) {
         LOGERR("failed to publish server pid file: %s",
                unifyfs_rc_enum_description(rc));
         exit(1);
     }
+
+    LOGDBG("finished service initialization");
 
     while (1) {
         sleep(1);
@@ -624,9 +626,11 @@ static int unifyfs_exit(void)
     LOGDBG("stopping rpc service");
     margo_server_rpc_finalize();
 
+#if defined(USE_MDHIM)
     /* shutdown the metadata service*/
     LOGDBG("stopping metadata service");
     meta_sanitize();
+#endif
 
 #if defined(UNIFYFSD_USE_MPI)
     LOGDBG("finalizing MPI");
