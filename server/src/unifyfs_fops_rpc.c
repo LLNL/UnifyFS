@@ -67,6 +67,9 @@ static int rpc_metaset(unifyfs_fops_ctx_t* ctx,
     return unifyfs_invoke_metaset_rpc(gfid, create, attr);
 }
 
+/*
+ * sync rpc from client contains extents for a single gfid (file).
+ */
 static int rpc_sync(unifyfs_fops_ctx_t* ctx)
 {
     size_t i;
@@ -113,81 +116,38 @@ static int rpc_sync(unifyfs_fops_ctx_t* ctx)
 
     unifyfs_index_t* meta_payload = (unifyfs_index_t*)(ptr_extents);
 
-    struct extent_tree_node* local_extents = calloc(extent_num_entries,
-                                                    sizeof(*local_extents));
-    if (!local_extents) {
+    struct extent_tree_node* extents = calloc(extent_num_entries,
+                                              sizeof(*extents));
+    if (!extents) {
         LOGERR("failed to allocate memory for local_extents");
         return ENOMEM;
     }
 
-    /*
-     * During sync() in client, all index entries in the superblock are
-     * re-written with the segments (unifyfs_rewrite_index_from_seg_tree).
-     * Therefore, the entries here are also ordered by gfid.
-     */
-    int current_count = 0;
-    int current_gfid = meta_payload[0].gfid;
-    struct extent_tree_node* current_extents = local_extents;
+    /* the sync rpc now contains extents from a single file/gfid */
+    int gfid = meta_payload[0].gfid;
 
     for (i = 0; i < extent_num_entries; i++) {
-        struct extent_tree_node* tmp = &local_extents[i];
+        struct extent_tree_node* tmp = &extents[i];
         unifyfs_index_t* meta = &meta_payload[i];
-        int gfid = meta->gfid;
-        size_t offset = meta->file_pos;
-        size_t length = meta->length;
-        size_t logpos = meta->log_pos;
-        unsigned long end = (unsigned long) (offset + length - 1);
 
-        tmp->start = offset;
-        tmp->end = end;
+        tmp->start = meta->file_pos;
+        tmp->end = (meta->file_pos + meta->length) - 1;
         tmp->svr_rank = glb_pmi_rank;
         tmp->app_id = ctx->app_id;
         tmp->cli_id = ctx->client_id;
-        tmp->pos = (unsigned long) logpos;
+        tmp->pos = meta->log_pos;
+    }
 
-        current_count++;
+    ret = unifyfs_inode_add_extents(gfid, extent_num_entries, extents);
+    if (ret) {
+        LOGERR("failed to add extents (gfid=%d, ret=%d)", gfid, ret);
+        return ret;
+    }
 
-        if (gfid != current_gfid) {
-            ret = unifyfs_inode_add_extents(current_gfid,
-                                            current_count - 1,
-                                            current_extents);
-            if (ret) {
-                LOGERR("failed to add extents (gfid=%d, ret=%d)",
-                        current_gfid, ret);
-                return ret;
-            }
-
-            ret = unifyfs_invoke_broadcast_extents_rpc(current_gfid,
-                       current_count - 1, current_extents);
-            if (ret) {
-                LOGERR("failed to broadcast extents (gfid=%d, ret=%d)",
-                        current_gfid, ret);
-                return ret;
-            }
-
-            current_gfid = gfid;
-            current_extents = tmp;
-            current_count = 1;
-        }
-
-        if (current_count == extent_num_entries) {
-            ret = unifyfs_inode_add_extents(current_gfid,
-                                            current_count,
-                                            current_extents);
-            if (ret) {
-                LOGERR("failed to add extents (gfid=%d, ret=%d)",
-                        current_gfid, ret);
-                return ret;
-            }
-
-            ret = unifyfs_invoke_broadcast_extents_rpc(current_gfid,
-                    current_count, current_extents);
-            if (ret) {
-                LOGERR("failed to broadcast extents (gfid=%d, ret=%d)",
-                        current_gfid, ret);
-                return ret;
-            }
-        }
+    ret = unifyfs_invoke_broadcast_extents_rpc(gfid, extent_num_entries,
+                                               extents);
+    if (ret) {
+        LOGERR("failed to broadcast extents (gfid=%d, ret=%d)", gfid, ret);
     }
 
     return ret;
