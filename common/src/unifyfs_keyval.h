@@ -22,7 +22,6 @@ extern "C" {
 #endif
 
 // keys we use
-extern const char* const key_runstate;           // path to runstate file
 extern const char* const key_unifyfsd_socket;    // server domain socket path
 extern const char* const key_unifyfsd_margo_shm; // client-server margo address
 extern const char* const key_unifyfsd_margo_svr; // server-server margo address

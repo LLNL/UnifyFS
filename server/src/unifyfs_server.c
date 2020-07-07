@@ -34,7 +34,6 @@
 // common headers
 #include "unifyfs_configurator.h"
 #include "unifyfs_keyval.h"
-#include "unifyfs_runstate.h"
 
 // server components
 #include "unifyfs_global.h"
@@ -346,11 +345,6 @@ int main(int argc, char* argv[])
         rc = allocate_servers((size_t)kv_nranks);
     }
 
-    rc = unifyfs_write_runstate(&server_cfg);
-    if (rc != (int)UNIFYFS_SUCCESS) {
-        exit(1);
-    }
-
     LOGDBG("initializing rpc service");
     ABT_init(argc, argv);
     ABT_mutex_create(&app_configs_abt_sync);
@@ -402,9 +396,6 @@ int main(int argc, char* argv[])
 
     LOGDBG("stopping service manager thread");
     rc = svcmgr_fini();
-
-    LOGDBG("cleaning run state");
-    rc = unifyfs_clean_runstate(&server_cfg);
 
     return unifyfs_exit();
 }

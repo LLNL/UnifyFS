@@ -34,7 +34,6 @@
 #include <sys/stat.h>
 
 // UnifyFS keys
-const char* const key_runstate           = "unifyfs.runstate";
 const char* const key_unifyfsd_socket    = "unifyfsd.socket";
 const char* const key_unifyfsd_margo_shm = "unifyfsd.margo-shm";
 const char* const key_unifyfsd_margo_svr = "unifyfsd.margo-svr";

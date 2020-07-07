@@ -125,11 +125,11 @@ files.
 .. table:: ``[runstate]`` section - server runstate settings
    :widths: auto
 
-   ========  ======  ==================================================
+   ========  ======  ===============================================
    Key       Type    Description
-   ========  ======  ==================================================
-   dir       STRING  path to directory to contain server runstate file
-   ========  ======  ==================================================
+   ========  ======  ===============================================
+   dir       STRING  path to directory to contain server-local state
+   ========  ======  ===============================================
 
 .. table:: ``[server]`` section - server settings
    :widths: auto
