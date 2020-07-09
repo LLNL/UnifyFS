@@ -1107,7 +1107,7 @@ int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count)
     /*
      * ToDo: Exception handling when some of the requests
      * are missed
-     * */
+     */
 
     /* spin waiting for read data to come back from the server,
      * we process it in batches as it comes in, eventually the
@@ -1121,11 +1121,14 @@ int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count)
         } else {
             tmp_rc = process_read_data(read_reqs, count, &done);
             if (tmp_rc != UNIFYFS_SUCCESS) {
+                LOGERR("failed to process data from server");
                 rc = UNIFYFS_FAILURE;
             }
             delegator_signal();
         }
     }
+
+    LOGDBG("fetched all data from server for %d requests", count);
 
     /* got all of the data we'll get from the server,
      * check for short reads and whether those short
