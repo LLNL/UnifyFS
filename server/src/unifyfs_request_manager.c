@@ -2255,6 +2255,7 @@ static void chunk_read_response_rpc(hg_handle_t handle)
 {
     int32_t ret;
     hg_return_t hret;
+    chunk_read_response_out_t out;
 
     /* get input params */
     chunk_read_response_in_t in;
@@ -2268,6 +2269,9 @@ static void chunk_read_response_rpc(hg_handle_t handle)
     int req_id     = (int)in.req_id;
     int num_chks   = (int)in.num_chks;
     size_t bulk_sz = (size_t)in.bulk_size;
+
+    LOGDBG("received chunk read response from server %d (%d chunks)",
+           src_rank, num_chks);
 
     /* The input parameters specify the info for a bulk transfer
      * buffer on the sending process.  We use that info to pull data
@@ -2306,21 +2310,49 @@ static void chunk_read_response_rpc(hg_handle_t handle)
             hg_bulk_t bulk_handle;
             hret = margo_bulk_create(mid, 1, (void**)&resp_buf, &in.bulk_size,
                 HG_BULK_WRITE_ONLY, &bulk_handle);
-            assert(hret == HG_SUCCESS);
+            if (hret != HG_SUCCESS) {
+                LOGERR("failed to prepare bulk transfer");
+                ret = UNIFYFS_ERROR_MARGO;
+                goto out_respond;
+            }
 
             /* execute the transfer to pull data from remote side
-             * into our local bulk transfer buffer */
-            hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
-                in.bulk_handle, 0, bulk_handle, 0, in.bulk_size);
-            assert(hret == HG_SUCCESS);
+             * into our local bulk transfer buffer.
+             * NOTE: mercury/margo bulk transfer does not check the maximum
+             * transfer size that the underlying transport supports, and a
+             * large bulk transfer may result in failure. */
+            int i = 0;
+            hg_size_t remain = in.bulk_size;
 
-            /* process read replies (headers and data) we just
-             * received */
-            rc = rm_post_chunk_read_responses(app_id, client_id,
-                src_rank, req_id, num_chks, bulk_sz, resp_buf);
-            if (rc != (int)UNIFYFS_SUCCESS) {
-                LOGERR("failed to handle chunk read responses")
-                ret = rc;
+            do {
+                hg_size_t offset = i * MAX_BULK_TX_SIZE;
+                hg_size_t len = remain < MAX_BULK_TX_SIZE
+                                ? remain : MAX_BULK_TX_SIZE;
+
+                hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
+                                           in.bulk_handle, offset,
+                                           bulk_handle, offset, len);
+                if (hret != HG_SUCCESS) {
+                    break;
+                }
+
+                remain -= len;
+                i++;
+            } while (remain > 0);
+
+            if (hret == HG_SUCCESS) {
+                LOGDBG("transferred bulk data (%lu bytes)", in.bulk_size);
+
+                /* process read replies (headers and data) we just received */
+                rc = rm_post_chunk_read_responses(app_id, client_id,
+                        src_rank, req_id, num_chks, bulk_sz, resp_buf);
+                if (rc != (int)UNIFYFS_SUCCESS) {
+                    LOGERR("failed to handle chunk read responses")
+                        ret = rc;
+                }
+            } else {
+                LOGERR("failed to perform bulk transfer");
+                ret = UNIFYFS_ERROR_MARGO;
             }
 
             /* deregister our bulk transfer buffer */
@@ -2328,8 +2360,8 @@ static void chunk_read_response_rpc(hg_handle_t handle)
         }
     }
 
+out_respond:
     /* fill output structure */
-    chunk_read_response_out_t out;
     out.ret = ret;
 
     /* return to caller */

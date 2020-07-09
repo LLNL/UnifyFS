@@ -54,6 +54,7 @@
 #define REQ_BUF_LEN (MAX_META_PER_SEND * 64) /* chunk read reqs buffer size */
 #define SHM_WAIT_INTERVAL 1000       /* unit: ns */
 #define RM_MAX_ACTIVE_REQUESTS 64    /* number of concurrent read requests */
+#define MAX_BULK_TX_SIZE (8 * MIB)   /* bulk transfer size */
 
 // Server - Service Manager
 #define LARGE_BURSTY_DATA (512 * MIB)

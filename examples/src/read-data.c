@@ -85,7 +85,7 @@ static void alloc_buf(unsigned long length)
 
 static void do_pread(int fd, size_t length, off_t offset)
 {
-    int ret = 0;
+    ssize_t ret = 0;
 
     alloc_buf(length);
 
@@ -93,7 +93,7 @@ static void do_pread(int fd, size_t length, off_t offset)
 
     ret = pread(fd, buf, length, offset);
 
-    printf(" -> pread(off=%lu, len=%lu) = %d", offset, length, ret);
+    printf(" -> pread(off=%lu, len=%lu) = %zd", offset, length, ret);
     if (errno) {
         printf("  (err=%d, %s)\n", errno, strerror(errno));
     } else {
