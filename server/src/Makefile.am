@@ -11,7 +11,6 @@ libunifyfsd_a_SOURCES = \
     margo_server.h \
     unifyfs_cmd_handler.c \
     unifyfs_fops.h \
-    unifyfs_fops.c \
     unifyfs_global.h \
     unifyfs_group_rpc.h \
     unifyfs_group_rpc.c \
@@ -36,7 +35,8 @@ OPT_LIBS =
 if USE_MDHIM
 
   libunifyfsd_a_SOURCES += \
-    unifyfs_metadata_mdhim.c
+    unifyfs_metadata_mdhim.c \
+    unifyfs_fops_mdhim.c
 
   OPT_CPP_FLAGS += \
       -DUSE_MDHIM \
@@ -55,6 +55,11 @@ if USE_MDHIM
   OPT_LIBS += \
       $(top_builddir)/meta/src/libmdhim.a \
       $(LEVELDB_LIBS)
+
+else # ! USE_MDHIM
+
+  libunifyfsd_a_SOURCES += \
+    unifyfs_fops_rpc.c
 
 endif # USE_MDHIM
 
