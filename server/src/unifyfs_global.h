@@ -55,12 +55,6 @@
 #include <margo.h>
 #include <pthread.h>
 
-//#if defined(UNIFYFSD_USE_MPI)
-# include <mpi.h>
-//#endif
-
-
-
 /* Some global variables/structures used throughout the server code */
 
 /* PMI server rank and server count */
