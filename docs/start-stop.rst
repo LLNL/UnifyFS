@@ -117,3 +117,29 @@ with a README documenting the installation instructions, is available
 within the source repository at ``util/scripts/lsfcsm``.
 
 Support for the SLURM resource manager is under development.
+
+-----------------------------------------------
+  Stage-in and Stage-out Manifest File Format
+-----------------------------------------------
+
+The manifest file contains one or more file copy requests.
+Each line in the manifest corresponds to one file copy request,
+and contains both the source and destination file paths. Currently,
+directory copies are not supported.
+
+Each line is formatted as <source filename><whitespace><destination filename>.
+If either of the filenames
+contain whitespace or special characters, then both filenames should
+be surrounded by double-quote characters (") (ASCII character 34 decimal).
+The double-quote character and the linefeed end-of-line character are forbidden
+in any filenames used in a unifyfs manifest file, but any other
+characters are allowed, including control characters.
+If a filename contains any characters that might be misinterpreted, then
+enclosing the filename in double-quotes is always
+a safe thing to do.
+
+Here is an example of a valid stage-in manifest file:
+
+``/scratch/users/me/input_data/input_1.dat /unifyfs/input/input_1.dat``
+``/home/users/me/configuration/run_12345.conf /unifyfs/config/run_12345.conf``
+``"/home/users/me/file with space.dat" "/unifyfs/file with space.dat"``
