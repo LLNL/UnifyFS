@@ -95,6 +95,7 @@ typedef enum {
 } readreq_status_e;
 
 typedef struct {
+    int gfid;           /* gfid */
     size_t nbytes;      /* size of data chunk */
     size_t offset;      /* file offset */
     size_t log_offset;  /* remote log offset */
@@ -103,6 +104,7 @@ typedef struct {
 } chunk_read_req_t;
 
 typedef struct {
+    int gfid;         /* gfid */
     size_t offset;    /* file offset */
     size_t nbytes;    /* requested read size */
     ssize_t read_rc;  /* bytes read (or negative error code) */

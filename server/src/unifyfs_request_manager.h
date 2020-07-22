@@ -38,7 +38,7 @@ typedef struct {
     int app_id;                /* app id of requesting client process */
     int client_id;             /* client id of requesting client process */
     int num_remote_reads;      /* size of remote_reads array */
-    client_read_req_t extent;  /* client read extent, includes gfid */
+    int in_use;                /* occupied by a thread */
     chunk_read_req_t* chunks;  /* array of chunk-reads */
     remote_chunk_reads_t* remote_reads; /* per-delegator remote reads array */
 } server_read_req_t;

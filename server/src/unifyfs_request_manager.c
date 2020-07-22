@@ -228,9 +228,8 @@ void free_value_array(unifyfs_val_t** array)
 static void debug_print_read_req(server_read_req_t* req)
 {
     if (NULL != req) {
-        LOGDBG("server_read_req[%d] status=%d, gfid=%d, num_remote=%d",
-               req->req_ndx, req->status, req->extent.gfid,
-               req->num_remote_reads);
+        LOGDBG("server_read_req[%d] status=%d, num_remote=%d",
+               req->req_ndx, req->status, req->num_remote_reads);
     }
 }
 
@@ -241,18 +240,19 @@ static server_read_req_t* reserve_read_req(reqmgr_thrd_t* thrd_ctrl)
     if (thrd_ctrl->num_read_reqs < RM_MAX_ACTIVE_REQUESTS) {
         if (thrd_ctrl->next_rdreq_ndx < (RM_MAX_ACTIVE_REQUESTS - 1)) {
             rdreq = thrd_ctrl->read_reqs + thrd_ctrl->next_rdreq_ndx;
-            assert((rdreq->req_ndx == 0) && (rdreq->extent.gfid == 0));
+            assert((rdreq->req_ndx == 0) && (rdreq->in_use == 0));
             rdreq->req_ndx = thrd_ctrl->next_rdreq_ndx++;
         } else { // search for unused slot
             for (int i = 0; i < RM_MAX_ACTIVE_REQUESTS; i++) {
                 rdreq = thrd_ctrl->read_reqs + i;
-                if ((rdreq->req_ndx == 0) && (rdreq->extent.gfid == 0)) {
+                if ((rdreq->req_ndx == 0) && (rdreq->in_use == 0)) {
                     rdreq->req_ndx = i;
                     break;
                 }
             }
         }
         thrd_ctrl->num_read_reqs++;
+        rdreq->in_use = 1;
         LOGDBG("reserved read req %d (active=%d, next=%d)", rdreq->req_ndx,
                thrd_ctrl->num_read_reqs, thrd_ctrl->next_rdreq_ndx);
         debug_print_read_req(rdreq);
@@ -263,11 +263,13 @@ static server_read_req_t* reserve_read_req(reqmgr_thrd_t* thrd_ctrl)
     return rdreq;
 }
 
-static int release_read_req(reqmgr_thrd_t* thrd_ctrl,
-                            server_read_req_t* rdreq)
+static int __release_read_req(reqmgr_thrd_t* thrd_ctrl,
+                              server_read_req_t* rdreq)
 {
+    // NOTE: this fn assumes thrd_ctrl->thrd_lock is locked
+
     int rc = (int)UNIFYFS_SUCCESS;
-    RM_LOCK(thrd_ctrl);
+
     if (rdreq != NULL) {
         LOGDBG("releasing read req %d", rdreq->req_ndx);
         if (rdreq->req_ndx == (thrd_ctrl->next_rdreq_ndx - 1)) {
@@ -288,7 +290,18 @@ static int release_read_req(reqmgr_thrd_t* thrd_ctrl,
         rc = EINVAL;
         LOGERR("NULL read_req");
     }
+
+    return rc;
+}
+
+static int release_read_req(reqmgr_thrd_t* thrd_ctrl, server_read_req_t* rdreq)
+{
+    int rc = (int)UNIFYFS_SUCCESS;
+
+    RM_LOCK(thrd_ctrl);
+    rc = __release_read_req(thrd_ctrl, rdreq);
     RM_UNLOCK(thrd_ctrl);
+
     return rc;
 }
 
@@ -374,6 +387,7 @@ int create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
         chunk_read_req_t* chk = all_chunk_reads + i;
 
         /* fill in chunk read request */
+        chk->gfid          = keyvals[i].key.gfid;
         chk->nbytes        = keyvals[i].val.len;
         chk->offset        = keyvals[i].key.offset;
         chk->log_offset    = keyvals[i].val.addr;
@@ -1033,63 +1047,68 @@ int rm_cmd_laminate(
     return rc;
 }
 
-int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl,
-                            int gfid, int app_id, int client_id,
-                            int num_keys, unifyfs_key_t** keys, int* keylens)
+static int submit_read_request(reqmgr_thrd_t* thrd_ctrl, int num_keys,
+                               unifyfs_key_t** keys, int* keylens)
 {
-    /* lookup all key/value pairs for given range */
+    int ret = UNIFYFS_SUCCESS;
+    int app_id = -1;
+    int client_id = -1;
     int num_vals = 0;
     unifyfs_keyval_t* keyvals = NULL;
-    int rc = unifyfs_get_file_extents(num_keys, keys, keylens,
-                                      &num_vals, &keyvals);
+
+    if (!thrd_ctrl || num_keys < 0 || !keys || !keylens) {
+        return EINVAL;
+    }
+
+    app_id = thrd_ctrl->app_id;
+    client_id = thrd_ctrl->client_id;
+
+    /* lookup all key/value pairs for given range */
+    ret = unifyfs_get_file_extents(num_keys, keys, keylens,
+                                   &num_vals, &keyvals);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("failed to get file extents (ret=%d)", ret);
+        return UNIFYFS_ERROR_MDHIM;
+    }
 
     /* this is to maintain limits imposed in previous code
      * that would throw fatal errors */
     if (num_vals >= UNIFYFS_MAX_SPLIT_CNT ||
         num_vals >= MAX_META_PER_SEND) {
         LOGERR("too many key/values returned in range lookup");
-        if (NULL != keyvals) {
-            free(keyvals);
-            keyvals = NULL;
-        }
-        return ENOMEM;
+        ret = ENOMEM;
+        goto out_free;
     }
 
-    if (UNIFYFS_SUCCESS != rc) {
-        /* failed to find any key / value pairs */
-        rc = UNIFYFS_FAILURE;
+    /* if we get more than one write index entry
+     * sort them by file id and then by delegator rank */
+    if (num_vals > 1) {
+        qsort(keyvals, (size_t)num_vals, sizeof(unifyfs_keyval_t),
+              compare_kv_gfid_rank);
+    }
+
+    server_read_req_t* rdreq = reserve_read_req(thrd_ctrl);
+    if (NULL == rdreq) {
+        LOGERR("failed to allocate server_read_req_t");
+        ret = UNIFYFS_FAILURE;
     } else {
-        /* if we get more than one write index entry
-         * sort them by file id and then by delegator rank */
-        if (num_vals > 1) {
-            qsort(keyvals, (size_t)num_vals, sizeof(unifyfs_keyval_t),
-                  compare_kv_gfid_rank);
-        }
+        rdreq->app_id         = app_id;
+        rdreq->client_id      = client_id;
 
-        server_read_req_t* rdreq = reserve_read_req(thrd_ctrl);
-        if (NULL == rdreq) {
-            rc = UNIFYFS_FAILURE;
-        } else {
-            rdreq->app_id         = app_id;
-            rdreq->client_id      = client_id;
-            rdreq->extent.gfid    = gfid;
-            rdreq->extent.errcode = EINPROGRESS;
-
-            rc = create_chunk_requests(thrd_ctrl, rdreq,
-                                       num_vals, keyvals);
-            if (rc != (int)UNIFYFS_SUCCESS) {
-                release_read_req(thrd_ctrl, rdreq);
-            }
+        ret = create_chunk_requests(thrd_ctrl, rdreq, num_vals, keyvals);
+        if (ret != (int)UNIFYFS_SUCCESS) {
+            LOGERR("failed to submit read requests");
+            release_read_req(thrd_ctrl, rdreq);
         }
     }
 
-    /* free off key/value buffer returned from get_file_extents */
+out_free:
     if (NULL != keyvals) {
         free(keyvals);
         keyvals = NULL;
     }
 
-    return rc;
+    return ret;
 }
 
 /* return number of slice ranges needed to cover range */
@@ -1293,8 +1312,7 @@ int rm_cmd_read(
     split_request(keys, key_lens, gfid, offset, length);
 
     /* queue up the read operations */
-    int rc = create_gfid_chunk_reads(thrd_ctrl, gfid,
-        app_id, client_id, key_cnt, keys, key_lens);
+    int rc = submit_read_request(thrd_ctrl, key_cnt, keys, key_lens);
 
     /* free memory allocated for key storage */
     free_key_array(keys);
@@ -1362,30 +1380,12 @@ int rm_cmd_mread(
         return ENOMEM;
     }
 
-    /* get chunks corresponding to requested client read extents */
-    int ret;
+    /* we need to create a single server_read_req_t structure even with
+     * multiple gfids. */
     int num_keys = 0;
-    int last_gfid = -1;
     for (j = 0; j < req_num; j++) {
         /* get the file id for this request */
         int gfid = unifyfs_Extent_fid(unifyfs_Extent_vec_at(extents, j));
-
-        /* if we have switched to a different file, create chunk reads
-         * for the previous file */
-        if (j && (gfid != last_gfid)) {
-            /* create requests for all extents of last_gfid */
-            ret = create_gfid_chunk_reads(thrd_ctrl, last_gfid,
-                app_id, client_id, num_keys, keys, key_lens);
-            if (ret != UNIFYFS_SUCCESS) {
-                LOGERR("Error creating chunk reads for gfid=%d", last_gfid);
-                rc = ret;
-            }
-
-            /* reset key counter for the current gfid */
-            num_keys = 0;
-        }
-
-        /* get offset and length of current read request */
         size_t off = unifyfs_Extent_offset(unifyfs_Extent_vec_at(extents, j));
         size_t len = unifyfs_Extent_length(unifyfs_Extent_vec_at(extents, j));
         LOGDBG("gfid:%d, offset:%zu, length:%zu", gfid, off, len);
@@ -1402,21 +1402,12 @@ int rm_cmd_mread(
 
         /* split range of read request at boundaries used for
          * MDHIM range query */
-        int used = split_request(&keys[num_keys], &key_lens[num_keys],
-            gfid, off, len);
-        num_keys += used;
-
-        /* keep track of the last gfid value that we processed */
-        last_gfid = gfid;
+        num_keys += split_request(&keys[num_keys], &key_lens[num_keys],
+                                  gfid, off, len);
     }
 
-    /* create requests for all extents of final gfid */
-    ret = create_gfid_chunk_reads(thrd_ctrl, last_gfid,
-        app_id, client_id, num_keys, keys, key_lens);
-    if (ret != UNIFYFS_SUCCESS) {
-        LOGERR("Error creating chunk reads for gfid=%d", last_gfid);
-        rc = ret;
-    }
+    /* queue the read operations */
+    rc = submit_read_request(thrd_ctrl, num_keys, keys, key_lens);
 
     /* free memory allocated for key storage */
     free_key_array(keys);
@@ -1750,8 +1741,6 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
             }
         } else if ((req->num_remote_reads == 0) &&
                    (req->status == READREQ_STARTED)) {
-            RM_LOCK(thrd_ctrl);
-
             /* look up client shared memory region */
             int app_id = req->app_id;
             int client_id = req->client_id;
@@ -1771,13 +1760,11 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
                 client_wait(shm_hdr);
             }
 
-            rc = release_read_req(thrd_ctrl, req);
+            rc = __release_read_req(thrd_ctrl, req);
             if (rc != (int)UNIFYFS_SUCCESS) {
                 LOGERR("failed to release server_read_req_t");
                 ret = rc;
             }
-
-            RM_UNLOCK(thrd_ctrl);
         }
     }
 
@@ -1891,6 +1878,8 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
                                    server_read_req_t* rdreq,
                                    remote_chunk_reads_t* del_reads)
 {
+    // NOTE: this fn assumes thrd_ctrl->thrd_lock is locked
+
     int errcode, gfid, i, num_chks, rc, thrd_id;
     int ret = (int)UNIFYFS_SUCCESS;
     chunk_read_resp_t* responses = NULL;
@@ -1914,26 +1903,23 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
     client_shm = clnt->shmem_data;
     shm_hdr = (shm_data_header*) client_shm->addr;
 
-    RM_LOCK(thrd_ctrl);
-
     num_chks = del_reads->num_chunks;
-    gfid = rdreq->extent.gfid;
     if (del_reads->status != READREQ_STARTED) {
         LOGERR("chunk read response for non-started req @ index=%d",
                rdreq->req_ndx);
         ret = (int32_t)EINVAL;
     } else if (0 == del_reads->total_sz) {
-        LOGERR("empty chunk read response for gfid=%d", gfid);
+        LOGERR("empty chunk read response from delegator %d", del_reads->rank);
         ret = (int32_t)EINVAL;
     } else {
         LOGDBG("handling chunk read responses from server %d: "
-               "gfid=%d num_chunks=%d buf_size=%zu",
-               del_reads->rank, gfid, num_chks,
-               del_reads->total_sz);
+               "num_chunks=%d buf_size=%zu",
+               del_reads->rank, num_chks, del_reads->total_sz);
         responses = del_reads->resp;
         data_buf = (char*)(responses + num_chks);
         for (i = 0; i < num_chks; i++) {
             chunk_read_resp_t* resp = responses + i;
+            gfid = resp->gfid;
             if (resp->read_rc < 0) {
                 errcode = (int)-(resp->read_rc);
                 data_sz = 0;
@@ -1942,7 +1928,8 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
                 data_sz = resp->nbytes;
             }
             offset = resp->offset;
-            LOGDBG("chunk response for offset=%zu: sz=%zu", offset, data_sz);
+            LOGDBG("chunk response for gfid=%d (offset=%zu, sz=%zu)",
+                   gfid, offset, data_sz);
 
             /* allocate and register local target buffer for bulk access */
             meta = reserve_shmem_meta(client_shm, shm_hdr, data_sz);
@@ -1986,14 +1973,12 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
             /* wait for client to read data */
             client_wait(shm_hdr);
 
-            rc = release_read_req(thrd_ctrl, rdreq);
+            rc = __release_read_req(thrd_ctrl, rdreq);
             if (rc != (int)UNIFYFS_SUCCESS) {
                 LOGERR("failed to release server_read_req_t");
             }
         }
     }
-
-    RM_UNLOCK(thrd_ctrl);
 
     return ret;
 }

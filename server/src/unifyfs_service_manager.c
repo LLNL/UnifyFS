@@ -172,6 +172,7 @@ int sm_issue_chunk_reads(int src_rank,
         size_t log_offset = rreq->log_offset;
 
         /* record request metadata in response */
+        rresp->gfid    = rreq->gfid;
         rresp->read_rc = 0;
         rresp->nbytes  = nbytes;
         rresp->offset  = rreq->offset;
