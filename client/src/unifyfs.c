@@ -2675,7 +2675,7 @@ int unifyfs_unmount(void)
     return ret;
 }
 
-#define UNIFYFS_TX_BUFSIZE (1<<20)
+#define UNIFYFS_TX_BUFSIZE (8*(1<<20))
 
 enum {
     UNIFYFS_TX_STAGE_OUT = 0,
@@ -2693,7 +2693,13 @@ ssize_t do_transfer_data(int fd_src, int fd_dst, off_t offset, size_t count)
     ssize_t n_left = 0;
     ssize_t n_processed = 0;
     size_t len = UNIFYFS_TX_BUFSIZE;
-    char buf[UNIFYFS_TX_BUFSIZE] = { 0, };
+    char* buf = NULL;
+
+    buf = malloc(UNIFYFS_TX_BUFSIZE);
+    if (!buf) {
+        LOGERR("failed to allocate transfer buffer");
+        return ENOMEM;
+    }
 
     pos = lseek(fd_src, offset, SEEK_SET);
     if (pos == (off_t) -1) {
@@ -2740,6 +2746,11 @@ ssize_t do_transfer_data(int fd_src, int fd_dst, off_t offset, size_t count)
     }
 
 out:
+    if (buf) {
+        free(buf);
+        buf = NULL;
+    }
+
     return ret;
 }
 
