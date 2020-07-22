@@ -32,7 +32,7 @@ test_expect_success "source.file exists" '
     test_path_is_file ${UNIFYFS_TEST_TMPDIR}/stage_source/source_9300.file
 '
 
-rm - f $ {UNIFYFS_TEST_TMPDIR} / config_9300/*
+rm -f ${UNIFYFS_TEST_TMPDIR}/config_9300/*
 rm -f ${UNIFYFS_TEST_TMPDIR}/stage_destination_9300/*
 
 test_expect_success "config_9300 directory is empty" '

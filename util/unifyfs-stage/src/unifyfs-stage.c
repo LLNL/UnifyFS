@@ -294,7 +294,10 @@ int main(int argc, char** argv)
         fprintf(stderr, "data transfer failed (%s)\n", strerror(errno));
     }
 
-    if (share_dir) {
+    /* wait until all processes are done */
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    if (share_dir && rank == 0) {
         ret = create_status_file(ret);
         if (ret) {
             fprintf(stderr, "failed to create the status file (%s)\n",

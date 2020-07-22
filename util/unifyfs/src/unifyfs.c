@@ -77,6 +77,7 @@ static struct option const long_opts[] = {
     { "stage-in", required_argument, NULL, 'i' },
     { "stage-out", required_argument, NULL, 'o' },
     { "timeout", required_argument, NULL, 't' },
+    { "stage-timeout", required_argument, NULL, 'T' },
     { 0, 0, 0, 0 },
 };
 
