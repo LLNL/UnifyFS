@@ -665,6 +665,10 @@ static int process_read_data(read_req_t* read_reqs, int count, int* done)
         char* rep_buf = shmptr;
         shmptr += rep->length;
 
+        LOGDBG("processing data response from server: "
+               "[%zu] (gfid=%d, offset=%lu, length=%lu, errcode=%d)",
+               i, rep->gfid, rep->offset, rep->length, rep->errcode);
+
         /* get start and end offset of reply */
         size_t rep_start = rep->offset;
         size_t rep_end   = rep->offset + rep->length;
@@ -746,6 +750,8 @@ static int process_read_data(read_req_t* read_reqs, int count, int* done)
             char* req_ptr = req->buf + req_offset;
             char* rep_ptr = rep_buf  + rep_offset;
             memcpy(req_ptr, rep_ptr, length);
+
+            LOGDBG("copied data to application buffer (%lu bytes)", length);
 
             /* update max number of bytes we have written to in the
              * request buffer */
@@ -1047,6 +1053,9 @@ int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count)
     /* prepare our shared memory buffer for delegator */
     delegator_signal();
 
+    /* for mread, we need to manually track the rpc progress */
+    unifyfs_mread_rpc_ctx_t mread_ctx = { 0, };
+
     /* we select different rpcs depending on the number of
      * read requests */
     if (count > 1) {
@@ -1078,7 +1087,7 @@ int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count)
                count, buffer, size);
 
         /* invoke multi-read rpc */
-        read_rc = invoke_client_mread_rpc(count, size, buffer);
+        read_rc = invoke_client_mread_rpc(count, size, buffer, &mread_ctx);
 
         /* free flat buffer resources */
         flatcc_builder_clear(&builder);
@@ -1113,6 +1122,7 @@ int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count)
      * we process it in batches as it comes in, eventually the
      * server will tell us it's sent us everything it can */
     int done = 0;
+    int rpc_done = 0;
     while (!done) {
         int tmp_rc = delegator_wait();
         if (tmp_rc != UNIFYFS_SUCCESS) {
@@ -1126,6 +1136,30 @@ int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count)
             }
             delegator_signal();
         }
+
+        /* if this was mread, track the progress */
+        if (count > 1 && !rpc_done) {
+            tmp_rc = unifyfs_mread_rpc_status_check(&mread_ctx);
+            if (tmp_rc < 0) {
+                LOGERR("failed to check the rpc progress");
+                continue;
+            }
+
+            /* if we received a response from the server, check any errors.
+             * for any errors, we do not have to wait for the data anymore. */
+            if (tmp_rc) {
+                LOGDBG("received rpc response from the server (ret=%d)",
+                       mread_ctx.rpc_ret);
+
+                if (mread_ctx.rpc_ret != UNIFYFS_SUCCESS) {
+                    LOGERR("mread rpc failed on server (ret=%d)",
+                           mread_ctx.rpc_ret);
+                    return UNIFYFS_FAILURE;
+                }
+
+                rpc_done = 1;
+            }
+        }
     }
 
     LOGDBG("fetched all data from server for %d requests", count);
@@ -1136,6 +1170,11 @@ int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count)
     for (i = 0; i < count; i++) {
         /* get pointer to next read request */
         read_req_t* req = &read_reqs[i];
+
+        /* no error message was received from server, set it success */
+        if (req->errcode == EINPROGRESS) {
+            req->errcode = UNIFYFS_SUCCESS;
+        }
 
         /* if we hit an error on our read, nothing else to do */
         if (req->errcode != UNIFYFS_SUCCESS) {

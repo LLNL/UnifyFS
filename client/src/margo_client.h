@@ -61,6 +61,32 @@ int invoke_client_sync_rpc(void);
 
 int invoke_client_read_rpc(int gfid, size_t offset, size_t length);
 
-int invoke_client_mread_rpc(int read_count, size_t size, void* buffer);
+/*
+ * mread rpc function is non-blocking (using margo_iforward), and the response
+ * from the server should be checked by the caller manually using
+ * the unifyfs_mread_rpc_status_check function.
+ */
+struct unifyfs_mread_rpc_ctx {
+    margo_request req;      /* margo request for track iforward result */
+    hg_handle_t handle;     /* rpc handle */
+    int rpc_ret;            /* rpc response from the server */
+};
+
+typedef struct unifyfs_mread_rpc_ctx unifyfs_mread_rpc_ctx_t;
+
+/**
+ * @brief track the progress of the submitted rpc. if the rpc is done, this
+ * funtcion returns 1 with the server response being stored in @ctx->rpc_ret.
+ *
+ * @param ctx pointer to the rpc ctx
+ *
+ * @return 1 if rpc is done (received response from the server), 0 if still in
+ * progress. -EINVAL if the @ctx is invalid.
+ */
+int unifyfs_mread_rpc_status_check(unifyfs_mread_rpc_ctx_t* ctx);
+
+
+int invoke_client_mread_rpc(int read_count, size_t size, void* buffer,
+                            unifyfs_mread_rpc_ctx_t* ctx);
 
 #endif // MARGO_CLIENT_H

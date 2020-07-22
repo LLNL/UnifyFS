@@ -318,6 +318,7 @@ typedef struct {
     size_t length; /* number of bytes to read */
     size_t nread;  /* number of bytes actually read */
     char* buf;     /* pointer to user buffer to place data */
+    struct aiocb* aiocbp; /* the original request from application */
 } read_req_t;
 
 typedef struct {

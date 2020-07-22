@@ -1581,6 +1581,7 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
                     reqs[reqcnt].nread   = 0;
                     reqs[reqcnt].errcode = EINPROGRESS;
                     reqs[reqcnt].buf     = (char*)(cbp->aio_buf);
+                    reqs[reqcnt].aiocbp  = cbp;
                     reqcnt++;
                 }
             } else {
@@ -1609,12 +1610,10 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
         }
 
         /* update aiocb fields to record error status and return value */
-        ndx = 0;
         for (i = 0; i < reqcnt; i++) {
-            char* buf = reqs[i].buf;
-            for (; ndx < nitems; ndx++) {
+            for (ndx = 0; ndx < nitems; ndx++) {
                 cbp = aiocb_list[ndx];
-                if ((char*)(cbp->aio_buf) == buf) {
+                if (cbp == reqs[i].aiocbp) {
                     AIOCB_ERROR_CODE(cbp) = reqs[i].errcode;
                     if (0 == reqs[i].errcode) {
                         AIOCB_RETURN_VAL(cbp) = reqs[i].length;
