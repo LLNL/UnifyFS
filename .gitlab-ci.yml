@@ -44,10 +44,12 @@ workflow:
 .lsf-single-node-template:
   variables:
     LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes 1 -q pbatch -W $UNIT_WALL_TIME -J unifyfs-unit-tests"
+    SCHEDULER_PARAMETERS: "-nnodes 1 -P $PROJECT_ID -W $UNIT_WALL_TIME -J unifyfs-unit-tests"
 
 .lsf-multi-node-template:
   variables:
     LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes $NNODES -stage storage=${STORAGE_SIZE} -q pbatch -W $INTEG_WALL_TIME -J unifyfs-integ-tests"
+    SCHEDULER_PARAMETERS: "-nnodes $NNODES -P $PROJECT_ID -W $INTEG_WALL_TIME -J unifyfs-integ-tests"
 
 ##### Job Templates #####
 
