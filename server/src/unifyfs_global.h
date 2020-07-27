@@ -168,7 +168,8 @@ typedef struct app_config {
 
     /* array of clients associated with this app */
     size_t num_clients;
-    app_client* clients[MAX_APP_CLIENTS];
+    size_t clients_sz;
+    app_client** clients;
 } app_config;
 
 app_config* get_application(int app_id);
