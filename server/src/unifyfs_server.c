@@ -59,6 +59,7 @@ unifyfs_cfg_t server_cfg;
 
 static ABT_mutex app_configs_abt_sync;
 static app_config* app_configs[MAX_NUM_APPS]; /* list of apps */
+static size_t clients_per_app = MAX_APP_CLIENTS;
 
 /**
  * @brief create a ready status file to notify that all servers are ready for
@@ -266,6 +267,7 @@ int main(int argc, char* argv[])
     }
     server_cfg.ptype = UNIFYFS_SERVER;
 
+    // to daemon or not to daemon, that is the question
     rc = configurator_bool_val(server_cfg.unifyfs_daemonize, &daemon);
     if (rc != 0) {
         exit(1);
@@ -292,6 +294,15 @@ int main(int argc, char* argv[])
     rc = sigaction(SIGINT, &sa, NULL);
     rc = sigaction(SIGQUIT, &sa, NULL);
     rc = sigaction(SIGTERM, &sa, NULL);
+
+    // update clients_per_app based on configuration
+    if (server_cfg.server_max_app_clients != NULL) {
+        long l;
+        rc = configurator_int_val(server_cfg.server_max_app_clients, &l);
+        if (0 == rc) {
+            clients_per_app = l;
+        }
+    }
 
     // initialize empty app_configs[]
     memset(app_configs, 0, sizeof(app_configs));
@@ -640,6 +651,14 @@ app_config* new_application(int app_id)
     for (int i = 0; i < MAX_NUM_APPS; i++) {
         app_config* existing = app_configs[i];
         if (NULL == existing) {
+            new_app->clients = (app_client**) calloc(clients_per_app,
+                                                     sizeof(app_client*));
+            if (NULL == new_app->clients) {
+                LOGERR("failed to allocate application clients arrays")
+                ABT_mutex_unlock(app_configs_abt_sync);
+                return NULL;
+            }
+            new_app->clients_sz = clients_per_app;
             app_configs[i] = new_app;
             ABT_mutex_unlock(app_configs_abt_sync);
             return new_app;
@@ -677,7 +696,7 @@ unifyfs_rc cleanup_application(app_config* app)
     LOGDBG("cleaning application %d", app_id);
 
     /* free resources allocated for each client */
-    for (int j = 0; j < MAX_APP_CLIENTS; j++) {
+    for (int j = 0; j < app->clients_sz; j++) {
         app_client* client = app->clients[j];
         if (NULL != client) {
             unifyfs_rc rc = cleanup_app_client(app, client);
@@ -686,7 +705,9 @@ unifyfs_rc cleanup_application(app_config* app)
             }
         }
     }
-
+    if (NULL != app->clients) {
+        free(app->clients);
+    }
     free(app);
 
     return ret;
@@ -699,7 +720,7 @@ app_client* get_app_client(int app_id,
     app_config* app_cfg = get_application(app_id);
     if ((NULL == app_cfg) ||
         (client_id <= 0) ||
-        (client_id > MAX_APP_CLIENTS)) {
+        (client_id > (int)app_cfg->clients_sz)) {
         return NULL;
     }
 
@@ -770,7 +791,7 @@ app_client* new_app_client(app_config* app,
         return NULL;
     }
 
-    if (app->num_clients == MAX_APP_CLIENTS) {
+    if (app->num_clients == app->clients_sz) {
         LOGERR("reached maximum number of application clients");
         return NULL;
     }
