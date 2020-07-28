@@ -86,7 +86,7 @@
     UNIFYFS_CFG(meta, db_path, STRING, RUNDIR, "metadata database path", configurator_directory_check) \
     UNIFYFS_CFG(meta, server_ratio, INT, META_DEFAULT_SERVER_RATIO, "metadata server ratio", NULL) \
     UNIFYFS_CFG(meta, range_size, INT, META_DEFAULT_RANGE_SZ, "metadata range size", NULL) \
-    UNIFYFS_CFG_CLI(runstate, dir, STRING, RUNDIR, "runstate file directory", configurator_directory_check, 'R', "specify full path to directory to contain server runstate file") \
+    UNIFYFS_CFG_CLI(runstate, dir, STRING, RUNDIR, "runstate file directory", configurator_directory_check, 'R', "specify full path to directory to contain server-local state") \
     UNIFYFS_CFG_CLI(server, hostfile, STRING, NULLSTRING, "server hostfile name", NULL, 'H', "specify full path to server hostfile") \
     UNIFYFS_CFG_CLI(server, init_timeout, INT, UNIFYFS_DEFAULT_INIT_TIMEOUT, "timeout of waiting for server initialization", NULL, 't', "timeout in seconds to wait for servers to be ready for clients") \
     UNIFYFS_CFG(server, max_app_clients, INT, MAX_APP_CLIENTS, "maximum number of clients per application", NULL) \
