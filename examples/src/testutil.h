@@ -759,7 +759,22 @@ int lipsum_check(const char* buf, uint64_t len, uint64_t offset,
     uint64_t i, val;
     uint64_t start = offset / sizeof(uint64_t);
     uint64_t count = len / sizeof(uint64_t);
+    uint64_t skip = 0;
+    uint64_t remain = 0;
     const uint64_t* ibuf = (uint64_t*) buf;
+
+    /* check if we have any extra bytes at the front and end */
+    if (offset % sizeof(uint64_t)) {
+        skip = sizeof(uint64_t) - (offset % sizeof(uint64_t));
+        remain = (len - skip) % sizeof(uint64_t);
+
+        ibuf = (uint64_t*) &buf[skip];
+        start++;
+
+        if (skip + remain >= sizeof(uint64_t)) {
+            count--;
+        }
+    }
 
     for (i = 0; i < count; i++) {
         val = start + i;
