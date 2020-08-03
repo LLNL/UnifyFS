@@ -50,7 +50,6 @@
 #include "unifyfs_rpc_util.h"
 #include "margo_client.h"
 #include "seg_tree.h"
-#include "ucr_read_builder.h"
 
 #ifdef HAVE_SPATH
 #include "spath.h"
@@ -593,20 +592,20 @@ static int compare_read_req(const void* a, const void* b)
     }
 }
 
-/* notify our delegator that the shared memory buffer
+/* notify our reqmgr that the shared memory buffer
  * is now clear and ready to hold more read data */
 static void delegator_signal(void)
 {
     LOGDBG("receive buffer now empty");
 
-    /* set shm flag to signal delegator we're done */
+    /* set shm flag to signal reqmgr we're done */
     shm_data_header* hdr = (shm_data_header*)(shm_recv_ctx->addr);
     hdr->state = SHMEM_REGION_EMPTY;
 
     /* TODO: MEM_FLUSH */
 }
 
-/* wait for delegator to inform us that shared memory buffer
+/* wait for reqmgr to inform us that shared memory buffer
  * is filled with read data */
 static int delegator_wait(void)
 {
@@ -640,7 +639,7 @@ static int delegator_wait(void)
 }
 
 /* copy read data from shared memory buffer to user buffers from read
- * calls, sets done=1 on return when delegator informs us it has no
+ * calls, sets done=1 on return when reqmgr informs us it has no
  * more data */
 static int process_read_data(read_req_t* read_reqs, int count, int* done)
 {
@@ -967,7 +966,7 @@ static void service_local_reqs(
 
 /*
  * get data for a list of read requests from the
- * delegator
+ * reqmgr
  *
  * @param read_reqs: a list of read requests
  * @param count: number of read requests
@@ -1050,7 +1049,7 @@ int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count)
     /* order read request by increasing file id, then increasing offset */
     qsort(read_reqs, count, sizeof(read_req_t), compare_read_req);
 
-    /* prepare our shared memory buffer for delegator */
+    /* prepare our shared memory buffer for reqmgr */
     delegator_signal();
 
     /* for mread, we need to manually track the rpc progress */
@@ -1059,38 +1058,28 @@ int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count)
     /* we select different rpcs depending on the number of
      * read requests */
     if (count > 1) {
-        /* got multiple read requests,
-         * build up a flat buffer to include them all */
-        flatcc_builder_t builder;
-        flatcc_builder_init(&builder);
-
-        /* create request vector */
-        unifyfs_Extent_vec_start(&builder);
-
-        /* fill in values for each request entry */
+        /* got multiple read requests */
+        size_t size = (size_t)count * sizeof(unifyfs_extent_t);
+        void* buffer = malloc(size);
+        if (NULL == buffer) {
+            return ENOMEM;
+        }
+        unifyfs_extent_t* extents = (unifyfs_extent_t*)buffer;
+        unifyfs_extent_t* ext;
+        read_req_t* req;
         for (i = 0; i < count; i++) {
-            unifyfs_Extent_vec_push_create(&builder,
-                read_reqs[i].gfid, read_reqs[i].offset, read_reqs[i].length);
+            ext = extents + i;
+            req = read_reqs + i;
+            ext->gfid = req->gfid;
+            ext->offset = req->offset;
+            ext->length = req->length;
         }
 
-        /* complete the array */
-        unifyfs_Extent_vec_ref_t extents = unifyfs_Extent_vec_end(&builder);
-        unifyfs_ReadRequest_create_as_root(&builder, extents);
-        //unifyfs_ReadRequest_end_as_root(&builder);
-
-        /* allocate our buffer to be sent */
-        size_t size = 0;
-        void* buffer = flatcc_builder_finalize_buffer(&builder, &size);
-        assert(buffer);
-
-        LOGDBG("mread: n_reqs:%d, flatcc buffer (%p) sz:%zu",
+        LOGDBG("mread: n_reqs:%d, reqs(%p) sz:%zu",
                count, buffer, size);
 
         /* invoke multi-read rpc */
         read_rc = invoke_client_mread_rpc(count, size, buffer, &mread_ctx);
-
-        /* free flat buffer resources */
-        flatcc_builder_clear(&builder);
         free(buffer);
     } else {
         /* got a single read request */
@@ -1566,8 +1555,6 @@ int unifyfs_fid_free(int fid)
  * returns the new fid, or negative value on error */
 int unifyfs_fid_create_file(const char* path)
 {
-    int rc;
-
     /* check that pathname is within bounds */
     size_t pathlen = strlen(path) + 1;
     if (pathlen > UNIFYFS_MAX_FILENAME) {

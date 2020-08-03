@@ -11,8 +11,6 @@ BASE_SRCS = \
   cm_enumerator.c \
   rm_enumerator.h \
   rm_enumerator.c \
-  flatbuffers_common_builder.h \
-  flatbuffers_common_reader.h \
   seg_tree.h \
   seg_tree.c \
   slotmap.h \
@@ -20,8 +18,6 @@ BASE_SRCS = \
   tinyexpr.h \
   tinyexpr.c \
   tree.h \
-  ucr_read_builder.h \
-  ucr_read_reader.h \
   unifyfs_const.h \
   unifyfs_configurator.h \
   unifyfs_configurator.c \
@@ -64,8 +60,7 @@ libunifyfs_common_la_CPPFLAGS = \
   $(OPT_FLAGS) \
   $(MERCURY_CFLAGS) \
   $(ARGOBOTS_CFLAGS) \
-  $(MARGO_CFLAGS) \
-  $(FLATCC_CFLAGS)
+  $(MARGO_CFLAGS)
 
 libunifyfs_common_la_CPPFLAGS += -DSYSCONFDIR="$(sysconfdir)"
 

@@ -19,7 +19,7 @@ AC_DEFUN([UNIFYFS_AC_LEVELDB], [
      AC_SUBST(LEVELDB_LDFLAGS)
      AC_SUBST(LEVELDB_LIBS)
     ],
-    [AC_MSG_ERROR([couldn't find a suitable libleveldb, use LEVELDB_ROOT to set the path to the flatcc installation directory.])],
+    [AC_MSG_ERROR([couldn't find a suitable libleveldb, use LEVELDB_ROOT to set the path to the installation directory.])],
     []
   )
 

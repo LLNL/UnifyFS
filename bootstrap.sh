@@ -17,7 +17,6 @@ repos=(	https://xgitlab.cels.anl.gov/sds/bmi.git
 	https://github.com/pmodels/argobots.git
 	https://github.com/mercury-hpc/mercury.git
 	https://xgitlab.cels.anl.gov/sds/margo.git
-	https://github.com/dvidelabs/flatcc.git
 )
 
 for i in "${repos[@]}" ; do
@@ -95,23 +94,13 @@ export PKG_CONFIG_PATH="$INSTALL_DIR/lib/pkgconfig"
 make -j $(nproc) && make install
 cd ..
 
-echo "### building flatcc ###"
-cd flatcc
-# need -DBUILD_SHARED_LIBS=ye
-mkdir -p build && cd build
-cmake -DBUILD_SHARED_LIBS=on -DCMAKE_BUILD_TYPE=Release \
-	-DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DFLATCC_INSTALL=on ..
-make -j $(nproc) && make install
-cd ..
-cd ..
-
 cd "$ROOT"
 
 echo "*************************************************************************"
 echo "Dependencies are all built.  You can now build UnifyFS with:"
 echo ""
 echo -n "  export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig && "
-echo "export LEVELDB_ROOT=$INSTALL_DIR && export FLATCC_ROOT=$INSTALL_DIR"
+echo "export LEVELDB_ROOT=$INSTALL_DIR"
 echo -n "  ./autogen.sh && ./configure --with-gotcha=$INSTALL_DIR"
 echo " --prefix=$INSTALL_DIR"
 echo "  make"

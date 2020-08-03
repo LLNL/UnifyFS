@@ -159,7 +159,6 @@ UnifyFS dependencies can then be installed.
 
 .. code-block:: Bash
 
-    $ spack install flatcc
     $ spack install gotcha
     $ spack install leveldb
     $ spack install margo ^mercury+bmi
@@ -186,7 +185,6 @@ manually build UnifyFS from inside the source code directory.
 
 .. code-block:: Bash
 
-    $ spack load flatcc
     $ spack load gotcha
     $ spack load leveldb
     $ spack load mercury
@@ -214,7 +212,7 @@ from the `UnifyFS repository <https://github.com/LLNL/UnifyFS>`_.
 Build the Dependencies
 **********************
 
-UnifyFS requires MPI, LevelDB, GOTCHA, FlatCC, Margo and OpenSSL.
+UnifyFS requires MPI, LevelDB, GOTCHA, Margo and OpenSSL.
 References to these dependencies can be found on our :doc:`<dependencies>` page.
 
 A `bootstrap.sh <https://github.com/LLNL/UnifyFS/blob/dev/bootstrap.sh>`_ script
@@ -236,7 +234,7 @@ this:
 
     $ export PKG_CONFIG_PATH=path/to/mercury/lib/pkgconfig:path/to/argobots/lib/pkgconfig:path/to/margo/lib/pkgconfig
     $ ./autogen.sh
-    $ ./configure --prefix=/path/to/install --with-gotcha=/path/to/gotcha --with-leveldb=/path/to/leveldb  --with-flatcc=/path/to/flatcc
+    $ ./configure --prefix=/path/to/install --with-gotcha=/path/to/gotcha --with-leveldb=/path/to/leveldb
     $ make
     $ make install
 

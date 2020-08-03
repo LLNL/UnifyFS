@@ -140,7 +140,7 @@ fi
 # don't fail out
 if [[ -n $(which spack 2>/dev/null) ]]; then
     loaded_modules=$(module list 2>&1)
-    modules="gotcha leveldb flatcc argobots mercury margo"
+    modules="gotcha leveldb argobots mercury margo"
     for mod in $modules; do
         if ! [[ $(echo "$loaded_modules" | fgrep "$mod") ]]; then
             echo "$errmsg $mod not detected. Please 'spack load $mod'"

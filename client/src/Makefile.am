@@ -28,19 +28,16 @@ CLIENT_COMMON_CFLAGS = \
   $(MPI_CFLAGS) \
   $(MERCURY_CFLAGS) \
   $(ARGOBOTS_CFLAGS) \
-  $(MARGO_CFLAGS) \
-  $(FLATCC_CFLAGS)
+  $(MARGO_CFLAGS)
 
 CLIENT_COMMON_LDFLAGS = \
   -version-info $(LIBUNIFYFS_LT_VERSION) \
   $(MPI_CLDFLAGS) \
-  $(MARGO_LDFLAGS) \
-  $(FLATCC_LDFLAGS)
+  $(MARGO_LDFLAGS)
 
 CLIENT_COMMON_LIBADD = \
   $(top_builddir)/common/src/libunifyfs_common.la \
   $(MARGO_LIBS) \
-  $(FLATCC_LIBS) \
   -lrt -lpthread
 
 CLIENT_COMMON_SOURCES = \
