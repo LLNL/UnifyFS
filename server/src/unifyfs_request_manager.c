@@ -46,7 +46,6 @@
 // margo rpcs
 #include "unifyfs_server_rpcs.h"
 #include "margo_server.h"
-#include "ucr_read_builder.h"
 
 
 #define RM_LOCK(rm) \
@@ -63,18 +62,18 @@ do { \
 
 
 /* One request manager thread is created for each client that a
- * delegator serves.  The main thread of the delegator assigns
- * work to the request manager thread to retrieve data and send
+ * server serves.  The margo rpc handler thread(s) assign work
+ * to the request manager thread to retrieve data and send
  * it back to the client.
  *
  * To start, given a read request from the client (via rpc)
- * the handler function on the main delegator first queries the
+ * the handler function on the main server first queries the
  * key/value store using the given file id and byte range to obtain
  * the meta data on the physical location of the file data.  This
- * meta data provides the host delegator rank, the app/client
- * ids that specify the log file on the remote delegator, the
+ * meta data provides the host server rank, the app/client
+ * ids that specify the log file on the remote server, the
  * offset within the log file and the length of data.  The rpc
- * handler function sorts the meta data by host delegator rank,
+ * handler function sorts the meta data by host server rank,
  * generates read requests, and inserts those into a list on a
  * data structure shared with the request manager (del_req_set).
  *
@@ -106,8 +105,8 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
         return NULL;
     }
 
-    /* initialize lock for shared data structures between
-     * main thread and request delegator thread */
+    /* initialize lock for shared data structures of the
+     * request manager */
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
@@ -120,8 +119,8 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
         return NULL;
     }
 
-    /* initailize condition variable to flow control
-     * work between main thread and request delegator thread */
+    /* initialize condition variable to synchronize work
+     * notifications for the request manager thread */
     rc = pthread_cond_init(&(thrd_ctrl->thrd_cond), NULL);
     if (rc != 0) {
         LOGERR("pthread_cond_init failed for request "
@@ -158,7 +157,7 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
     return thrd_ctrl;
 }
 
-/* order keyvals by gfid, then host delegator rank */
+/* order keyvals by gfid, then host server rank */
 static int compare_kv_gfid_rank(const void* a, const void* b)
 {
     const unifyfs_keyval_t* kv_a = a;
@@ -311,18 +310,18 @@ static void signal_new_requests(reqmgr_thrd_t* thrd_ctrl)
 
     /* wake up the request manager thread for the requesting client */
     if (!thrd_ctrl->has_waiting_delegator) {
-        /* delegator thread is not waiting, but we are in critical
-         * section, we just added requests so we must wait for delegator
+        /* reqmgr thread is not waiting, but we are in critical
+         * section, we just added requests so we must wait for reqmgr
          * to signal us that it's reached the critical section before
          * we escape so we don't overwrite these requests before it
          * has had a chance to process them */
         thrd_ctrl->has_waiting_dispatcher = 1;
         pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
 
-        /* delegator thread has signaled us that it's now waiting */
+        /* reqmgr thread has signaled us that it's now waiting */
         thrd_ctrl->has_waiting_dispatcher = 0;
     }
-    /* have a delegator thread waiting on condition variable,
+    /* have a reqmgr thread waiting on condition variable,
      * signal it to begin processing the requests we just added */
     pthread_cond_signal(&thrd_ctrl->thrd_cond);
 }
@@ -333,7 +332,7 @@ static void signal_new_responses(reqmgr_thrd_t* thrd_ctrl)
 
     /* wake up the request manager thread */
     if (thrd_ctrl->has_waiting_delegator) {
-        /* have a delegator thread waiting on condition variable,
+        /* have a reqmgr thread waiting on condition variable,
          * signal it to begin processing the responses we just added */
         pthread_cond_signal(&thrd_ctrl->thrd_cond);
     }
@@ -346,9 +345,6 @@ int create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
                           int num_vals,
                           unifyfs_keyval_t* keyvals)
 {
-    /* get app id for this request batch */
-    int app_id = thrd_ctrl->app_id;
-
     /* allocate read request structures */
     chunk_read_req_t* all_chunk_reads = (chunk_read_req_t*)
         calloc((size_t)num_vals, sizeof(chunk_read_req_t));
@@ -372,11 +368,11 @@ int create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
     int prev_del = -1;
     int num_del = 0;
     for (i = 0; i < num_vals; i++) {
-        /* get target delegator for this request */
+        /* get target server for this request */
         int curr_del = keyvals[i].val.delegator_rank;
 
-        /* if target delegator is different from last target,
-         * increment our delegator count */
+        /* if target server is different from last target,
+         * increment our server count */
         if ((prev_del == -1) || (curr_del != prev_del)) {
             num_del++;
         }
@@ -410,25 +406,25 @@ int create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
     remote_chunk_reads_t* reads = rdreq->remote_reads;
 
     /* iterate over write index values again and now create
-     * per-delegator chunk-reads info, for each delegator
+     * per-server chunk-reads info, for each server
      * that we'll request data from, this totals up the number
      * of read requests and total read data size from that
-     * delegator  */
+     * server  */
     prev_del = -1;
     size_t del_data_sz = 0;
     for (i = 0; i < num_vals; i++) {
-        /* get target delegator for this request */
+        /* get target server for this request */
         int curr_del = keyvals[i].val.delegator_rank;
 
-        /* if target delegator is different from last target,
+        /* if target server is different from last target,
          * close out the total number of bytes for the last
-         * delegator, note this assumes our write index values are
-         * sorted by delegator rank */
+         * server, note this assumes our write index values are
+         * sorted by server rank */
         if ((prev_del != -1) && (curr_del != prev_del)) {
-            /* record total data for previous delegator */
+            /* record total data for previous server */
             reads->total_sz = del_data_sz;
 
-            /* advance to read request for next delegator */
+            /* advance to read request for next server */
             reads += 1;
 
             /* reset our running tally of bytes to 0 */
@@ -436,11 +432,11 @@ int create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
         }
         prev_del = curr_del;
 
-        /* update total read data size for current delegator */
+        /* update total read data size for current server */
         del_data_sz += keyvals[i].val.len;
 
-        /* if this is the first read request for this delegator,
-         * initialize fields on the per-delegator read request
+        /* if this is the first read request for this server,
+         * initialize fields on the per-server read request
          * structure */
         if (0 == reads->num_chunks) {
             /* TODO: let's describe what these fields are for */
@@ -451,11 +447,11 @@ int create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
         }
 
         /* increment number of read requests we're sending
-         * to this delegator */
+         * to this server */
         reads->num_chunks++;
     }
 
-    /* record total data size for final delegator (if any),
+    /* record total data size for final server (if any),
      * would have missed doing this in the above loop */
     if (num_vals > 0) {
         reads->total_sz = del_data_sz;
@@ -792,7 +788,7 @@ static int truncate_rewrite_keys(
             size_t newlen = (size_t)(filesize - first_offset);
 
             /* for the value, we store the log position, the length,
-             * the host server (delegator rank), the mount point id
+             * the host server (delegator_rank), the mount point id
              * (app id), and the client id (rank) */
             unifyfs_val_t* val = unifyfs_vals[count];
             val->addr           = kv->val.addr;
@@ -1081,7 +1077,7 @@ static int submit_read_request(reqmgr_thrd_t* thrd_ctrl, int num_keys,
     }
 
     /* if we get more than one write index entry
-     * sort them by file id and then by delegator rank */
+     * sort them by file id and then by server rank */
     if (num_vals > 1) {
         qsort(keyvals, (size_t)num_vals, sizeof(unifyfs_keyval_t),
               compare_kv_gfid_rank);
@@ -1257,7 +1253,7 @@ static int split_index(
 
 /* read function for one requested extent,
  * called from rpc handler to fill shared data structures
- * with read requests to be handled by the delegator thread
+ * with read requests to be handled by the reqmgr thread.
  * returns before requests are handled
  */
 int rm_cmd_read(
@@ -1346,19 +1342,17 @@ int rm_cmd_mread(
     reqmgr_thrd_t* thrd_ctrl = client->reqmgr;
 
      /* get the locations of all the read requests from the key-value store */
-    unifyfs_ReadRequest_table_t readRequest =
-        unifyfs_ReadRequest_as_root(reqbuf);
-    unifyfs_Extent_vec_t extents = unifyfs_ReadRequest_extents(readRequest);
-    size_t extents_len = unifyfs_Extent_vec_len(extents);
-    assert(extents_len == req_num);
+    unifyfs_extent_t* read_reqs = (unifyfs_extent_t*)reqbuf;
 
     /* count up number of slices these request cover */
-    int j;
+    int i;
     size_t slices = 0;
-    for (j = 0; j < req_num; j++) {
+    unifyfs_extent_t* req;
+    for (i = 0; i < req_num; i++) {
         /* get offset and length of next request */
-        size_t off = unifyfs_Extent_offset(unifyfs_Extent_vec_at(extents, j));
-        size_t len = unifyfs_Extent_length(unifyfs_Extent_vec_at(extents, j));
+        req = read_reqs + i;
+        size_t off = req->offset;
+        size_t len = req->length;
 
         /* add in number of slices this request needs */
         slices += num_slices(off, len);
@@ -1383,11 +1377,12 @@ int rm_cmd_mread(
     /* we need to create a single server_read_req_t structure even with
      * multiple gfids. */
     int num_keys = 0;
-    for (j = 0; j < req_num; j++) {
+    for (i = 0; i < req_num; i++) {
         /* get the file id for this request */
-        int gfid = unifyfs_Extent_fid(unifyfs_Extent_vec_at(extents, j));
-        size_t off = unifyfs_Extent_offset(unifyfs_Extent_vec_at(extents, j));
-        size_t len = unifyfs_Extent_length(unifyfs_Extent_vec_at(extents, j));
+        req = read_reqs + i;
+        int gfid = req->gfid;
+        size_t off = req->offset;
+        size_t len = req->length;
         LOGDBG("gfid:%d, offset:%zu, length:%zu", gfid, off, len);
 
         /* Generate a pair of keys for each read request, representing
@@ -1429,10 +1424,10 @@ int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl)
     /* grab the lock */
     RM_LOCK(thrd_ctrl);
 
-    /* if delegator thread is not waiting in critical
+    /* if reqmgr thread is not waiting in critical
      * section, let's wait on it to come back */
     if (!thrd_ctrl->has_waiting_delegator) {
-        /* delegator thread is not in critical section,
+        /* reqmgr thread is not in critical section,
          * tell it we've got something and signal it */
         thrd_ctrl->has_waiting_dispatcher = 1;
         pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
@@ -1441,16 +1436,16 @@ int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl)
         thrd_ctrl->has_waiting_dispatcher = 0;
     }
 
-    /* inform delegator thread that it's time to exit */
+    /* inform reqmgr thread that it's time to exit */
     thrd_ctrl->exit_flag = 1;
 
-    /* signal delegator thread */
+    /* signal reqmgr thread */
     pthread_cond_signal(&thrd_ctrl->thrd_cond);
 
     /* release the lock */
     RM_UNLOCK(thrd_ctrl);
 
-    /* wait for delegator thread to exit */
+    /* wait for reqmgr thread to exit */
     int rc = pthread_join(thrd_ctrl->thrd, NULL);
     if (0 == rc) {
         pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
@@ -1599,7 +1594,7 @@ rm_cmd_sync_exit:
  * These functions define the logic of the request manager thread
  ***********************/
 
-/* pack the chunk read requests for a single remote delegator.
+/* pack the chunk read requests for a single remote server.
  *
  * @param req_msg_buf: request buffer used for packing
  * @param req_num: number of read requests
@@ -1666,7 +1661,7 @@ static int rm_request_remote_chunks(reqmgr_thrd_t* thrd_ctrl)
             debug_print_read_req(req);
             if (req->status == READREQ_READY) {
                 req->status = READREQ_STARTED;
-                /* iterate over each delegator we need to send requests to */
+                /* iterate over each server we need to send requests to */
                 remote_chunk_reads_t* remote_reads;
                 size_t packed_sz;
                 for (j = 0; j < req->num_remote_reads; j++) {
@@ -1676,7 +1671,7 @@ static int rm_request_remote_chunks(reqmgr_thrd_t* thrd_ctrl)
                     /* pack requests into send buffer, get packed size */
                     packed_sz = rm_pack_chunk_requests(sendbuf, remote_reads);
 
-                    /* get rank of target delegator */
+                    /* get rank of target server */
                     int del_rank = remote_reads->rank;
 
                     /* send requests */
@@ -1724,14 +1719,14 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
         server_read_req_t* req = thrd_ctrl->read_reqs + i;
         if ((req->num_remote_reads > 0) &&
             (req->status == READREQ_STARTED)) {
-            /* iterate over each delegator we need to send requests to */
+            /* iterate over each server we need to send requests to */
             remote_chunk_reads_t* rcr;
             for (j = 0; j < req->num_remote_reads; j++) {
                 rcr = req->remote_reads + j;
                 if (NULL == rcr->resp) {
                     continue;
                 }
-                LOGDBG("found read req %d responses from delegator %d",
+                LOGDBG("found read req %d responses from server %d",
                        i, rcr->rank);
                 rc = rm_handle_chunk_read_responses(thrd_ctrl, req, rcr);
                 if (rc != (int)UNIFYFS_SUCCESS) {
@@ -1845,7 +1840,7 @@ int rm_post_chunk_read_responses(int app_id,
     }
 
     if (NULL != del_reads) {
-        LOGDBG("posting chunk responses for req %d from delegator %d",
+        LOGDBG("posting chunk responses for req %d from server %d",
                req_id, src_rank);
         del_reads->resp = (chunk_read_resp_t*)resp_buf;
         if (del_reads->num_chunks != num_chks) {
@@ -1880,7 +1875,7 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
 {
     // NOTE: this fn assumes thrd_ctrl->thrd_lock is locked
 
-    int errcode, gfid, i, num_chks, rc, thrd_id;
+    int errcode, gfid, i, num_chks, rc;
     int ret = (int)UNIFYFS_SUCCESS;
     chunk_read_resp_t* responses = NULL;
     shm_context* client_shm = NULL;
@@ -1909,7 +1904,7 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
                rdreq->req_ndx);
         ret = (int32_t)EINVAL;
     } else if (0 == del_reads->total_sz) {
-        LOGERR("empty chunk read response from delegator %d", del_reads->rank);
+        LOGERR("empty chunk read response from server %d", del_reads->rank);
         ret = (int32_t)EINVAL;
     } else {
         LOGDBG("handling chunk read responses from server %d: "

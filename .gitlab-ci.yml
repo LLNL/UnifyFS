@@ -115,7 +115,6 @@ before_script:
   - FC_PATH=$($FC_COMMAND)
   - SPACK_COMPILER=${COMPILER//\//@}
   - SPACK_ARCH="$(spack arch -p)-$(spack arch -o)-$(uname -m)"
-  - spack load flatcc %$SPACK_COMPILER arch=$SPACK_ARCH
   - spack load gotcha %$SPACK_COMPILER arch=$SPACK_ARCH
   - spack load leveldb %$SPACK_COMPILER arch=$SPACK_ARCH
   - spack load argobots %$SPACK_COMPILER arch=$SPACK_ARCH

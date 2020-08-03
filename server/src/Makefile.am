@@ -21,8 +21,7 @@ unifyfsd_SOURCES = unifyfs_server.c
 
 unifyfsd_LDFLAGS = -static \
   $(LEVELDB_LDFLAGS) \
-  $(MARGO_LDFLAGS) \
-  $(FLATCC_LDFLAGS)
+  $(MARGO_LDFLAGS)
 
 unifyfsd_LDADD = \
     libunifyfsd.a \
@@ -31,7 +30,6 @@ unifyfsd_LDADD = \
     $(LEVELDB_LIBS) \
     $(MPI_CLDFLAGS) \
     $(MARGO_LIBS) \
-    $(FLATCC_LIBS) \
     -lpthread -lm -lstdc++ -lrt
 
 AM_CPPFLAGS = \
@@ -46,7 +44,6 @@ AM_CFLAGS = -Wall -Werror \
   $(MPI_CFLAGS) \
   $(MERCURY_CFLAGS) \
   $(ARGOBOTS_CFLAGS) \
-  $(MARGO_CFLAGS) \
-  $(FLATCC_CFLAGS)
+  $(MARGO_CFLAGS)
 
 CLEANFILES = $(bin_PROGRAMS)

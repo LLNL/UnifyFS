@@ -13,8 +13,7 @@ unifyfs_stage_CPPFLAGS = $(AM_CPPFLAGS) $(MPI_CFLAGS) \
 unifyfs_stage_LDADD = $(top_builddir)/client/src/libunifyfs.la -lrt -lm
 
 unifyfs_stage_LDFLAGS = -static $(CP_WRAPPERS) $(AM_LDFLAGS) \
-                        $(MPI_CLDFLAGS) $(FLATCC_LDFLAGS) $(FLATCC_LIBS) \
-                        $(OPENSSL_LIBS)
+                        $(MPI_CLDFLAGS) $(OPENSSL_LIBS)
 
 AM_CFLAGS = -Wall -Werror
 

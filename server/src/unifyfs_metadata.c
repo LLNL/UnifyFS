@@ -33,7 +33,6 @@
 
 // common headers
 #include "unifyfs_client_rpcs.h"
-#include "ucr_read_builder.h"
 
 // server headers
 #include "unifyfs_global.h"
@@ -94,7 +93,6 @@ int meta_init_store(unifyfs_cfg_t* cfg)
 {
     int rc, ratio;
     MPI_Comm comm = MPI_COMM_WORLD;
-    size_t path_len;
     long svr_ratio, range_sz;
     struct stat ss;
     char db_path[UNIFYFS_MAX_FILENAME] = {0};

@@ -69,8 +69,7 @@ test_ldadd = \
 	$(top_builddir)/t/lib/libtap.la \
 	$(top_builddir)/t/lib/libtestutil.la \
 	$(top_builddir)/client/src/libunifyfs_gotcha.la \
-    $(MPI_CLDFLAGS) \
-	$(FLATCC_LDFLAGS) $(FLATCC_LIBS)
+    $(MPI_CLDFLAGS)
 
 test_static_ldadd = \
 	$(top_builddir)/t/lib/libtap.la \
@@ -80,8 +79,7 @@ test_static_ldadd = \
 test_static_ldflags = \
 	-static $(AM_LDFLAGS) \
 	$(CP_WRAPPERS) \
-	$(MPI_CLDFLAGS) \
-	$(FLATCC_LDFLAGS) $(FLATCC_LIBS)
+	$(MPI_CLDFLAGS)
 
 test_metadata_ldadd = \
 	$(top_builddir)/t/lib/libtap.la \
@@ -94,7 +92,6 @@ test_metadata_ldadd = \
 	$(MERCURY_LDFLAGS) $(MERCURY_LIBS) \
 	$(ARGOBOTS_LDFLAGS) $(ARGOBOTS_LIBS) \
 	$(MARGO_LDFLAGS) $(MARGO_LIBS) \
-	$(FLATCC_LDFLAGS) $(FLATCC_LIBS) \
 	-lpthread -lm -lstdc++ -lrt
 
 test_common_cppflags = \

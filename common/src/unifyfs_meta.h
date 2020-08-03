@@ -33,6 +33,14 @@ typedef struct {
     int rank;
 } name_rank_pair_t;
 
+/* generic file extent */
+typedef struct {
+    size_t offset;
+    size_t length;
+    int gfid;
+} unifyfs_extent_t;
+
+
 /* write-log metadata index structure */
 typedef struct {
     off_t file_pos; /* start offset of data in file */

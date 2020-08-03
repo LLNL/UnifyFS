@@ -6,8 +6,6 @@ UnifyFS Dependencies
 
 - `leveldb <https://github.com/google/leveldb/releases/tag/1.22>`_ version 1.22
 
-- `flatcc <https://github.com/dvidelabs/flatc://github.com/dvidelabs/flatcc/releases/tag/v0.5.3>`_ version 0.5.3
-
 - `Margo <https://xgitlab.cels.anl.gov/sds/margo>`_ version 0.4.3 and its dependencies:
 
   - `Argobots <https://github.com/pmodels/argobots/releases/tag/v1.0>`_ version 1.0
