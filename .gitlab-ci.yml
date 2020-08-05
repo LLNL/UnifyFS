@@ -125,5 +125,6 @@ before_script:
 
 # System specific jobs
 include:
+  - local: .gitlab/ascent.yml
   - local: .gitlab/catalyst.yml
   - local: .gitlab/lassen.yml
