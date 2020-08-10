@@ -439,11 +439,14 @@ cleanup_hosts()
     pdsh -w $l_hl 'test -f /dev/shm/svr_id && /bin/cat /dev/shm/svr_id'
     pdsh -w $l_hl 'test -f /dev/shm/unifyfsd_id && /bin/cat \
                    /dev/shm/unifyfsd_id'
+    pdsh -w $l_hl 'test -f /tmp/unifyfsd.err.* && /bin/cat \
+                   /tmp/unifyfsd.err.*'
     pdsh -w $l_hl '/bin/rm -rfv /tmp/na_sm /tmp/*unifyfs* /var/tmp/*unifyfs* \
                    /dev/shm/unifyfsd_id /dev/shm/svr_id /dev/shm/*na_sm* \
-                   "'${UNIFYFS_SPILLOVER_DATA_DIR}'"/spill*.log \
-                   "'${UNIFYFS_SPILLOVER_META_DIR}'"/spill*.log \
-                   /dev/shm/*-recv-* /dev/shm/*-req-* /dev/shm/*-super-*'
+                   /dev/shm/logio_mem* \
+                   "'${UNIFYFS_LOGIO_SPILL_DIR}'"/spill*.log \
+                   /dev/shm/*-recv-* /dev/shm/*-req-* /dev/shm/*-super-* \
+                   "'$CI_TEMP_DIR'"'
 
     # Reset capturing all output
     exec 1>&3 2>&4

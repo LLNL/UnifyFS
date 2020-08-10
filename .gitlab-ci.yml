@@ -6,16 +6,6 @@ stages:
   - test-unit
   - test-integ
 
-# Rules to determine when a pipeline will be generated. If none of these rules
-# match, no pipeline will be generated.
-workflow:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
-    - if: '$CI_PIPELINE_SOURCE == "external_pull_request_event" && $CI_EXTERNAL_PULL_REQUEST_TARGET_BRANCH_NAME == "dev"'
-    - if: '$CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH == "dev"'
-
 ##### System Templates #####
 
 # Generic system templates used to contruct the final jobs on specific
@@ -88,10 +78,6 @@ workflow:
 # full details.
 .integ-test-template:
   stage: test-integ
-  variables:
-    UNIFYFS_INSTALL: "$CI_PROJECT_DIR/unifyfs-install"
-    CI_PROJDIR: "$CI_PROJECT_DIR"
-    CI_NPROCS: "$NPROCS"
   script:
     - cd t/ci && prove -v RUN_CI_TESTS.sh
 
