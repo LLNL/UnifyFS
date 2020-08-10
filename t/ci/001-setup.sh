@@ -72,7 +72,6 @@ done
 [[ -z $infomsg ]] && infomsg="-- UNIFYFS JOB INFO:"
 [[ -z $errmsg ]] && errmsg="!!!! UNIFYFS JOB ERROR:"
 
-export CI_PROJDIR=${CI_PROJDIR:-$HOME}
 export TMPDIR=${TMPDIR:-/tmp}
 export SYSTEM_NAME=$(echo $(hostname) | sed -r 's/(^[[:alpha:]]*)(.*)/\1/')
 
@@ -83,8 +82,14 @@ export SYSTEM_NAME=$(echo $(hostname) | sed -r 's/(^[[:alpha:]]*)(.*)/\1/')
 echo "$infomsg Setting up sharness"
 CI_DIR=${CI_DIR:-$(dirname "$(readlink -fm $BASH_SOURCE)")}
 SHARNESS_DIR="$(dirname "$CI_DIR")"
+UNIFYFS_SOURCE_DIR="$(dirname "$SHARNESS_DIR")"
+export CI_PROJDIR=${CI_PROJDIR:-"$(dirname "$UNIFYFS_SOURCE_DIR")"}
 echo "$infomsg CI_DIR: $CI_DIR"
 echo "$infomsg SHARNESS_DIR: $SHARNESS_DIR"
+echo "$infomsg UNIFYFS_SOURCE_DIR: $UNIFYFS_SOURCE_DIR"
+echo "$infomsg CI_PROJDIR: $CI_PROJDIR"
+
+SHARNESS_TEST_DIRECTORY=${SHARNESS_TEST_DIRECTORY:-$CI_DIR}
 source ${SHARNESS_DIR}/sharness.sh
 source $SHARNESS_DIR/sharness.d/02-functions.sh
 source $CI_DIR/ci-functions.sh
@@ -196,6 +201,7 @@ export UNIFYFS_DAEMONIZE=${UNIFYFS_DAEMONIZE:-off}
 # temp
 nlt=${TMPDIR}/unifyfs.${USER}.${SYSTEM_NAME}.${JOB_ID}
 export CI_TEMP_DIR=${CI_TEMP_DIR:-$nlt}
+$JOB_RUN_ONCE_PER_NODE mkdir -p $CI_TEMP_DIR
 export UNIFYFS_RUNSTATE_DIR=${UNIFYFS_RUNSTATE_DIR:-$CI_TEMP_DIR}
 export UNIFYFS_META_DB_PATH=${UNIFYFS_META_DB_PATH:-$CI_TEMP_DIR}
 echo "$infomsg UNIFYFS_RUNSTATE_DIR set as $UNIFYFS_RUNSTATE_DIR"
