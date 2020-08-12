@@ -37,158 +37,238 @@ int lseek_test(char* unifyfs_root)
     char path[64];
     int file_mode = 0600;
     int fd = -1;
-
-    errno = 0;
+    int err, rc;
 
     /* Create a random file at the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifyfs_root);
 
     /* lseek in bad file descriptor should fail with errno=EBADF */
-    ok(lseek(fd, 0, SEEK_SET) == -1 && errno == EBADF,
+    errno = 0;
+    rc = (int) lseek(fd, 0, SEEK_SET);
+    err = errno;
+    ok(rc == -1 && err == EBADF,
        "%s:%d lseek in bad file descriptor fails (errno=%d): %s",
-       __FILE__, __LINE__, errno, strerror(errno));
-    errno = 0; /* reset errno after test for failure */
+       __FILE__, __LINE__, err, strerror(err));
 
     /* Open a file and write to it to test lseek() */
+    errno = 0;
     fd = open(path, O_RDWR | O_CREAT | O_TRUNC, file_mode);
-    ok(fd >= 0, "%s:%d open worked: %s", __FILE__, __LINE__, strerror(errno));
-    ok(write(fd, "hello world", 12) == 12, "%s:%d write worked: %s",
-        __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(fd >= 0 && err == 0, "%s:%d open worked: %s",
+       __FILE__, __LINE__, strerror(err));
+
+    errno = 0;
+    rc = (int) write(fd, "hello world", 12);
+    err = errno;
+    ok(rc == 12 && err == 0,
+       "%s:%d write worked: %s", __FILE__, __LINE__, strerror(err));
 
     /* lseek with invalid whence fails with errno=EINVAL. */
-    ok(lseek(fd, 0, -1) == -1 && errno == EINVAL,
+    errno = 0;
+    rc = (int) lseek(fd, 0, -1);
+    err = errno;
+    ok(rc == -1 && err == EINVAL,
        "%s:%d lseek with invalid whence should fail (errno=%d): %s",
-       __FILE__, __LINE__, errno, strerror(errno));
-    errno = 0;
+       __FILE__, __LINE__, err, strerror(err));
 
-    /* lseek() with SEEK_SET tests */
+    /*--- lseek() with SEEK_SET tests ---*/
+
     /* lseek to negative offset with SEEK_SET should fail with errno=EINVAL */
-    ok(lseek(fd, -1, SEEK_SET) == -1 && errno == EINVAL,
-       "%s:%d lseek(-1) to invalid offset w/ SEEK_SET fails (errno=%d): %s",
-       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
+    rc = (int) lseek(fd, -1, SEEK_SET);
+    err = errno;
+    ok(rc == -1 && err == EINVAL,
+       "%s:%d lseek(-1, SEEK_SET) to invalid offset fails (errno=%d): %s",
+       __FILE__, __LINE__, err, strerror(err));
 
     /* lseek to valid offset with SEEK_SET succeeds */
-    ok(lseek(fd, 7, SEEK_SET) == 7,
-       "%s:%d lseek(7) to valid offset w/ SEEK_SET: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, 7, SEEK_SET);
+    err = errno;
+    ok(rc == 7 && err == 0,
+       "%s:%d lseek(7, SEEK_SET) to valid offset: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* lseek beyond end of file with SEEK_SET succeeds */
-    ok(lseek(fd, 25, SEEK_SET) == 25,
-       "%s:%d lseek(25) beyond EOF w/ SEEK_SET: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, 25, SEEK_SET);
+    err = errno;
+    ok(rc == 25 && err == 0,
+       "%s:%d lseek(25, SEEK_SET) beyond EOF: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* lseek to beginning of file with SEEK_SET succeeds */
-    ok(lseek(fd, 0, SEEK_SET) == 0, "%s:%d lseek(0) w/ SEEK_SET: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, 0, SEEK_SET);
+    err = errno;
+    ok(rc == 0 && err == 0,
+       "%s:%d lseek(0, SEEK_SET): %s",
+       __FILE__, __LINE__, strerror(err));
 
-    /* lseek() with SEEK_CUR tests */
+    /*--- lseek() with SEEK_CUR tests ---*/
+
     /* lseek to end of file with SEEK_CUR succeeds */
-    ok(lseek(fd, 12, SEEK_CUR) == 12, "%s:%d lseek(12) to EOF w/ SEEK_CUR: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, 12, SEEK_CUR);
+    err = errno;
+    ok(rc == 12 && err == 0,
+       "%s:%d lseek(12, SEEK_CUR) to EOF: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* lseek to negative offset with SEEK_CUR should fail with errno=EINVAL */
-    ok(lseek(fd, -15, SEEK_CUR) == -1 && errno == EINVAL,
-       "%s:%d lseek(-15) to invalid offset w/ SEEK_CUR fails (errno=%d): %s",
-       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
+    rc = (int) lseek(fd, -15, SEEK_CUR);
+    err = errno;
+    ok(rc == -1 && err == EINVAL,
+       "%s:%d lseek(-15, SEEK_CUR) to invalid offset fails (errno=%d): %s",
+       __FILE__, __LINE__, err, strerror(err));
 
     /* lseek to beginning of file with SEEK_CUR succeeds */
-    ok(lseek(fd, -12, SEEK_CUR) == 0,
-       "%s:%d lseek(-12) to beginning of file w/ SEEK_CUR: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, -12, SEEK_CUR);
+    err = errno;
+    ok(rc == 0 && err == 0,
+       "%s:%d lseek(-12, SEEK_CUR) to beginning of file: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* lseek beyond end of file with SEEK_CUR succeeds */
-    ok(lseek(fd, 25, SEEK_CUR) == 25,
-       "%s:%d lseek(25) beyond EOF w/ SEEK_CUR: %s",
-       __FILE__, __LINE__, strerror(errno));
-
-    /* lseek() with SEEK_END tests */
-    /* lseek to negative offset with SEEK_END should fail with errno=EINVAL */
-    ok(lseek(fd, -15, SEEK_END) == -1 && errno == EINVAL,
-       "%s:%d lseek(-15) to invalid offset w/ SEEK_END fails (errno=%d): %s",
-       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
+    rc = (int) lseek(fd, 25, SEEK_CUR);
+    err = errno;
+    ok(rc == 25 && err == 0,
+       "%s:%d lseek(25, SEEK_CUR) beyond EOF: %s",
+       __FILE__, __LINE__, strerror(err));
+
+    /*--- lseek() with SEEK_END tests ---*/
+
+    /* lseek to negative offset with SEEK_END should fail with errno=EINVAL */
+    errno = 0;
+    rc = (int) lseek(fd, -15, SEEK_END);
+    err = errno;
+    ok(rc == -1 && err == EINVAL,
+       "%s:%d lseek(-15, SEEK_END) to invalid offset fails (errno=%d): %s",
+       __FILE__, __LINE__, err, strerror(err));
 
     /* lseek back one from end of file with SEEK_END succeeds */
-    ok(lseek(fd, -1, SEEK_END) == 11,
-       "%s:%d lseek(-1) from EOF w/ SEEK_END: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, -1, SEEK_END);
+    err = errno;
+    ok(rc == 11 && err == 0,
+       "%s:%d lseek(-1, SEEK_END) from EOF: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* lseek to beginning of file with SEEK_END succeeds */
-    ok(lseek(fd, -12, SEEK_END) == 0,
-       "%s:%d lseek(-12) to beginning of file w/ SEEK_END: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, -12, SEEK_END);
+    err = errno;
+    ok(rc == 0 && err == 0,
+       "%s:%d lseek(-12, SEEK_END) to beginning of file: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* lseek beyond end of file with SEEK_END succeeds */
-    ok(lseek(fd, 25, SEEK_END) == 37,
-       "%s:%d lseek(25) beyond EOF w/ SEEK_END: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, 25, SEEK_END);
+    err = errno;
+    ok(rc == 37 && err == 0,
+       "%s:%d lseek(25, SEEK_END) beyond EOF: %s",
+       __FILE__, __LINE__, strerror(err));
 
-    /* lseek() with SEEK_DATA tests */
+    /*--- lseek() with SEEK_DATA tests ---*/
+
     /* Write beyond end of file to create a hole */
-    ok(write(fd, "hello universe", 15) == 15, "%s:%d write to create hole: %s",
-        __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) write(fd, "hello universe", 15);
+    err = errno;
+    ok(rc == 15 && err == 0,
+       "%s:%d write to create hole: %s",
+        __FILE__, __LINE__, strerror(err));
 
     /* lseek to negative offset with SEEK_DATA should fail with errno=ENXIO */
-    ok(lseek(fd, -1, SEEK_DATA) == -1 && errno == ENXIO,
-       "%s:%d lseek(-1) to invalid offset w/ SEEK_DATA fails (errno=%d): %s",
-       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
+    rc = (int) lseek(fd, -1, SEEK_DATA);
+    err = errno;
+    ok(rc == -1 && err == ENXIO,
+       "%s:%d lseek(-1, SEEK_DATA) to invalid offset fails (errno=%d): %s",
+       __FILE__, __LINE__, err, strerror(err));
 
     /* lseek to beginning of file with SEEK_DATA succeeds */
-    ok(lseek(fd, 0, SEEK_DATA) == 0, "%s:%d lseek(0) w/ SEEK_DATA: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, 0, SEEK_DATA);
+    err = errno;
+    ok(rc == 0 && err == 0,
+       "%s:%d lseek(0, SEEK_DATA) w/ SEEK_DATA: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* Fallback implementation: lseek to data after hole with SEEK_DATA returns
      * current offset */
-    ok(lseek(fd, 15, SEEK_DATA) == 15,
-       "%s:%d lseek(15) to data after hole w/ SEEK_DATA returns offset: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, 15, SEEK_DATA);
+    err = errno;
+    ok(rc == 15 && err == 0,
+       "%s:%d lseek(15, SEEK_DATA) to data after hole returns offset: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* lseek beyond end of file with SEEK_DATA should fail with errno=ENXIO */
-    ok(lseek(fd, 75, SEEK_DATA) == -1 && errno == ENXIO,
-       "%s:%d lseek(75) beyond EOF w/ SEEK_DATA fails (errno=%d): %s",
-       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
+    rc = (int) lseek(fd, 75, SEEK_DATA);
+    err = errno;
+    ok(rc == -1 && err == ENXIO,
+       "%s:%d lseek(75, SEEK_DATA) beyond EOF fails (errno=%d): %s",
+       __FILE__, __LINE__, err, strerror(err));
 
-    /* lseek() with SEEK_HOLE tests */
+    /*--- lseek() with SEEK_HOLE tests ---*/
+
     /* lseek to negative offset with SEEK_HOLE should fail with errno=ENXIO */
-    ok(lseek(fd, -1, SEEK_HOLE) == -1 && errno == ENXIO,
-       "%s:%d lseek(-1) to invalid offset w/ SEEK_HOLE fails (errno=%d): %s",
-       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
+    rc = (int) lseek(fd, -1, SEEK_HOLE);
+    err = errno;
+    ok(rc == -1 && err == ENXIO,
+       "%s:%d lseek(-1, SEEK_HOLE) to invalid offset fails (errno=%d): %s",
+       __FILE__, __LINE__, err, strerror(err));
 
     /* Fallback implementation: lseek to first hole of file with SEEK_HOLE
      * returns or EOF */
-    ok(lseek(fd, 0, SEEK_HOLE) == 52,
-       "%s:%d lseek(0) to first hole in file w/ SEEK_HOLE returns EOF: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, 0, SEEK_HOLE);
+    err = errno;
+    ok(rc == 52 && err == 0,
+       "%s:%d lseek(0, SEEK_HOLE) to first hole in file returns EOF: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* Fallback implementation: lseek to middle of hole with SEEK_HOLE returns
      * EOF */
-    ok(lseek(fd, 18, SEEK_HOLE) == 52,
-       "%s:%d lseek(18) to middle of hole w/ SEEK_HOLE returns EOF: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, 18, SEEK_HOLE);
+    err = errno;
+    ok(rc == 52 && err == 0,
+       "%s:%d lseek(18, SEEK_HOLE) to middle of hole returns EOF: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* lseek to end of file with SEEK_HOLE succeeds */
-    ok(lseek(fd, 42, SEEK_HOLE) == 52,
-       "%s:%d lseek(42) to EOF w/ SEEK_HOLE: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = (int) lseek(fd, 42, SEEK_HOLE);
+    err = errno;
+    ok(rc == 52 && err == 0,
+       "%s:%d lseek(42, SEEK_HOLE) to EOF w/ SEEK_HOLE: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* lseek beyond end of file with SEEK_HOLE should fail with errno= ENXIO */
-    ok(lseek(fd, 75, SEEK_HOLE) == -1 && errno == ENXIO,
-       "%s:%d lseek beyond EOF w/ SEEK_HOLE fails (errno=%d): %s",
-       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
+    rc = (int) lseek(fd, 75, SEEK_HOLE);
+    err = errno;
+    ok(rc == -1 && err == ENXIO,
+       "%s:%d lseek(75, SEEK_HOLE) beyond EOF fails (errno=%d): %s",
+       __FILE__, __LINE__, err, strerror(err));
 
     close(fd);
 
     /* lseek in non-open file descriptor should fail with errno=EBADF */
-    ok(lseek(fd, 0, SEEK_SET) == -1 && errno == EBADF,
-       "%s:%d lseek in non-open file descriptor fails (errno=%d): %s",
-       __FILE__, __LINE__, errno, strerror(errno));
     errno = 0;
+    rc = (int) lseek(fd, 0, SEEK_SET);
+    err = errno;
+    ok(rc == -1 && err == EBADF,
+       "%s:%d lseek in non-open file descriptor fails (errno=%d): %s",
+       __FILE__, __LINE__, err, strerror(err));
 
     diag("Finished UNIFYFS_WRAP(lseek) tests");
 

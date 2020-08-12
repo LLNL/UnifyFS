@@ -38,9 +38,7 @@ int mkdir_rmdir_test(char* unifyfs_root)
     char file_subdir_path[80];
     int file_mode = 0600;
     int dir_mode = 0700;
-    int fd;
-
-    errno = 0;
+    int err, fd, rc;
 
     /* Create random dir and file path names at the mountpoint to test on */
     testutil_rand_path(dir_path, sizeof(dir_path), unifyfs_root);
@@ -67,101 +65,138 @@ int mkdir_rmdir_test(char* unifyfs_root)
     todo("mkdir_1: we currently don't support directory structure");
     /* Verify creating a dir under non-existent parent dir fails with
      * errno=ENOENT */
-    ok(mkdir(subdir_path, dir_mode) == -1 && errno == ENOENT,
+    errno = 0;
+    rc = mkdir(subdir_path, dir_mode);
+    err = errno;
+    ok(rc == -1 && err == ENOENT,
        "%s:%d mkdir dir %s without parent dir should fail (errno=%d): %s",
-       __FILE__, __LINE__, subdir_path, errno, strerror(errno));
+       __FILE__, __LINE__, subdir_path, err, strerror(err));
     end_todo; /* end todo_mkdir_1 */
-    errno = 0; /* Reset errno after test for failure */
 
     /* Verify rmdir a non-existing directory fails with errno=ENOENT */
-    ok(rmdir(dir_path) == -1 && errno == ENOENT,
-       "%s:%d rmdir non-existing dir %s should fail (errno=%d): %s",
-       __FILE__, __LINE__, dir_path, errno, strerror(errno));
     errno = 0;
+    rc = rmdir(dir_path);
+    err = errno;
+    ok(rc == -1 && err == ENOENT,
+       "%s:%d rmdir non-existing dir %s should fail (errno=%d): %s",
+       __FILE__, __LINE__, dir_path, err, strerror(err));
 
     /* Verify we can create a non-existent directory. */
-    ok(mkdir(dir_path, dir_mode) == 0, "%s:%d mkdir non-existing dir %s: %s",
-       __FILE__, __LINE__, dir_path, strerror(errno));
+    errno = 0;
+    rc = mkdir(dir_path, dir_mode);
+    err = errno;
+    ok(rc == 0 && err == 0,
+       "%s:%d mkdir non-existing dir %s: %s",
+       __FILE__, __LINE__, dir_path, strerror(err));
 
     /* Verify recreating an already created directory fails with errno=EEXIST */
-    ok(mkdir(dir_path, dir_mode) == -1 && errno == EEXIST,
+    errno = 0;
+    rc = mkdir(dir_path, dir_mode);
+    err = errno;
+    ok(rc == -1 && err == EEXIST,
        "%s:%d mkdir existing dir %s should fail (errno=%d): %s",
-       __FILE__, __LINE__, dir_path, errno, strerror(errno));
-    errno = 0;
+       __FILE__, __LINE__, dir_path, err, strerror(err));
 
-    /* todo_mkdir_2: Remove when issue is resolved */
-    todo("mkdir_2: should fail with errno=EISDIR=21");
     /* Verify creating a file with same name as a dir fails with errno=EISDIR */
-    fd = creat(dir_path, file_mode);
-    ok(fd == -1 && errno == EISDIR,
-       "%s:%d creat file with same name as dir %s fails (fd=%d, errno=%d): %s",
-       __FILE__, __LINE__, dir_path, fd, errno, strerror(errno));
-    end_todo; /* end todo_mkdir_2 */
     errno = 0;
+    fd = creat(dir_path, file_mode);
+    err = errno;
+    ok(fd == -1 && err == EISDIR,
+       "%s:%d creat file with same name as dir %s fails (fd=%d, errno=%d): %s",
+       __FILE__, __LINE__, dir_path, fd, err, strerror(err));
 
     /* todo_mkdir_3: Remove when issue is resolved */
     todo("mkdir_3: this fails because \"TODO mkdir_1\" is failing");
     /* Verify we can create a subdirectory under an existing directory  */
-    ok(mkdir(subdir_path, dir_mode) == 0,
+    errno = 0;
+    rc = mkdir(subdir_path, dir_mode);
+    err = errno;
+    ok(rc == 0 && err == 0,
        "%s:%d mkdir subdirectory %s in existing dir: %s",
-       __FILE__, __LINE__, subdir_path, strerror(errno));
+       __FILE__, __LINE__, subdir_path, strerror(err));
     end_todo; /* end todo_mkdir_3 */
-    errno = 0; /* can remove when test is passing */
 
     /* Verify we can create a subfile under an existing directory */
+    errno = 0;
     fd = creat(subfile_path, file_mode);
-    ok(fd >= 0, "%s:%d creat subfile %s in existing dir (fd=%d): %s",
-       __FILE__, __LINE__, subfile_path, fd, strerror(errno));
+    err = errno;
+    ok(fd >= 0 && err == 0,
+       "%s:%d creat subfile %s in existing dir (fd=%d): %s",
+       __FILE__, __LINE__, subfile_path, fd, strerror(err));
 
-    ok(close(fd) == 0, "%s:%d close() worked: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = close(fd);
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d close() worked: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* Verify creating a directory whose parent is a file fails with
      * errno=ENOTDIR */
+    errno = 0;
     fd = creat(file_path, file_mode);
-    ok(fd >= 0, "%s:%d creat parent file %s (fd=%d): %s",
-       __FILE__, __LINE__, file_path, fd, strerror(errno));
-    ok(close(fd) == 0, "%s:%d close() worked: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(fd >= 0 && err == 0,
+       "%s:%d creat parent file %s (fd=%d): %s",
+       __FILE__, __LINE__, file_path, fd, strerror(err));
+
+    errno = 0;
+    rc = close(fd);
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d close() worked: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* todo_mkdir_4: Remove when issue is resolved */
     todo("mkdir_4: unifyfs currently creates all paths as separate entities");
-    ok(mkdir(file_subdir_path, dir_mode) == -1 && errno == ENOTDIR,
+    errno = 0;
+    rc = mkdir(file_subdir_path, dir_mode);
+    err = errno;
+    ok(rc == -1 && err == ENOTDIR,
        "%s:%d mkdir dir %s where parent is a file should fail (errno=%d): %s",
-       __FILE__, __LINE__, file_subdir_path, errno, strerror(errno));
+       __FILE__, __LINE__, file_subdir_path, err, strerror(err));
     end_todo; /* end todo_mkdir_4 */
-    errno = 0;
 
-    /* Verify rmdir a non-directory fails with errno=ENOENT */
-    ok(rmdir(file_path) == -1 && errno == ENOTDIR,
-       "%s:%d rmdir non-directory %s should fail (errno=%d): %s",
-       __FILE__, __LINE__, file_path, errno, strerror(errno));
+    /* Verify rmdir on non-directory fails with errno=ENOTDIR */
     errno = 0;
+    rc = rmdir(file_path);
+    err = errno;
+    ok(rc == -1 && err == ENOTDIR,
+       "%s:%d rmdir non-directory %s should fail (errno=%d): %s",
+       __FILE__, __LINE__, file_path, err, strerror(err));
 
     /* todo_mkdir_5: Remove when issue is resolved */
     todo("mkdir_5: unifyfs currently creates all paths as separate entities");
     /* Verify rmdir a non-empty directory fails with errno=ENOTEMPTY */
-    ok(rmdir(dir_path) == -1 && errno == ENOTEMPTY,
-       "%s:%d rmdir non-empty directory %s should fail (errno=%d): %s",
-       __FILE__, __LINE__, dir_path, errno, strerror(errno));
-    end_todo; /* end todo_mkdir_5 */
     errno = 0;
+    rc = rmdir(dir_path);
+    err = errno;
+    ok(rc == -1 && err == ENOTEMPTY,
+       "%s:%d rmdir non-empty directory %s should fail (errno=%d): %s",
+       __FILE__, __LINE__, dir_path, err, strerror(err));
+    end_todo; /* end todo_mkdir_5 */
 
     /* Verify we can rmdir an empty directory */
-    ok(rmdir(subdir_path) == 0, "%s:%d rmdir an empty directory %s: %s",
-       __FILE__, __LINE__, subdir_path, strerror(errno));
+    errno = 0;
+    rc = rmdir(subdir_path);
+    err = errno;
+    ok(rc == 0 && err == 0,
+       "%s:%d rmdir an empty directory %s: %s",
+       __FILE__, __LINE__, subdir_path, strerror(err));
 
     /* Verify rmdir an already removed directory fails with errno=ENOENT */
-    ok(rmdir(subdir_path) == -1 && errno == ENOENT,
-       "%s:%d rmdir already removed dir %s should fail (errno=%d): %s",
-       __FILE__, __LINE__, subdir_path, errno, strerror(errno));
     errno = 0;
+    rc = rmdir(subdir_path);
+    err = errno;
+    ok(rc == -1 && err == ENOENT,
+       "%s:%d rmdir already removed dir %s should fail (errno=%d): %s",
+       __FILE__, __LINE__, subdir_path, err, strerror(err));
 
     /* Verify trying to rmdir the mount point fails with errno=EBUSY */
-    ok(rmdir(unifyfs_root) == -1 && errno == EBUSY,
-       "%s:%d rmdir mount point %s should fail (errno=%d): %s",
-       __FILE__, __LINE__, unifyfs_root, errno, strerror(errno));
     errno = 0;
+    rc = rmdir(unifyfs_root);
+    err = errno;
+    ok(rc == -1 && err == EBUSY,
+       "%s:%d rmdir mount point %s should fail (errno=%d): %s",
+       __FILE__, __LINE__, unifyfs_root, err, strerror(err));
 
     /* CLEANUP
      *

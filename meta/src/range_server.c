@@ -50,7 +50,7 @@
 #include "mdhim_options.h"
 #include "partitioner.h"
 #include "range_server.h"
-#include "unifyfs_metadata.h"
+#include "unifyfs_metadata_mdhim.h"
 #include "uthash.h"
 
 int recv_counter = 0;

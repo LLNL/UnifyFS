@@ -30,7 +30,7 @@ static unsigned long seed;
  * be run individually if need be. If they run too fast, seeding srand() with
  * time(NULL) can happen more than once in a second, causing the pseudo random
  * sequence to repeat which causes each suite to create the same random files.
- * Using gettimeofday() allows us to increase the granularty to microseconds.
+ * Using gettimeofday() allows us to increase the granularity to microseconds.
  */
 static void test_util_srand(void)
 {
@@ -63,7 +63,6 @@ void testutil_rand_string(char* buf, size_t len)
         idx = rand() % (sizeof(charset) - 1);
         buf[i] = charset[idx];
     }
-
     buf[i] = '\0';
 }
 
@@ -76,6 +75,7 @@ void testutil_rand_path(char* buf, size_t len, const char* pfx)
 {
     int rc;
 
+    memset(buf, 0, len);
     rc = snprintf(buf, len, "%s/", pfx);
     testutil_rand_string(buf + rc, len - rc);
 }

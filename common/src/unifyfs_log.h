@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -77,6 +77,7 @@ pid_t unifyfs_gettid(void);
 
 #define LOGERR(...)  LOG(LOG_ERR,  __VA_ARGS__)
 #define LOGWARN(...) LOG(LOG_WARN, __VA_ARGS__)
+#define LOGINFO(...) LOG(LOG_INFO, __VA_ARGS__)
 #define LOGDBG(...)  LOG(LOG_DBG,  __VA_ARGS__)
 
 /* open specified file as debug file stream,

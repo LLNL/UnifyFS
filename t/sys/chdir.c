@@ -34,51 +34,59 @@ int chdir_test(char* unifyfs_root)
          "get_current_dir_name) tests");
 
     char path[64];
-    int rc;
+    int err, rc;
     char* str;
-
-    errno = 0;
 
     testutil_rand_path(path, sizeof(path), unifyfs_root);
 
     /* define a dir1 subdirectory within unifyfs space */
     char buf[64] = {0};
     snprintf(buf, sizeof(buf), "%s/dir1", unifyfs_root);
-    rc = mkdir(buf, 0700);
-    ok(rc == 0 || errno == EEXIST, "%s:%d mkdir(%s): %s",
-       __FILE__, __LINE__, buf, strerror(errno));
     errno = 0;
+    rc = mkdir(buf, 0700);
+    err = errno;
+    ok(rc == 0 || err == EEXIST, "%s:%d mkdir(%s): %s",
+       __FILE__, __LINE__, buf, strerror(err));
 
     /* define a dir2 subdirectory within unifyfs space */
     char buf2[64] = {0};
     snprintf(buf2, sizeof(buf2), "%s/dir2", unifyfs_root);
-    rc = mkdir(buf2, 0700);
-    ok(rc == 0 || errno == EEXIST, "%s:%d mkdir(%s): %s",
-       __FILE__, __LINE__, buf2, strerror(errno));
     errno = 0;
+    rc = mkdir(buf2, 0700);
+    err = errno;
+    ok(rc == 0 || err == EEXIST, "%s:%d mkdir(%s): %s",
+       __FILE__, __LINE__, buf2, strerror(err));
 
     /* change to root directory */
+    errno = 0;
     rc = chdir("/");
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, "/", strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, "/", strerror(err));
 
     /* check that we're in root directory */
+    errno = 0;
     str = getcwd(path, sizeof(path));
-    ok(str != NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d getcwd: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, "/",
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, "/");
 
     /* change to unifyfs root directory */
+    errno = 0;
     rc = chdir(unifyfs_root);
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, unifyfs_root, strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, unifyfs_root, strerror(err));
 
     /* check that we're in unifyfs root directory */
+    errno = 0;
     str = getcwd(path, sizeof(path));
-    ok(str != NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d getcwd: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, unifyfs_root,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, unifyfs_root);
@@ -88,96 +96,120 @@ int chdir_test(char* unifyfs_root)
 
     /* try getcwd with a buffer short by one byte,
      * should fail with ERANGE */
-    str = getcwd(path, len); // pass
-    ok(str == NULL && errno == ERANGE,
-       "%s:%d getcwd(buf, %d): expected NULL got %s errno %s",
-       __FILE__, __LINE__, len, str, strerror(errno));
     errno = 0;
+    str = getcwd(path, len); // pass
+    err = errno;
+    ok(str == NULL && err == ERANGE,
+       "%s:%d getcwd(buf, short_len): (errno=%d) %s",
+       __FILE__, __LINE__, err, strerror(err));
 
-    /* try getcwd with a NULL buffer */
+    /* try getcwd with a NULL buffer (Linux glibc extension to POSIX) */
+    errno = 0;
     str = getcwd(NULL, sizeof(path));
-    ok(str != NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d getcwd(NULL, good_len): (errno=%d) %s",
+       __FILE__, __LINE__, err, strerror(err));
     if (str != NULL) {
         free(str);
     }
 
     /* try getcwd with a NULL buffer but short size,
      * should fail with ERANGE */
+    errno = 0;
     str = getcwd(NULL, len);
-    ok(str == NULL && errno == ERANGE, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str == NULL && err == ERANGE,
+       "%s:%d getcwd(NULL, short_len): (errno=%d) %s",
+       __FILE__, __LINE__, err, strerror(err));
     if (str != NULL) {
         free(str);
     }
-    errno = 0;
 
     /* try getcwd with a buffer and 0 size, should fail with EINVAL */
+    errno = 0;
     str = getcwd(path, 0);
-    ok(str == NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str == NULL && err == EINVAL, "%s:%d getcwd(buf, 0): (errno=%d) %s",
+       __FILE__, __LINE__, err, strerror(err));
     if (str != NULL) {
         free(str);
     }
-    errno = 0;
 
     /* try getcwd with a NULL buffer and 0 size,
-     * getcwd should allocate buffer */
+     * getcwd should allocate buffer (Linux glibc extension to POSIX) */
+    errno = 0;
     str = getcwd(NULL, 0);
-    ok(str != NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d getcwd(NULL, 0): (errno=%d) %s",
+       __FILE__, __LINE__, err, strerror(err));
     if (str != NULL) {
         free(str);
     }
 
     /* change to unifyfs/dir1 */
+    errno = 0;
     rc = chdir(buf);
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, buf, strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, buf, strerror(err));
 
     /* check that we're in unifyfs/dir1 */
+    errno = 0;
     str = getcwd(path, sizeof(path));
-    ok(str != NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d getcwd: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, buf,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, buf);
 
     /* change back to root unifyfs directory */
+    errno = 0;
     rc = chdir("..");
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, "..", strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, "..", strerror(err));
 
     /* check that we're in root unifyfs directory */
+    errno = 0;
     str = getcwd(path, sizeof(path));
-    ok(str != NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d getcwd: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, unifyfs_root,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, unifyfs_root);
 
     /* change to unifyfs/dir1 directory using relative path */
+    errno = 0;
     rc = chdir("dir1");
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, "dir1", strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, "dir1", strerror(err));
 
     /* check that we're in unifyfs/dir1 directory */
+    errno = 0;
     str = getcwd(path, sizeof(path));
-    ok(str != NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d getcwd: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, buf,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, buf);
 
     /* change to unifyfs/dir2 directory in strange way */
+    errno = 0;
     rc = chdir("././.././dir2");
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, "dir1", strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, "dir1", strerror(err));
 
     /* check that we're in unifyfs/dir2 directory */
+    errno = 0;
     str = getcwd(path, sizeof(path));
-    ok(str != NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d getcwd: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, buf2,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, buf2);
@@ -188,67 +220,87 @@ int chdir_test(char* unifyfs_root)
  * these tests.  For now, I'll leave this here as a reminder. */
 #if 0
     /* change to root directory */
+    errno = 0;
     rc = chdir("/");
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, "/", strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, "/", strerror(err));
 
     /* check that we're in root directory */
+    errno = 0;
     str = getwd(pathmax);
-    ok(str != NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d getcwd: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, "/",
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, "/");
 
     /* change to unifyfs root directory */
+    errno = 0;
     rc = chdir(unifyfs_root);
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, unifyfs_root, strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, unifyfs_root, strerror(err));
 
     /* check that we're in unifyfs root directory */
+    errno = 0;
     str = getwd(pathmax);
-    ok(str != NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d getcwd: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, unifyfs_root,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, unifyfs_root);
 
     /* change to directory within unifyfs */
+    errno = 0;
     rc = chdir(buf);
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, buf, strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, buf, strerror(err));
 
     /* check that we're in directory within unifyfs */
+    errno = 0;
     str = getwd(pathmax);
-    ok(str != NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d getcwd: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, buf,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, buf);
 
     /* change back to root unifyfs directory */
+    errno = 0;
     rc = chdir("..");
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, "..", strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, "..", strerror(err));
 
     /* check that we're in root unifyfs directory */
+    errno = 0;
     str = getwd(pathmax);
-    ok(str != NULL, "%s:%d getcwd: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d getcwd: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, unifyfs_root,
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, unifyfs_root);
 #endif
 
     /* change to root directory */
+    errno = 0;
     rc = chdir("/");
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, "/", strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, "/", strerror(err));
 
     /* check that we're in root directory */
+    errno = 0;
     str = get_current_dir_name();
-    ok(str != NULL, "%s:%d get_current_dir_name: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d get_current_dir_name: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, "/",
        "%s:%d get_current_dir_name returned %s expected %s",
        __FILE__, __LINE__, str, "/");
@@ -257,14 +309,18 @@ int chdir_test(char* unifyfs_root)
     }
 
     /* change to unifyfs root directory */
+    errno = 0;
     rc = chdir(unifyfs_root);
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, unifyfs_root, strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, unifyfs_root, strerror(err));
 
     /* check that we're in unifyfs root directory */
+    errno = 0;
     str = get_current_dir_name();
-    ok(str != NULL, "%s:%d get_current_dir_name: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d get_current_dir_name: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, unifyfs_root,
        "%s:%d get_current_dir_name returned %s expected %s",
        __FILE__, __LINE__, str, unifyfs_root);
@@ -273,14 +329,18 @@ int chdir_test(char* unifyfs_root)
     }
 
     /* change to unifyfs/dir1 */
+    errno = 0;
     rc = chdir(buf);
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, buf, strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, buf, strerror(err));
 
     /* check that we're in unifyfs/dir1 */
+    errno = 0;
     str = get_current_dir_name();
-    ok(str != NULL, "%s:%d get_current_dir_name: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d get_current_dir_name: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, buf,
        "%s:%d get_current_dir_name returned %s expected %s",
        __FILE__, __LINE__, str, buf);
@@ -289,14 +349,18 @@ int chdir_test(char* unifyfs_root)
     }
 
     /* change back to root unifyfs directory */
+    errno = 0;
     rc = chdir("..");
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, "..", strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, "..", strerror(err));
 
     /* check that we're in root unifyfs directory */
+    errno = 0;
     str = get_current_dir_name();
-    ok(str != NULL, "%s:%d get_current_dir_name: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d get_current_dir_name: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, unifyfs_root,
        "%s:%d get_current_dir_name returned %s expected %s",
        __FILE__, __LINE__, str, unifyfs_root);
@@ -305,14 +369,18 @@ int chdir_test(char* unifyfs_root)
     }
 
     /* change to unifyfs/dir2 directory */
+    errno = 0;
     rc = chdir("dir2");
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, "dir2", strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, "dir2", strerror(err));
 
     /* check that we're in unifyfs/dir2 */
+    errno = 0;
     str = get_current_dir_name();
-    ok(str != NULL, "%s:%d get_current_dir_name: %s",
-       __FILE__, __LINE__, strerror(errno));
+    err = errno;
+    ok(str != NULL && err == 0, "%s:%d get_current_dir_name: %s",
+       __FILE__, __LINE__, strerror(err));
     is(str, buf2,
        "%s:%d get_current_dir_name returned %s expected %s",
        __FILE__, __LINE__, str, buf2);
@@ -325,39 +393,53 @@ int chdir_test(char* unifyfs_root)
  * but when they do, we should check that fchdir works. */
 #if 0
     /* change to root directory */
+    errno = 0;
     rc = chdir("/");
-    ok(rc == 0, "%s:%d chdir(%s): %s",
-       __FILE__, __LINE__, "/", strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d chdir(%s): %s",
+       __FILE__, __LINE__, "/", strerror(err));
 
     /* open a directory in unifyfs */
+    errno = 0;
     DIR* dirp = opendir(buf);
-    ok(dirp != NULL, "%s:%d opendir(%s): %s",
-       __FILE__, __LINE__, buf, strerror(errno));
+    err = errno;
+    ok(dirp != NULL && err == 0, "%s:%d opendir(%s): %s",
+       __FILE__, __LINE__, buf, strerror(err));
 
+    errno = 0;
     int fd = dirfd(dirp);
-    ok(fd >= 0, "%s:%d dirfd(%p): %s",
-       __FILE__, __LINE__, dirp, strerror(errno));
+    err = errno;
+    ok(fd >= 0 && err == 0, "%s:%d dirfd(%p): %s",
+       __FILE__, __LINE__, dirp, strerror(err));
 
     /* use fchdir to change into it */
+    errno = 0;
     rc = fchdir(fd);
-    ok(rc == 0, "%s:%d fchdir(%d): %s",
-       __FILE__, __LINE__, fd, strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d fchdir(%d): %s",
+       __FILE__, __LINE__, fd, strerror(err));
 
     closedir(dirp);
 
     /* open root directory */
+    errno = 0;
     dirp = opendir("/");
-    ok(dirp != NULL, "%s:%d opendir(%s): %s",
-       __FILE__, __LINE__, "/", strerror(errno));
+    err = errno;
+    ok(dirp != NULL && err == 0, "%s:%d opendir(%s): %s",
+       __FILE__, __LINE__, "/", strerror(err));
 
+    errno = 0;
     fd = dirfd(dirp);
-    ok(fd >= 0, "%s:%d dirfd(%p): %s",
-       __FILE__, __LINE__, dirp, strerror(errno));
+    err = errno;
+    ok(fd >= 0 && err == 0, "%s:%d dirfd(%p): %s",
+       __FILE__, __LINE__, dirp, strerror(err));
 
     /* use fchdir to change into it */
+    errno = 0;
     rc = fchdir(fd);
-    ok(rc == 0, "%s:%d fchdir(%d): %s",
-       __FILE__, __LINE__, fd, strerror(errno));
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d fchdir(%d): %s",
+       __FILE__, __LINE__, fd, strerror(err));
 
     closedir(dirp);
 #endif

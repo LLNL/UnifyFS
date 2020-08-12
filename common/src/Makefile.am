@@ -5,10 +5,12 @@ include_HEADERS = unifyfs_const.h unifyfs_rc.h
 libunifyfs_commondir = $(includedir)
 
 BASE_SRCS = \
-  ini.h \
-  ini.c \
+  arraylist.h \
+  arraylist.c \
   cm_enumerator.h \
   cm_enumerator.c \
+  ini.h \
+  ini.c \
   rm_enumerator.h \
   rm_enumerator.c \
   seg_tree.h \
@@ -33,12 +35,15 @@ BASE_SRCS = \
   unifyfs_misc.h \
   unifyfs_rpc_util.h \
   unifyfs_rpc_util.c \
+  unifyfs_rpc_types.h \
   unifyfs_client_rpcs.h \
   unifyfs_server_rpcs.h \
   unifyfs_rc.h \
   unifyfs_rc.c \
   unifyfs_shm.h \
-  unifyfs_shm.c
+  unifyfs_shm.c \
+  unifyfs-stack.h \
+  unifyfs-stack.c
 
 OPT_FLAGS =
 OPT_LIBS =

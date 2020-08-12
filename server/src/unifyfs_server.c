@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -37,9 +37,10 @@
 
 // server components
 #include "unifyfs_global.h"
-#include "unifyfs_metadata.h"
+#include "unifyfs_metadata_mdhim.h"
 #include "unifyfs_request_manager.h"
 #include "unifyfs_service_manager.h"
+#include "unifyfs_inode_tree.h"
 
 // margo rpcs
 #include "margo_server.h"
@@ -78,6 +79,8 @@ int local_rank_cnt;
 static int CountTasksPerNode(int rank, int numTasks);
 static int find_rank_idx(int my_rank);
 #endif
+
+struct unifyfs_fops* global_fops_tab;
 
 /*
  * Perform steps to create a daemon process:
@@ -381,21 +384,25 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    LOGDBG("initializing metadata store");
-    rc = meta_init_store(&server_cfg);
+    LOGDBG("initializing file operations");
+    rc = unifyfs_fops_init(&server_cfg);
     if (rc != 0) {
         LOGERR("%s", unifyfs_rc_enum_description(rc));
         exit(1);
     }
 
-    LOGDBG("finished service initialization");
+    /* initialize our tree that maps a gfid to its extent tree */
+    unifyfs_inode_tree_init(global_inode_tree);
 
+    LOGDBG("publishing server pid");
     rc = unifyfs_publish_server_pids();
     if (rc != 0) {
         LOGERR("failed to publish server pid file: %s",
                unifyfs_rc_enum_description(rc));
         exit(1);
     }
+
+    LOGINFO("server[%d] - finished initialization", glb_pmi_rank);
 
     while (1) {
         sleep(1);
@@ -404,6 +411,9 @@ int main(int argc, char* argv[])
             break;
         }
     }
+
+    /* tear down gfid-to-extents tree */
+    unifyfs_inode_tree_destroy(global_inode_tree);
 
     LOGDBG("stopping service manager thread");
     rc = svcmgr_fini();
@@ -601,9 +611,11 @@ static int unifyfs_exit(void)
     LOGDBG("stopping rpc service");
     margo_server_rpc_finalize();
 
+#if defined(USE_MDHIM)
     /* shutdown the metadata service*/
     LOGDBG("stopping metadata service");
     meta_sanitize();
+#endif
 
 #if defined(UNIFYFSD_USE_MPI)
     LOGDBG("finalizing MPI");
@@ -909,7 +921,7 @@ unifyfs_rc disconnect_app_client(app_client* client)
 
     /* stop client request manager thread */
     if (NULL != client->reqmgr) {
-        rm_cmd_exit(client->reqmgr);
+        rm_request_exit(client->reqmgr);
     }
 
     /* free margo client address */
@@ -958,7 +970,7 @@ unifyfs_rc cleanup_app_client(app_config* app, app_client* client)
 
     /* close client logio context */
     if (NULL != client->logio) {
-        unifyfs_logio_close(client->logio);
+        unifyfs_logio_close(client->logio, 1);
         client->logio = NULL;
     }
 
@@ -971,6 +983,7 @@ unifyfs_rc cleanup_app_client(app_config* app, app_client* client)
     /* free client structure */
     if (NULL != client->reqmgr) {
         free(client->reqmgr);
+        client->reqmgr = NULL;
     }
     free(client);
 

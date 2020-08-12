@@ -34,52 +34,76 @@ int fopen_fclose_test(char* unifyfs_root)
     char path[64];
     char path2[64];
     FILE* fd = NULL;
+    int err, rc;
 
-    errno = 0;
 
     /* Generate a random file name in the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifyfs_root);
     testutil_rand_path(path2, sizeof(path2), unifyfs_root);
 
     /* Verify fopen a non-existent file as read-only fails with errno=ENOENT. */
+    errno = 0;
     fd = fopen(path, "r");
-    ok(fd == NULL && errno == ENOENT,
+    err = errno;
+    ok(fd == NULL && err == ENOENT,
        "%s:%d fopen non-existent file %s w/ mode r: %s",
-       __FILE__, __LINE__, path, strerror(errno));
-    errno = 0; /* Reset errno after test for failure */
+       __FILE__, __LINE__, path, strerror(err));
 
     /* Verify we can create a new file. */
+    errno = 0;
     fd = fopen(path, "w");
-    ok(fd != NULL, "%s:%d fopen non-existing file %s w/ mode w: %s",
-       __FILE__, __LINE__, path, strerror(errno));
+    err = errno;
+    ok(fd != NULL && err == 0,
+       "%s:%d fopen non-existing file %s w/ mode w: %s",
+       __FILE__, __LINE__, path, strerror(err));
 
     /* Verify close succeeds. */
-    ok(fclose(fd) == 0, "%s:%d fclose new file: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = fclose(fd);
+    err = errno;
+    ok(rc == 0 && err == 0,
+       "%s:%d fclose new file: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* Verify we can create a new file with mode "a". */
+    errno = 0;
     fd = fopen(path2, "a");
-    ok(fd != NULL, "%s:%d fopen non-existing file %s mode a: %s",
-       __FILE__, __LINE__, path2, strerror(errno));
+    err = errno;
+    ok(fd != NULL && err == 0,
+       "%s:%d fopen non-existing file %s mode a: %s",
+       __FILE__, __LINE__, path2, strerror(err));
 
     /* Verify close succeeds. */
-    ok(fclose(fd) == 0, "%s:%d fclose new file: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = fclose(fd);
+    err = errno;
+    ok(rc == 0 && err == 0,
+       "%s:%d fclose new file: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* Verify opening an existing file with mode "r" succeeds. */
+    errno = 0;
     fd = fopen(path, "r");
-    ok(fd != NULL, "%s:%d fopen existing file %s mode r: %s",
-       __FILE__, __LINE__, path, strerror(errno));
+    err = errno;
+    ok(fd != NULL && err == 0,
+       "%s:%d fopen existing file %s mode r: %s",
+       __FILE__, __LINE__, path, strerror(err));
 
     /* Verify close succeeds. */
-    ok(fclose(fd) == 0, "%s:%d fclose worked: %s",
-       __FILE__, __LINE__, strerror(errno));
+    errno = 0;
+    rc = fclose(fd);
+    err = errno;
+    ok(rc == 0 && err == 0,
+       "%s:%d fclose worked: %s",
+       __FILE__, __LINE__, strerror(err));
 
     /* Verify closing already closed file fails with errno=EBADF */
-    ok(fclose(fd) == -1 && errno == EBADF,
-       "%s:%d fclose already closed file %s should fail (errno=%d): %s",
-       __FILE__, __LINE__, path, errno, strerror(errno));
     errno = 0;
+    rc = fclose(fd);
+    err = errno;
+    ok(rc == -1 && err == EBADF,
+       "%s:%d fclose already closed file %s should fail (errno=%d): %s",
+       __FILE__, __LINE__, path, err, strerror(err));
 
     diag("Finished UNIFYFS_WRAP(fopen/fclose) tests");
 

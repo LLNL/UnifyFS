@@ -48,6 +48,9 @@
 /* rewrite client's shared memory index of file write extents */
 off_t unifyfs_rewrite_index_from_seg_tree(unifyfs_filemeta_t* meta);
 
+/* remove/truncate write extents in client metadata */
+int truncate_write_meta(unifyfs_filemeta_t* meta, off_t trunc_sz);
+
 /* sync all writes for target file(s) with the server */
 int unifyfs_sync(int target_fid);
 

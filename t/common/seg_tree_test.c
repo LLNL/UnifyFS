@@ -198,6 +198,24 @@ int main(int argc, char** argv)
     ok(count == 1, "count is 1 (got %lu)", count);
 
     seg_tree_clear(&seg_tree);
+    seg_tree_add(&seg_tree, 0, 0, 0);
+    seg_tree_add(&seg_tree, 1, 10, 101);
+    seg_tree_add(&seg_tree, 20, 30, 20);
+    seg_tree_add(&seg_tree, 31, 40, 131);
+
+    /* Remove a single entry */
+    seg_tree_remove(&seg_tree, 0, 0);
+    ok(1 == 1, "removed a single entry, got %s", print_tree(tmp, &seg_tree));
+    is("[1-10:101][20-30:20][31-40:131]", print_tree(tmp, &seg_tree),
+       "removed a single range, got %s", print_tree(tmp, &seg_tree));
+
+    /* Remove a range spanning the two bordering ranges [20-30] & [31-40]. */
+    seg_tree_remove(&seg_tree, 25, 31);
+    is("[1-10:101][20-24:20][32-40:132]", print_tree(tmp, &seg_tree),
+       "removed a range that truncated two entries, got %s",
+       print_tree(tmp, &seg_tree));
+
+    seg_tree_clear(&seg_tree);
     seg_tree_destroy(&seg_tree);
 
     done_testing();

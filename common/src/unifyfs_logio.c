@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -166,6 +166,7 @@ int unifyfs_logio_init_server(const int app_id,
         }
     }
 
+    char spillfile[UNIFYFS_MAX_FILENAME];
     void* spill_mapping = NULL;
     int spill_fd = -1;
     if (spill_size) {
@@ -175,7 +176,6 @@ int unifyfs_logio_init_server(const int app_id,
         }
 
         /* open the spill over file */
-        char spillfile[UNIFYFS_MAX_FILENAME];
         snprintf(spillfile, sizeof(spillfile), LOGIO_SPILL_FMTSTR,
                  spill_dir, app_id, client_id);
         spill_fd = get_spillfile(spillfile, spill_size);
@@ -202,6 +202,9 @@ int unifyfs_logio_init_server(const int app_id,
     ctx->spill_hdr = spill_mapping;
     ctx->spill_fd = spill_fd;
     ctx->spill_sz = spill_size;
+    if (spill_size) {
+        ctx->spill_file = strdup(spillfile);
+    }
     *pctx = ctx;
 
     return UNIFYFS_SUCCESS;
@@ -372,7 +375,8 @@ int unifyfs_logio_init_client(const int app_id,
 }
 
 /* Close logio context */
-int unifyfs_logio_close(logio_context* ctx)
+int unifyfs_logio_close(logio_context* ctx,
+                        int clean_spill)
 {
     if (NULL == ctx) {
         return EINVAL;
@@ -407,6 +411,15 @@ int unifyfs_logio_close(logio_context* ctx)
                        strerror(err));
             }
             ctx->spill_fd = -1;
+        }
+        if (clean_spill && (ctx->spill_file != NULL)) {
+            rc = unlink(ctx->spill_file);
+            if (rc != 0) {
+                int err = errno;
+                LOGERR("Failed to unlink logio spill file %s (errno=%s)",
+                       ctx->spill_file, strerror(err));
+            }
+            free(ctx->spill_file);
         }
     }
 

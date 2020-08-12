@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -50,22 +50,19 @@
 #define UNIFYFS_MAX_HOSTNAME 64
 
 // Server - Request Manager
+#define MAX_DATA_TX_SIZE (4 * MIB)   /* data transfer size (to client) */
 #define MAX_META_PER_SEND (4 * KIB)  /* max read request count per server */
 #define REQ_BUF_LEN (MAX_META_PER_SEND * 64) /* chunk read reqs buffer size */
 #define SHM_WAIT_INTERVAL 1000       /* unit: ns */
 #define RM_MAX_ACTIVE_REQUESTS 64    /* number of concurrent read requests */
-#define MAX_BULK_TX_SIZE (8 * MIB)   /* bulk transfer size */
 
 // Server - Service Manager
-#define LARGE_BURSTY_DATA (512 * MIB)
-#define MAX_BURSTY_INTERVAL 10000 /* unit: us */
-#define MIN_SLEEP_INTERVAL 100    /* unit: us */
-#define SLEEP_INTERVAL 500        /* unit: us */
-#define SLEEP_SLICE_PER_UNIT 50   /* unit: us */
+#define MIN_SLEEP_INTERVAL 50  /* unit: us */
 
 // Server - General
-#define MAX_NUM_APPS 64     /* max # apps/mountpoints supported */
-#define MAX_APP_CLIENTS 256 /* max # clients per application */
+#define MAX_BULK_TX_SIZE (8 * MIB) /* bulk transfer size (between servers) */
+#define MAX_NUM_APPS 64            /* max # apps/mountpoints supported */
+#define MAX_APP_CLIENTS 256        /* max # clients per application */
 #define UNIFYFS_DEFAULT_INIT_TIMEOUT 120 /* server init timeout (seconds) */
 #define UNIFYFSD_PID_FILENAME "unifyfsd.pids"
 #define UNIFYFS_STAGE_STATUS_FILENAME "unifyfs-stage.status"

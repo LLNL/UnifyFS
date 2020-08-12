@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -11,6 +11,7 @@
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
+
 #ifndef __TESTLIB_H
 #define __TESTLIB_H
 

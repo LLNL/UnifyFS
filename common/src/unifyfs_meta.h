@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2018, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2018, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -15,17 +15,29 @@
 #ifndef UNIFYFS_META_H
 #define UNIFYFS_META_H
 
+#include <errno.h>
+#include <inttypes.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <string.h>
 
 #include "unifyfs_const.h"
+#include "unifyfs_log.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+
+/* extent slice size used for metadata */
+extern size_t meta_slice_sz;
+
+/* calculate number of slices in an extent given by start offset and length */
+size_t meta_num_slices(size_t offset, size_t length);
 
 /* structure used to detect clients/servers colocated on a host */
 typedef struct {
@@ -40,7 +52,6 @@ typedef struct {
     int gfid;
 } unifyfs_extent_t;
 
-
 /* write-log metadata index structure */
 typedef struct {
     off_t file_pos; /* start offset of data in file */
@@ -51,8 +62,11 @@ typedef struct {
 
 /* UnifyFS file attributes */
 typedef struct {
+    char* filename;
     int gfid;
-    char filename[UNIFYFS_MAX_FILENAME];
+
+    /* Set when the file is laminated */
+    int is_laminated;
 
     /* essential stat fields */
     uint32_t mode;   /* st_mode bits */
@@ -62,9 +76,6 @@ typedef struct {
     struct timespec atime;
     struct timespec mtime;
     struct timespec ctime;
-
-    /* Set when the file is laminated */
-    uint32_t is_laminated;
 } unifyfs_file_attr_t;
 
 enum {
@@ -75,9 +86,150 @@ enum {
 };
 
 static inline
+int unifyfs_file_attr_set_invalid(unifyfs_file_attr_t* attr)
+{
+    if (!attr) {
+        return EINVAL;
+    }
+
+    memset(attr, 0, sizeof(*attr));
+    attr->filename = NULL;
+    attr->gfid = -1;
+    attr->is_laminated = -1;
+    attr->mode = -1;
+    attr->uid = -1;
+    attr->gid = -1;
+    attr->size = (uint64_t) -1;
+
+    return 0;
+}
+
+static inline
+void debug_print_file_attr(unifyfs_file_attr_t* attr)
+{
+    if (!attr) {
+        return;
+    }
+    LOGDBG("fileattr(%p) - gfid=%d filename=%s laminated=%d",
+           attr, attr->gfid, attr->filename, attr->is_laminated);
+    LOGDBG("             - sz=%zu mode=%o uid=%d gid=%d",
+           (size_t)attr->size, attr->mode, attr->uid, attr->gid);
+    LOGDBG("             - atime=%ld.%09ld ctime=%ld.%09ld mtime=%ld.%09ld",
+           attr->atime.tv_sec, attr->atime.tv_nsec,
+           attr->ctime.tv_sec, attr->ctime.tv_nsec,
+           attr->mtime.tv_sec, attr->mtime.tv_nsec);
+}
+
+typedef enum {
+    UNIFYFS_FILE_ATTR_OP_INVALID = 0,
+    UNIFYFS_FILE_ATTR_OP_CHGRP,
+    UNIFYFS_FILE_ATTR_OP_CHMOD,
+    UNIFYFS_FILE_ATTR_OP_CHOWN,
+    UNIFYFS_FILE_ATTR_OP_CREATE,
+    UNIFYFS_FILE_ATTR_OP_DATA,
+    UNIFYFS_FILE_ATTR_OP_LAMINATE,
+    UNIFYFS_FILE_ATTR_OP_TRUNCATE
+} unifyfs_file_attr_op_e;
+
+/*
+ * updates @dst with new values from @src.
+ * ignores fields from @src with negative values.
+ */
+static inline
+int unifyfs_file_attr_update(int attr_op,
+                             unifyfs_file_attr_t* dst,
+                             unifyfs_file_attr_t* src)
+{
+    if (!dst || !src
+        || (attr_op == UNIFYFS_FILE_ATTR_OP_INVALID)
+        || (dst->gfid != src->gfid)) {
+        return EINVAL;
+    }
+
+    LOGDBG("updating attributes for gfid=%d", dst->gfid);
+
+    /* Update fields only with valid values and associated operation.
+     * invalid values are set by unifyfs_file_attr_set_invalid() above */
+
+    if ((src->mode != -1) &&
+        ((attr_op == UNIFYFS_FILE_ATTR_OP_CHMOD) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_LAMINATE))) {
+        LOGDBG("setting mode to %o", src->mode);
+        dst->mode = src->mode;
+    }
+
+    if ((src->uid != -1) &&
+        ((attr_op == UNIFYFS_FILE_ATTR_OP_CHOWN) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE))) {
+        dst->uid = src->uid;
+    }
+
+    if ((src->gid != -1) &&
+        ((attr_op == UNIFYFS_FILE_ATTR_OP_CHGRP) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE))) {
+        dst->gid = src->gid;
+    }
+
+    if ((src->size != (uint64_t)-1) &&
+        ((attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_DATA) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_LAMINATE) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_TRUNCATE))) {
+        LOGDBG("setting attr.size to %" PRIu64, src->size);
+        dst->size = src->size;
+    }
+
+    if ((src->atime.tv_sec != 0) &&
+        (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE)) {
+        LOGDBG("setting attr.atime to %d.%09ld",
+               (int)src->atime.tv_sec, src->atime.tv_nsec);
+        dst->atime = src->atime;
+    }
+
+    if ((src->mtime.tv_sec != 0) &&
+        ((attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_DATA) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_LAMINATE) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_TRUNCATE))) {
+        LOGDBG("setting attr.mtime to %d.%09ld",
+               (int)src->mtime.tv_sec, src->mtime.tv_nsec);
+        dst->mtime = src->mtime;
+    }
+
+    if ((src->ctime.tv_sec != 0) &&
+        ((attr_op == UNIFYFS_FILE_ATTR_OP_CHGRP) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_CHMOD) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_CHOWN) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_DATA) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_LAMINATE))) {
+        LOGDBG("setting attr.ctime to %d.%09ld",
+               (int)src->ctime.tv_sec, src->ctime.tv_nsec);
+        dst->ctime = src->ctime;
+    }
+
+    if ((src->is_laminated != -1) &&
+        ((attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_LAMINATE))) {
+        LOGDBG("setting attr.is_laminated to %d", src->is_laminated);
+        dst->is_laminated = src->is_laminated;
+    }
+
+    if (src->filename && !dst->filename) {
+        LOGDBG("setting attr.filename to %s", src->filename);
+        dst->filename = strdup(src->filename);
+    }
+
+    return 0;
+}
+
+static inline
 void unifyfs_file_attr_to_stat(unifyfs_file_attr_t* fattr, struct stat* sb)
 {
     if (fattr && sb) {
+        debug_print_file_attr(fattr);
+
         sb->st_dev = UNIFYFS_STAT_DEFAULT_DEV;
         sb->st_ino = fattr->gfid;
         sb->st_mode = fattr->mode;
@@ -85,6 +237,9 @@ void unifyfs_file_attr_to_stat(unifyfs_file_attr_t* fattr, struct stat* sb)
         sb->st_gid = fattr->gid;
         sb->st_rdev = UNIFYFS_STAT_DEFAULT_DEV;
         sb->st_size = fattr->size;
+
+        /* TODO: use cfg.logio_chunk_size here for st_blksize
+         *       and report acutal chunks allocated for st_blocks */
         sb->st_blksize = UNIFYFS_STAT_DEFAULT_BLKSIZE;
         sb->st_blocks = fattr->size / UNIFYFS_STAT_DEFAULT_BLKSIZE;
         if (fattr->size % UNIFYFS_STAT_DEFAULT_BLKSIZE > 0) {
@@ -98,9 +253,9 @@ void unifyfs_file_attr_to_stat(unifyfs_file_attr_t* fattr, struct stat* sb)
          */
         sb->st_nlink = fattr->is_laminated ? 1 : 0;
 
-        sb->st_atime = fattr->atime.tv_sec;
-        sb->st_mtime = fattr->mtime.tv_sec;
-        sb->st_ctime = fattr->ctime.tv_sec;
+        sb->st_atim = fattr->atime;
+        sb->st_mtim = fattr->mtime;
+        sb->st_ctim = fattr->ctime;
     }
 }
 
