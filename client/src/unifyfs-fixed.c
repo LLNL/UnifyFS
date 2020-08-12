@@ -150,6 +150,39 @@ off_t unifyfs_rewrite_index_from_seg_tree(unifyfs_filemeta_t* meta)
 }
 
 /*
+ * Find any write extents that span or exceed truncation point and remove them.
+ *
+ * This function is called when we truncate a file and there are cached writes.
+ */
+int truncate_write_meta(unifyfs_filemeta_t* meta, off_t trunc_sz)
+{
+    if (0 == trunc_sz) {
+        /* All writes should be removed. Clear extents_sync */
+        seg_tree_clear(&meta->extents_sync);
+
+        if (unifyfs_local_extents) {
+            /* Clear the local extent cache too */
+            seg_tree_clear(&meta->extents);
+        }
+        return UNIFYFS_SUCCESS;
+    }
+
+    unsigned long trunc_off = (unsigned long) trunc_sz;
+    int rc = seg_tree_remove(&meta->extents_sync, trunc_off, ULONG_MAX);
+    if (unifyfs_local_extents) {
+        rc = seg_tree_remove(&meta->extents, trunc_off, ULONG_MAX);
+    }
+    if (rc) {
+        LOGERR("removal of write extents due to truncation failed");
+        rc = UNIFYFS_FAILURE;
+    } else {
+        rc = UNIFYFS_SUCCESS;
+    }
+    return rc;
+}
+
+
+/*
  * Sync all the write extents for the target file(s) to the server.
  * The target_fid identifies a specific file, or all files (-1).
  * Clears the metadata index afterwards.

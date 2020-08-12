@@ -18,6 +18,9 @@ if HAVE_LD_WRAP
   sysio-dir-static \
   sysio-stat-static \
   sysio-cp-static \
+  sysio-truncate-static \
+  sysio-unlink-static \
+  sysio-open-static \
   app-mpiio-static \
   app-btio-static \
   app-tileio-static \
@@ -42,6 +45,9 @@ if HAVE_GOTCHA
     sysio-dir-gotcha \
     sysio-stat-gotcha \
     sysio-cp-gotcha \
+    sysio-truncate-gotcha \
+    sysio-unlink-gotcha \
+    sysio-open-gotcha \
     app-mpiio-gotcha \
     app-btio-gotcha \
     app-tileio-gotcha \
@@ -174,6 +180,36 @@ sysio_cp_static_CPPFLAGS = $(test_cppflags)
 sysio_cp_static_LDADD    = $(test_static_ldadd)
 sysio_cp_static_LDFLAGS  = $(test_static_ldflags)
 
+sysio_truncate_gotcha_SOURCES  = sysio-truncate.c
+sysio_truncate_gotcha_CPPFLAGS = $(test_cppflags)
+sysio_truncate_gotcha_LDADD    = $(test_gotcha_ldadd)
+sysio_truncate_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+sysio_truncate_static_SOURCES  = sysio-truncate.c
+sysio_truncate_static_CPPFLAGS = $(test_cppflags)
+sysio_truncate_static_LDADD    = $(test_static_ldadd)
+sysio_truncate_static_LDFLAGS  = $(test_static_ldflags)
+
+sysio_unlink_gotcha_SOURCES  = sysio-unlink.c
+sysio_unlink_gotcha_CPPFLAGS = $(test_cppflags)
+sysio_unlink_gotcha_LDADD    = $(test_gotcha_ldadd)
+sysio_unlink_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+sysio_unlink_static_SOURCES  = sysio-unlink.c
+sysio_unlink_static_CPPFLAGS = $(test_cppflags)
+sysio_unlink_static_LDADD    = $(test_static_ldadd)
+sysio_unlink_static_LDFLAGS  = $(test_static_ldflags)
+
+sysio_open_gotcha_SOURCES  = sysio-open.c
+sysio_open_gotcha_CPPFLAGS = $(test_cppflags)
+sysio_open_gotcha_LDADD    = $(test_gotcha_ldadd)
+sysio_open_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
+
+sysio_open_static_SOURCES  = sysio-open.c
+sysio_open_static_CPPFLAGS = $(test_cppflags)
+sysio_open_static_LDADD    = $(test_static_ldadd)
+sysio_open_static_LDFLAGS  = $(test_static_ldflags)
+
 cr_posix_SOURCES  = checkpoint-restart.c
 cr_posix_CPPFLAGS = $(test_posix_cppflags)
 cr_posix_LDADD    = $(test_posix_ldadd)
@@ -219,17 +255,17 @@ write_static_CPPFLAGS = $(test_cppflags)
 write_static_LDADD    = $(test_static_ldadd)
 write_static_LDFLAGS  = $(test_static_ldflags)
 
-writeread_posix_SOURCES  = writeread.c
+writeread_posix_SOURCES  = writeread.c testutil.c
 writeread_posix_CPPFLAGS = $(test_posix_cppflags)
 writeread_posix_LDADD    = $(test_posix_ldadd)
 writeread_posix_LDFLAGS  = $(test_posix_ldflags)
 
-writeread_gotcha_SOURCES  = writeread.c
+writeread_gotcha_SOURCES  = writeread.c testutil.c
 writeread_gotcha_CPPFLAGS = $(test_cppflags)
 writeread_gotcha_LDADD    = $(test_gotcha_ldadd)
 writeread_gotcha_LDFLAGS  = $(test_gotcha_ldflags)
 
-writeread_static_SOURCES  = writeread.c
+writeread_static_SOURCES  = writeread.c testutil.c
 writeread_static_CPPFLAGS = $(test_cppflags)
 writeread_static_LDADD    = $(test_static_ldadd)
 writeread_static_LDFLAGS  = $(test_static_ldflags)

@@ -1,27 +1,17 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
+ *
+ * Copyright 2020, UT-Battelle, LLC.
+ *
  * LLNL-CODE-741539
  * All rights reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
+
  /*
   * This file is a simple, thread-safe, segment tree implementation.  The
   * segments in the tree are non-overlapping.  Added segments overwrite the old
@@ -30,13 +20,14 @@
 
 #include <stdio.h>
 #include <errno.h>
+#include <limits.h>
 #include <string.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <pthread.h>
 
 #include "seg_tree.h"
 #include "tree.h"
+#include "unifyfs_log.h"
 
 #ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -46,7 +37,7 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
-int
+static int
 compare_func(struct seg_tree_node* node1, struct seg_tree_node* node2)
 {
     if (node1->start > node2->end) {
@@ -69,7 +60,7 @@ int seg_tree_init(struct seg_tree* seg_tree)
     RB_INIT(&seg_tree->head);
 
     return 0;
-};
+}
 
 /*
  * Remove and free all nodes in the seg_tree.
@@ -77,7 +68,7 @@ int seg_tree_init(struct seg_tree* seg_tree)
 void seg_tree_destroy(struct seg_tree* seg_tree)
 {
     seg_tree_clear(seg_tree);
-};
+}
 
 /* Allocate a node for the range tree.  Free node with free() when finished */
 static struct seg_tree_node*
@@ -337,6 +328,78 @@ release_add:
 }
 
 /*
+ * Remove or truncate one or more entries from the range tree
+ * if they overlap [start, end].
+ *
+ * Returns 0 on success, nonzero otherwise.
+ */
+int seg_tree_remove(
+    struct seg_tree* seg_tree,
+    unsigned long start,
+    unsigned long end)
+{
+    struct seg_tree_node* node;
+
+    LOGDBG("removing extents overlapping [%lu, %lu]", start, end);
+
+    seg_tree_wrlock(seg_tree);
+    node = seg_tree_find_nolock(seg_tree, start, end);
+    while (node != NULL) {
+        if (start <= node->start) {
+            if (node->end <= end) {
+                /* start <= node_s <= node_e <= end
+                 * remove whole extent */
+                LOGDBG("removing node [%lu, %lu]", node->start, node->end);
+                RB_REMOVE(inttree, &seg_tree->head, node);
+                free(node);
+                seg_tree->count--;
+            } else {
+                /* start <= node_s <= end < node_e
+                 * update node start */
+                LOGDBG("updating node start from %lu to %lu",
+                       node->start, (end + 1));
+                node->start = end + 1;
+            }
+        } else if (node->start < start) {
+            if (node->end <= end) {
+                /* node_s < start <= node_e <= end
+                 * truncate node */
+                LOGDBG("updating node end from %lu to %lu",
+                       node->end, (start - 1));
+                node->end = start - 1;
+            } else {
+                /* node_s < start <= end < node_e
+                 * extent spans entire region, split into two nodes
+                 * representing before/after region */
+                unsigned long a_end = node->end;
+                unsigned long a_start = end + 1;
+                unsigned long a_ptr = node->ptr + (a_start - node->start);
+
+                /* truncate existing (before) node */
+                LOGDBG("updating before node end from %lu to %lu",
+                       node->end, (start - 1));
+                node->end = start - 1;
+
+                /* add new (after) node */
+                LOGDBG("add after node [%lu, %lu]", a_start, a_end);
+                seg_tree_unlock(seg_tree);
+                int rc = seg_tree_add(seg_tree, a_start, a_end, a_ptr);
+                if (rc) {
+                    LOGERR("seg_tree_add() failed when splitting");
+                    return rc;
+                }
+                seg_tree_wrlock(seg_tree);
+            }
+        }
+        /* keep looking for nodes that overlap target region */
+        node = seg_tree_find_nolock(seg_tree, start, end);
+    }
+    seg_tree_unlock(seg_tree);
+
+    return 0;
+}
+
+/*
  * Search tree for an entry that overlaps with given range of [start, end].
  * Returns the first overlapping entry if found, which is the overlapping entry
  * having the lowest starting offset, and returns NULL otherwise.
@@ -448,7 +511,10 @@ seg_tree_iter(struct seg_tree* seg_tree, struct seg_tree_node* start)
 void
 seg_tree_rdlock(struct seg_tree* seg_tree)
 {
-    assert(pthread_rwlock_rdlock(&seg_tree->rwlock) == 0);
+    int rc = pthread_rwlock_rdlock(&seg_tree->rwlock);
+    if (rc) {
+        LOGERR("pthread_rwlock_rdlock() failed - rc=%d", rc);
+    }
 }
 
 /*
@@ -459,7 +525,10 @@ seg_tree_rdlock(struct seg_tree* seg_tree)
 void
 seg_tree_wrlock(struct seg_tree* seg_tree)
 {
-    assert(pthread_rwlock_wrlock(&seg_tree->rwlock) == 0);
+    int rc = pthread_rwlock_wrlock(&seg_tree->rwlock);
+    if (rc) {
+        LOGERR("pthread_rwlock_wrlock() failed - rc=%d", rc);
+    }
 }
 
 /*
@@ -470,7 +539,10 @@ seg_tree_wrlock(struct seg_tree* seg_tree)
 void
 seg_tree_unlock(struct seg_tree* seg_tree)
 {
-    assert(pthread_rwlock_unlock(&seg_tree->rwlock) == 0);
+    int rc = pthread_rwlock_unlock(&seg_tree->rwlock);
+    if (rc) {
+        LOGERR("pthread_rwlock_unlock() failed - rc=%d", rc);
+    }
 }
 
 /*

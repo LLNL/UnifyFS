@@ -78,17 +78,13 @@ int open_test(char* unifyfs_root)
     rc = mkdir(dir_path, dir_mode);
     ok(rc == 0, "mkdir(%s, %o) worked, rc = %d", dir_path, dir_mode, rc);
 
-    /* todo_open_1: Remove when issue is resolved */
-    todo("open_1: should fail with errno=EISDIR=21");
-
-    errno = 0;
     fd = open(dir_path, O_RDWR, file_mode);
     ok(fd < 0 && errno == EISDIR,
        "open directory %s for write should fail (fd=%d, errno=%d): %s",
        dir_path, fd, errno, strerror(errno));
-    end_todo; /* end todo_open_1 */
+    errno = 0;
 
-    /* ClEANUP
+    /* CLEANUP
      *
      * Don't unlink `path` so that the final test (9020-mountpoint-empty) can
      * check if open left anything in the mountpoint and thus wasn't wrapped

@@ -41,7 +41,7 @@
 #include <sys/time.h>
 #include "partitioner.h"
 
-#include "unifyfs_metadata.h"
+#include "unifyfs_metadata_mdhim.h"
 
 struct timeval calslicestart, calsliceend;
 double calslicetime = 0;

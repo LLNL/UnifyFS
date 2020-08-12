@@ -89,14 +89,11 @@ int mkdir_rmdir_test(char* unifyfs_root)
        __FILE__, __LINE__, dir_path, errno, strerror(errno));
     errno = 0;
 
-    /* todo_mkdir_2: Remove when issue is resolved */
-    todo("mkdir_2: should fail with errno=EISDIR=21");
     /* Verify creating a file with same name as a dir fails with errno=EISDIR */
     fd = creat(dir_path, file_mode);
     ok(fd == -1 && errno == EISDIR,
        "%s:%d creat file with same name as dir %s fails (fd=%d, errno=%d): %s",
        __FILE__, __LINE__, dir_path, fd, errno, strerror(errno));
-    end_todo; /* end todo_mkdir_2 */
     errno = 0;
 
     /* todo_mkdir_3: Remove when issue is resolved */
@@ -132,7 +129,7 @@ int mkdir_rmdir_test(char* unifyfs_root)
     end_todo; /* end todo_mkdir_4 */
     errno = 0;
 
-    /* Verify rmdir a non-directory fails with errno=ENOENT */
+    /* Verify rmdir on non-directory fails with errno=ENOTDIR */
     ok(rmdir(file_path) == -1 && errno == ENOTDIR,
        "%s:%d rmdir non-directory %s should fail (errno=%d): %s",
        __FILE__, __LINE__, file_path, errno, strerror(errno));

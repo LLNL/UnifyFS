@@ -219,7 +219,10 @@ static int wait_server_initialization(unifyfs_resource_t* resource,
     }
 
     while (1) {
+        int err;
+        errno = 0;
         fp = fopen(filename, "r");
+        err = errno;
         if (fp) {
             while (fgets(linebuf, 31, fp) != NULL) {
                 count++;
@@ -235,12 +238,10 @@ static int wait_server_initialization(unifyfs_resource_t* resource,
 
             fclose(fp);
             break;
-        }
-
-        if (errno != ENOENT) {
+        } else if (err != ENOENT) {
             fprintf(stderr, "failed to open file %s (%s)\n",
-                    filename, strerror(errno));
-            ret = -errno;
+                    filename, strerror(err));
+            ret = -err;
             break;
         }
 

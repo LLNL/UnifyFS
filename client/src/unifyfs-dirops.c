@@ -129,13 +129,13 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
          * re-populate with the global data?
          */
         if (!unifyfs_fid_is_dir(fid)) {
-            errno = EIO;
+            errno = ENOTDIR;
             return NULL;
         }
     } else {
         fid = unifyfs_fid_create_file(upath);
         if (fid < 0) {
-            errno = EIO;
+            errno = unifyfs_rc_errno(-fid);
             return NULL;
         }
 

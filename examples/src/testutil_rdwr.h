@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -16,6 +16,15 @@
 #define UNIFYFS_TESTUTIL_RDWR_H
 
 #include "testutil.h"
+
+
+static inline
+void test_print_aiocb(test_cfg* cfg, struct aiocb* cbp)
+{
+    test_print(cfg, "aiocb(fd=%d, op=%d, count=%zu, offset=%zu, buf=%p)",
+               cbp->aio_fildes, cbp->aio_lio_opcode, cbp->aio_nbytes,
+               cbp->aio_offset, cbp->aio_buf);
+}
 
 /* -------- Write Helper Methods -------- */
 
@@ -107,6 +116,7 @@ int issue_write_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs)
         struct aiocb* lio_vec[n_reqs];
         for (i = 0; i < n_reqs; i++) {
             lio_vec[i] = reqs + i;
+            //test_print_aiocb(cfg, lio_vec[i]);
         }
         lio_mode = LIO_WAIT;
         if (cfg->use_aio) {
@@ -185,6 +195,29 @@ int wait_write_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs)
         }
     }
     return ret;
+}
+
+static inline
+int write_truncate(test_cfg* cfg)
+{
+    int rc = 0;
+
+    if (cfg->use_mpiio) {
+        MPI_Offset mpi_off = (MPI_Offset) cfg->trunc_size;
+        MPI_CHECK(cfg, (MPI_File_set_size(cfg->mpifh, mpi_off)));
+    } else {
+        if (cfg->rank == 0 || cfg->io_pattern == IO_PATTERN_NN) {
+            if (-1 != cfg->fd) { // ftruncate(2)
+                rc = ftruncate(cfg->fd, cfg->trunc_size);
+                if (-1 == rc) {
+                    test_print(cfg, "ftruncate() failed");
+                    return -1;
+                }
+            }
+        }
+    }
+
+    return rc;
 }
 
 static inline

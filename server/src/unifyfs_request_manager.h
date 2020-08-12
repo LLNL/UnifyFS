@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017-2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -31,6 +31,7 @@
 #define UNIFYFS_REQUEST_MANAGER_H
 
 #include "unifyfs_global.h"
+#include "unifyfs_metadata_mdhim.h"
 
 typedef struct {
     readreq_status_e status;   /* aggregate request status */
@@ -86,6 +87,17 @@ typedef struct reqmgr_thrd {
     int client_id;
 } reqmgr_thrd_t;
 
+/* reserve/release read requests */
+server_read_req_t* rm_reserve_read_req(reqmgr_thrd_t* thrd_ctrl);
+int rm_release_read_req(reqmgr_thrd_t* thrd_ctrl,
+                        server_read_req_t* rdreq);
+
+/* issue remote chunk read requests for extent chunks
+ * listed within keyvals */
+int rm_create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
+                             server_read_req_t* rdreq,
+                             int num_vals,
+                             unifyfs_keyval_t* keyvals);
 
 /* create Request Manager thread for application client */
 reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id,
@@ -94,33 +106,10 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id,
 /* Request Manager pthread main */
 void* rm_delegate_request_thread(void* arg);
 
-/* functions called by rpc handlers to assign work
- * to request manager threads */
-int rm_cmd_mread(int app_id, int client_id,
-                 size_t req_num, void* reqbuf);
-
-int rm_cmd_read(int app_id, int client_id, int gfid,
-                size_t offset, size_t length);
-
-int rm_cmd_filesize(int app_id, int client_id, int gfid, size_t* outsize);
-
-/* truncate file to specified size */
-int rm_cmd_truncate(int app_id, int client_id, int gfid, size_t size);
-
-/* delete file */
-int rm_cmd_unlink(int app_id, int client_id, int gfid);
-
-/* laminate file */
-int rm_cmd_laminate(int app_id, int client_id, int gfid);
-
 /* function called by main thread to instruct
  * resource manager thread to exit,
  * returns UNIFYFS_SUCCESS on success */
 int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl);
-
-/* retrieve all write index entries for app-client and
- * store them in global metadata */
-int rm_cmd_sync(int app_id, int client_side_id);
 
 /* update state for remote chunk reads with received response data */
 int rm_post_chunk_read_responses(int app_id,
@@ -136,16 +125,18 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
                                    server_read_req_t* rdreq,
                                    remote_chunk_reads_t* del_reads);
 
+/**
+ * @brief hand over a read request to the request manager thread.
+ *
+ * @param req all members except for status and req_ndx need to be filled by
+ * the caller. @req->chunks and @req->remote_reads should be allocated from
+ * heap, and should not be freed by the caller.
+ *
+ * @return 0 on success, errno otherwise
+ */
+int rm_submit_read_request(server_read_req_t* req);
+
 /* MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
-
-#if 0 // DISABLE UNUSED RPCS
-int invoke_server_hello_rpc(int dst_srvr_rank);
-
-int invoke_server_request_rpc(int dst_srvr_rank,
-                              int req_id,
-                              int tag,
-                              void* data_buf, size_t buf_sz);
-#endif // DISABLE UNUSED RPCS
 
 int invoke_chunk_read_request_rpc(int dst_srvr_rank,
                                   server_read_req_t* rdreq,

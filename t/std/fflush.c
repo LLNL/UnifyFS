@@ -33,7 +33,7 @@ int fflush_test(char* unifyfs_root)
 
     /* Generate a random file name in the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifyfs_root);
-    skip(1, 9, "remove when fflush() sync extents (issue #374)");
+    //skip(1, 9, "remove when fflush() sync extents (issue #374)");
 
     /* Write "hello world" to a file */
     fp = fopen(path, "w");
@@ -65,7 +65,7 @@ int fflush_test(char* unifyfs_root)
     rc = fclose(fp);
     ok(rc == 0, "%s: fclose() (rc=%d): %s", __FILE__, rc, strerror(errno));
 
-    end_skip;
+    //end_skip;
 
     return 0;
 }

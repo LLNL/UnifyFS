@@ -222,10 +222,8 @@ int write_pre_existing_file_test(char* unifyfs_root)
 
     /* Check global size is 300 */
     testutil_get_size(path, &global);
-    todo("File is now 100 bytes instead of 300. See issue #488 for details");
     ok(global == 300, "%s:%d global size of 300 byte file is %d: %s",
        __FILE__, __LINE__, global, strerror(errno));
-    end_todo;
 
     diag("Finished write-to-pre-existing-file tests");
 

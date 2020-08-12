@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -100,9 +100,8 @@ int sm_issue_chunk_reads(int src_rank,
     ptr += sizeof(int);
 
     /* extract number of chunk read requests */
-    int num = *((int*)ptr);
+    assert(num_chks == *((int*)ptr));
     ptr += sizeof(int);
-    assert(num == num_chks);
 
     /* total data size we'll be reading */
     size_t total_data_sz = *((size_t*)ptr);
@@ -427,7 +426,7 @@ void* sm_service_reads(void* arg)
 int invoke_chunk_read_response_rpc(remote_chunk_reads_t* rcr)
 {
     /* assume we'll succeed */
-    int rc = (int)UNIFYFS_SUCCESS;
+    int rc = UNIFYFS_SUCCESS;
 
     /* rank of destination server */
     int dst_rank = rcr->rank;
@@ -442,16 +441,28 @@ int invoke_chunk_read_response_rpc(remote_chunk_reads_t* rcr)
 
     /* get handle to read response rpc on destination server */
     hg_handle_t handle;
+    hg_id_t resp_id = ctx->rpcs.chunk_read_response_id;
     hg_return_t hret = margo_create(ctx->svr_mid, dst_addr,
-        ctx->rpcs.chunk_read_response_id, &handle);
-    assert(hret == HG_SUCCESS);
+                                    resp_id, &handle);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_create() failed");
+        return UNIFYFS_ERROR_MARGO;
+    }
 
     /* get address and size of our response buffer */
     void* data_buf    = (void*)rcr->resp;
     hg_size_t bulk_sz = rcr->total_sz;
 
-    /* fill in input struct */
+    /* register our response buffer for bulk remote read access */
     chunk_read_response_in_t in;
+    hret = margo_bulk_create(ctx->svr_mid, 1, &data_buf, &bulk_sz,
+                             HG_BULK_READ_ONLY, &in.bulk_handle);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_bulk_create() failed");
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    /* fill in input struct */
     in.src_rank  = (int32_t)glb_pmi_rank;
     in.app_id    = (int32_t)rcr->app_id;
     in.client_id = (int32_t)rcr->client_id;
@@ -459,17 +470,12 @@ int invoke_chunk_read_response_rpc(remote_chunk_reads_t* rcr)
     in.num_chks  = (int32_t)rcr->num_chunks;
     in.bulk_size = bulk_sz;
 
-    /* register our response buffer for bulk remote read access */
-    hret = margo_bulk_create(ctx->svr_mid, 1,
-        &data_buf, &bulk_sz, HG_BULK_READ_ONLY, &in.bulk_handle);
-    assert(hret == HG_SUCCESS);
-
     /* call the read response rpc */
     LOGDBG("invoking the chunk-read-response rpc function");
     hret = margo_forward(handle, &in);
     if (hret != HG_SUCCESS) {
-        /* failed to invoke the rpc */
-        rc = (int)UNIFYFS_FAILURE;
+        LOGERR("margo_forward() failed");
+        rc = UNIFYFS_ERROR_MARGO;
     } else {
         /* rpc executed, now decode response */
         chunk_read_response_out_t out;
@@ -480,7 +486,8 @@ int invoke_chunk_read_response_rpc(remote_chunk_reads_t* rcr)
                    dst_rank, rc);
             margo_free_output(handle, &out);
         } else {
-            rc = (int)UNIFYFS_FAILURE;
+            LOGERR("margo_get_output() failed");
+            rc = UNIFYFS_ERROR_MARGO;
         }
     }
 
@@ -497,196 +504,94 @@ int invoke_chunk_read_response_rpc(remote_chunk_reads_t* rcr)
 
 /* BEGIN MARGO SERVER-SERVER RPC HANDLERS */
 
-/* handler for server-server hello
- *
- * print the message, and return my rank */
-static void server_hello_rpc(hg_handle_t handle)
-{
-    /* get input params */
-    server_hello_in_t in;
-    int rc = margo_get_input(handle, &in);
-    assert(rc == HG_SUCCESS);
-
-    /* extract params from input struct */
-    int src_rank = (int)in.src_rank;
-    char* msg = strdup(in.message_str);
-    if (NULL != msg) {
-        LOGDBG("got message '%s' from server %d", msg, src_rank);
-        free(msg);
-    }
-
-    /* fill output structure to return to caller */
-    server_hello_out_t out;
-    out.ret = (int32_t)glb_pmi_rank;
-
-    /* send output back to caller */
-    hg_return_t hret = margo_respond(handle, &out);
-    assert(hret == HG_SUCCESS);
-
-    /* free margo resources */
-    margo_free_input(handle, &in);
-    margo_destroy(handle);
-}
-DEFINE_MARGO_RPC_HANDLER(server_hello_rpc)
-
-/* handler for server-server request
- *
- * decode payload based on tag, and call appropriate svcmgr routine */
-static void server_request_rpc(hg_handle_t handle)
-{
-    int32_t ret;
-    hg_return_t hret;
-
-    /* get input params */
-    server_request_in_t in;
-    int rc = margo_get_input(handle, &in);
-    assert(rc == HG_SUCCESS);
-
-    /* extract params from input struct */
-    int src_rank   = (int)in.src_rank;
-    int req_id     = (int)in.req_id;
-    int tag        = (int)in.req_tag;
-    size_t bulk_sz = (size_t)in.bulk_size;
-
-    LOGDBG("handling request from server %d: tag=%d req=%d sz=%zu",
-           src_rank, tag, req_id, bulk_sz);
-
-    /* get margo info */
-    const struct hg_info* hgi = margo_get_info(handle);
-    assert(NULL != hgi);
-
-    margo_instance_id mid = margo_hg_info_get_instance(hgi);
-    assert(mid != MARGO_INSTANCE_NULL);
-
-    hg_bulk_t bulk_handle;
-    void* reqbuf = NULL;
-    if (bulk_sz) {
-        /* allocate and register local target buffer for bulk access */
-        reqbuf = malloc(bulk_sz);
-        if (NULL == reqbuf) {
-            ret = (int32_t)ENOMEM;
-            goto request_out;
-        }
-        hret = margo_bulk_create(mid, 1, &reqbuf, &in.bulk_size,
-                                 HG_BULK_WRITE_ONLY, &bulk_handle);
-        assert(hret == HG_SUCCESS);
-
-        /* pull request data */
-        hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
-                                   in.bulk_handle, 0,
-                                   bulk_handle, 0, in.bulk_size);
-        assert(hret == HG_SUCCESS);
-    }
-
-    switch (tag) {
-      default: {
-        LOGERR("invalid request tag %d", tag);
-        ret = (int32_t)EINVAL;
-        break;
-      }
-    }
-
-    server_request_out_t out;
-request_out:
-
-    /* fill output structure */
-    out.ret = ret;
-
-    /* return to caller */
-    hret = margo_respond(handle, &out);
-    assert(hret == HG_SUCCESS);
-
-    /* free margo resources */
-    margo_free_input(handle, &in);
-    if (NULL != reqbuf) {
-        margo_bulk_free(bulk_handle);
-        free(reqbuf);
-    }
-    margo_destroy(handle);
-}
-DEFINE_MARGO_RPC_HANDLER(server_request_rpc)
-
-/* handler for server-server request
- *
- * decode payload based on tag, and call appropriate svcmgr routine */
+/* handler for server-server chunk read request */
 static void chunk_read_request_rpc(hg_handle_t handle)
 {
-    hg_return_t hret;
+    int32_t ret = UNIFYFS_SUCCESS;
 
     /* get input params */
     chunk_read_request_in_t in;
-    int rc = margo_get_input(handle, &in);
-    assert(rc == HG_SUCCESS);
-
-    /* extract params from input struct */
-    int src_rank   = (int)in.src_rank;
-    int app_id     = (int)in.app_id;
-    int client_id  = (int)in.client_id;
-    int req_id     = (int)in.req_id;
-    int num_chks   = (int)in.num_chks;
-    size_t bulk_sz = (size_t)in.bulk_size;
-
-    LOGDBG("handling chunk read request from server %d: "
-           "req=%d num_chunks=%d bulk_sz=%zu",
-           src_rank, req_id, num_chks, bulk_sz);
-
-    /* get margo info */
-    const struct hg_info* hgi = margo_get_info(handle);
-    assert(NULL != hgi);
-
-    margo_instance_id mid = margo_hg_info_get_instance(hgi);
-    assert(mid != MARGO_INSTANCE_NULL);
-
-    hg_bulk_t bulk_handle;
-    int reqcmd = (int)SVC_CMD_INVALID;
-    void* reqbuf = NULL;
-    if (bulk_sz) {
-        /* allocate and register local target buffer for bulk access */
-        reqbuf = malloc(bulk_sz);
-        if (NULL != reqbuf) {
-            hret = margo_bulk_create(mid, 1, &reqbuf, &in.bulk_size,
-                                     HG_BULK_WRITE_ONLY, &bulk_handle);
-            assert(hret == HG_SUCCESS);
-
-            /* pull request data */
-            hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
-                                       in.bulk_handle, 0,
-                                       bulk_handle, 0, in.bulk_size);
-            assert(hret == HG_SUCCESS);
-
-            /* first int in request buffer is the command */
-            reqcmd = *(int*)reqbuf;
-        }
-    }
-
-    /* verify this is a request for data */
-    int32_t ret;
-    if (reqcmd == (int)SVC_CMD_RDREQ_CHK) {
-        /* chunk read request command */
-        LOGDBG("request command: SVC_CMD_RDREQ_CHK");
-        sm_issue_chunk_reads(src_rank, app_id, client_id, req_id,
-                             num_chks, (char*)reqbuf);
-        ret = (int32_t)UNIFYFS_SUCCESS;
+    hg_return_t hret = margo_get_input(handle, &in);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_get_input() failed");
+        ret = UNIFYFS_ERROR_MARGO;
     } else {
-        LOGERR("invalid chunk read request command %d from server %d",
-               reqcmd, src_rank);
-        ret = (int32_t)EINVAL;
-    }
+        /* extract params from input struct */
+        int src_rank   = (int)in.src_rank;
+        int app_id     = (int)in.app_id;
+        int client_id  = (int)in.client_id;
+        int req_id     = (int)in.req_id;
+        int num_chks   = (int)in.num_chks;
+        size_t bulk_sz = (size_t)in.bulk_size;
 
-    /* fill output structure */
-    chunk_read_request_out_t out;
-    out.ret = ret;
+        LOGDBG("handling chunk read request from server %d: "
+            "req=%d num_chunks=%d bulk_sz=%zu",
+            src_rank, req_id, num_chks, bulk_sz);
+
+        /* get margo info */
+        const struct hg_info* hgi = margo_get_info(handle);
+        assert(NULL != hgi);
+
+        margo_instance_id mid = margo_hg_info_get_instance(hgi);
+        assert(mid != MARGO_INSTANCE_NULL);
+
+        hg_bulk_t bulk_handle;
+        int reqcmd = (int)SVC_CMD_INVALID;
+        void* reqbuf = NULL;
+        if (bulk_sz) {
+            /* allocate and register local target buffer for bulk access */
+            reqbuf = malloc(bulk_sz);
+            if (NULL != reqbuf) {
+                hret = margo_bulk_create(mid, 1, &reqbuf, &in.bulk_size,
+                                        HG_BULK_WRITE_ONLY, &bulk_handle);
+                if (hret != HG_SUCCESS) {
+                    LOGERR("margo_bulk_create() failed");
+                    ret = UNIFYFS_ERROR_MARGO;
+                } else {
+                    /* pull request data */
+                    hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
+                                               in.bulk_handle, 0,
+                                               bulk_handle, 0, in.bulk_size);
+                    if (hret != HG_SUCCESS) {
+                        LOGERR("margo_bulk_transfer() failed");
+                        ret = UNIFYFS_ERROR_MARGO;
+                    } else {
+                        /* first int in request buffer is the command */
+                        reqcmd = *(int*)reqbuf;
+
+                        /* verify this is a request for data */
+                        if (reqcmd == (int)SVC_CMD_RDREQ_CHK) {
+                            /* chunk read request command */
+                            LOGDBG("request command: SVC_CMD_RDREQ_CHK");
+                            ret = sm_issue_chunk_reads(src_rank,
+                                                       app_id, client_id,
+                                                       req_id, num_chks,
+                                                       (char*)reqbuf);
+                        } else {
+                            LOGERR("invalid command %d from server %d",
+                                   reqcmd, src_rank);
+                            ret = EINVAL;
+                        }
+                    }
+                    margo_bulk_free(bulk_handle);
+                }
+                free(reqbuf);
+            } else {
+                ret = ENOMEM;
+            }
+        }
+        margo_free_input(handle, &in);
+    }
 
     /* return output to caller */
+    chunk_read_request_out_t out;
+    out.ret = ret;
     hret = margo_respond(handle, &out);
-    assert(hret == HG_SUCCESS);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
 
     /* free margo resources */
-    margo_free_input(handle, &in);
-    if (NULL != reqbuf) {
-        margo_bulk_free(bulk_handle);
-        free(reqbuf);
-    }
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(chunk_read_request_rpc)

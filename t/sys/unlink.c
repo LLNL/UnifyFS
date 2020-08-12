@@ -52,11 +52,9 @@ static int unlink_after_sync_test(char* unifyfs_root)
     ok(unlink(path) == 0, "%s:%d unlink(): %s",
         __FILE__, __LINE__, strerror(errno));
 
-    todo("Failing with wrong errno. Should fail with errno=ENOENT=2");
     ok(stat(path, &sb) == -1 && errno == ENOENT,
        "%s:%d stat() after unlink fails (errno=%d): %s",
         __FILE__, __LINE__, errno, strerror(errno));
-    end_todo;
     errno = 0; /* Reset errno after test for failure */
 
     ok(unlink(path) == -1 && errno == ENOENT,
@@ -99,11 +97,9 @@ static int unlink_after_sync_laminate_test(char* unifyfs_root)
     ok(unlink(path) == 0, "%s:%d unlink(): %s",
         __FILE__, __LINE__, strerror(errno));
 
-    todo("Failing with wrong errno. Should fail with errno=ENOENT=2");
     ok(stat(path, &sb) == -1 && errno == ENOENT,
        "%s:%d stat() after unlink fails (errno=%d): %s",
         __FILE__, __LINE__, errno, strerror(errno));
-    end_todo;
     errno = 0;
 
     ok(unlink(path) == -1 && errno == ENOENT,
@@ -149,11 +145,9 @@ int unlink_test(char* unifyfs_root)
     ok(unlink(path) == 0, "%s:%d unlink() empty file: %s",
         __FILE__, __LINE__, strerror(errno));
 
-    todo("Failing with wrong errno. Should fail with errno=ENOENT=2");
     ok(stat(path, &sb) == -1 && errno == ENOENT,
        "%s:%d stat() after unlink fails (errno=%d): %s",
         __FILE__, __LINE__, errno, strerror(errno));
-    end_todo;
     errno = 0;
 
     ok(unlink(path) == -1 && errno == ENOENT,

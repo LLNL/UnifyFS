@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -17,6 +17,7 @@
 
 #include <aio.h>
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -32,6 +33,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
+#include <time.h>
 #include <unistd.h>
 #include <mpi.h>
 
@@ -124,6 +126,8 @@ typedef struct {
     int io_pattern; /* N1 or NN */
     int io_check;   /* use lipsum to verify data */
     int io_shuffle; /* read and write different extents */
+    int pre_wr_trunc;  /* truncate file before writing */
+    int post_wr_trunc; /* truncate file after writing */
     int use_aio;    /* use asynchronous IO */
     int use_lio;    /* use lio_listio instead of read/write */
     int use_mapio;  /* use mmap instead of read/write */
@@ -136,6 +140,7 @@ typedef struct {
     uint64_t n_blocks; /* number of I/O blocks */
     uint64_t block_sz; /* IO block size (multiple of chunk_sz) */
     uint64_t chunk_sz; /* per-IO-op size */
+    off_t trunc_size;  /* file size for truncate */
 
     /* target file info */
     char*  filename;
@@ -205,6 +210,8 @@ void test_config_print(test_cfg* cfg)
     fprintf(stderr, "\t io_pattern  = %s\n", io_pattern_str(cfg->io_pattern));
     fprintf(stderr, "\t io_check    = %d\n", cfg->io_check);
     fprintf(stderr, "\t io_shuffle  = %d\n", cfg->io_shuffle);
+    fprintf(stderr, "\t pre_trunc   = %d\n", cfg->pre_wr_trunc);
+    fprintf(stderr, "\t post_trunc  = %d\n", cfg->post_wr_trunc);
     fprintf(stderr, "\t use_aio     = %d\n", cfg->use_aio);
     fprintf(stderr, "\t use_lio     = %d\n", cfg->use_lio);
     fprintf(stderr, "\t use_mapio   = %d\n", cfg->use_mapio);
@@ -217,6 +224,7 @@ void test_config_print(test_cfg* cfg)
     fprintf(stderr, "\t n_blocks    = %" PRIu64 "\n", cfg->n_blocks);
     fprintf(stderr, "\t block_sz    = %" PRIu64 "\n", cfg->block_sz);
     fprintf(stderr, "\t chunk_sz    = %" PRIu64 "\n", cfg->chunk_sz);
+    fprintf(stderr, "\t truncate_sz = %lu\n", (unsigned long)cfg->trunc_size);
 
     fprintf(stderr, "\n-- Target File --\n");
     fprintf(stderr, "\t filename    = %s\n", cfg->filename);
@@ -458,7 +466,7 @@ int test_is_static(const char* program)
 
 // common options for all tests
 
-static const char* test_short_opts = "a:Ab:c:df:hkLm:MNn:p:PSUvVx";
+static const char* test_short_opts = "a:Ab:c:df:hkLm:MNn:p:PSt:T:UvVx";
 
 static const struct option test_long_opts[] = {
     { "appid", 1, 0, 'a' },
@@ -476,6 +484,8 @@ static const struct option test_long_opts[] = {
     { "mapio", 0, 0, 'N' },
     { "pattern", 1, 0, 'p' },
     { "prdwr", 0, 0, 'P' },
+    { "pre-truncate", 1, 0, 't' },
+    { "post-truncate", 1, 0, 'T' },
     { "stdio", 0, 0, 'S' },
     { "disable-unifyfs", 0, 0, 'U' },
     { "verbose", 0, 0, 'v' },
@@ -518,6 +528,10 @@ static const char* test_usage_str =
     " -P, --prdwr                      use pread|pwrite instead of read|write\n"
     "                                  (default: off)\n"
     " -S, --stdio                      use fread|fwrite instead of read|write\n"
+    "                                  (default: off)\n"
+    " -t, --pre-truncate=<size>        truncate file to size (B) before writing\n"
+    "                                  (default: off)\n"
+    " -T, --post-truncate=<size>       truncate file to size (B) after writing\n"
     "                                  (default: off)\n"
     " -U, --disable-unifyfs            do not use UnifyFS\n"
     "                                  (default: enable UnifyFS)\n"
@@ -610,6 +624,16 @@ int test_process_argv(test_cfg* cfg,
             cfg->use_stdio = 1;
             break;
 
+        case 't':
+            cfg->pre_wr_trunc = 1;
+            cfg->trunc_size = (off_t) strtoul(optarg, NULL, 0);
+            break;
+
+        case 'T':
+            cfg->post_wr_trunc = 1;
+            cfg->trunc_size = (off_t) strtoul(optarg, NULL, 0);
+            break;
+
         case 'U':
             cfg->use_unifyfs = 0;
             break;
@@ -669,6 +693,19 @@ int test_process_argv(test_cfg* cfg,
     }
 
     // exhaustive check of incompatible I/O modes
+    if (cfg->pre_wr_trunc || cfg->post_wr_trunc) {
+        if (cfg->pre_wr_trunc && cfg->post_wr_trunc) {
+            test_print_once(cfg,
+                "USAGE ERROR: choose --pre-truncate or --post-truncate");
+            exit(-1);
+        }
+        if (cfg->use_mapio || cfg->use_stdio) {
+            test_print_once(cfg,
+                "USAGE ERROR: pre/post-truncate incompatible with "
+                "[--mapio, --stdio]");
+            exit(-1);
+        }
+    }
     if (cfg->use_aio &&
         (cfg->use_mapio || cfg->use_mpiio || cfg->use_prdwr
          || cfg->use_stdio || cfg->use_vecio)) {

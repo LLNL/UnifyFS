@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -41,6 +41,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 // common headers
 #include "arraylist.h"
@@ -49,15 +50,10 @@
 #include "unifyfs_logio.h"
 #include "unifyfs_meta.h"
 #include "unifyfs_shm.h"
+#include "unifyfs_fops.h"
 
 #include <margo.h>
 #include <pthread.h>
-
-#if defined(UNIFYFSD_USE_MPI)
-# include <mpi.h>
-#endif
-
-
 
 /* Some global variables/structures used throughout the server code */
 
@@ -79,6 +75,7 @@ typedef struct {
 extern server_info_t* glb_servers; /* array of server info structs */
 extern size_t glb_num_servers; /* number of entries in glb_servers array */
 
+extern struct unifyfs_inode_tree* global_inode_tree; /* global inode tree */
 
 /* defines commands for messages sent to service manager threads */
 typedef enum {
@@ -101,6 +98,7 @@ typedef struct {
     size_t log_offset;  /* remote log offset */
     int log_app_id;     /* remote log application id */
     int log_client_id;  /* remote log client id */
+    int rank;           /* remote server rank who holds data */
 } chunk_read_req_t;
 
 typedef struct {

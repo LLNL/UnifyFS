@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2018, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2018, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -15,17 +15,29 @@
 #ifndef UNIFYFS_META_H
 #define UNIFYFS_META_H
 
+#include <errno.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
 
 #include "unifyfs_const.h"
+#include "unifyfs_log.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+
+/* extent slice size used for metadata */
+extern size_t meta_slice_sz;
+
+/* calculate number of slices in an extent given by start offset and length */
+size_t meta_num_slices(size_t offset, size_t length);
 
 /* structure used to detect clients/servers colocated on a host */
 typedef struct {
@@ -51,8 +63,11 @@ typedef struct {
 
 /* UnifyFS file attributes */
 typedef struct {
+    char* filename;
     int gfid;
-    char filename[UNIFYFS_MAX_FILENAME];
+
+    /* Set when the file is laminated */
+    int is_laminated;
 
     /* essential stat fields */
     uint32_t mode;   /* st_mode bits */
@@ -62,9 +77,6 @@ typedef struct {
     struct timespec atime;
     struct timespec mtime;
     struct timespec ctime;
-
-    /* Set when the file is laminated */
-    uint32_t is_laminated;
 } unifyfs_file_attr_t;
 
 enum {
@@ -73,6 +85,117 @@ enum {
     UNIFYFS_STAT_DEFAULT_FILE_MODE = S_IFREG | 0644,
     UNIFYFS_STAT_DEFAULT_DIR_MODE = S_IFDIR | 0755,
 };
+
+static inline
+int unifyfs_file_attr_set_invalid(unifyfs_file_attr_t* attr)
+{
+    if (!attr) {
+        return EINVAL;
+    }
+
+    memset(attr, 0, sizeof(*attr));
+    attr->filename = NULL;
+    attr->gfid = -1;
+    attr->is_laminated = -1;
+    attr->mode = -1;
+    attr->uid = -1;
+    attr->gid = -1;
+    attr->size = (uint64_t) -1;
+    attr->atime.tv_sec = (uint64_t) -1;
+    attr->mtime.tv_sec = (uint64_t) -1;
+    attr->ctime.tv_sec = (uint64_t) -1;
+
+    return 0;
+}
+
+static inline
+void debug_print_file_attr(unifyfs_file_attr_t* attr)
+{
+    if (!attr) {
+        return;
+    }
+    LOGDBG("fileattr(%p) - gfid=%d filename=%s",
+           attr, attr->gfid, attr->filename);
+    LOGDBG("             - sz=%zu mode=%o uid=%d gid=%d",
+           (size_t)attr->size, attr->mode, attr->uid, attr->gid);
+    LOGDBG("             - laminated=%d ctime=%d.%09ld",
+           attr->is_laminated, (int)attr->ctime.tv_sec, attr->ctime.tv_nsec);
+}
+
+/*
+ * updates @dst with new values from @src.
+ * ignores fields from @src with negative values.
+ */
+static inline
+int unifyfs_file_attr_update(unifyfs_file_attr_t* dst,
+                             unifyfs_file_attr_t* src)
+{
+    if (!dst || !src) {
+        return EINVAL;
+    }
+
+    if (dst->gfid != src->gfid) {
+        return EINVAL;
+    }
+
+    LOGDBG("updating attributes for gfid=%d", dst->gfid);
+
+    /* update fields only with >=0 values */
+    if (src->mode >= 0) {
+        LOGDBG("setting mode to %o", src->mode);
+        dst->mode = src->mode;
+    }
+
+    if (src->uid >= 0) {
+        dst->uid = src->uid;
+    }
+
+    if (src->gid >= 0) {
+        dst->gid = src->gid;
+    }
+
+#if 0
+    /* this function is currently used in the server context, when
+     * the server receives attributes from client. the file size should be
+     * maintained by the server, so we skip updating the size.
+     */
+    if (src->size != (uint64_t) -1) {
+        LOGDBG("setting attr.size to %" PRIu64, src->size);
+        dst->size = src->size;
+    }
+#endif
+
+    if (src->atime.tv_sec != (uint64_t) -1) {
+        LOGDBG("setting attr.atime to %d.%09ld",
+               (int)src->atime.tv_sec, src->atime.tv_nsec);
+        dst->atime = src->atime;
+    }
+
+    if (src->mtime.tv_sec != (uint64_t) -1) {
+        LOGDBG("setting attr.mtime to %d.%09ld",
+               (int)src->mtime.tv_sec, src->mtime.tv_nsec);
+        dst->mtime = src->mtime;
+    }
+
+    if (src->ctime.tv_sec != (uint64_t) -1) {
+        LOGDBG("setting attr.ctime to %d.%09ld",
+               (int)src->ctime.tv_sec, src->ctime.tv_nsec);
+        dst->ctime = src->ctime;
+    }
+
+    if (src->is_laminated >= 0) {
+        LOGDBG("setting attr.is_laminated to %d", src->is_laminated);
+        dst->is_laminated = src->is_laminated;
+    }
+
+    /* FIXME: is this necessary? */
+    if (src->filename && !strcmp(dst->filename, src->filename)) {
+        LOGDBG("setting attr.filename to %s", src->filename);
+        dst->filename = strdup(src->filename);
+    }
+
+    return 0;
+}
 
 static inline
 void unifyfs_file_attr_to_stat(unifyfs_file_attr_t* fattr, struct stat* sb)
@@ -85,6 +208,9 @@ void unifyfs_file_attr_to_stat(unifyfs_file_attr_t* fattr, struct stat* sb)
         sb->st_gid = fattr->gid;
         sb->st_rdev = UNIFYFS_STAT_DEFAULT_DEV;
         sb->st_size = fattr->size;
+
+        /* TODO: use cfg.logio_chunk_size here for st_blksize
+         *       and report acutal chunks allocated for st_blocks */
         sb->st_blksize = UNIFYFS_STAT_DEFAULT_BLKSIZE;
         sb->st_blocks = fattr->size / UNIFYFS_STAT_DEFAULT_BLKSIZE;
         if (fattr->size % UNIFYFS_STAT_DEFAULT_BLKSIZE > 0) {

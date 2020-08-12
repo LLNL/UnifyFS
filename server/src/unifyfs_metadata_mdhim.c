@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017-2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -36,12 +36,11 @@
 
 // server headers
 #include "unifyfs_global.h"
-#include "unifyfs_metadata.h"
+#include "unifyfs_metadata_mdhim.h"
 
 // MDHIM headers
 #include "indexes.h"
 #include "mdhim.h"
-
 
 struct mdhim_t* md;
 
@@ -52,23 +51,6 @@ struct mdhim_t* md;
 #define IDX_FILE_ATTR    (1)
 struct index_t* unifyfs_indexes[2];
 
-size_t meta_slice_sz;
-
-void debug_log_key_val(const char* ctx,
-                       unifyfs_key_t* key,
-                       unifyfs_val_t* val)
-{
-    if ((key != NULL) && (val != NULL)) {
-        LOGDBG("@%s - key(gfid=%d, offset=%lu), "
-               "val(del=%d, len=%lu, addr=%lu, app=%d, rank=%d)",
-               ctx, key->gfid, key->offset,
-               val->delegator_rank, val->len, val->addr,
-               val->app_id, val->rank);
-    } else if (key != NULL) {
-        LOGDBG("@%s - key(gfid=%d, offset=%lu)",
-               ctx, key->gfid, key->offset);
-    }
-}
 
 int unifyfs_key_compare(unifyfs_key_t* a, unifyfs_key_t* b)
 {
@@ -82,6 +64,33 @@ int unifyfs_key_compare(unifyfs_key_t* a, unifyfs_key_t* b)
             return 1;
         }
     } else if (a->gfid < b->gfid) {
+        return -1;
+    } else {
+        return 1;
+    }
+}
+
+/* order keyvals by gfid, then host delegator rank */
+int unifyfs_keyval_compare(const void* a, const void* b)
+{
+    assert((NULL != a) && (NULL != b));
+
+    const unifyfs_keyval_t* kv_a = a;
+    const unifyfs_keyval_t* kv_b = b;
+
+    int gfid_a = kv_a->key.gfid;
+    int gfid_b = kv_b->key.gfid;
+    if (gfid_a == gfid_b) {
+        int rank_a = kv_a->val.delegator_rank;
+        int rank_b = kv_b->val.delegator_rank;
+        if (rank_a == rank_b) {
+            return 0;
+        } else if (rank_a < rank_b) {
+            return -1;
+        } else {
+            return 1;
+        }
+    } else if (gfid_a < gfid_b) {
         return -1;
     } else {
         return 1;

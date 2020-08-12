@@ -39,7 +39,6 @@ int creat64_test(char* unifyfs_root)
     /* Create a random file name at the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifyfs_root);
 
-    skip(1, 2, "remove when UNIFYFS(create64) has been implemented");
     /* Verify we can create a non-existent file. */
     errno = 0;
     fd = creat64(path, mode);
@@ -55,8 +54,6 @@ int creat64_test(char* unifyfs_root)
        path, fd, strerror(errno));
 
     ok(close(fd) != -1, "close() worked");
-
-    end_skip;
 
     diag("Finished UNIFYFS_WRAP(creat64) tests");
 
