@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -166,6 +166,12 @@ size_t generate_read_reqs(test_cfg* cfg, char* dstbuf,
  *
  *    cfg.io_check - when enabled, lipsum data is used when writing
  *    the file and verified when reading.
+ *
+ *    cfg.pre_wr_truncate - when enabled, truncate the file to specified
+ *    size before writing.
+ *
+ *    cfg.post_wr_truncate - when enabled, truncate the file to specified
+ *    size after writing.
  */
 
 int main(int argc, char* argv[])
@@ -173,7 +179,7 @@ int main(int argc, char* argv[])
     char* wr_buf;
     char* rd_buf;
     char* target_file;
-    struct aiocb* reqs;
+    struct aiocb* reqs = NULL;
     size_t num_reqs = 0;
     int rc;
 
@@ -229,6 +235,10 @@ int main(int argc, char* argv[])
     timer_stop_barrier(cfg, &time_create);
     test_print_verbose_once(cfg, "DEBUG: finished create");
 
+    if (cfg->pre_wr_trunc) {
+        write_truncate(cfg);
+    }
+
     // generate write requests
     test_print_verbose_once(cfg, "DEBUG: generating write requests");
     wr_buf = calloc(test_config.n_blocks, test_config.block_sz);
@@ -263,19 +273,21 @@ int main(int argc, char* argv[])
     timer_stop_barrier(cfg, &time_sync);
     test_print_verbose_once(cfg, "DEBUG: finished sync");
 
-    // close file
-
     // stat file pre-laminate
     timer_start_barrier(cfg, &time_stat_pre);
     stat_file(cfg, target_file);
     timer_stop_barrier(cfg, &time_stat_pre);
-    test_print_verbose_once(cfg, "DEBUG: finished stat pre");
+    test_print_verbose_once(cfg, "DEBUG: finished stat pre-laminate");
 
-    // stat file pre-laminate (again)
-    timer_start_barrier(cfg, &time_stat_pre2);
-    stat_file(cfg, target_file);
-    timer_stop_barrier(cfg, &time_stat_pre2);
-    test_print_verbose_once(cfg, "DEBUG: finished stat pre2");
+    if (cfg->post_wr_trunc) {
+        write_truncate(cfg);
+
+        // stat file post-truncate
+        timer_start_barrier(cfg, &time_stat_pre2);
+        stat_file(cfg, target_file);
+        timer_stop_barrier(cfg, &time_stat_pre2);
+        test_print_verbose_once(cfg, "DEBUG: finished stat pre2 (post trunc)");
+    }
 
     // laminate
     timer_start_barrier(cfg, &time_laminate);
@@ -288,16 +300,14 @@ int main(int argc, char* argv[])
 
     // stat file post-laminate
     timer_start_barrier(cfg, &time_stat_post);
-    stat_file(cfg, target_file);
+    stat_cmd(cfg, target_file);
     timer_stop_barrier(cfg, &time_stat_post);
-    test_print_verbose_once(cfg, "DEBUG: finished stat post");
+    test_print_verbose_once(cfg, "DEBUG: finished stat post-laminate");
 
     // post-write cleanup
     free(wr_buf);
     free(reqs);
     reqs = NULL;
-
-    // open file
 
     // generate read requests
     test_print_verbose_once(cfg, "DEBUG: generating read requests");

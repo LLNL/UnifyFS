@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -10,7 +10,9 @@
  * This is the license for UnifyFS.
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
- *
+ */
+
+/*
  * Test doing lots of writes to many open files and verify the data is written
  * correctly.  This can be used to exercise bugs.
  *
@@ -22,6 +24,7 @@
  * 4. Read them back, and verify the portions that did get written match the
  *    data from bigbuf[].
  */
+
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>

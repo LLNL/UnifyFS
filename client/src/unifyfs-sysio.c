@@ -539,18 +539,10 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
         /* get file id for path name */
         int fid = unifyfs_get_fid_from_path(upath);
         if (fid >= 0) {
-            /* before we truncate, sync any data cached this file id */
-            int ret = unifyfs_fid_sync(fid);
-            if (ret != UNIFYFS_SUCCESS) {
-                /* sync failed for some reason, set errno and return error */
-                errno = unifyfs_rc_errno(ret);
-                return -1;
-            }
-
             /* got the file locally, use fid_truncate the file */
             int rc = unifyfs_fid_truncate(fid, length);
             if (rc != UNIFYFS_SUCCESS) {
-                errno = EIO;
+                errno = unifyfs_rc_errno(rc);
                 return -1;
             }
         } else {
@@ -559,7 +551,7 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
             int rc = invoke_client_truncate_rpc(gfid, length);
             if (rc != UNIFYFS_SUCCESS) {
                 LOGDBG("truncate rpc failed %s in UNIFYFS", upath);
-                errno = EIO;
+                errno = unifyfs_rc_errno(rc);
                 return -1;
             }
         }
@@ -697,7 +689,7 @@ static int __stat(const char* path, struct stat* buf)
     if (fid != -1) {
         int sync_rc = unifyfs_fid_sync(fid);
         if (sync_rc != UNIFYFS_SUCCESS) {
-            errno = EIO;
+            errno = unifyfs_rc_errno(sync_rc);
             return -1;
         }
     }
@@ -710,9 +702,10 @@ static int __stat(const char* path, struct stat* buf)
 
     /* get stat information for file */
     unifyfs_file_attr_t fattr;
+    memset(&fattr, 0, sizeof(fattr));
     int ret = unifyfs_get_meta_with_size(gfid, &fattr);
     if (ret != UNIFYFS_SUCCESS) {
-        errno = EIO;
+        errno = unifyfs_rc_errno(ret);
         return -1;
     }
 
@@ -911,8 +904,7 @@ int UNIFYFS_WRAP(fstatfs)(int fd, struct statfs* fsbuf)
 /*
  * Read 'count' bytes info 'buf' from file starting at offset 'pos'.
  *
- * Returns number of bytes actually read, or -1 on error, in which
- * case errno will be set.
+ * Returns success or error code.
  */
 int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* nread)
 {
@@ -959,17 +951,17 @@ int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* nread)
     req.offset  = (size_t) pos;
     req.length  = count;
     req.nread   = 0;
-    req.errcode = UNIFYFS_SUCCESS;
+    req.errcode = EINPROGRESS;
     req.buf     = buf;
 
     /* execute read operation */
     int ret = unifyfs_gfid_read_reqs(&req, 1);
     if (ret != UNIFYFS_SUCCESS) {
         /* failed to issue read operation */
-        return EIO;
+        return ret;
     } else if (req.errcode != UNIFYFS_SUCCESS) {
         /* read executed, but failed */
-        return EIO;
+        return req.errcode;
     }
 
     /* success, get number of bytes read from read request field */
@@ -985,7 +977,7 @@ int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* nread)
  * is ignored.  Fills any gaps with zeros
  */
 int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count,
-    size_t* nwritten)
+                     size_t* nwritten)
 {
     /* assume we'll fail, set bytes written to 0 as a clue */
     *nwritten = 0;
@@ -1019,43 +1011,50 @@ int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count,
     return write_rc;
 }
 
-int UNIFYFS_WRAP(creat)(const char* path, mode_t mode)
+static int unifyfs_create(char* upath, mode_t mode)
 {
     /* equivalent to open(path, O_WRONLY|O_CREAT|O_TRUNC, mode) */
 
+    /* create the file */
+    int fid;
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+    off_t pos;
+    int rc = unifyfs_fid_open(upath, flags, mode, &fid, &pos);
+    if (rc != UNIFYFS_SUCCESS) {
+        errno = unifyfs_rc_errno(rc);
+        return -1;
+    }
+
+    /* allocate a free file descriptor value */
+    int fd = unifyfs_stack_pop(unifyfs_fd_stack);
+    if (fd < 0) {
+        /* ran out of file descriptors */
+        errno = EMFILE;
+        return -1;
+    }
+
+     /* set file id and file pointer, flags include O_WRONLY */
+    unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(fd);
+    filedesc->fid   = fid;
+    filedesc->pos   = pos;
+    filedesc->read  = 0;
+    filedesc->write = 1;
+
+
+    /* don't conflict with active system fds that range from 0 - (fd_limit) */
+    int ret = fd + unifyfs_fd_limit;
+    LOGDBG("using fds (internal=%d, external=%d) for fid %d file %s",
+           fd, ret, fid, upath);
+    return ret;
+}
+
+int UNIFYFS_WRAP(creat)(const char* path, mode_t mode)
+{
     /* check whether we should intercept this path */
     char upath[UNIFYFS_MAX_FILENAME];
     if (unifyfs_intercept_path(path, upath)) {
         /* TODO: handle relative paths using current working directory */
-
-        /* create the file */
-        int fid;
-        off_t pos;
-        int rc = unifyfs_fid_open(upath, O_WRONLY | O_CREAT | O_TRUNC, mode, &fid, &pos);
-        if (rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_rc_errno(rc);
-            return -1;
-        }
-
-        /* allocate a free file descriptor value */
-        int fd = unifyfs_stack_pop(unifyfs_fd_stack);
-        if (fd < 0) {
-            /* ran out of file descriptors */
-            errno = EMFILE;
-            return -1;
-        }
-
-        /* set file id and file pointer, flags include O_WRONLY */
-        unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(fd);
-        filedesc->fid   = fid;
-        filedesc->pos   = pos;
-        filedesc->read  = 0;
-        filedesc->write = 1;
-        LOGDBG("UNIFYFS_open generated fd %d for file %s", fd, upath);
-
-        /* don't conflict with active system fds that range from 0 - (fd_limit) */
-        int ret = fd + unifyfs_fd_limit;
-        return ret;
+        return unifyfs_create(upath, mode);
     } else {
         MAP_OR_FAIL(creat);
         int ret = UNIFYFS_REAL(creat)(path, mode);
@@ -1068,11 +1067,8 @@ int UNIFYFS_WRAP(creat64)(const char* path, mode_t mode)
     /* check whether we should intercept this path */
     char upath[UNIFYFS_MAX_FILENAME];
     if (unifyfs_intercept_path(path, upath)) {
-        /* ERROR: fn not yet supported */
-        fprintf(stderr, "Function not yet supported @ %s:%d\n",
-                __FILE__, __LINE__);
-        errno = ENOTSUP;
-        return -1;
+        /* TODO: handle relative paths using current working directory */
+        return unifyfs_create(upath, mode);
     } else {
         MAP_OR_FAIL(creat64);
         int ret = UNIFYFS_REAL(creat64)(path, mode);
@@ -1122,11 +1118,12 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
                           || ((flags & O_RDWR) == O_RDWR);
         filedesc->write = ((flags & O_WRONLY) == O_WRONLY)
                           || ((flags & O_RDWR) == O_RDWR);
-        filedesc->append = ((flags & O_APPEND));
-        LOGDBG("UNIFYFS_open generated fd %d for file %s", fd, upath);
+        filedesc->append = (flags & O_APPEND);
 
         /* don't conflict with active system fds that range from 0 - (fd_limit) */
         ret = fd + unifyfs_fd_limit;
+        LOGDBG("using fds (internal=%d, external=%d) for fid %d file %s",
+               fd, ret, fid, upath);
         return ret;
     } else {
         MAP_OR_FAIL(open);
@@ -1264,6 +1261,7 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
         case SEEK_END:
             /* seek to EOF + offset */
             logical_eof = unifyfs_fid_logical_size(fid);
+            LOGDBG("fid=%d EOF is offset %zu", fid, (size_t)logical_eof);
             if (logical_eof + offset < 0) {
                 /* offset is negative and will result in negative position */
                 errno = EINVAL;
@@ -1274,6 +1272,7 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
         case SEEK_DATA:
             /* Using fallback approach: always return offset */
             logical_eof = unifyfs_fid_logical_size(fid);
+            LOGDBG("fid=%d EOF is offset %zu", fid, (size_t)logical_eof);
             if (offset < 0 || offset > logical_eof) {
                 /* negative offset and offset beyond EOF are invalid */
                 errno = ENXIO;
@@ -1284,6 +1283,7 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
         case SEEK_HOLE:
             /* Using fallback approach: always return offset for EOF */
             logical_eof = unifyfs_fid_logical_size(fid);
+            LOGDBG("fid=%d EOF is offset %zu", fid, (size_t)logical_eof);
             if (offset < 0 || offset > logical_eof) {
                 /* negative offset and offset beyond EOF are invalid */
                 errno = ENXIO;
@@ -1550,6 +1550,11 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
     for (i = 0; i < nitems; i++) {
         cbp = aiocb_list[i];
         fd = cbp->aio_fildes;
+
+        /* LOGDBG("aiocb(fd=%d, op=%d, count=%zu, offset=%zu, buf=%p)",
+         *      cbp->aio_fildes, cbp->aio_lio_opcode, cbp->aio_nbytes,
+         *      cbp->aio_offset, cbp->aio_buf); */
+
         switch (cbp->aio_lio_opcode) {
         case LIO_WRITE: {
             ssize_t wret;
@@ -1598,6 +1603,8 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
             break;
         }
         default: // LIO_NOP
+            LOGDBG("lio_vec[%d] - unexpected LIO op %d",
+                   i, cbp->aio_lio_opcode);
             break;
         }
     }
@@ -1606,7 +1613,7 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
         rc = unifyfs_gfid_read_reqs(reqs, reqcnt);
         if (rc != UNIFYFS_SUCCESS) {
             /* error reading data */
-            ret = -1;
+            ret = rc;
         }
 
         /* update aiocb fields to record error status and return value */
@@ -1614,7 +1621,8 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
             for (ndx = 0; ndx < nitems; ndx++) {
                 cbp = aiocb_list[ndx];
                 if (cbp == reqs[i].aiocbp) {
-                    AIOCB_ERROR_CODE(cbp) = reqs[i].errcode;
+                    AIOCB_ERROR_CODE(cbp) =
+                        unifyfs_rc_errno((unifyfs_rc)(reqs[i].errcode));
                     if (0 == reqs[i].errcode) {
                         AIOCB_RETURN_VAL(cbp) = reqs[i].length;
                     }
@@ -1626,8 +1634,9 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
 
     free(reqs);
 
-    if (-1 == ret) {
-        errno = EIO;
+    if (ret) {
+        errno = unifyfs_rc_errno(ret);
+        ret = -1;
     }
     return ret;
 }
@@ -1658,7 +1667,7 @@ ssize_t UNIFYFS_WRAP(pread)(int fd, void* buf, size_t count, off_t offset)
         req.offset  = offset;
         req.length  = count;
         req.nread   = 0;
-        req.errcode = UNIFYFS_SUCCESS;
+        req.errcode = EINPROGRESS;
         req.buf     = buf;
 
         /* execute read operation */
@@ -1666,11 +1675,11 @@ ssize_t UNIFYFS_WRAP(pread)(int fd, void* buf, size_t count, off_t offset)
         int ret = unifyfs_gfid_read_reqs(&req, 1);
         if (ret != UNIFYFS_SUCCESS) {
             /* error reading data */
-            errno = EIO;
+            errno = unifyfs_rc_errno(ret);
             retcount = -1;
         } else if (req.errcode != UNIFYFS_SUCCESS) {
             /* error reading data */
-            errno = EIO;
+            errno = unifyfs_rc_errno((unifyfs_rc)req.errcode);
             retcount = -1;
         } else {
             /* read succeeded, get number of bytes from nread field */
@@ -1716,6 +1725,8 @@ ssize_t UNIFYFS_WRAP(pwrite)(int fd, const void* buf, size_t count,
 
         /* write data to file */
         size_t bytes;
+        LOGDBG("pwrite - fd=%d offset=%zu count=%zu",
+               fd, (size_t)offset, count);
         int write_rc = unifyfs_fd_write(fd, offset, buf, count, &bytes);
         if (write_rc != UNIFYFS_SUCCESS) {
             errno = unifyfs_rc_errno(write_rc);
@@ -1823,18 +1834,10 @@ int UNIFYFS_WRAP(ftruncate)(int fd, off_t length)
             return -1;
         }
 
-        /* before we truncate, sync any data cached this file id */
-        int ret = unifyfs_fid_sync(fid);
-        if (ret != UNIFYFS_SUCCESS) {
-            /* sync failed for some reason, set errno and return error */
-            errno = unifyfs_rc_errno(ret);
-            return -1;
-        }
-
         /* truncate the file */
         int rc = unifyfs_fid_truncate(fid, length);
         if (rc != UNIFYFS_SUCCESS) {
-            errno = EIO;
+            errno = unifyfs_rc_errno(rc);
             return -1;
         }
 
@@ -2082,7 +2085,7 @@ int UNIFYFS_WRAP(close)(int fd)
         /* close the file id */
         int close_rc = unifyfs_fid_close(fid);
         if (close_rc != UNIFYFS_SUCCESS) {
-            errno = EIO;
+            errno = unifyfs_rc_errno(close_rc);
             return -1;
         }
 
@@ -2129,9 +2132,6 @@ static int __chmod(int fid, mode_t mode)
      * get the global file id */
     int gfid = unifyfs_gfid_from_fid(fid);
 
-    /* TODO: need to fetch global metadata in case
-     * another process has changed it */
-
     /*
      * If the chmod clears all the existing write bits, then it's a laminate.
      *
@@ -2143,8 +2143,8 @@ static int __chmod(int fid, mode_t mode)
         /* We're laminating. */
         ret = invoke_client_laminate_rpc(gfid);
         if (ret) {
-            LOGERR("chmod: couldn't get the global file size on laminate");
-            errno = EIO;
+            LOGERR("laminate failed");
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
     }
@@ -2154,11 +2154,12 @@ static int __chmod(int fid, mode_t mode)
     meta->mode = meta->mode | mode;
 
     /* update the global meta data to reflect new permissions */
-    ret = unifyfs_set_global_file_meta_from_fid(fid, 0);
+    unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_CHMOD;
+    ret = unifyfs_set_global_file_meta_from_fid(fid, op);
     if (ret) {
         LOGERR("chmod: can't set global meta entry for %s (fid:%d)",
                path, fid);
-        errno = EIO;
+        errno = unifyfs_rc_errno(ret);
         return -1;
     }
 
@@ -2168,9 +2169,12 @@ static int __chmod(int fid, mode_t mode)
     if (ret) {
         LOGERR("chmod: can't get global meta entry for %s (fid:%d)",
                path, fid);
-        errno = EIO;
+        errno = unifyfs_rc_errno(ret);
         return -1;
     }
+
+    LOGDBG("attributes from global metadata");
+    debug_print_file_attr(&attr);
 
     /* update global size of file from global metadata */
     unifyfs_fid_update_file_meta(fid, &attr);

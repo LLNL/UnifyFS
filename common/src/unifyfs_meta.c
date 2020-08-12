@@ -18,6 +18,18 @@
 
 #include "unifyfs_meta.h"
 
+/* extent slice size used for metadata */
+size_t meta_slice_sz = META_DEFAULT_RANGE_SZ;
+
+/* calculate number of slices in an extent given by start offset and length */
+size_t meta_num_slices(size_t offset, size_t length)
+{
+    size_t start = offset / meta_slice_sz;
+    size_t end   = (offset + length - 1) / meta_slice_sz;
+    size_t count = end - start + 1;
+    return count;
+}
+
 /**
  * Hash a file path to a 64-bit unsigned integer using MD5
  * @param path absolute file path

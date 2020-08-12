@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -91,7 +91,6 @@
     UNIFYFS_CFG_CLI(server, init_timeout, INT, UNIFYFS_DEFAULT_INIT_TIMEOUT, "timeout of waiting for server initialization", NULL, 't', "timeout in seconds to wait for servers to be ready for clients") \
     UNIFYFS_CFG(server, max_app_clients, INT, MAX_APP_CLIENTS, "maximum number of clients per application", NULL) \
     UNIFYFS_CFG_CLI(sharedfs, dir, STRING, NULLSTRING, "shared file system directory", configurator_directory_check, 'S', "specify full path to directory to contain server shared files") \
-
 
 #ifdef __cplusplus
 extern "C" {

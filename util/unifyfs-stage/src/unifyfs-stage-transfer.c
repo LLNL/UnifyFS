@@ -78,7 +78,7 @@ static int md5_checksum(const char* path, unsigned char* digest)
 
 out:
     /* MD5_xx returns 1 for success */
-    ret = ret == 1 ? 0 : EIO;
+    ret = (ret == 1 ? 0 : EIO);
     close(fd);
 
     return ret;

@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017-2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -21,15 +21,31 @@
 // server headers
 #include "unifyfs_global.h"
 #include "margo_server.h"
+#include "na_config.h" // from mercury include lib
 
 // global variables
 ServerRpcContext_t* unifyfsd_rpc_context;
 bool margo_use_tcp = true;
 bool margo_lazy_connect; // = false
+int  margo_client_server_pool_sz = 4;
+int  margo_server_server_pool_sz = 4;
+int  margo_use_progress_thread = 1;
 
+#if defined(NA_HAS_SM)
 static const char* PROTOCOL_MARGO_SHM   = "na+sm://";
-static const char* PROTOCOL_MARGO_VERBS = "ofi+verbs://";
-static const char* PROTOCOL_MARGO_TCP   = "bmi+tcp://";
+#else
+#error Required Mercury NA shared memory plugin not found (please enable 'SM')
+#endif
+
+#if defined(NA_HAS_BMI)
+static const char* PROTOCOL_MARGO_TCP = "bmi+tcp://";
+static const char* PROTOCOL_MARGO_RMA = "bmi+tcp://";
+#elif defined(NA_HAS_OFI)
+static const char* PROTOCOL_MARGO_TCP = "ofi+tcp://";
+static const char* PROTOCOL_MARGO_RMA = "ofi+verbs://";
+#else
+#error No supported Mercury NA plugin found (please use one of: 'BMI', 'OFI')
+#endif
 
 /* setup_remote_target - Initializes the server-server margo target */
 static margo_instance_id setup_remote_target(void)
@@ -45,10 +61,11 @@ static margo_instance_id setup_remote_target(void)
     if (margo_use_tcp) {
         margo_protocol = PROTOCOL_MARGO_TCP;
     } else {
-        margo_protocol = PROTOCOL_MARGO_VERBS;
+        margo_protocol = PROTOCOL_MARGO_RMA;
     }
 
-    mid = margo_init(margo_protocol, MARGO_SERVER_MODE, 1, 4);
+    mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
+                     margo_use_progress_thread, margo_server_server_pool_sz);
     if (mid == MARGO_INSTANCE_NULL) {
         LOGERR("margo_init(%s)", margo_protocol);
         return mid;
@@ -82,20 +99,10 @@ static margo_instance_id setup_remote_target(void)
 /* register server-server RPCs */
 static void register_server_server_rpcs(margo_instance_id mid)
 {
-    unifyfsd_rpc_context->rpcs.hello_id =
-        MARGO_REGISTER(mid, "server_hello_rpc",
-                       server_hello_in_t, server_hello_out_t,
-                       server_hello_rpc);
-
     unifyfsd_rpc_context->rpcs.server_pid_id =
         MARGO_REGISTER(mid, "server_pid_rpc",
                        server_pid_in_t, server_pid_out_t,
-                       server_pid_handle_rpc);
-
-    unifyfsd_rpc_context->rpcs.request_id =
-        MARGO_REGISTER(mid, "server_request_rpc",
-                       server_request_in_t, server_request_out_t,
-                       server_request_rpc);
+                       server_pid_rpc);
 
     unifyfsd_rpc_context->rpcs.chunk_read_request_id =
         MARGO_REGISTER(mid, "chunk_read_request_rpc",
@@ -106,6 +113,66 @@ static void register_server_server_rpcs(margo_instance_id mid)
         MARGO_REGISTER(mid, "chunk_read_response_rpc",
                        chunk_read_response_in_t, chunk_read_response_out_t,
                        chunk_read_response_rpc);
+
+    unifyfsd_rpc_context->rpcs.extent_add_id =
+        MARGO_REGISTER(mid, "add_extents_rpc",
+                       add_extents_in_t, add_extents_out_t,
+                       add_extents_rpc);
+
+    unifyfsd_rpc_context->rpcs.extent_bcast_id =
+        MARGO_REGISTER(mid, "extent_bcast_rpc",
+                       extent_bcast_in_t, extent_bcast_out_t,
+                       extent_bcast_rpc);
+
+    unifyfsd_rpc_context->rpcs.extent_lookup_id =
+        MARGO_REGISTER(mid, "find_extents_rpc",
+                       find_extents_in_t, find_extents_out_t,
+                       find_extents_rpc);
+
+    unifyfsd_rpc_context->rpcs.fileattr_bcast_id =
+        MARGO_REGISTER(mid, "fileattr_bcast_rpc",
+                       fileattr_bcast_in_t, fileattr_bcast_out_t,
+                       fileattr_bcast_rpc);
+
+    unifyfsd_rpc_context->rpcs.filesize_id =
+        MARGO_REGISTER(mid, "filesize_rpc",
+                       filesize_in_t, filesize_out_t,
+                       filesize_rpc);
+
+    unifyfsd_rpc_context->rpcs.laminate_id =
+        MARGO_REGISTER(mid, "laminate_rpc",
+                       laminate_in_t, laminate_out_t,
+                       laminate_rpc);
+
+    unifyfsd_rpc_context->rpcs.laminate_bcast_id =
+        MARGO_REGISTER(mid, "laminate_bcast_rpc",
+                       laminate_bcast_in_t, laminate_bcast_out_t,
+                       laminate_bcast_rpc);
+
+    unifyfsd_rpc_context->rpcs.metaget_id =
+        MARGO_REGISTER(mid, "metaget_rpc",
+                       metaget_in_t, metaget_out_t,
+                       metaget_rpc);
+
+    unifyfsd_rpc_context->rpcs.metaset_id =
+        MARGO_REGISTER(mid, "metaset_rpc",
+                       metaset_in_t, metaset_out_t,
+                       metaset_rpc);
+
+    unifyfsd_rpc_context->rpcs.truncate_id =
+        MARGO_REGISTER(mid, "truncate_rpc",
+                       truncate_in_t, truncate_out_t,
+                       truncate_rpc);
+
+    unifyfsd_rpc_context->rpcs.truncate_bcast_id =
+        MARGO_REGISTER(mid, "truncate_bcast_rpc",
+                       truncate_bcast_in_t, truncate_bcast_out_t,
+                       truncate_bcast_rpc);
+
+    unifyfsd_rpc_context->rpcs.unlink_bcast_id =
+        MARGO_REGISTER(mid, "unlink_bcast_rpc",
+                       unlink_bcast_in_t, unlink_bcast_out_t,
+                       unlink_bcast_rpc);
 }
 
 /* setup_local_target - Initializes the client-server margo target */
@@ -118,7 +185,8 @@ static margo_instance_id setup_local_target(void)
     hg_size_t self_string_sz = sizeof(self_string);
     margo_instance_id mid;
 
-    mid = margo_init(PROTOCOL_MARGO_SHM, MARGO_SERVER_MODE, 1, -1);
+    mid = margo_init(PROTOCOL_MARGO_SHM, MARGO_SERVER_MODE,
+                     margo_use_progress_thread, margo_client_server_pool_sz);
     if (mid == MARGO_INSTANCE_NULL) {
         LOGERR("margo_init(%s)", PROTOCOL_MARGO_SHM);
         return mid;
@@ -172,9 +240,9 @@ static void register_client_server_rpcs(margo_instance_id mid)
                    unifyfs_metaset_in_t, unifyfs_metaset_out_t,
                    unifyfs_metaset_rpc);
 
-    MARGO_REGISTER(mid, "unifyfs_sync_rpc",
-                   unifyfs_sync_in_t, unifyfs_sync_out_t,
-                   unifyfs_sync_rpc);
+    MARGO_REGISTER(mid, "unifyfs_fsync_rpc",
+                   unifyfs_fsync_in_t, unifyfs_fsync_out_t,
+                   unifyfs_fsync_rpc);
 
     MARGO_REGISTER(mid, "unifyfs_filesize_rpc",
                    unifyfs_filesize_in_t, unifyfs_filesize_out_t,
@@ -214,13 +282,15 @@ int margo_server_rpc_init(void)
     if (NULL == unifyfsd_rpc_context) {
         /* create rpc server context */
         unifyfsd_rpc_context = calloc(1, sizeof(ServerRpcContext_t));
-        assert(unifyfsd_rpc_context);
+        if (NULL == unifyfsd_rpc_context) {
+            return ENOMEM;
+        }
     }
 
     margo_instance_id mid;
     mid = setup_local_target();
     if (mid == MARGO_INSTANCE_NULL) {
-        rc = UNIFYFS_FAILURE;
+        rc = UNIFYFS_ERROR_MARGO;
     } else {
         unifyfsd_rpc_context->shm_mid = mid;
         register_client_server_rpcs(mid);
@@ -228,7 +298,7 @@ int margo_server_rpc_init(void)
 
     mid = setup_remote_target();
     if (mid == MARGO_INSTANCE_NULL) {
-        rc = UNIFYFS_FAILURE;
+        rc = UNIFYFS_ERROR_MARGO;
     } else {
         unifyfsd_rpc_context->svr_mid = mid;
         register_server_server_rpcs(mid);

@@ -1,4 +1,6 @@
+if USE_MDHIM
 noinst_LIBRARIES = libmdhim.a
+endif
 
 libmdhim_a_SOURCES = Mlog2/mlog2.c \
                      Mlog2/mlog2.h \

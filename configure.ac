@@ -103,6 +103,15 @@ AS_IF([test "x$enable_pmi" = "xyes"],[
     AM_CONDITIONAL([USE_PMI2], [false])
 ])
 
+# MDHIM support build option
+AC_ARG_ENABLE([mdhim],[AS_HELP_STRING([--enable-mdhim],[Enable MDHIM build options.])])
+AS_IF([test "x$enable_mdhim" = "xyes"],[
+    AM_CONDITIONAL([USE_MDHIM], [true])
+    UNIFYFS_AC_LEVELDB
+],[
+    AM_CONDITIONAL([USE_MDHIM], [false])
+])
+
 AC_ARG_WITH(pkgconfigdir,
     [AS_HELP_STRING([--with-pkgconfigdir=DIR],[pkgconfig file in DIR @<:@LIBDIR/pkgconfig@:>@])],
             [pkgconfigdir=$withval],
@@ -153,15 +162,13 @@ AS_IF([test "$have_C_mpi" != "yes"],
     []
 )
 
-# look for leveldb library, sets LEVELDB_CFLAGS/LDFLAGS/LIBS
-UNIFYFS_AC_LEVELDB
-
 # look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
 UNIFYFS_AC_GOTCHA
 
 # look for spath library, sets SPATH_CFLAGS, SPATH_LDFLAGS, SPATH_LIBS
 UNIFYFS_AC_SPATH
 
+# look for margo library, sets MARGO_CFLAGS, MARGO_LIBS
 UNIFYFS_AC_MARGO
 
 # openssl for md5 checksum
@@ -214,7 +221,7 @@ CP_WRAPPERS+=",-wrap,chmod"
 CP_WRAPPERS+=",-wrap,fchmod"
 
 OLD_LIBS=$LIBS
-LIBS+="-lrt"
+LIBS+=" -lrt"
 AC_CHECK_FUNCS(lio_listio,[
     CP_WRAPPERS+=",-wrap,lio_listio"
 ], [])

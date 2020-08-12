@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -33,7 +33,7 @@
 #include "unifyfs_global.h"
 
 /* service manager pthread routine */
-void* sm_service_reads(void* ctx);
+void* service_manager_thread(void* ctx);
 
 /* initialize and launch service manager */
 int svcmgr_init(void);
@@ -50,6 +50,6 @@ int sm_issue_chunk_reads(int src_rank,
                          char* msg_buf);
 
 /* MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
-int invoke_chunk_read_response_rpc(remote_chunk_reads_t* rcr);
+int invoke_chunk_read_response_rpc(server_chunk_reads_t* scr);
 
 #endif // UNIFYFS_SERVICE_MANAGER_H

@@ -550,18 +550,15 @@ int unifyfs_fid_unlink(int fid);
 /* issue a set of read requests */
 int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count);
 
-int unifyfs_set_global_file_meta_from_fid(
-    int fid,
-    int create);
+int unifyfs_set_global_file_meta_from_fid(int fid,
+                                          unifyfs_file_attr_op_e op);
 
-int unifyfs_set_global_file_meta(
-    int gfid,
-    int create,
-    unifyfs_file_attr_t* gfattr);
+int unifyfs_set_global_file_meta(int gfid,
+                                 unifyfs_file_attr_op_e op,
+                                 unifyfs_file_attr_t* gfattr);
 
-int unifyfs_get_global_file_meta(
-    int gfid,
-    unifyfs_file_attr_t* gfattr);
+int unifyfs_get_global_file_meta(int gfid,
+                                 unifyfs_file_attr_t* gfattr);
 
 // These require types/structures defined above
 #include "unifyfs-fixed.h"

@@ -172,19 +172,24 @@ Here are some examples of libtap tests:
             ok(somefunc() == 42, "%s:%d somefunc() returns 42", __FILE__,
             __LINE__);
 
-    Also, note that ``errno`` is only set when an error occurs and is never set
-    back to ``0`` implicitly.
+    Also note that ``errno`` is only set when an error occurs and is never set
+    back to ``0`` implicitly by the system.
     When testing for a failure and using ``errno`` as part of the test,
-    resetting ``errno`` after the test will prevent subsequent tests from
-    appearing to error.
+    setting ``errno = 0`` before the test will ensure a previous test error
+    will not affect the current test. In the following example, we also
+    assign ``errno`` to another variable ``err`` for use in constructing the
+    test message. This is needed because the ``ok()`` macro may use system
+    calls that set ``errno``.
 
         .. code-block:: C
-            :emphasize-lines: 4
 
-            ok(somefunc() == -1 && errno == ENOTTY,
-               "%s:%d somefunc() should fail (errno=%d): %s",
-               __FILE__, __LINE__, errno, strerror(errno));
+            int err, rc;
             errno = 0;
+            rc = systemcall();
+            err = errno;
+            ok(rc == -1 && err == ENOTTY,
+               "%s:%d systemcall() should fail (errno=%d): %s",
+               __FILE__, __LINE__, err, strerror(err));
 
 ------------
 

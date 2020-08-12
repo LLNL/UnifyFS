@@ -2,7 +2,7 @@
  * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -11,6 +11,7 @@
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
+
 /* read-data: This program aims to test reading data from a file with arbitrary
  * offset and length. This program can run either interactively (only
  * specifying filename) or non-interactively (specifying filename with offset
