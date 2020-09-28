@@ -303,7 +303,8 @@ build_test_command()
     local l_filename="$(get_filename $1 "$2")"
 
     # Set stderr output file name
-    # app_err is defined in resource manager setup script
+    # app_err is a flag set according to what resource manager we're
+    # running under
     local l_err_filename="$app_err ${UNIFYFS_LOG_DIR}/${l_filename}.err"
 
     # Set defaults for example executable name, application filename internal to

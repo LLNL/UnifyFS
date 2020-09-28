@@ -83,7 +83,7 @@ UNIFYFS_CI_DIR=${UNIFYFS_CI_DIR:-"$(dirname "$(readlink -fm $BASH_SOURCE)")"}
 
 # test_done gets called in 990-stop-server.sh if this is not set.
 # If not set, tests can be run individually
-full_run=true
+UNIFY_CI_TESTS_FULL_RUN=true
 
 # setup testing
 source $UNIFYFS_CI_DIR/001-setup.sh
