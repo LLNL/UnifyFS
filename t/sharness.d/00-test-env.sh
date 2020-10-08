@@ -27,7 +27,7 @@ if test -n "$(which jsrun 2>/dev/null)"; then
 elif test -n "$(which srun 2>/dev/null)"; then
     JOB_RUN_COMMAND="srun -n1 -N1"
 elif test -n "$(which mpirun 2>/dev/null)"; then
-    JOB_RUN_COMMAND="mpirun -wd $UNIFYFS_BUILD_DIR -np 1"
+    JOB_RUN_COMMAND="mpirun -np 1"
 fi
 if test -z "$JOB_RUN_COMMAND"; then
     echo >&2 "Failed to find a suitable parallel job launcher"

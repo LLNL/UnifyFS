@@ -49,9 +49,9 @@ test_expect_success "target directory is empty" '
     test_dir_is_empty ${UNIFYFS_TEST_TMPDIR}/stage_destination_0700
 '
 
-${SHARNESS_BUILD_DIRECTORY}/util/unifyfs-stage/src/unifyfs-stage -m ${UNIFYFS_TEST_MOUNT} ${UNIFYFS_TEST_TMPDIR}/config_0700/test_IN.manifest > ${UNIFYFS_TEST_TMPDIR}/config_0700/stage_IN_output.OUT 2>&1
+$JOB_RUN_COMMAND ${SHARNESS_BUILD_DIRECTORY}/util/unifyfs-stage/src/unifyfs-stage -m ${UNIFYFS_TEST_MOUNT} ${UNIFYFS_TEST_TMPDIR}/config_0700/test_IN.manifest > ${UNIFYFS_TEST_TMPDIR}/config_0700/stage_IN_output.OUT 2>&1
 
-${SHARNESS_BUILD_DIRECTORY}/util/unifyfs-stage/src/unifyfs-stage -m ${UNIFYFS_TEST_MOUNT} ${UNIFYFS_TEST_TMPDIR}/config_0700/test_OUT.manifest > ${UNIFYFS_TEST_TMPDIR}/config_0700/stage_OUT_output.OUT 2>&1
+$JOB_RUN_COMMAND ${SHARNESS_BUILD_DIRECTORY}/util/unifyfs-stage/src/unifyfs-stage -m ${UNIFYFS_TEST_MOUNT} ${UNIFYFS_TEST_TMPDIR}/config_0700/test_OUT.manifest > ${UNIFYFS_TEST_TMPDIR}/config_0700/stage_OUT_output.OUT 2>&1
 
 test_expect_success "input file has been staged to output" '
     test_path_is_file ${UNIFYFS_TEST_TMPDIR}/stage_destination_0700/destination_0700.file

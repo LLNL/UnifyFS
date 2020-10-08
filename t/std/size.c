@@ -161,7 +161,7 @@ int size_test(char* unifyfs_root)
     ok(fclose(fp) == 0, "%s:%d fclose(): %s",
        __FILE__, __LINE__, strerror(errno));
 
-    diag("Starting file size and fwrite/fread with append tests");
+    diag("Finished file size and fwrite/fread with append tests");
 
     return 0;
 }

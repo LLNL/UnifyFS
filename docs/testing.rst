@@ -282,11 +282,33 @@ in (i.e., testing a wrapper that doesn't have any tests yet):
 Running the Tests
 *****************
 
-To manually run the UnifyFS test suite, simply run ``make check`` from your
-build/t directory. If changes are made to existing files in the test suite, the
-tests can be run again by simply doing ``make clean`` followed by ``make
-check``. Individual tests may be run by hand. The test ``0001-setup.t`` should
-normally be run first to start the UnifyFS daemon.
+To manually run the UnifyFS unit test suite, simply run ``make check`` from the
+inside the t/ directory of wherever you built UnifyFS. E.g., if you built in a
+separate build/ directory, then do:
+
+.. code-block:: BASH
+
+    $ cd build/t
+    $ make check
+
+If on a system where jobs are launched on a separate compute node, then use your
+systems local MPI job launch command to run the unit tests:
+
+.. code-block:: BASH
+
+    $ cd build/t
+    $ srun -N1 -n1 make check
+
+If changes are made to existing files in the test suite, the tests can be run
+again by simply doing ``make clean`` followed by another ``make check``.
+
+Individual tests may be run by hand. The test *0001-setup.t* should
+normally be run first to start the UnifyFS daemon. E.g., to run just the
+*0100-sysio-gotcha.t* tests, do:
+
+.. code-block:: BASH
+
+    $ make check TESTS='0001-setup.t 0100-sysio-gotcha.t 9010-stop-unifyfsd.t 9999-cleanup.t'
 
 .. note::
 

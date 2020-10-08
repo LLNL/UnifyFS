@@ -1,3 +1,4 @@
+#include <mpi.h>
 #include "unifyfs_configurator.h"
 #include "unifyfs_metadata.h"
 
@@ -9,6 +10,8 @@ int main(int argc, char* argv[])
     /* need to initialize enough of the server to use the metadata API */
     unifyfs_cfg_t server_cfg;
     int rc;
+
+    MPI_Init(&argc, &argv);
 
     /* get the configuration */
     rc = unifyfs_config_init(&server_cfg, argc, argv);
@@ -41,6 +44,7 @@ int main(int argc, char* argv[])
 
     // shutdown the metadata service
     meta_sanitize();
+    MPI_Finalize();
 
     // finish the testing
     // needs to be last call
