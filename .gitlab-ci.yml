@@ -25,6 +25,7 @@ stages:
 
 .slurm-single-node-template:
   variables:
+    JOB_LAUNCH_COMMAND: "srun -N1 -n1"
     LLNL_SLURM_SCHEDULER_PARAMETERS: "-N 1 -p pbatch -t $UNIT_WALL_TIME -J unifyfs-unit-tests"
 
 .slurm-multi-node-template:
@@ -33,6 +34,7 @@ stages:
 
 .lsf-single-node-template:
   variables:
+    JOB_LAUNCH_COMMAND: "jsrun -r1 -n1"
     LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes 1 -q pbatch -W $UNIT_WALL_TIME -J unifyfs-unit-tests"
     SCHEDULER_PARAMETERS: "-nnodes 1 -P $PROJECT_ID -W $UNIT_WALL_TIME -J unifyfs-unit-tests"
 
@@ -69,7 +71,7 @@ stages:
 .unit-test-template:
   stage: test-unit
   script:
-    - cd unifyfs-build/t && make check
+    - cd unifyfs-build/t && $JOB_LAUNCH_COMMAND make check
   after_script:
     - rm -rf /tmp/unify* /tmp/tmp.* /tmp/mdhim* /tmp/na_sm | true
 

@@ -13,4 +13,4 @@ test_description="Test Metadata API"
 export UNIFYFS_META_DB_PATH=$UNIFYFS_TEST_TMPDIR/meta2
 mkdir -p $UNIFYFS_META_DB_PATH
 
-$UNIFYFS_BUILD_DIR/t/server/metadata.t
+$JOB_RUN_COMMAND $UNIFYFS_BUILD_DIR/t/server/metadata.t
