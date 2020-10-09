@@ -33,28 +33,34 @@ before_install:
             mpi: [openmpi]
       autoconf:
         buildable: False
-        paths:
-          autoconf@2.69: /usr
+        externals:
+        - spec: "autoconf@2.69"
+          prefix: /usr
       automake:
         buildable: False
-        paths:
-          automake@1.15.1: /usr
+        externals:
+        - spec: "automake@1.15.1"
+          prefix: /usr
       cmake:
         buildable: False
-        paths:
-            cmake@3.12.4: /usr/local/cmake-3.12.4
+        externals:
+        - spec: "cmake@3.12.4"
+          prefix: /usr/local/cmake-3.12.4
       libtool:
         buildable: False
-        paths:
-          libtool@2.4.6: /usr
+        externals:
+        - spec: "libtool@2.4.6"
+          prefix: /usr
       m4:
         buildable: False
-        paths:
-          m4@1.4.18: /usr
+        externals:
+        - spec: "m4@1.4.18"
+          prefix: /usr
       openmpi:
         buildable: False
-        paths:
-          openmpi@2.1.1: /usr
+        externals:
+        - spec: "openmpi@2.1.1"
+          prefix: /usr
     EOF
 
 install:
