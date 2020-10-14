@@ -258,9 +258,10 @@ static int rpc_invoke_filesize_request(int rank, state_filesize_t* st)
 
     /* fill in input struct */
     filesize_request_in_t in;
-    in.root  = (int32_t)st->root;
-    in.tag   = (int32_t)st->tag;
-    in.reply = (int32_t)st->reply;
+    in.root   = (int32_t)st->root;
+    in.degree = (int32_t)st->degree;
+    in.reply  = (int32_t)st->reply;
+    in.tag    = (int32_t)st->tag;
 
     /* call rpc function */
     hret = margo_forward(handle, &in);
@@ -328,9 +329,10 @@ static int rpc_invoke_filesize_request_noreply(int rank, state_filesize_t* st)
 
     /* fill in input struct */
     filesize_request_in_t in;
-    in.root  = (int32_t)st->root;
-    in.tag   = (int32_t)st->tag;
-    in.reply = (int32_t)st->reply;
+    in.root   = (int32_t)st->root;
+    in.degree = (int32_t)st->degree;
+    in.tag    = (int32_t)st->tag;
+    in.reply  = (int32_t)st->reply;
 
     /* call rpc function */
     hret = margo_forward(handle, &in);
@@ -371,6 +373,7 @@ static int rpc_invoke_filesize_response_noreply(int rank, state_filesize_t* st)
 static void filesize_response_forward(state_filesize_t* st)
 {
     //printf("%d: BUCKEYES response_forward\n", glb_rank);  fflush(stdout);
+
     /* get tree we're using for this operation */
     tree_t* t = &st->tree;
 
@@ -396,9 +399,7 @@ static void filesize_response_forward(state_filesize_t* st)
 
         /* send result to parent if we have one */
         if (parent != -1) {
-            //printf("%d: BUCKEYES filesize is %llu\n",
-            //    glb_rank, (unsigned long long) st->filesize);
-            //fflush(stdout);
+            //printf("%d: BUCKEYES filesize is %llu\n", glb_rank, (unsigned long long) st->filesize); fflush(stdout);
             if (st->reply) {
               rpc_invoke_filesize_response(parent, st);
             } else {
@@ -409,9 +410,7 @@ static void filesize_response_forward(state_filesize_t* st)
             state_filesize_free(&st);
         } else {
             /* we're the root, deliver result back to client */
-            //printf("BUCKEYES filesize is %llu\n",
-            //    (unsigned long long) st->filesize);
-            //fflush(stdout);
+            //printf("BUCKEYES filesize is %llu\n", (unsigned long long) st->filesize); fflush(stdout);
 
             /* to wake up requesting thread,
              * lock structure, signal condition variable, unlock */
@@ -432,8 +431,7 @@ static void filesize_response_forward(state_filesize_t* st)
 
 void filesize_request_forward(state_filesize_t* st)
 {
-    //printf("%d: BUCKEYES request_forward\n", glb_rank);
-    //fflush(stdout);
+    //printf("%d: BUCKEYES request_forward\n", glb_rank); fflush(stdout);
 
     /* get tree we're using for this operation */
     tree_t* t = &st->tree;
@@ -467,8 +465,7 @@ void filesize_request_forward(state_filesize_t* st)
  * from a given server */
 static void filesize_request_rpc(hg_handle_t handle)
 {
-    //printf("%d: BUCKEYES request_rpc\n", glb_rank);
-    //fflush(stdout);
+    //printf("%d: BUCKEYES request_rpc\n", glb_rank); fflush(stdout);
 
     /* assume we'll succeed */
     int32_t ret = 0;
@@ -512,8 +509,7 @@ DEFINE_MARGO_RPC_HANDLER(filesize_request_rpc)
 /* allreduce of max filesize from each child */
 static void filesize_response_rpc(hg_handle_t handle)
 {
-    //printf("%d: BUCKEYES response_rpc\n", glb_rank);
-    //fflush(stdout);
+    //printf("%d: BUCKEYES response_rpc\n", glb_rank); fflush(stdout);
 
     /* assume we'll succeed */
     int32_t ret = 0;
@@ -565,8 +561,7 @@ DEFINE_MARGO_RPC_HANDLER(filesize_response_rpc)
  * from a given server */
 static void filesize_request_noreply_rpc(hg_handle_t handle)
 {
-    //printf("%d: BUCKEYES request_rpc\n", glb_rank);
-    //fflush(stdout);
+    //printf("%d: BUCKEYES request_rpc\n", glb_rank); fflush(stdout);
 
     /* assume we'll succeed */
     int32_t ret = 0;
@@ -603,8 +598,7 @@ DEFINE_MARGO_RPC_HANDLER(filesize_request_noreply_rpc)
 /* allreduce of max filesize from each child */
 static void filesize_response_noreply_rpc(hg_handle_t handle)
 {
-    //printf("%d: BUCKEYES response_rpc\n", glb_rank);
-    //fflush(stdout);
+    //printf("%d: BUCKEYES response_rpc\n", glb_rank); fflush(stdout);
 
     /* assume we'll succeed */
     int32_t ret = 0;
@@ -757,8 +751,8 @@ int main(int argc, char* argv[])
 
   margo_connect_servers(glb_mid);
 
-  for (int reply = 0; reply < 2; reply++) {
-  for (int degree = 2; degree < 9; degree++) {
+  for (int reply = 1; reply < 2; reply++) {
+  for (int degree = 2; degree < 3; degree++) {
 
   MPI_Barrier(MPI_COMM_WORLD);
 
@@ -790,9 +784,7 @@ int main(int argc, char* argv[])
 
     /* have result at this point, get it */
     size_t filesize = glb_st->filesize;
-    //printf("BUCKEYES got a filesize of %llu\n",
-    //    (unsigned long long) glb_st->filesize);
-    //fflush(stdout);
+    //printf("BUCKEYES got a filesize of %llu\n", (unsigned long long) glb_st->filesize); fflush(stdout);
 
     /* release lock and free state */
     if (glb_ranks > 1) {
@@ -838,9 +830,7 @@ int main(int argc, char* argv[])
   
       /* have result at this point, get it */
       size_t filesize = glb_st->filesize;
-      //printf("BUCKEYES got a filesize of %llu\n",
-      //    (unsigned long long) glb_st->filesize);
-      //fflush(stdout);
+      //printf("BUCKEYES got a filesize of %llu\n", (unsigned long long) glb_st->filesize); fflush(stdout);
   
       /* release lock and free state */
       if (glb_ranks > 1) {
