@@ -1,8 +1,15 @@
 ##### Ascent Templates #####
 
+# The WORKING_DIR envar is defined to allow the init job to clone the
+# git repo to a different location than the default. Subsequent jobs
+# will then `cd` to this directory during their before_script stage.
+# The WORKING_DIR_BASE envar is definied in the Gitlab UI.
+#
 # The RUN_ASCENT variable can be toggled in the Gitlab interface to
 # toggle whether jobs should be run on this system.
 .ascent-template:
+  variables:
+    WORKING_DIR: ${WORKING_DIR_BASE}/${CI_PIPELINE_ID}
   extends: .base-template
   rules:
     - if: '$RUN_ASCENT != "ON"'
@@ -19,12 +26,16 @@
 
 ##### All Ascent Jobs #####
 
+ascent-gcc-4_8_5-init:
+  extends: [.ascent-shell-template, .init-template]
+
 ascent-gcc-4_8_5-build:
   variables:
     COMPILER: gcc/4.8.5
     CC_COMMAND: "which gcc"
     FC_COMMAND: "which gfortran"
   extends: [.ascent-shell-template, .build-template]
+  needs: ["ascent-gcc-4_8_5-init"]
 
 ascent-gcc-4_8_5-unit-test:
   variables:

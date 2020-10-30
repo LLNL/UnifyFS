@@ -2,6 +2,7 @@
 # keyword, we prevent the testing stages from blocking, in favor of a
 # DAG.
 stages:
+  - init
   - build
   - test-unit
   - test-integ
@@ -45,6 +46,20 @@ stages:
 
 ##### Job Templates #####
 
+# Only use this template in a pre-build job if needing to clone and
+# run subsequent jobs from a non-default location.
+# The WORKING_DIR envar needs to be defined in the job variables.
+#
+# The before_script section here overrides the default before_script
+# for jobs using this template.
+.init-template:
+  stage: init
+  before_script:
+    - mkdir -pv $WORKING_DIR
+    - cd $WORKING_DIR
+  script:
+    - git clone -b ${CI_COMMIT_BRANCH} --depth=1 ${CI_REPOSITORY_URL} source
+
 # Build script used by each system. The CC and FC variables are set in
 # the specific job scripts and evaluated in the before_script in order
 # to customize which compiler will be used for each job.
@@ -56,7 +71,7 @@ stages:
   script:
     - ./autogen.sh
     - mkdir -p unifyfs-build unifyfs-install && cd unifyfs-build
-    - ../configure CC=$CC_PATH FC=$FC_PATH --prefix=$CI_PROJECT_DIR/unifyfs-install --enable-fortran --disable-silent-rules
+    - ../configure CC=$CC_PATH FC=$FC_PATH --prefix=${WORKING_DIR}/source/unifyfs-install --enable-fortran --disable-silent-rules
     - make V=1
     - make V=1 install
   needs: []
@@ -92,12 +107,17 @@ stages:
 # prior to running when new compilers or architectures need to be
 # tested.
 #
+# For jobs running in the not-default location, change directories
+# to the WORKING_DIR directory. Otherwise, set WORKING_DIR to be the
+# CI_PROJECT_DIR for the build step.
+#
 # The COMPILER, CC_PATH, and FC_PATH variables are evaluated here. Set
 # them in their specific job scripts.
 # SPACK_COMPILER and SPACK_ARCH are then set to load the matching
 # dependencies for the desired compiler.
 before_script:
   - which spack || ((cd $HOME/spack && git describe) && . $HOME/spack/share/spack/setup-env.sh)
+  - [[ -d $WORKING_DIR ]] && cd ${WORKING_DIR}/source || export WORKING_DIR=${CI_PROJECT_DIR}
   - module load $COMPILER
   - CC_PATH=$($CC_COMMAND)
   - FC_PATH=$($FC_COMMAND)
