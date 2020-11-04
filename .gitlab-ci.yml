@@ -117,7 +117,7 @@ stages:
 # dependencies for the desired compiler.
 before_script:
   - which spack || ((cd $HOME/spack && git describe) && . $HOME/spack/share/spack/setup-env.sh)
-  - [[ -d $WORKING_DIR ]] && cd ${WORKING_DIR}/source || export WORKING_DIR=${CI_PROJECT_DIR}
+  - if [[ -d $WORKING_DIR ]]; then cd ${WORKING_DIR}/source; else export WORKING_DIR=${CI_PROJECT_DIR}; fi
   - module load $COMPILER
   - CC_PATH=$($CC_COMMAND)
   - FC_PATH=$($FC_COMMAND)
