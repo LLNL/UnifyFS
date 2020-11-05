@@ -55,7 +55,7 @@ stages:
 .init-template:
   stage: init
   before_script:
-    - mkdir -v $WORKING_DIR
+    - mkdir -pv $WORKING_DIR
     - cd $WORKING_DIR
   script:
     - git clone -b ${CI_COMMIT_BRANCH} --depth=1 ${CI_REPOSITORY_URL} $WORKING_DIR
