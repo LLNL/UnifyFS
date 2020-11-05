@@ -9,7 +9,7 @@
 # toggle whether jobs should be run on this system.
 .ascent-template:
   variables:
-    WORKING_DIR: ${WORKING_DIR_BASE}/${CI_PIPELINE_ID}
+    WORKING_DIR: ${WORKING_DIR_BASE}/${CI_PIPELINE_ID}/source
   extends: .base-template
   rules:
     - if: '$RUN_ASCENT != "ON"'
