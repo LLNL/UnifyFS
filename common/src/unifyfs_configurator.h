@@ -74,6 +74,7 @@
     UNIFYFS_CFG(client, recv_data_size, INT, UNIFYFS_DATA_RECV_SIZE, "shared memory segment size in bytes for receiving data from server", NULL) \
     UNIFYFS_CFG(client, write_index_size, INT, UNIFYFS_INDEX_BUF_SIZE, "write metadata index buffer size", NULL) \
     UNIFYFS_CFG(client, cwd, STRING, NULLSTRING, "current working directory", NULL) \
+    UNIFYFS_CFG(client, write_sync, BOOL, off, "sync every write to server", NULL) \
     UNIFYFS_CFG_CLI(log, verbosity, INT, 0, "log verbosity level", NULL, 'v', "specify logging verbosity level") \
     UNIFYFS_CFG_CLI(log, file, STRING, unifyfsd.log, "log file name", NULL, 'l', "specify log file name") \
     UNIFYFS_CFG_CLI(log, dir, STRING, LOGDIR, "log file directory", configurator_directory_check, 'L', "specify full path to directory to contain log file") \

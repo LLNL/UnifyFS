@@ -71,6 +71,7 @@ a given section and key.
    local_extents     BOOL    service reads from local data if possible (default: off)
    recv_data_size    INT     maximum size (B) of memory buffer for receiving data from server
    write_index_size  INT     maximum size (B) of memory buffer for storing write log metadata
+   write_sync        BOOL    sync data to server after every write (default: off)
    ================  ======  =================================================================
 
 The ``cwd`` setting is used to emulate the behavior one

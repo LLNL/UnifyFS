@@ -79,6 +79,11 @@ int unifyfs_client_id;
 static int unifyfs_use_single_shm = 0;
 static int unifyfs_page_size      = 0;
 
+/* Determine whether we automatically sync every write to server.
+ * This slows write performance, but it can serve as a work
+ * around for apps that do not have all necessary syncs. */
+static bool unifyfs_write_sync;
+
 static off_t unifyfs_max_offt;
 static off_t unifyfs_min_offt;
 static off_t unifyfs_max_long;
@@ -1706,6 +1711,15 @@ int unifyfs_fid_write(
             /* write succeeded, remember that we have new data
              * that needs to be synced with the server */
             meta->needs_sync = 1;
+
+            /* optionally sync after every write */
+            if (unifyfs_write_sync) {
+                int ret = unifyfs_sync(fid);
+                if (ret) {
+                    LOGERR("client sync after write failed");
+                    rc = ret;
+                }
+            }
         }
     } else {
         /* unknown storage type */
@@ -2313,6 +2327,18 @@ static int unifyfs_init(void)
             rc = configurator_bool_val(cfgval, &b);
             if (rc == 0) {
                 unifyfs_local_extents = (bool)b;
+            }
+        }
+
+        /* Determine whether we automatically sync every write to server.
+         * This slows write performance, but it can serve as a work
+         * around for apps that do not have all necessary syncs. */
+        unifyfs_write_sync = false;
+        cfgval = client_cfg.client_write_sync;
+        if (cfgval != NULL) {
+            rc = configurator_bool_val(cfgval, &b);
+            if (rc == 0) {
+                unifyfs_write_sync = (bool)b;
             }
         }
 
