@@ -191,10 +191,68 @@ int truncate_write_meta(unifyfs_filemeta_t* meta, off_t trunc_sz)
  */
 int unifyfs_sync(int target_fid)
 {
+    int tmp_rc;
     int ret = UNIFYFS_SUCCESS;
-    off_t max_log_offset = 0;
 
-    /* For each open file descriptor .. */
+    /* if caller gave us a file id, sync that specific fid */
+    if (target_fid >= 0) {
+        /* user named a specific file id, lookup its metadata */
+        int fid = target_fid;
+        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+        if ((NULL == meta) || (meta->fid != fid)) {
+            /* bail out with an error if we fail to find it */
+            LOGERR("missing filemeta for fid=%d", fid);
+            return UNIFYFS_FAILURE;
+        }
+
+        /* sync with server if we need to */
+        if (meta->needs_sync) {
+            /* write contents from segment tree to index buffer */
+            off_t max_log_off = unifyfs_rewrite_index_from_seg_tree(meta);
+
+            /* if there are no index entries, we've got nothing to sync */
+            if (*unifyfs_indices.ptr_num_entries == 0) {
+                /* consider that we've sync'd successfully */
+                meta->needs_sync = 0;
+                return UNIFYFS_SUCCESS;
+            }
+
+            /* ensure any data written to the spillover file is flushed */
+            off_t logio_shmem_size;
+            unifyfs_logio_get_sizes(logio_ctx, &logio_shmem_size, NULL);
+            if (max_log_off >= logio_shmem_size) {
+                /* some extents range into spill over area,
+                 * so flush data to spill over file */
+                tmp_rc = unifyfs_logio_sync(logio_ctx);
+                if (UNIFYFS_SUCCESS != tmp_rc) {
+                    LOGERR("failed to sync logio data");
+                    ret = tmp_rc;
+                }
+                LOGDBG("after logio spill sync");
+            }
+
+            /* tell the server to grab our new extents */
+            tmp_rc = invoke_client_sync_rpc(meta->gfid);
+            if (UNIFYFS_SUCCESS != tmp_rc) {
+                /* something went wrong when trying to flush extents */
+                LOGERR("failed to flush write index to server for gfid=%d",
+                       meta->gfid);
+                ret = tmp_rc;
+            }
+
+            /* we've sync'd, so mark this file as being up-to-date */
+            meta->needs_sync = 0;
+
+            /* flushed, clear buffer and refresh number of entries
+             * and number remaining */
+            clear_index();
+        }
+
+        return ret;
+    }
+
+    /* to get here, caller specified target_fid = -1,
+     * so sync every file descriptor */
     for (int i = 0; i < UNIFYFS_MAX_FILEDESCS; i++) {
         /* get file id for each file descriptor */
         int fid = unifyfs_fds[i].fid;
@@ -203,64 +261,11 @@ int unifyfs_sync(int target_fid)
             continue;
         }
 
-        /* is this the target file? */
-        if ((target_fid != -1) && (fid != target_fid)) {
-            continue;
+        /* got an open file, sync this file id */
+        tmp_rc = unifyfs_sync(fid);
+        if (UNIFYFS_SUCCESS != tmp_rc) {
+            ret = tmp_rc;
         }
-
-        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-        if ((NULL == meta) || (meta->fid != fid)) {
-            LOGERR("missing filemeta for fid=%d", fid);
-            if (fid == target_fid) {
-                return UNIFYFS_FAILURE;
-            }
-            continue;
-        }
-
-        if (meta->needs_sync) {
-            /* write contents from segment tree to index buffer */
-            off_t max_log_off = unifyfs_rewrite_index_from_seg_tree(meta);
-            if (max_log_off > max_log_offset) {
-                max_log_offset = max_log_off;
-            }
-
-            /* if there are no index entries, we've got nothing to sync */
-            if (*unifyfs_indices.ptr_num_entries == 0) {
-                if (fid == target_fid) {
-                    return UNIFYFS_SUCCESS;
-                }
-            }
-
-            /* tell the server to grab our new extents */
-            ret = invoke_client_sync_rpc(meta->gfid);
-            if (ret != UNIFYFS_SUCCESS) {
-                /* something went wrong when trying to flush extents */
-                LOGERR("failed to flush write index to server for gfid=%d",
-                       meta->gfid);
-            }
-            meta->needs_sync = 0;
-
-            /* flushed, clear buffer and refresh number of entries
-             * and number remaining */
-            clear_index();
-        }
-
-        /* break out of loop when targeting a specific file */
-        if (fid == target_fid) {
-            break;
-        }
-    }
-
-    /* ensure any data written to the spillover file is flushed */
-    off_t logio_shmem_size;
-    unifyfs_logio_get_sizes(logio_ctx, &logio_shmem_size, NULL);
-    if (max_log_offset >= logio_shmem_size) {
-        LOGDBG("before logio spill sync")
-        ret = unifyfs_logio_sync(logio_ctx);
-        if (ret != UNIFYFS_SUCCESS) {
-            LOGERR("failed to sync logio data");
-        }
-        LOGDBG("after logio spill sync");
     }
 
     return ret;
