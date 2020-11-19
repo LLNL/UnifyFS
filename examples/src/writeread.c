@@ -387,41 +387,41 @@ int main(int argc, char* argv[])
     double global_read_bw = bandwidth_mib(total_bytes, max_global_read_time);
 
     if (test_config.rank == 0) {
-        printf("File Create Time is %.6lf s\n",
-               time_create.elapsed_sec_all);
-        printf("Minimum Local Write BW is %.3lf MiB/s\n",
-               min_local_write_bw);
-        printf("Maximum Local Write BW is %.3lf MiB/s\n",
-               max_local_write_bw);
-        printf("Aggregate Local Write BW is %.3lf MiB/s\n",
-               aggr_local_write_bw);
-        printf("Global Write BW is %.3lf MiB/s\n",
-               global_write_bw);
-        printf("Minimum Local Sync Time is %.6lf s\n",
-               min_local_sync_time);
-        printf("Maximum Local Sync Time is %.6lf s\n",
-               max_local_sync_time);
-        printf("Global Sync Time is %.6lf s\n",
-               max_global_sync_time);
-        printf("Global Write+Sync BW is %.3lf MiB/s\n",
-               global_write_sync_bw);
-        printf("Stat Time Pre-Laminate is %.6lf s\n",
-               time_stat_pre.elapsed_sec_all);
-        printf("Stat Time Pre-Laminate2 is %.6lf s\n",
-               time_stat_pre.elapsed_sec_all);
-        printf("File Laminate Time is %.6lf s\n",
-               time_laminate.elapsed_sec_all);
-        printf("Stat Time Post-Laminate is %.6lf s\n",
-               time_stat_post.elapsed_sec_all);
-        printf("Minimum Local Read BW is %.3lf MiB/s\n",
-               min_local_read_bw);
-        printf("Maximum Local Read BW is %.3lf MiB/s\n",
-               max_local_read_bw);
-        printf("Aggregate Local Read BW is %.3lf MiB/s\n",
-               aggr_local_read_bw);
-        printf("Global Read BW is %.3lf MiB/s\n",
-               global_read_bw);
-        fflush(stdout);
+        errno = 0; /* just in case there was an earlier error */
+        test_print_once(cfg, "File Create Time is %.6lf s",
+                        time_create.elapsed_sec_all);
+        test_print_once(cfg, "Minimum Local Write BW is %.3lf MiB/s",
+                        min_local_write_bw);
+        test_print_once(cfg, "Maximum Local Write BW is %.3lf MiB/s",
+                        max_local_write_bw);
+        test_print_once(cfg, "Aggregate Local Write BW is %.3lf MiB/s",
+                        aggr_local_write_bw);
+        test_print_once(cfg, "Global Write BW is %.3lf MiB/s",
+                        global_write_bw);
+        test_print_once(cfg, "Minimum Local Sync Time is %.6lf s",
+                        min_local_sync_time);
+        test_print_once(cfg, "Maximum Local Sync Time is %.6lf s",
+                        max_local_sync_time);
+        test_print_once(cfg, "Global Sync Time is %.6lf s",
+                        max_global_sync_time);
+        test_print_once(cfg, "Global Write+Sync BW is %.3lf MiB/s",
+                        global_write_sync_bw);
+        test_print_once(cfg, "Stat Time Pre-Laminate is %.6lf s",
+                        time_stat_pre.elapsed_sec_all);
+        test_print_once(cfg, "Stat Time Pre-Laminate2 is %.6lf s",
+                        time_stat_pre.elapsed_sec_all);
+        test_print_once(cfg, "File Laminate Time is %.6lf s",
+                        time_laminate.elapsed_sec_all);
+        test_print_once(cfg, "Stat Time Post-Laminate is %.6lf s",
+                        time_stat_post.elapsed_sec_all);
+        test_print_once(cfg, "Minimum Local Read BW is %.3lf MiB/s",
+                        min_local_read_bw);
+        test_print_once(cfg, "Maximum Local Read BW is %.3lf MiB/s",
+                        max_local_read_bw);
+        test_print_once(cfg, "Aggregate Local Read BW is %.3lf MiB/s",
+                        aggr_local_read_bw);
+        test_print_once(cfg, "Global Read BW is %.3lf MiB/s",
+                        global_read_bw);
     }
 
     // cleanup
