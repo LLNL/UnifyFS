@@ -280,6 +280,7 @@ int stat_cmd(test_cfg* cfg, char* filename)
     int rc;
     const char* typestr;
     char* tmp;
+    char* newline;
     char datestr[32];
 
     rc = stat(filename, &sb);
@@ -357,15 +358,27 @@ int stat_cmd(test_cfg* cfg, char* filename)
     memset(datestr, 0, sizeof(datestr));
     timestamp = sb.st_atime;
     ctime_r(&timestamp, datestr);
+    newline = strchr(datestr, '\n');
+    if (NULL != newline) {
+        *newline = '\0';
+    }
     test_print(cfg, "Last file access:         %s", datestr);
 
     memset(datestr, 0, sizeof(datestr));
     timestamp = sb.st_mtime;
     ctime_r(&timestamp, datestr);
+    newline = strchr(datestr, '\n');
+    if (NULL != newline) {
+        *newline = '\0';
+    }
     test_print(cfg, "Last file modification:   %s", datestr);
 
     memset(datestr, 0, sizeof(datestr));
     timestamp = sb.st_ctime;
     ctime_r(&timestamp, datestr);
+    newline = strchr(datestr, '\n');
+    if (NULL != newline) {
+        *newline = '\0';
+    }
     test_print(cfg, "Last status change:       %s", datestr);
 }

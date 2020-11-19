@@ -121,6 +121,8 @@ typedef struct {
     int use_mpi;
     int use_unifyfs;
     int enable_mpi_mount; /* automount during MPI_Init() */
+    char* output_file;    /* print test messages to output file */
+    FILE* output_fp;
 
     /* I/O behavior options */
     int io_pattern; /* N1 or NN */
@@ -196,44 +198,51 @@ void test_config_print(test_cfg* cfg)
 {
     assert(NULL != cfg);
 
-    fprintf(stderr, "    Test Configuration\n");
-    fprintf(stderr, "==========================\n");
+    FILE* fp = cfg->output_fp;
+    if (NULL == fp) {
+        fp = stderr;
+    }
 
-    fprintf(stderr, "\n-- Program Behavior --\n");
-    fprintf(stderr, "\t debug       = %d\n", cfg->debug);
-    fprintf(stderr, "\t verbose     = %d\n", cfg->verbose);
-    fprintf(stderr, "\t use_mpi     = %d\n", cfg->use_mpi);
-    fprintf(stderr, "\t use_unifyfs = %d\n", cfg->use_unifyfs);
-    fprintf(stderr, "\t mpi_mount   = %d\n", cfg->enable_mpi_mount);
+    fprintf(fp, "    Test Configuration\n");
+    fprintf(fp, "==========================\n");
 
-    fprintf(stderr, "\n-- IO Behavior --\n");
-    fprintf(stderr, "\t io_pattern  = %s\n", io_pattern_str(cfg->io_pattern));
-    fprintf(stderr, "\t io_check    = %d\n", cfg->io_check);
-    fprintf(stderr, "\t io_shuffle  = %d\n", cfg->io_shuffle);
-    fprintf(stderr, "\t pre_trunc   = %d\n", cfg->pre_wr_trunc);
-    fprintf(stderr, "\t post_trunc  = %d\n", cfg->post_wr_trunc);
-    fprintf(stderr, "\t use_aio     = %d\n", cfg->use_aio);
-    fprintf(stderr, "\t use_lio     = %d\n", cfg->use_lio);
-    fprintf(stderr, "\t use_mapio   = %d\n", cfg->use_mapio);
-    fprintf(stderr, "\t use_mpiio   = %d\n", cfg->use_mpiio);
-    fprintf(stderr, "\t use_prdwr   = %d\n", cfg->use_prdwr);
-    fprintf(stderr, "\t use_stdio   = %d\n", cfg->use_stdio);
-    fprintf(stderr, "\t use_vecio   = %d\n", cfg->use_vecio);
+    fprintf(fp, "\n-- Program Behavior --\n");
+    fprintf(fp, "\t debug       = %d\n", cfg->debug);
+    fprintf(fp, "\t verbose     = %d\n", cfg->verbose);
+    fprintf(fp, "\t use_mpi     = %d\n", cfg->use_mpi);
+    fprintf(fp, "\t use_unifyfs = %d\n", cfg->use_unifyfs);
+    fprintf(fp, "\t mpi_mount   = %d\n", cfg->enable_mpi_mount);
+    fprintf(fp, "\t outfile     = %s\n", cfg->output_file);
 
-    fprintf(stderr, "\n-- IO Size Config --\n");
-    fprintf(stderr, "\t n_blocks    = %" PRIu64 "\n", cfg->n_blocks);
-    fprintf(stderr, "\t block_sz    = %" PRIu64 "\n", cfg->block_sz);
-    fprintf(stderr, "\t chunk_sz    = %" PRIu64 "\n", cfg->chunk_sz);
-    fprintf(stderr, "\t truncate_sz = %lu\n", (unsigned long)cfg->trunc_size);
+    fprintf(fp, "\n-- IO Behavior --\n");
+    fprintf(fp, "\t io_pattern  = %s\n", io_pattern_str(cfg->io_pattern));
+    fprintf(fp, "\t io_check    = %d\n", cfg->io_check);
+    fprintf(fp, "\t io_shuffle  = %d\n", cfg->io_shuffle);
+    fprintf(fp, "\t pre_trunc   = %d\n", cfg->pre_wr_trunc);
+    fprintf(fp, "\t post_trunc  = %d\n", cfg->post_wr_trunc);
+    fprintf(fp, "\t use_aio     = %d\n", cfg->use_aio);
+    fprintf(fp, "\t use_lio     = %d\n", cfg->use_lio);
+    fprintf(fp, "\t use_mapio   = %d\n", cfg->use_mapio);
+    fprintf(fp, "\t use_mpiio   = %d\n", cfg->use_mpiio);
+    fprintf(fp, "\t use_prdwr   = %d\n", cfg->use_prdwr);
+    fprintf(fp, "\t use_stdio   = %d\n", cfg->use_stdio);
+    fprintf(fp, "\t use_vecio   = %d\n", cfg->use_vecio);
 
-    fprintf(stderr, "\n-- Target File --\n");
-    fprintf(stderr, "\t filename    = %s\n", cfg->filename);
-    fprintf(stderr, "\t mountpt     = %s\n", cfg->mountpt);
+    fprintf(fp, "\n-- IO Size Config --\n");
+    fprintf(fp, "\t n_blocks    = %" PRIu64 "\n", cfg->n_blocks);
+    fprintf(fp, "\t block_sz    = %" PRIu64 "\n", cfg->block_sz);
+    fprintf(fp, "\t chunk_sz    = %" PRIu64 "\n", cfg->chunk_sz);
+    fprintf(fp, "\t truncate_sz = %lu\n", (unsigned long)cfg->trunc_size);
 
-    fprintf(stderr, "\n-- MPI Info --\n");
-    fprintf(stderr, "\t app_id      = %d\n", cfg->app_id);
-    fprintf(stderr, "\t rank        = %d\n", cfg->rank);
-    fprintf(stderr, "\t n_ranks     = %d\n", cfg->n_ranks);
+    fprintf(fp, "\n-- Target File --\n");
+    fprintf(fp, "\t filename    = %s\n", cfg->filename);
+    fprintf(fp, "\t mountpt     = %s\n", cfg->mountpt);
+
+    fprintf(fp, "\n-- MPI Info --\n");
+    fprintf(fp, "\t app_id      = %d\n", cfg->app_id);
+    fprintf(fp, "\t rank        = %d\n", cfg->rank);
+    fprintf(fp, "\t n_ranks     = %d\n", cfg->n_ranks);
+    fprintf(fp, "\n==========================\n\n");
 }
 
 static inline
@@ -259,28 +268,28 @@ static inline
 void test_print(test_cfg* cfg, const char* fmt, ...)
 {
     int err = errno;
-    char buf[1024];
 
     assert(NULL != cfg);
 
-    printf("[%d] ", cfg->rank);
+    FILE* fp = cfg->output_fp;
+    if (NULL == fp) {
+        fp = stdout;
+    }
+
+    fprintf(fp, "[%d] ", cfg->rank);
 
     va_list args;
     va_start(args, fmt);
-    vsprintf(buf, fmt, args);
-    printf("%s", buf);
+    vfprintf(fp, fmt, args);
     va_end(args);
 
     if (err) {
-        printf(" (errno=%d, %s)", err, strerror(err));
+        fprintf(fp, " (errno=%d, %s)", err, strerror(err));
     }
 
-    /* Add in a '\n' if the line didn't end with one */
-    if (buf[strlen(buf) - 1] != '\n') {
-        printf("\n");
-    }
-
-    fflush(stdout);
+    /* End with a newline */
+    fprintf(fp, "\n");
+    fflush(fp);
 }
 
 static inline
@@ -294,17 +303,23 @@ void test_print_once(test_cfg* cfg, const char* fmt, ...)
         return;
     }
 
+    FILE* fp = cfg->output_fp;
+    if (NULL == fp) {
+        fp = stdout;
+    }
+
     va_list args;
     va_start(args, fmt);
-    vfprintf(stdout, fmt, args);
+    vfprintf(fp, fmt, args);
     va_end(args);
 
     if (err) {
-        printf(" (errno=%d, %s)\n", err, strerror(err));
+        fprintf(fp, " (errno=%d, %s)\n", err, strerror(err));
     }
 
-    printf("\n");
-    fflush(stdout);
+    /* End with a newline */
+    fprintf(fp, "\n");
+    fflush(fp);
 }
 
 static inline
@@ -316,13 +331,18 @@ void test_print_verbose(test_cfg* cfg, const char* fmt, ...)
         return;
     }
 
+    FILE* fp = cfg->output_fp;
+    if (NULL == fp) {
+        fp = stderr;
+    }
+
     va_list args;
     va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
+    vfprintf(fp, fmt, args);
     va_end(args);
 
-    fprintf(stderr, "\n");
-    fflush(stderr);
+    fprintf(fp, "\n");
+    fflush(fp);
 }
 
 static inline
@@ -334,13 +354,18 @@ void test_print_verbose_once(test_cfg* cfg, const char* fmt, ...)
         return;
     }
 
+    FILE* fp = cfg->output_fp;
+    if (NULL == fp) {
+        fp = stderr;
+    }
+
     va_list args;
     va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
+    vfprintf(fp, fmt, args);
     va_end(args);
 
-    fprintf(stderr, "\n");
-    fflush(stderr);
+    fprintf(fp, "\n");
+    fflush(fp);
 }
 
 /* ---------- Timer Utilities ---------- */
@@ -466,7 +491,7 @@ int test_is_static(const char* program)
 
 // common options for all tests
 
-static const char* test_short_opts = "a:Ab:c:df:hkLm:MNn:p:PSt:T:UvVx";
+static const char* test_short_opts = "a:Ab:c:df:hkLm:MNn:o:p:PSt:T:UvVx";
 
 static const struct option test_long_opts[] = {
     { "appid", 1, 0, 'a' },
@@ -482,6 +507,7 @@ static const struct option test_long_opts[] = {
     { "mpiio", 0, 0, 'M' },
     { "nblocks", 1, 0, 'n' },
     { "mapio", 0, 0, 'N' },
+    { "outfile", 1, 0, 'o' },
     { "pattern", 1, 0, 'p' },
     { "prdwr", 0, 0, 'P' },
     { "pre-truncate", 1, 0, 't' },
@@ -523,6 +549,8 @@ static const char* test_usage_str =
     "                                  (default: 32)\n"
     " -N, --mapio                      use mmap instead of read|write\n"
     "                                  (default: off)\n"
+    " -o, --outfile=<filename>         output file name (or path)\n"
+    "                                  (default: 'stdout')\n"
     " -p, --pattern=<pattern>          'n1' (N-to-1 shared file) or 'nn' (N-to-N file per process)\n"
     "                                  (default: 'n1')\n"
     " -P, --prdwr                      use pread|pwrite instead of read|write\n"
@@ -610,6 +638,10 @@ int test_process_argv(test_cfg* cfg,
 
         case 'N':
             cfg->use_mapio = 1;
+            break;
+
+        case 'o':
+            cfg->output_file = strdup(optarg);
             break;
 
         case 'p':
@@ -817,7 +849,8 @@ int lipsum_check(const char* buf, uint64_t len, uint64_t offset,
         val = start + i;
         if (ibuf[i] != val) {
             *error_offset = offset + (i * sizeof(uint64_t));
-            fprintf(stderr, "DEBUG: [%" PRIu64 "] @ offset %" PRIu64
+            fprintf(stderr,
+                    "LIPSUM CHECK ERROR: [%" PRIu64 "] @ offset %" PRIu64
                     ", expected=%" PRIu64 " found=%" PRIu64 "\n",
                     i, *error_offset, val, ibuf[i]);
             return -1;
@@ -1195,8 +1228,21 @@ int test_init(int argc, char** argv,
         cfg->n_ranks = 1;
     }
 
+    if (NULL != cfg->output_file) {
+        if (cfg->rank == 0) {
+            // only rank 0 writes to output file
+            cfg->output_fp = fopen(cfg->output_file, "a");
+            if (NULL == cfg->output_fp) {
+                test_print_once(cfg,
+                    "USAGE ERROR: failed to open output file %s",
+                    cfg->output_file);
+                exit(-1);
+            }
+        }
+    }
+
     if (cfg->verbose) {
-        // must come after test_mpi_init() to pick up MPI info
+        // must come after MPI_Init() to have valid MPI info
         test_config_print(cfg);
     }
 
@@ -1254,6 +1300,14 @@ void test_fini(test_cfg* cfg)
 
     if (NULL != cfg->mountpt) {
         free(cfg->mountpt);
+    }
+
+    if (NULL != cfg->output_file) {
+        free(cfg->output_file);
+        if (NULL != cfg->output_fp) {
+            fflush(cfg->output_fp);
+            fclose(cfg->output_fp);
+        }
     }
 
     memset(cfg, 0, sizeof(test_cfg));
