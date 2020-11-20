@@ -95,44 +95,50 @@ to aid in this process.
     Usage: write-static [options...]
 
     Available options:
-     -a, --appid=<id>          use given application id
-                               (default: 0)
-     -A, --aio                 use asynchronous I/O instead of read|write
-                               (default: off)
-     -b, --blocksize=<bytes>   I/O block size
-                               (default: 16 MiB)
-     -c, --chunksize=<bytes>   I/O chunk size for each operation
-                               (default: 1 MiB)
-     -d, --debug               for debugging, wait for input (at rank 0) at start
-                               (default: off)
-     -f, --file=<filename>     target file name (or path) under mountpoint
-                               (default: 'testfile')
-     -k, --check               check data contents upon read
-                               (default: off)
-     -L, --listio              use lio_listio instead of read|write
-                               (default: off)
-     -m, --mount=<mountpoint>  use <mountpoint> for unifyfs
-                               (default: /unifyfs)
-     -M, --mpiio               use MPI-IO instead of POSIX I/O
-                               (default: off)
-     -n, --nblocks=<count>     count of blocks each process will read|write
-                               (default: 32)
-     -N, --mapio               use mmap instead of read|write
-                               (default: off)
-     -p, --pattern=<pattern>   'n1' (N-to-1 shared file) or 'nn' (N-to-N file per process)
-                               (default: 'n1')
-     -P, --prdwr               use pread|pwrite instead of read|write
-                               (default: off)
-     -S, --stdio               use fread|fwrite instead of read|write
-                               (default: off)
-     -U, --disable-unifyfs     do not use UnifyFS
-                               (default: enable UnifyFS)
-     -v, --verbose             print verbose information
-                               (default: off)
-     -V, --vecio               use readv|writev instead of read|write
-                               (default: off)
-     -x, --shuffle             read different data than written
-                               (default: off)
+     -a, --appid=<id>            use given application id
+                                 (default: 0)
+     -A, --aio                   use asynchronous I/O instead of read|write
+                                 (default: off)
+     -b, --blocksize=<bytes>     I/O block size
+                                 (default: 16 MiB)
+     -c, --chunksize=<bytes>     I/O chunk size for each operation
+                                 (default: 1 MiB)
+     -d, --debug                 for debugging, wait for input (at rank 0) at start
+                                 (default: off)
+     -f, --file=<filename>       target file name (or path) under mountpoint
+                                 (default: 'testfile')
+     -k, --check                 check data contents upon read
+                                 (default: off)
+     -L, --listio                use lio_listio instead of read|write
+                                 (default: off)
+     -m, --mount=<mountpoint>    use <mountpoint> for unifyfs
+                                 (default: /unifyfs)
+     -M, --mpiio                 use MPI-IO instead of POSIX I/O
+                                 (default: off)
+     -n, --nblocks=<count>       count of blocks each process will read|write
+                                 (default: 32)
+     -N, --mapio                 use mmap instead of read|write
+                                 (default: off)
+     -o, --outfile=<filename>    output file name (or path)
+                                 (default: 'stdout')
+     -p, --pattern=<pattern>     'n1' (N-to-1 shared file) or 'nn' (N-to-N file per process)
+                                 (default: 'n1')
+     -P, --prdwr                 use pread|pwrite instead of read|write
+                                 (default: off)
+     -S, --stdio                 use fread|fwrite instead of read|write
+                                 (default: off)
+     -t, --pre-truncate=<size>   truncate file to size (B) before writing
+                                 (default: off)
+     -T, --post-truncate=<size>  truncate file to size (B) after writing
+                                 (default: off)
+     -U, --disable-unifyfs       do not use UnifyFS
+                                 (default: enable UnifyFS)
+     -v, --verbose               print verbose information
+                                 (default: off)
+     -V, --vecio                 use readv|writev instead of read|write
+                                 (default: off)
+     -x, --shuffle               read different data than written
+                                 (default: off)
 
 One form of running this example could be:
 

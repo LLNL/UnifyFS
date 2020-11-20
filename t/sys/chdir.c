@@ -391,7 +391,7 @@ int chdir_test(char* unifyfs_root)
 
 /* TODO: Our directory wrappers are not fully functioning yet,
  * but when they do, we should check that fchdir works. */
-#if 0
+    skip(1, 7, "fchdir tests until directory wrappers are fully functional")
     /* change to root directory */
     errno = 0;
     rc = chdir("/");
@@ -442,7 +442,7 @@ int chdir_test(char* unifyfs_root)
        __FILE__, __LINE__, fd, strerror(err));
 
     closedir(dirp);
-#endif
+    end_skip;
 
     return 0;
 }

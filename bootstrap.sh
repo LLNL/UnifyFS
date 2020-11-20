@@ -12,12 +12,15 @@ INSTALL_DIR=$ROOT/install
 cd deps
 
 repos=(	https://xgitlab.cels.anl.gov/sds/bmi.git
-	https://github.com/google/leveldb.git
 	https://github.com/LLNL/GOTCHA.git
 	https://github.com/pmodels/argobots.git
 	https://github.com/mercury-hpc/mercury.git
 	https://xgitlab.cels.anl.gov/sds/margo.git
 )
+
+if [ $1 = "--with-leveldb" ]; then
+    repos+=(https://github.com/google/leveldb.git)
+fi
 
 for i in "${repos[@]}" ; do
 	# Get just the name of the project (like "mercury")
@@ -40,15 +43,19 @@ cd bmi
 make -j $(nproc) && make install
 cd ..
 
-echo "### building leveldb ###"
-cd leveldb
-git checkout 1.22
-mkdir -p build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-	-DBUILD_SHARED_LIBS=yes ..
-make -j $(nproc) && make install
-cd ..
-cd ..
+if [ $1 = "--with-leveldb" ]; then
+    echo "### building leveldb ###"
+    cd leveldb
+    git checkout 1.22
+    mkdir -p build && cd build
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+        -DBUILD_SHARED_LIBS=yes ..
+    make -j $(nproc) && make install
+    cd ..
+    cd ..
+else
+    echo "### skipping leveldb build ###"
+fi
 
 echo "### building GOTCHA ###"
 cd GOTCHA

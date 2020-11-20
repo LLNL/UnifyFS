@@ -4,16 +4,6 @@ Build & I/O Interception
 
 In this section, we describe how to build UnifyFS with I/O interception.
 
-.. note::
-
-    The current version of UnifyFS adopts the mdhim key-value store, which strictly
-    requires:
-
-    "An MPI distribution that supports MPI_THREAD_MULTIPLE and per-object locking of
-    critical sections (this excludes OpenMPI up to version 3.0.1, the current version as of this writing)"
-
-    as specified in the project `github <https://github.com/mdhim/mdhim-tng>`_.
-
 ---------------------------
 
 ---------------------------------------
@@ -40,6 +30,22 @@ you can omit it during UnifyFS configuration by using the ``--without-gotcha``
 configure option. Without GOTCHA, static linker wrapping is required for I/O
 interception.
 
+HDF5
+****
+
+UnifyFS includes example programs that use HDF5. If HDF5 is not available on
+your target system, it can be omitted during UnifyFS configuration by using
+the ``--without-hdf5`` configure option.
+
+MDHIM
+*****
+
+Previous MDHIM-based support for file operations can be selected at configure
+time using the ``--enable-mdhim`` option. Using this option requires LevelDB as
+a dependency. Provide the path to your LevelDB install at configure time with
+the ``--with-leveldb=/path/to/leveldb`` option. Note that this may not
+currently be in a usable state.
+
 PMI2/PMIx Key-Value Store
 *************************
 
@@ -57,13 +63,6 @@ mounting capability. With transparent mounting, calls to ``unifyfs_mount()`` and
 ``MPI_Finalize()``, respectively. Transparent mounting always uses ``/unifyfs`` as
 the namespace mountpoint. To enable transparent mounting, use the
 ``--enable-mpi-mount`` configure option.
-
-HDF5
-****
-
-UnifyFS includes example programs that use HDF5. If HDF5 is not available on
-your target system, it can be omitted during UnifyFS configuration by using
-the ``--without-hdf5`` configure option.
 
 ---------------------------
 
@@ -122,8 +121,10 @@ build is desired. Type ``spack info unifyfs`` for more info.
 
                ``spack install unifyfs+hdf5 ^hdf5~mpi``  Build with serial HDF5
    Fortran     ``spack install unifyfs+fortran``         Enable Fortran support
+   MDHIM       ``spack install unifyfs+mdhim``           Enable MDHIM build options
    PMI         ``spack install unifyfs+pmi``             Enable PMI2 support
    PMIx        ``spack install unifyfs+pmix``            Enable PMIx support
+   spath       ``spack install unifyfs+spath``           Normalize relative paths
    ==========  ========================================  ===========================
 
 .. attention::
@@ -160,7 +161,6 @@ UnifyFS dependencies can then be installed.
 .. code-block:: Bash
 
     $ spack install gotcha
-    $ spack install leveldb
     $ spack install margo ^mercury+bmi
 
 .. tip::
@@ -186,7 +186,6 @@ manually build UnifyFS from inside the source code directory.
 .. code-block:: Bash
 
     $ spack load gotcha
-    $ spack load leveldb
     $ spack load mercury
     $ spack load argobots
     $ spack load margo
@@ -196,7 +195,7 @@ manually build UnifyFS from inside the source code directory.
     $ make
     $ make install
 
-To see all available build configuration options, type ``./configure --help``
+To see all available build configuration options, run ``./configure --help``
 after ``./autogen.sh`` has been run.
 
 ---------------------------
@@ -212,8 +211,8 @@ from the `UnifyFS repository <https://github.com/LLNL/UnifyFS>`_.
 Build the Dependencies
 **********************
 
-UnifyFS requires MPI, LevelDB, GOTCHA, Margo and OpenSSL.
-References to these dependencies can be found on our :doc:`<dependencies>` page.
+UnifyFS requires MPI, GOTCHA, Margo and OpenSSL.
+References to these dependencies can be found on our :doc:`dependencies` page.
 
 A `bootstrap.sh <https://github.com/LLNL/UnifyFS/blob/dev/bootstrap.sh>`_ script
 has been provided in order to make manual build and installation of dependencies
@@ -234,11 +233,11 @@ this:
 
     $ export PKG_CONFIG_PATH=path/to/mercury/lib/pkgconfig:path/to/argobots/lib/pkgconfig:path/to/margo/lib/pkgconfig
     $ ./autogen.sh
-    $ ./configure --prefix=/path/to/install --with-gotcha=/path/to/gotcha --with-leveldb=/path/to/leveldb
+    $ ./configure --prefix=/path/to/install --with-gotcha=/path/to/gotcha
     $ make
     $ make install
 
-To see all available build configuration options, type ``./configure --help``
+To see all available build configuration options, run ``./configure --help``
 after ``./autogen.sh`` has been run.
 
 ---------------------------
