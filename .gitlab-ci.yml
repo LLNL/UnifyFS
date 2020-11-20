@@ -124,7 +124,6 @@ before_script:
   - SPACK_COMPILER=${COMPILER//\//@}
   - SPACK_ARCH="$(spack arch -p)-$(spack arch -o)-$(uname -m)"
   - spack load gotcha %$SPACK_COMPILER arch=$SPACK_ARCH
-  - spack load leveldb %$SPACK_COMPILER arch=$SPACK_ARCH
   - spack load argobots %$SPACK_COMPILER arch=$SPACK_ARCH
   - spack load mercury %$SPACK_COMPILER arch=$SPACK_ARCH
   - spack load margo %$SPACK_COMPILER arch=$SPACK_ARCH
