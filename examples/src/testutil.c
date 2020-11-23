@@ -283,9 +283,10 @@ int stat_cmd(test_cfg* cfg, char* filename)
     char* newline;
     char datestr[32];
 
+    errno = 0;
     rc = stat(filename, &sb);
     if (rc) {
-        test_print(cfg, "ERROR: stat(%s) - %s", filename, strerror(rc));
+        test_print(cfg, "ERROR: stat(%s) failed", filename);
         return rc;
     }
 
