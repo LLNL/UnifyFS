@@ -1,0 +1,112 @@
+#!/bin/bash
+
+set -x
+
+if [ ! -f mvapich2-2.3.4.tar.gz ] ; then
+  wget http://mvapich.cse.ohio-state.edu/download/mvapich/mv2/mvapich2-2.3.4.tar.gz
+fi
+
+## unzip mvapich source
+rm -rf mvapich2-2.3.4
+tar -zxf mvapich2-2.3.4.tar.gz
+
+# build MPI
+cd mvapich2-2.3.4
+
+# MPI installation directory
+installdir=`pwd`/install-gcc-psm2
+rm -rf $installdir
+
+# GNU compiler settings
+export CC=gcc 
+export CXX=g++ 
+export F77=gfortran
+export FC=gfortran
+#export MPICHLIB_CFLAGS="-g -O2"
+#export MPICHLIB_CXXFLAGS="-g -O2"
+#export MPICHLIB_FFLAGS="-g -O2 -fno-second-underscore"
+#export MPICHLIB_FCFLAGS="-g -O2 -fno-second-underscore"
+export MPICHLIB_CFLAGS="-g -O0"
+export MPICHLIB_CXXFLAGS="-g -O0"
+export MPICHLIB_FFLAGS="-g -O0 -fno-second-underscore"
+export MPICHLIB_FCFLAGS="-g -O0 -fno-second-underscore"
+
+# Intel compiler settings
+#export CC=icc 
+#export CXX=icpc
+#export F77=ifort
+#export FC=ifort
+#export MPICHLIB_CFLAGS="-g -O2"
+#export MPICHLIB_CXXFLAGS="-g -O2"
+#export MPICHLIB_FFLAGS="-g -O2"
+#export MPICHLIB_FCFLAGS="-g -O2"
+#export MPICHLIB_CFLAGS="-g -O0"
+#export MPICHLIB_CXXFLAGS="-g -O0"
+#export MPICHLIB_FFLAGS="-g -O0"
+#export MPICHLIB_FCFLAGS="-g -O0"
+
+# PGI compiler settings
+#export CC=pgcc 
+#export CXX=pgCC
+#export F77=pgf77
+##export FC=pgf90
+#export MPICHLIB_CFLAGS="-g -O2 -fPIC"
+#export MPICHLIB_CXXFLAGS="-g -O2 -fPIC"
+#export MPICHLIB_FFLAGS="-g -O2 -fPIC"
+#export MPICHLIB_FCFLAGS="-g -O2 -fPIC"
+
+# Pathscale compiler settings
+#export CC=pathcc 
+#export CXX=pathCC
+#export F77=pathf90
+##export FC=pathf90
+#export MPICHLIB_CFLAGS="-g -O2"
+#export MPICHLIB_CXXFLAGS="-g -O2"
+#export MPICHLIB_FFLAGS="-g -O2 -fno-second-underscore"
+#export MPICHLIB_FCFLAGS="-g -O2 -fno-second-underscore"
+
+export CONFIG_FLAGS="--disable-fast --enable-g=dbg --enable-error-checking=runtime --enable-error-messages=all --enable-nmpi-as-mpi"
+#export CONFIG_FLAGS="--enable-fast=all --enable-g=dbg --enable-nmpi-as-mpi"
+
+# PMI library:  PMGR_COLLECTIVE, SLURM
+#export PMI="--with-pm=no --with-pmi=slurm"
+export PMI="--with-pm=slurm --with-pmi=pmi2"
+
+# Network for Omnipath
+export DEVICE_FLAGS="--with-device=ch3:psm --with-psm2"
+#export DEVICE_FLAGS="--with-device=ch3:psm --with-psm2 --with-psm2-lib=/usr/lib64"
+
+# Network for QLogic
+#export DEVICE_FLAGS="--with-device=ch3:psm --with-psm"
+#export DEVICE_FLAGS="--with-device=ch3:psm --with-psm --with-psm-lib=/usr/lib64"
+#export DEVICE_FLAGS="--with-device=ch3:psm"
+
+# Network for Mellanox
+#export DEVICE_FLAGS="--with-device=ch3:mrail --with-rdma=gen2"
+#export DEVICE_FLAGS="--with-device=ch3:mrail --with-rdma=gen2 --enable-cuda --with-cuda=/opt/cudatoolkit-5.0"
+#export DEVICE_FLAGS="--with-device=ch3:nemesis"
+
+export REG_CACHE="--disable-registration-cache"
+
+mkdir build
+cd build
+../configure \
+  --prefix=${installdir} \
+  --enable-f77 --enable-fc --enable-cxx \
+  ${CONFIG_FLAGS} \
+  --enable-shared --enable-sharedlibs=gcc \
+  --enable-debuginfo \
+  --disable-new-dtags \
+  ${PMI} \
+  ${DEVICE_FLAGS} \
+  ${REG_CACHE} \
+  --enable-llnl-site-specific-options \
+  --with-ch3-rank-bits=32 \
+  --enable-romio --with-file-system=lustre+nfs+ufs \
+  --disable-mpe --without-mpe 2>&1 > configure.out
+
+make clean
+
+make -j8 VERBOSE=1 2>&1 > make.out
+
+make install VERBOSE=1
