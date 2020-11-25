@@ -706,6 +706,7 @@ int truncate_bcast_forward(const unifyfs_tree_t* broadcast_tree,
 
         /* forward request down the tree */
         coll_request* req;
+        hg_id_t hgid = unifyfsd_rpc_context->rpcs.truncate_bcast_id;
         for (i = 0; i < child_count; i++) {
             req = requests + i;
 
@@ -715,8 +716,7 @@ int truncate_bcast_forward(const unifyfs_tree_t* broadcast_tree,
                    i, child, glb_servers[child].margo_svr_addr_str);
 
             /* allocate handle */
-            rc = get_request_handle(unifyfsd_rpc_context->rpcs.truncate_id,
-                                    child, req);
+            rc = get_request_handle(hgid, child, req);
             if (rc == UNIFYFS_SUCCESS) {
                 /* invoke truncate request rpc on child */
                 rc = forward_request((void*)in, req);
