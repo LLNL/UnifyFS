@@ -13,14 +13,14 @@
 #
 # If individual tests are desired to be run, source the 001-setup.sh script
 # first, followed by 002-start-server.sh. Then source each desired script after
-# that preceded by `$CI_DIR`. When finished, source the 990-stop-server.sh
-# script last.
+# that preceded by `$UNIFYFS_CI_DIR`. When finished, source the
+# 990-stop-server.sh script last.
 #
 # E.g.:
 #      $ . full/path/to/001-setup.sh
-#      $ . $CI_DIR/002-start-server.sh
-#      $ . $CI_DIR/100-writeread-tests.sh
-#      $ . $CI_DIR/990-stop-server.sh
+#      $ . $UNIFYFS_CI_DIR/002-start-server.sh
+#      $ . $UNIFYFS_CI_DIR/100-writeread-tests.sh
+#      $ . $UNIFYFS_CI_DIR/990-stop-server.sh
 #
 # Before doing either of these, make sure you have interactively allocated nodes
 # or are submitting a batch job.
@@ -51,9 +51,9 @@ Then source any desired test files. Lastly, source 990-stop-server.sh.
 
 E.g.:
     $ . full/path/to/001-setup.sh
-    $ . $CI_DIR/002-start-server.sh
-    $ . $CI_DIR/100-writeread-tests.sh
-    $ . $CI_DIR/990-stop-server.sh
+    $ . \$UNIFYFS_CI_DIR/002-start-server.sh
+    $ . \$UNIFYFS_CI_DIR/100-writeread-tests.sh
+    $ . \$UNIFYFS_CI_DIR/990-stop-server.sh
 
 Before doing either of these, make sure you have interactively allocated nodes
 or are submitting a batch job.
@@ -78,18 +78,18 @@ SECONDS=0
 start_time=$SECONDS
 echo "Started RUN_TESTS.sh @: $(date)"
 
-# Set up CI_DIR if this script is called first
-CI_DIR=${CI_DIR:-"$(dirname "$(readlink -fm $BASH_SOURCE)")"}
+# Set up UNIFYFS_CI_DIR if this script is called first
+UNIFYFS_CI_DIR=${UNIFYFS_CI_DIR:-"$(dirname "$(readlink -fm $BASH_SOURCE)")"}
 
 # test_done gets called in 990-stop-server.sh if this is not set.
 # If not set, tests can be run individually
 full_run=true
 
 # setup testing
-source $CI_DIR/001-setup.sh
+source $UNIFYFS_CI_DIR/001-setup.sh
 
 # start unifyfsd
-source $CI_DIR/002-start-server.sh
+source $UNIFYFS_CI_DIR/002-start-server.sh
 
 # determine time setup took
 setup_time=$SECONDS
@@ -101,13 +101,13 @@ echo "Setup time -- $(elapsed_time start_time setup_time)"
 ##############################################################################
 
 # writeread example tests
-source $CI_DIR/100-writeread-tests.sh
+source $UNIFYFS_CI_DIR/100-writeread-tests.sh
 
 # write example tests
-source $CI_DIR/110-write-tests.sh
+source $UNIFYFS_CI_DIR/110-write-tests.sh
 
 # read example tests
-source $CI_DIR/120-read-tests.sh
+source $UNIFYFS_CI_DIR/120-read-tests.sh
 
 ##############################################################################
 # DO NOT add additional tests after this point
@@ -117,7 +117,7 @@ testing_time=$SECONDS
 echo "Testing time -- $(elapsed_time setup_time testing_time)"
 
 # stop unifyfsd and cleanup
-source $CI_DIR/990-stop-server.sh
+source $UNIFYFS_CI_DIR/990-stop-server.sh
 
 end_time=$SECONDS
 echo "All done @ $(date)"

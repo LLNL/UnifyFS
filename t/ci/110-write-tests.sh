@@ -88,9 +88,9 @@ unify_test_write_posix() {
         test $rc = 0 &&
         test $lcount = 18 &&
         if [[ $io_pattern =~ (n1)$ ]]; then
-            test_path_is_file ${CI_POSIX_MP}/$filename
+            test_path_is_file ${UNIFYFS_CI_POSIX_MP}/$filename
         else
-            test_path_has_file_per_process $CI_POSIX_MP $filename
+            test_path_has_file_per_process $UNIFYFS_CI_POSIX_MP $filename
         fi
     '
 }

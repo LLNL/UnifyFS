@@ -40,8 +40,8 @@ test_expect_success REAL_MP "Verify UNIFYFS_MOUNTPOINT ($UNIFYFS_MP) is empty" '
 '
 
 # Cleanup posix mountpoint
-test_expect_success POSIX "Cleanup CI_POSIX_MP: $CI_POSIX_MP" '
-    rm -rf $CI_POSIX_MP/*posix*
+test_expect_success POSIX "Cleanup UNIFYFS_CI_POSIX_MP: $UNIFYFS_CI_POSIX_MP" '
+    rm -rf $UNIFYFS_CI_POSIX_MP/*posix*
 '
 
 # cleanup_hosts
@@ -55,4 +55,11 @@ test_expect_success PDSH,CLEAN "Cleanup hosts" '
 trap - EXIT
 
 # end here if running tests individually
-[[ -z $full_run ]] && test_done
+if [[ -z $full_run ]]; then
+    ( test_done; )
+    test_exit_code=$?
+
+    cd "$(dirname "$SHARNESS_TRASH_DIRECTORY")"
+
+    return $test_exit_code
+fi
