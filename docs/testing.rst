@@ -426,6 +426,189 @@ documentation.
 
 ------------
 
+Configuration Variables
+***********************
+
+Along with the already provided :doc:`configuration` options/environment
+variables, there are environment variables used by the integration testing
+suite that can also be set in order to change the default behavior.
+
+Key Variables
+^^^^^^^^^^^^^
+
+These environment variables can be set prior to sourcing the *t/ci/001-setup.sh*
+script and will affect how the overall integration suite operates.
+
+``UNIFYFS_INSTALL``
+"""""""""""""""""""
+
+USAGE: ``UNIFYFS_INSTALL=/path/to/dir/containing/UnifyFS/bin/directory``
+
+The full path to the directory containing the *bin/* and *libexec/* directories
+for your UnifyFS installation. Set this envar to prevent the integration tests
+from searching for a UnifyFS installation automatically. Where the automatic
+search starts can be altered by setting the ``$BASE_SEARCH_DIR`` variable.
+
+``UNIFYFS_CI_NPROCS``
+"""""""""""""""""""""
+
+USAGE: ``UNIFYFS_CI_NPROCS=<number-of-process-per-node>``
+
+The number of processes to use per node inside a job allocation. This defaults
+to 1 process per node.  This can be adjusted if more processes are desired
+on multiple nodes or multiple processes are desired on a single node.
+
+``UNIFYFS_CI_TEMP_DIR``
+"""""""""""""""""""""""
+
+USAGE: ``UNIFYFS_CI_TEMP_DIR=/path/for/temporary/files/created/by/UnifyFS``
+
+Can be used as a shortcut to set ``UNIFYFS_RUNSTATE_DIR`` and
+``UNIFYFS_META_DB_PATH`` to the same path.  This envar defaults to
+``UNIFYFS_CI_TEMP_DIR=${TMPDIR}/unifyfs.${USER}.${JOB_ID}``.
+
+``UNIFYFS_CI_LOG_CLEANUP``
+""""""""""""""""""""""""""
+
+USAGE: ``UNIFYFS_CI_LOG_CLEANUP=yes|YES|no|NO``
+
+In the event ``$UNIFYFS_LOG_DIR`` has **not** been set, the logs will be put in
+``$SHARNESS_TRASH_DIRECTORY``, as set up by sharness.sh_, and cleaned up
+automatically after the tests have run. The logs will be in a
+*<system-name>_<jobid>/* subdirectory. Should any tests fail, sharness does not
+clean up the trash directory for debugging purposes. Setting
+``UNIFYFS_CI_LOG_CLEANUP=no|NO`` will move the *<system-name>_<jobid>/* logs
+directory to ``$UNIFYFS_CI_DIR`` (the directory containing the integration
+testing scripts) to allow them to persist even when all tests pass. This envar
+defauls to ``yes``.
+
+.. note::
+
+    Setting ``$UNIFYFS_LOG_DIR`` will put all created logs in the designated path
+    and will not clean them up.
+
+``UNIFYFS_CI_HOST_CLEANUP``
+"""""""""""""""""""""""""""
+
+USAGE: ``UNIFYFS_CI_HOST_CLEANUP=yes|YES|no|NO``
+
+After all tests have run, the nodes on which the tests were ran will
+automatically be cleaned up. This cleanup includes ensuring ``unifyfsd`` has
+stopped and deleting any files created by UnifyFS or its dependencies. Set
+``UNIFYFS_CI_HOST_CLEANUP=no|NO`` to skip cleaning up. This envar defaults to
+``yes``.
+
+.. note::
+
+    PDSH_ is required for cleanup and cleaning up is simply skipped if not
+    found.
+
+``UNIFYFS_CI_CLEANUP``
+""""""""""""""""""""""
+
+USAGE: ``UNIFYFS_CI_CLEANUP=yes|YES|no|NO``
+
+Setting this to ``no|NO`` sets both ``$CI_LOG_CLEANUP`` and
+``$UNIFYFS_CI_HOST_CLEANUP`` to ``no|NO``.
+
+``UNIFYFS_CI_TEST_POSIX``
+"""""""""""""""""""""""""
+
+USAGE: ``UNIFYFS_CI_TEST_POSIX=yes|YES|no|NO``
+
+Determines whether any ``<example-name>-posix`` tests should be run since they
+require a real mountpoint to exist.
+
+This envar defaults to ``yes``. However, when ``$UNIFYFS_MOUNTPOINT`` is set to a
+real directory, this envar is switched to ``no``. The idea behind this is that
+the tests can be run a first time with a fake mountpoint (which will also run
+the posix tests), and then the tests can be run again with a real mountpoint and
+the posix tests won't be run twice. This behavior can be overridden by setting
+``UNIFYFS_CI_TEST_POSIX=yes|YES`` before running the integration tests when
+``$UNIFYFS_MOUNTPOINT`` is set to an existing directory.
+
+An example of testing a posix example can be see :ref:`below <posix-ex-label>`.
+
+.. note::
+
+    The posix mountpoint envar, ``UNIFYFS_CI_POSIX_MP``, is set to be located
+    inside ``$SHARNESS_TRASH_DIRECTORY`` automatically and cleaned up
+    afterwards. However, this envar can be set before running the integration
+    tests as well. If setting this, ensure that it is a shared file system that
+    all allocated nodes can see.
+
+Additional Variables
+^^^^^^^^^^^^^^^^^^^^
+
+After sourcing the *t/ci/001-setup.sh* script there will be additional variables
+available that may be useful when writing/adding additional tests.
+
+Directory Structure
+"""""""""""""""""""
+
+File structure here is assuming UnifyFS was cloned to ``$HOME``.
+
+``UNIFYFS_CI_DIR``
+    Directory containing the CI testing scripts. *$HOME/UnifyFS/t/ci/*
+``SHARNESS_DIR``
+    Directory containing the base sharness scripts. *$HOME/UnifyFS/t/*
+``UNIFYFS_SOURCE_DIR``
+    Directory containing the UnifyFS source code. *$HOME/UnifyFS/*
+``BASE_SEARCH_DIR``
+    Parent directory containing the UnifyFS source code. Starting place to auto
+    search for UnifyFS install when ``$UNIFYFS_INSTALL`` isn't provided. *$HOME/*
+
+Executable Locations
+""""""""""""""""""""
+
+``UNIFYFS_BIN``
+    Directory containing ``unifyfs`` and ``unifyfsd``. *$UNIFYFS_INSTALL/bin*
+``UNIFYFS_EXAMPLES``
+    Directory containing the compiled examples_. *$UNIFYFS_INSTALL/libexec*
+
+Resource Managers
+"""""""""""""""""
+
+``JOB_RUN_COMMAND``
+    The base MPI job launch command established according to the detected
+    resource manager, number of allocated nodes, and ``$UNIFYFS_CI_NPROCS``.
+
+    The LSF variables below will also affect the default version of this command
+    when using that resource manager.
+``JOB_RUN_ONCE_PER_NODE``
+    MPI job launch command to only run a single process on each allocated node
+    established according to the detected resource manager.
+``JOB_ID``
+    The ID assigned to the current CI job as established by the detected
+    resource manager.
+
+LSF
+"""
+
+Additional variables used by the LSF resource manager to determine how jobs are
+launched with ``$JOB_RUN_COMMAND``. These can also be set prior to sourcing the
+*t/ci/001-setup.sh* script and will affect how the integration tests run.
+
+``UNIFYFS_CI_NCORES``
+    Number of cores-per-resource-set to use. Defaults to 20.
+``UNIFYFS_CI_NRS_PER_NODE``
+    Number of resource-sets-per-node to use. Defaults to 1.
+``UNIFYFS_CI_NRES_SETS``
+    Total number of resource sets to use. Defaults to (number_of_nodes) *
+    (``$UNIFYFS_CI_NRS_PER_NODE``).
+
+Misc
+""""
+
+``KB``
+    :math:`2^10`.
+``MB``
+    :math:`2^20`.
+``GB``
+    :math:`2^30`.
+
+------------
+
 Running the Tests
 *****************
 
@@ -442,19 +625,11 @@ The testing scripts in `t/ci`_ depend on sharness_, which is set up in the
 containing *t/* directory. These tests will not function properly if moved or if
 they cannot find the sharness files.
 
-.. important::
+Whether running all tests or individual tests, first make sure you have
+either interactively allocated nodes or are submitting a batch job to run
+them.
 
-    Whether running all tests or individual tests, first make sure you have
-    either interactively allocated nodes or are submitting a batch job to run
-    them.
-
-    Also make sure all :ref:`dependencies <spack-build-label>` are installed and
-    loaded.
-
-By default, the integration tests will use the number of processes-per-node as
-there are nodes allocated for the job (i.e., if 4 nodes were allocated, then 4
-processes will be run per node). This can be changed by setting the
-:ref:`$CI_NPROCS <ci-nprocs-label>` environment variable.
+Make sure all :ref:`dependencies <spack-build-label>` are installed and loaded.
 
 .. note::
 
@@ -498,136 +673,21 @@ or
 Running Individual Tests
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-In order to run individual tests, testing functions and variables need to be set
-up first, and the UnifyFS server needs to be started. To do this, first source
-the *t/ci/001-setup.sh* script followed by *002-start-server.sh*. Then source
-each desired test script after that preceded by ``$CI_DIR/``. When finished,
-source the *990-stop-server.sh* script last to stop the server and clean up.
+In order to run individual tests, the testing functions and variables need to be
+set up first and then the UnifyFS server needs to be started.
+
+First source the *t/ci/001-setup.sh* script whereafter sharness will change
+directories to the ``$SHARNESS_TRASH_DIRECTORY``. To account for this, source
+*002-start-server.sh* and each desired test script after that prefixed with
+``$UNIFYFS_CI_DIR/``. When finished, source the *990-stop-server.sh* script
+last to stop the server and clean up.
 
 .. code-block:: BASH
 
-    $ . full/path/to/001-setup.sh
-    $ . $CI_DIR/002-start-server.sh
-    $ . $CI_DIR/100-writeread-tests.sh
-    $ . $CI_DIR/990-stop-server.sh
-
-Configuration Variables
-^^^^^^^^^^^^^^^^^^^^^^^
-
-Along with the already provided :doc:`configuration` options/environment
-variables, there are available environment variables used by the integration
-testing suite that can be set in order to change the default behavior. They are
-listed below in the order they are set up.
-
-``CI_PROJDIR``
-""""""""""""""
-
-USAGE: ``CI_PROJDIR=/base/location/to/search/for/UnifyFS/source/files``
-
-During setup, the integration tests will search for the ``unifyfsd`` executable
-and installed example scripts if the UnifyFS install directory is not provided by
-the user with the ``UNIFYFS_INSTALL`` envar. ``CI_PROJDIR`` is the base location
-where this search will start and defaults to ``CI_PROJDIR=$HOME``.
-
-
-``UNIFYFS_INSTALL``
-"""""""""""""""""""
-
-USAGE: ``UNIFYFS_INSTALL=/path/to/dir/containing/UnifyFS/bin/directory``
-
-The full path to the directory containing the *bin/* and *libexec/* directories
-for a UnifyFS installation. Set this envar to prevent the integration tests from
-searching for a UnifyFS install directory automatically.
-
-.. _ci-nprocs-label:
-
-``CI_NPROCS``
-"""""""""""""
-
-USAGE: ``CI_NPROCS=<number-of-process-per-node>``
-
-The number of processes to use per node inside a job allocation. This defaults
-to the number of processes per node as there are nodes in the allocation (i.e.,
-if 4 nodes were allocated, then 4 processes will be run per node). This should
-be adjusted if fewer processes are desired on multiple nodes, multiple processes
-are desired on a single node, or a large number of nodes have been allocated.
-
-``CI_LOG_CLEANUP``
-""""""""""""""""""
-
-USAGE: ``CI_LOG_CLEANUP=yes|YES|no|NO``
-
-In the event ``$UNIFYFS_LOG_DIR`` has **not** been set, the logs will be put in
-``$SHARNESS_TRASH_DIRECTORY``, as set up by sharness.sh_, and cleaned up
-automatically after the tests have run. The logs will be in a
-*<system-name>_<jobid>/* subdirectory. Should any tests fail, the trash
-directory will not be cleaned up for debugging purposes. Setting
-``CI_LOG_CLEANUP=no|NO`` will move the *<system-name>_<jobid>/* logs directory
-to ``$CI_DIR`` (the directory containing the integration tests) to
-allow them to persist even when all tests pass. This envar defauls to ``yes``.
-
-.. note::
-
-    Setting ``$UNIFYFS_LOG_DIR`` will put all created logs in the designated path
-    and will not clean them up.
-
-``CI_HOST_CLEANUP``
-"""""""""""""""""""
-
-USAGE: ``CI_HOST_CLEANUP=yes|YES|no|NO``
-
-After all tests have run, the nodes on which the tests were ran will
-automatically be cleaned up. This cleanup includes ensuring ``unifyfsd`` has
-stopped and deleting any files created by UnifyFS or its dependencies. Set
-``CI_HOST_CLEANUP=no|NO`` to skip cleaning up. This envar defaults to ``yes``.
-
-.. note::
-
-    PDSH_ is required for cleanup and cleaning up is simply skipped if not
-    found.
-
-``CI_CLEANUP``
-""""""""""""""
-
-USAGE: ``CI_CLEANUP=yes|YES|no|NO``
-
-Setting this to ``no|NO`` sets both ``$CI_LOG_CLEANUP`` and ``$CI_HOST_CLEANUP``
-to ``no|NO``.
-
-``CI_TEMP_DIR``
-""""""""""""""""
-
-USAGE: ``CI_TEMP_DIR=/path/for/temporary/files/created/by/UnifyFS``
-
-Can be used as a shortcut to set ``UNIFYFS_RUNSTATE_DIR`` and
-``UNIFYFS_META_DB_PATH`` to the same path.  This envar defaults to
-``CI_TEMP_DIR=${TMPDIR}/unifyfs.${USER}.${JOB_ID}``.
-
-``CI_TEST_POSIX``
-"""""""""""""""""
-
-USAGE: ``CI_TEST_POSIX=yes|YES|no|NO``
-
-Determines whether any ``<example-name>-posix`` tests should be run since they
-require a real mountpoint to exist.
-
-This envar defaults to ``yes``. However, when ``$UNIFYFS_MOUNTPOINT`` is set to a
-real directory, this envar is switched to ``no``. The idea behind this is that
-the tests can be run a first time with a fake mountpoint (which will also run
-the posix tests), and then the tests can be run again with a real mountpoint and
-the posix tests wont be run twice. This behavior can be overridden by setting
-``CI_TEST_POSIX=yes|YES`` before running the integration tests when
-``$UNIFYFS_MOUNTPOINT`` is set to an existing directory.
-
-An example of testing a posix example can be see :ref:`below <posix-ex-label>`.
-
-.. note::
-
-    The the posix mountpoint envar, ``CI_POSIX_MP``, is set up inside
-    ``$SHARNESS_TRASH_DIRECTORY`` automatically and cleaned up afterwards.
-    However, this envar can be set before running the integration tests as well.
-    If setting this, ensure that it is a shared file system that all allocated
-    nodes can see.
+    $ . ./001-setup.sh
+    $ . $UNIFYFS_CI_DIR/002-start-server.sh
+    $ . $UNIFYFS_CI_DIR/100-writeread-tests.sh
+    $ . $UNIFYFS_CI_DIR/990-stop-server.sh
 
 ------------
 
@@ -647,12 +707,12 @@ as simple as possible.
 One particularly useful function is ``unify_run_test()``. Currently, this
 function is set up to work for the *write*, *read*, *writeread*, and
 *checkpoint-restart* examples. This function sets up the MPI job run command and
-default arguments as well as any default arguments wanted by all examples. See
+default options as well as any default arguments wanted by all examples. See
 :ref:`below <unify-run-test-label>` for details.
 
 .. _helper-label:
 
-Example Helper Functions
+Testing Helper Functions
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 There are helper functions available in `t/ci/ci-functions.sh`_ that can make
@@ -672,14 +732,15 @@ example with the appropriate MPI runner and args. This function is meant to make
 running the cr, write, read, and writeread examples as easy as possible.
 
 The ``build_test_command()`` function is called by this function which
-automatically sets any options that are always wanted (-vkf as well as -U and
+automatically sets any options that are always wanted (-vkfo as well as -U and
 the appropriate -m if posix test or not). The stderr output file is also created
 (based on the filename that is autogenerated) and the appropriate option is set
 for the MPI job run command.
 
-Args that can be passed in are ([-pncbx][-A|-M|-P|-S|-V]). All other args (see
-:ref:`Running the Examples <run-ex-label>`) are set automatically, including the
-filename (which is generated based on the input ``$app_name`` and ``$app_args``).
+Args that can be passed in are ([-pncbx][-A|-M|-N|-P|-S|-V]). All other args
+(see :ref:`Running the Examples <run-ex-label>`) are set automatically,
+including the outfile and filename (which are generated based on the input
+``$app_name`` and ``$app_args``).
 
 The third parameter is an optional "pass-by-reference" parameter that can
 contain the variable name for the resulting output to be stored in, allowing
@@ -731,18 +792,18 @@ The results can then be tested with sharness_:
 
 USAGE: ``get_filename app_name app_args [app_suffix]``
 
-Builds and returns the filename for an example so that if it shows up in the
-``$UNIFYFS_MOUNTPOINT`` (when using an existing mountpoint), it can be tracked
-to its originating test for debugging. Error files are created with this
-filename and a ``.err`` suffix and placed in the logs directory for debugging.
+Builds and returns the filename with the provided suffix based on the input
+app_name and app_args.
 
-Also allows testers to get what the filename will be in advance if called
+The filename in ``$UNIFYFS_MOUNTPOINT`` will be given a ``.app`` suffix.
+
+This allows tests to get what the filename will be in advance if called
 from a test suite. This can be used for posix tests to ensure the file showed
-up in the mount point, as well as for cp/stat tests that potentially need the
-filename from a previous test.
+up in the mount point, as well as for read, cp, stat tests that potentially need
+the filename from a previous test prior to running.
 
-Note that the filename created by ``unify_run_test()`` will have a ``.app``
-suffix.
+Error logs and outfiles are also created with this filename, with a ``.err`` or
+``.out`` suffix respectively, and placed in the logs directory.
 
 Returns a string with the spaces removed and hyphens replaced by underscores.
 
@@ -754,7 +815,8 @@ Returns a string with the spaces removed and hyphens replaced by underscores.
 Some uses cases may be:
 
 - posix tests where the file existence is checked for after a test was run
-- cp/stat tests where an already existing filename from a prior test is needed
+- read, cp, or stat tests where an already existing filename from a prior test
+  might be needed
 
 For example:
 
@@ -777,8 +839,34 @@ For example:
     test_expect_success POSIX "$app_name $app_args: (line_count=$line_count, rc=$rc)" '
         test $rc = 0 &&
         test $line_count = 8 &&
-        test_path_has_file_per_process $CI_POSIX_MP $filename
+        test_path_has_file_per_process $UNIFYFS_CI_POSIX_MP $filename
     '
+
+Additional Functions
+""""""""""""""""""""
+
+There are other convenience functions used bythat my be helpful in writing/adding tests are also
+found in `t/ci/ci-functions.sh`_:
+
+``find_executable()``
+    USAGE: ``find_executable abs_path *file_name|*path/file_name [prune_path]``
+
+    Locate the desired executable file when provided an absolute path of where
+    to start searching, the name of the file with an optional preceding path,
+    and an optional prune_path, or path to omit from the search.
+
+    Returns the path of the first executable found with the given name and
+    optional prefix.
+``elapsed_time()``
+    USAGE: ``elapsed_time start_time_in_seconds end_time_in_seconds``
+
+    Calculates the elapsed time between two given times.
+
+    Returns the elapsed time formatted as HH:MM:SS.
+``format_bytes()``
+    USAGE: ``format_bytes int``
+
+    Returns the input bytes formatted as KB, MB, or GB (1024 becomes 1KB).
 
 Sharness Helper Functions
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -804,7 +892,6 @@ Expects two arguments:
 - $2 - Number of seconds to wait before giving up
 
 .. code-block:: BASH
-    :emphasize-lines:
 
     test_expect_success "unifyfsd is running" '
         process_is_running unifyfsd 5

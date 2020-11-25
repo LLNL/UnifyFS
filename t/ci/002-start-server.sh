@@ -44,8 +44,8 @@ fi
 
 # If running posix tests, posix mountpoint needs to be a real, shared dir
 # If it's not, prereq will not be set and posix tests will be skipped
-test_expect_success TEST_POSIX "CI_POSIX_MP ($CI_POSIX_MP) is shared dir" '
-    test_path_is_shared_dir $CI_POSIX_MP &&
+test_expect_success TEST_POSIX "POSIX_MP ($UNIFYFS_CI_POSIX_MP) is shared dir" '
+    test_path_is_shared_dir $UNIFYFS_CI_POSIX_MP &&
     test_set_prereq POSIX
 '
 
@@ -95,5 +95,3 @@ clean_fail() {
     cleanup_hosts
 }
 trap 'clean_fail $BASH_SOURCE' EXIT
-
-#TODO: can't call cleanup_hosts if PDSH prereq isn't set...
