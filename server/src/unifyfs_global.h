@@ -35,23 +35,23 @@
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <pthread.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <stdbool.h>
-#include <pthread.h>
 
 // common headers
 #include "arraylist.h"
+#include "tree.h"
 #include "unifyfs_const.h"
 #include "unifyfs_log.h"
 #include "unifyfs_logio.h"
 #include "unifyfs_meta.h"
 #include "unifyfs_shm.h"
-#include "unifyfs_fops.h"
 #include "unifyfs_client_rpcs.h"
 #include "unifyfs_server_rpcs.h"
 
@@ -123,13 +123,6 @@ typedef struct {
                               * @SM: allocated responses buffer */
 } server_chunk_reads_t;
 
-typedef struct {
-    size_t length;  /* length of data to read */
-    size_t offset;  /* file offset */
-    int gfid;       /* global file id */
-    int errcode;    /* request completion status */
-} client_read_req_t;
-
 // forward declaration of reqmgr_thrd
 struct reqmgr_thrd;
 
@@ -148,8 +141,6 @@ typedef struct app_client {
     struct reqmgr_thrd* reqmgr; /* this client's request manager thread */
 
     logio_context* logio;    /* logio context for write data */
-
-    shm_context* shmem_data;  /* shmem context for read data */
 
     shm_context* shmem_super; /* shmem context for superblock region */
     size_t super_meta_offset; /* superblock offset to index metadata */
@@ -190,7 +181,6 @@ unifyfs_rc attach_app_client(app_client* client,
                              const char* logio_spill_dir,
                              const size_t logio_spill_size,
                              const size_t logio_shmem_size,
-                             const size_t shmem_data_size,
                              const size_t shmem_super_size,
                              const size_t super_meta_offset,
                              const size_t super_meta_size);

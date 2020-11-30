@@ -25,6 +25,7 @@
 struct _unifyfs_fops_ctx {
     int app_id;
     int client_id;
+    int mread_id;
 };
 typedef struct _unifyfs_fops_ctx unifyfs_fops_ctx_t;
 
@@ -178,13 +179,13 @@ static inline int unifyfs_fops_read(unifyfs_fops_ctx_t* ctx,
 }
 
 static inline int unifyfs_fops_mread(unifyfs_fops_ctx_t* ctx,
-                                     size_t n_req, void* req)
+                                     size_t n_req, void* reqs)
 {
     if (!global_fops_tab->mread) {
         return ENOSYS;
     }
 
-    return global_fops_tab->mread(ctx, n_req, req);
+    return global_fops_tab->mread(ctx, n_req, reqs);
 }
 
 #endif /* __UNIFYFS_FOPS_H */

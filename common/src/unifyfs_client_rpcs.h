@@ -39,7 +39,6 @@ typedef enum {
     UNIFYFS_CLIENT_RPC_METAGET,
     UNIFYFS_CLIENT_RPC_METASET,
     UNIFYFS_CLIENT_RPC_MOUNT,
-    UNIFYFS_CLIENT_RPC_MULTIREAD,
     UNIFYFS_CLIENT_RPC_READ,
     UNIFYFS_CLIENT_RPC_SYNC,
     UNIFYFS_CLIENT_RPC_TRUNCATE,
@@ -53,7 +52,6 @@ typedef enum {
 MERCURY_GEN_PROC(unifyfs_attach_in_t,
                  ((int32_t)(app_id))
                  ((int32_t)(client_id))
-                 ((hg_size_t)(shmem_data_size))
                  ((hg_size_t)(shmem_super_size))
                  ((hg_size_t)(meta_offset))
                  ((hg_size_t)(meta_size))
@@ -173,32 +171,51 @@ MERCURY_GEN_PROC(unifyfs_laminate_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_laminate_rpc)
 
-/* unifyfs_read_rpc (client => server)
- *
- * given an app_id, client_id, global file id, an offset, and a length,
- * initiate read request for data */
-MERCURY_GEN_PROC(unifyfs_read_in_t,
-                 ((int32_t)(app_id))
-                 ((int32_t)(client_id))
-                 ((int32_t)(gfid))
-                 ((hg_size_t)(offset))
-                 ((hg_size_t)(length)))
-MERCURY_GEN_PROC(unifyfs_read_out_t, ((int32_t)(ret)))
-DECLARE_MARGO_RPC_HANDLER(unifyfs_read_rpc)
-
 /* unifyfs_mread_rpc (client => server)
  *
- * given an app_id, client_id, and count of read requests,
- * followed by list of (gfid, offset, length) tuples,
+ * given mread (mread_id, app_id, client_id) and count of read requests,
+ * followed by a bulk data array of read extents (unifyfs_extent_t),
  * initiate read requests for data */
 MERCURY_GEN_PROC(unifyfs_mread_in_t,
+                 ((int32_t)(mread_id))
                  ((int32_t)(app_id))
                  ((int32_t)(client_id))
                  ((int32_t)(read_count))
                  ((hg_size_t)(bulk_size))
-                 ((hg_bulk_t)(bulk_handle)))
+                 ((hg_bulk_t)(bulk_extents)))
 MERCURY_GEN_PROC(unifyfs_mread_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_mread_rpc)
+
+/* unifyfs_mread_req_data_rpc (server => client)
+ *
+ * Bulk data response for a single read request located at the specified
+ * read_index in the array of requests associated with the given mread_id.
+ *
+ * read_offset is the offset to be added to the start offset of the request,
+ * and is used to transfer data for very large extents in multiple chunks. */
+MERCURY_GEN_PROC(unifyfs_mread_req_data_in_t,
+                 ((int32_t)(mread_id))
+                 ((int32_t)(read_index))
+                 ((hg_size_t)(read_offset))
+                 ((hg_size_t)(bulk_size))
+                 ((hg_bulk_t)(bulk_data)))
+MERCURY_GEN_PROC(unifyfs_mread_req_data_out_t, ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_mread_req_data_rpc)
+
+/* unifyfs_mread_req_complete_rpc (server => client)
+ *
+ * Request completion response for a single read request located at the
+ * specified read_index in the array of requests associated with the given
+ * mread_id.
+ *
+ * A non-zero read_error indicates the server encountered an error during
+ * processing of the request. */
+MERCURY_GEN_PROC(unifyfs_mread_req_complete_in_t,
+                 ((int32_t)(mread_id))
+                 ((int32_t)(read_index))
+                 ((int32_t)(read_error)))
+MERCURY_GEN_PROC(unifyfs_mread_req_complete_out_t, ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_mread_req_complete_rpc)
 
 #ifdef __cplusplus
 } // extern "C"

@@ -1,33 +1,39 @@
+include $(top_srcdir)/common/src/Makefile.mk
+
 bin_PROGRAMS = unifyfsd
 
-noinst_LIBRARIES = libunifyfsd.a
+AM_CPPFLAGS = \
+  -I$(top_srcdir)/common/src \
+  -I$(top_srcdir)/client/src
 
-unifyfsd_SOURCES = unifyfs_server.c
+AM_CFLAGS = -Wall -Werror
 
-libunifyfsd_a_SOURCES = \
-    extent_tree.c \
-    extent_tree.h \
-    margo_server.c \
-    margo_server.h \
-    unifyfs_cmd_handler.c \
-    unifyfs_fops.h \
-    unifyfs_global.h \
-    unifyfs_group_rpc.h \
-    unifyfs_group_rpc.c \
-    unifyfs_inode.h \
-    unifyfs_inode.c \
-    unifyfs_inode_tree.h \
-    unifyfs_inode_tree.c \
-    unifyfs_metadata_mdhim.h \
-    unifyfs_p2p_rpc.h \
-    unifyfs_p2p_rpc.c \
-    unifyfs_request_manager.c \
-    unifyfs_request_manager.h \
-    unifyfs_service_manager.c \
-    unifyfs_service_manager.h \
-    unifyfs_server_pid.c \
-    unifyfs_tree.c \
-    unifyfs_tree.h
+unifyfsd_SOURCES = \
+  $(UNIFYFS_COMMON_SRCS) \
+  extent_tree.c \
+  extent_tree.h \
+  margo_server.c \
+  margo_server.h \
+  unifyfs_cmd_handler.c \
+  unifyfs_fops.h \
+  unifyfs_global.h \
+  unifyfs_group_rpc.h \
+  unifyfs_group_rpc.c \
+  unifyfs_inode.h \
+  unifyfs_inode.c \
+  unifyfs_inode_tree.h \
+  unifyfs_inode_tree.c \
+  unifyfs_metadata_mdhim.h \
+  unifyfs_p2p_rpc.h \
+  unifyfs_p2p_rpc.c \
+  unifyfs_request_manager.c \
+  unifyfs_request_manager.h \
+  unifyfs_server.c \
+  unifyfs_service_manager.c \
+  unifyfs_service_manager.h \
+  unifyfs_server_pid.c \
+  unifyfs_tree.c \
+  unifyfs_tree.h
 
 OPT_CPP_FLAGS =
 OPT_C_FLAGS =
@@ -36,7 +42,7 @@ OPT_LIBS =
 
 if USE_MDHIM
 
-  libunifyfsd_a_SOURCES += \
+  unifyfsd_SOURCES += \
     unifyfs_metadata_mdhim.c \
     unifyfs_fops_mdhim.c
 
@@ -60,32 +66,12 @@ if USE_MDHIM
 
 else # ! USE_MDHIM
 
-  libunifyfsd_a_SOURCES += \
-    unifyfs_fops_rpc.c
+  unifyfsd_SOURCES += unifyfs_fops_rpc.c
 
 endif # USE_MDHIM
 
-
-unifyfsd_LDFLAGS = -static \
-  $(OPT_LD_FLAGS) \
-  $(MARGO_LDFLAGS)
-
-unifyfsd_LDADD = \
-    libunifyfsd.a \
-    $(top_builddir)/common/src/libunifyfs_common.la \
-    $(OPT_LIBS) \
-    $(MARGO_LIBS) \
-    -lpthread -lm -lstdc++ -lrt
-
-AM_CPPFLAGS = \
-  $(OPT_CPP_FLAGS) \
-  -I$(top_srcdir)/common/src \
-  -I$(top_srcdir)/client/src
-
-AM_CFLAGS = -Wall -Werror \
-  $(OPT_C_FLAGS) \
-  $(MARGO_CFLAGS) \
-  $(MERCURY_CFLAGS) \
-  $(ARGOBOTS_CFLAGS)
+unifyfsd_CFLAGS  = $(AM_CFLAGS) $(UNIFYFS_COMMON_FLAGS) $(OPT_C_FLAGS)
+unifyfsd_LDFLAGS = $(OPT_LD_FLAGS)
+unifyfsd_LDADD   = $(UNIFYFS_COMMON_LIBS) $(OPT_LIBS)
 
 CLEANFILES = $(bin_PROGRAMS)

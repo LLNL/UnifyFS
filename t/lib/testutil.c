@@ -105,11 +105,13 @@ char* testutil_get_mount_point(void)
 void testutil_get_size(char* path, size_t* global)
 {
     struct stat sb = {0};
-    int rc;
+    int err, rc;
 
+    errno = 0;
     rc = stat(path, &sb);
     if (rc != 0) {
-        printf("Error: %s\n", strerror(errno));
+        err = errno;
+        printf("Test Error: stat(%s) failed - %s\n", path, strerror(err));
         exit(1);
     }
     if (global) {

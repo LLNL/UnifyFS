@@ -66,7 +66,7 @@ int rpc_fsync(unifyfs_fops_ctx_t* ctx,
     int ret = UNIFYFS_SUCCESS;
 
     /* get memory page size on this machine */
-    int page_sz = getpagesize();
+    int page_sz = (int) get_page_size();
 
     /* get application client */
     app_client* client = get_app_client(ctx->app_id, ctx->client_id);
@@ -236,18 +236,19 @@ int create_remote_read_requests(unsigned int n_chunks,
 
 static
 int submit_read_request(unifyfs_fops_ctx_t* ctx,
-                        size_t count,
+                        unsigned int count,
                         unifyfs_inode_extent_t* extents)
 {
     if ((count == 0) || (NULL == extents)) {
         return EINVAL;
     }
 
-    LOGDBG("handling read request (%zu chunk requests)", count);
+    LOGDBG("handling read request (%u chunk requests)", count);
 
     /* see if we have a valid app information */
     int app_id = ctx->app_id;
     int client_id = ctx->client_id;
+    int client_mread = ctx->mread_id;
 
     /* get application client */
     app_client* client = get_app_client(app_id, client_id);
@@ -255,31 +256,25 @@ int submit_read_request(unifyfs_fops_ctx_t* ctx,
         return UNIFYFS_FAILURE;
     }
 
-    /* group requested extents by gfid */
+    /* TODO: when multiple extents from the same file are requested, it would
+     *       be nice to fetch all the chunks in one call to find_extents rpc.
+     *       this is difficult now because the returned chunks are not
+     *       necessarily in the same order as the requested extents */
+
     int ret = UNIFYFS_SUCCESS;
-    int extent_ndx = 0;
-    while (extent_ndx < (int)count) {
-        int curr_ndx = extent_ndx;
-        int curr_gfid = extents[extent_ndx].gfid;
-
-        /* get count of extents for current gfid */
-        unsigned int curr_count = 0;
-        while ((curr_ndx < count) && (extents[curr_ndx].gfid == curr_gfid)) {
-            curr_count++;
-            curr_ndx++;
-        }
-
+    unsigned int extent_ndx = 0;
+    for ( ; extent_ndx < count; extent_ndx++) {
+        unifyfs_inode_extent_t* ext = extents + extent_ndx;
         unsigned int n_chunks = 0;
         chunk_read_req_t* chunks = NULL;
-        int rc = unifyfs_invoke_find_extents_rpc(curr_gfid, curr_count,
-                                                 extents + extent_ndx,
+        int rc = unifyfs_invoke_find_extents_rpc(ext->gfid, 1, ext,
                                                  &n_chunks, &chunks);
         if (rc) {
             LOGERR("failed to find extent locations");
             return rc;
         }
         if (n_chunks > 0) {
-            /* prepare the read request requests */
+            /* prepare the remote read requests */
             unsigned int n_remote_reads = 0;
             server_chunk_reads_t* remote_reads = NULL;
             rc = create_remote_read_requests(n_chunks, chunks,
@@ -296,16 +291,18 @@ int submit_read_request(unifyfs_fops_ctx_t* ctx,
             server_read_req_t rdreq = { 0, };
             rdreq.app_id = app_id;
             rdreq.client_id = client_id;
+            rdreq.client_mread = client_mread;
+            rdreq.client_read_ndx = extent_ndx;
             rdreq.chunks = chunks;
             rdreq.num_server_reads = (int) n_remote_reads;
             rdreq.remote_reads = remote_reads;
+            rdreq.extent = *ext;
             ret = rm_submit_read_request(&rdreq);
         } else {
+            LOGDBG("extent(gfid=%d, offset=%lu, len=%lu) has no data",
+                   ext->gfid, ext->offset, ext->length);
             ret = ENODATA;
         }
-
-        /* advance to next group */
-        extent_ndx += curr_count;
     }
 
     return ret;
@@ -332,7 +329,8 @@ int rpc_mread(unifyfs_fops_ctx_t* ctx,
               void* read_reqs)
 {
     int ret = UNIFYFS_SUCCESS;
-    int i = 0;
+    unsigned int i = 0;
+    unsigned int count = (unsigned int)n_req;
     unifyfs_inode_extent_t* chunks = NULL;
     unifyfs_extent_t* reqs = (unifyfs_extent_t*) read_reqs;
 
@@ -342,7 +340,7 @@ int rpc_mread(unifyfs_fops_ctx_t* ctx,
         return ENOMEM;
     }
 
-    for (i = 0; i < (int)n_req; i++) {
+    for (i = 0; i < count; i++) {
         unifyfs_inode_extent_t* ch = chunks + i;
         unifyfs_extent_t* req = reqs + i;
         ch->gfid = req->gfid;
@@ -350,7 +348,7 @@ int rpc_mread(unifyfs_fops_ctx_t* ctx,
         ch->length = req->length;
     }
 
-    ret = submit_read_request(ctx, n_req, chunks);
+    ret = submit_read_request(ctx, count, chunks);
 
     if (chunks) {
         free(chunks);

@@ -43,6 +43,7 @@
 #include "unifyfs-internal.h"
 #include "unifyfs-sysio.h"
 #include "margo_client.h"
+#include "client_read.h"
 
 /* ---------------------------------------
  * POSIX wrappers: paths
@@ -937,7 +938,7 @@ int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* nread)
 
     /* if we don't read any bytes, return success */
     if (count == 0) {
-        LOGDBG("returning EOF");
+        LOGDBG("zero bytes requested");
         return UNIFYFS_SUCCESS;
     }
 
@@ -951,15 +952,19 @@ int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* nread)
     req.offset  = (size_t) pos;
     req.length  = count;
     req.nread   = 0;
-    req.errcode = EINPROGRESS;
+    req.errcode = 0;
     req.buf     = buf;
+    req.aiocbp  = NULL;
+    req.cover_begin_offset = (size_t)-1;
+    req.cover_end_offset   = (size_t)-1;
 
     /* execute read operation */
-    int ret = unifyfs_gfid_read_reqs(&req, 1);
+    int ret = process_gfid_reads(&req, 1);
     if (ret != UNIFYFS_SUCCESS) {
         /* failed to issue read operation */
         return ret;
-    } else if (req.errcode != UNIFYFS_SUCCESS) {
+    } else if ((req.errcode != UNIFYFS_SUCCESS) &&
+               (req.errcode != ENODATA)) {
         /* read executed, but failed */
         return req.errcode;
     }
@@ -1261,7 +1266,6 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
         case SEEK_END:
             /* seek to EOF + offset */
             logical_eof = unifyfs_fid_logical_size(fid);
-            LOGDBG("fid=%d EOF is offset %zu", fid, (size_t)logical_eof);
             if (logical_eof + offset < 0) {
                 /* offset is negative and will result in negative position */
                 errno = EINVAL;
@@ -1272,7 +1276,6 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
         case SEEK_DATA:
             /* Using fallback approach: always return offset */
             logical_eof = unifyfs_fid_logical_size(fid);
-            LOGDBG("fid=%d EOF is offset %zu", fid, (size_t)logical_eof);
             if (offset < 0 || offset > logical_eof) {
                 /* negative offset and offset beyond EOF are invalid */
                 errno = ENXIO;
@@ -1283,7 +1286,6 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
         case SEEK_HOLE:
             /* Using fallback approach: always return offset for EOF */
             logical_eof = unifyfs_fid_logical_size(fid);
-            LOGDBG("fid=%d EOF is offset %zu", fid, (size_t)logical_eof);
             if (offset < 0 || offset > logical_eof) {
                 /* negative offset and offset beyond EOF are invalid */
                 errno = ENXIO;
@@ -1584,9 +1586,11 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
                     reqs[reqcnt].offset  = (size_t)(cbp->aio_offset);
                     reqs[reqcnt].length  = cbp->aio_nbytes;
                     reqs[reqcnt].nread   = 0;
-                    reqs[reqcnt].errcode = EINPROGRESS;
+                    reqs[reqcnt].errcode = 0;
                     reqs[reqcnt].buf     = (char*)(cbp->aio_buf);
                     reqs[reqcnt].aiocbp  = cbp;
+                    reqs[reqcnt].cover_begin_offset = (size_t)-1;
+                    reqs[reqcnt].cover_end_offset   = (size_t)-1;
                     reqcnt++;
                 }
             } else {
@@ -1610,7 +1614,7 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
     }
 
     if (reqcnt) {
-        rc = unifyfs_gfid_read_reqs(reqs, reqcnt);
+        rc = process_gfid_reads(reqs, reqcnt);
         if (rc != UNIFYFS_SUCCESS) {
             /* error reading data */
             ret = rc;
@@ -1667,12 +1671,15 @@ ssize_t UNIFYFS_WRAP(pread)(int fd, void* buf, size_t count, off_t offset)
         req.offset  = offset;
         req.length  = count;
         req.nread   = 0;
-        req.errcode = EINPROGRESS;
+        req.errcode = 0;
         req.buf     = buf;
+        req.aiocbp  = NULL;
+        req.cover_begin_offset = (size_t)-1;
+        req.cover_end_offset   = (size_t)-1;
 
         /* execute read operation */
         ssize_t retcount;
-        int ret = unifyfs_gfid_read_reqs(&req, 1);
+        int ret = process_gfid_reads(&req, 1);
         if (ret != UNIFYFS_SUCCESS) {
             /* error reading data */
             errno = unifyfs_rc_errno(ret);

@@ -149,7 +149,7 @@ static int create_server_pid_file(void)
 {
     int i = 0;
     int ret = 0;
-    char filename[PATH_MAX] = { 0, };
+    char filename[UNIFYFS_MAX_FILENAME] = { 0, };
     FILE* fp = NULL;
 
     if (!server_pids) {
@@ -157,7 +157,8 @@ static int create_server_pid_file(void)
         return EINVAL;
     }
 
-    sprintf(filename, "%s/%s", server_cfg.sharedfs_dir, UNIFYFSD_PID_FILENAME);
+    snprintf(filename, sizeof(filename), "%s/%s",
+             server_cfg.sharedfs_dir, UNIFYFSD_PID_FILENAME);
 
     fp = fopen(filename, "w");
     if (!fp) {

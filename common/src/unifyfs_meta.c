@@ -44,6 +44,7 @@ uint64_t compute_path_md5(const char* path)
     MD5((const unsigned char*) path, len, digested);
 
     /* construct uint64_t hash from first 8 digest bytes */
-    uint64_t hash = be64toh(*((uint64_t*)digested));
+    uint64_t* digest_value = (uint64_t*) digested;
+    uint64_t hash = be64toh(*digest_value);
     return hash;
 }

@@ -54,7 +54,7 @@ int main(int argc, char* argv[])
 
     /* Verify unifyfs_mount succeeds. */
     rc = unifyfs_mount(unifyfs_root, rank, rank_num, 0);
-    ok(rc == 0, "unifyfs_mount at %s (rc=%d)", unifyfs_root, rc);
+    ok(rc == 0, "unifyfs_mount(%s) (rc=%d)", unifyfs_root, rc);
 
     if (rc != 0) {
         BAIL_OUT("unifyfs_mount in stdio_suite failed");
@@ -78,6 +78,9 @@ int main(int argc, char* argv[])
     fflush_test(unifyfs_root);
 
     size_test(unifyfs_root);
+
+    rc = unifyfs_unmount();
+    ok(rc == 0, "unifyfs_unmount(%s) (rc=%d)", unifyfs_root, rc);
 
     MPI_Finalize();
 

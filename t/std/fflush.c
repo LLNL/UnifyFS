@@ -29,40 +29,56 @@ int fflush_test(char* unifyfs_root)
     char path[64];
     char buf[64] = {0};
     FILE* fp = NULL;
-    int rc;
+    int err, rc;
 
     /* Generate a random file name in the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifyfs_root);
 
     /* Write "hello world" to a file */
+    errno = 0;
     fp = fopen(path, "w");
-    ok(fp != NULL, "%s: fopen(%s): %s", __FILE__, path, strerror(errno));
+    err = errno;
+    ok(fp != NULL, "%s: fopen(%s): %s", __FILE__, path, strerror(err));
 
+    errno = 0;
     rc = fwrite("hello world", 12, 1, fp);
-    ok(rc == 1, "%s: fwrite(\"hello world\"): %s", __FILE__, strerror(errno));
+    err = errno;
+    ok(rc == 1, "%s: fwrite(\"hello world\"): %s", __FILE__, strerror(err));
 
     /* Flush the extents */
+    errno = 0;
     rc = fflush(fp);
-    ok(rc == 0, "%s: fflush() (rc=%d): %s", __FILE__, rc, strerror(errno));
+    err = errno;
+    ok(rc == 0, "%s: fflush() (rc=%d): %s", __FILE__, rc, strerror(err));
 
+    errno = 0;
     rc = fclose(fp);
-    ok(rc == 0, "%s: fclose() (rc=%d): %s", __FILE__, rc, strerror(errno));
+    err = errno;
+    ok(rc == 0, "%s: fclose() (rc=%d): %s", __FILE__, rc, strerror(err));
 
     /* Laminate */
+    errno = 0;
     rc = chmod(path, 0444);
-    ok(rc == 0, "%s: chmod(0444) (rc=%d): %s", __FILE__, strerror(errno));
+    err = errno;
+    ok(rc == 0, "%s: chmod(0444) (rc=%d): %s", __FILE__, strerror(err));
 
     /* Read it back */
+    errno = 0;
     fp = fopen(path, "r");
-    ok(fp != NULL, "%s: fopen(%s): %s", __FILE__, path, strerror(errno));
+    err = errno;
+    ok(fp != NULL, "%s: fopen(%s): %s", __FILE__, path, strerror(err));
 
+    errno = 0;
     rc = fread(buf, 12, 1, fp);
+    err = errno;
     ok(rc == 1, "%s: fread() buf[]=\"%s\", (rc %d): %s", __FILE__, buf, rc,
-        strerror(errno));
+        strerror(err));
     is(buf, "hello world", "%s: saw \"hello world\"", __FILE__);
 
+    errno = 0;
     rc = fclose(fp);
-    ok(rc == 0, "%s: fclose() (rc=%d): %s", __FILE__, rc, strerror(errno));
+    err = errno;
+    ok(rc == 0, "%s: fclose() (rc=%d): %s", __FILE__, rc, strerror(err));
 
     //end_skip;
 

@@ -127,7 +127,7 @@ Each line in the manifest corresponds to one file copy request,
 and it contains both the source and destination file paths. Currently,
 directory copies are not supported.
 
-Each line is formatted as <source filename><whitespace><destination filename>.
+Each line is formatted as: ``<source filename> <whitespace> <destination filename>``.
 If either of the filenames
 contain whitespace or special characters, then both filenames should
 be surrounded by double-quote characters (") (ASCII character 34 decimal).
