@@ -185,7 +185,6 @@ int main(int argc, char* argv[])
 
     test_cfg test_config;
     test_cfg* cfg = &test_config;
-    test_timer time_create2laminate;
     test_timer time_create;
     test_timer time_wr;
     test_timer time_rd;
@@ -195,7 +194,6 @@ int main(int argc, char* argv[])
     test_timer time_laminate;
     test_timer time_stat_post;
 
-    timer_init(&time_create2laminate, "create2laminate");
     timer_init(&time_create, "create");
     timer_init(&time_wr, "write");
     timer_init(&time_rd, "read");
@@ -219,9 +217,6 @@ int main(int argc, char* argv[])
         fflush(NULL);
         return -1;
     }
-
-    // timer to wrap all parts of write operation
-    timer_start_barrier(cfg, &time_create2laminate);
 
     // create file
     target_file = test_target_filename(cfg);
@@ -427,7 +422,6 @@ int main(int argc, char* argv[])
     // cleanup
     free(target_file);
 
-    timer_fini(&time_create2laminate);
     timer_fini(&time_create);
     timer_fini(&time_wr);
     timer_fini(&time_rd);

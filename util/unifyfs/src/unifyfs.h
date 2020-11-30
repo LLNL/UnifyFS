@@ -75,6 +75,7 @@ typedef struct _unifyfs_args unifyfs_args_t;
  */
 struct _unifyfs_resource {
     unifyfs_rm_e rm;           /* resource manager */
+    int n_cores_per_server;    /* number of cores per node for each server */
     size_t n_nodes;            /* number of nodes in job allocation */
     char** nodes;              /* allocated node names */
 };

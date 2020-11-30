@@ -450,7 +450,7 @@ static void laminate_bcast_rpc(hg_handle_t handle)
                 LOGERR("margo_wait() for bulk transfer failed");
                 ret = UNIFYFS_ERROR_MARGO;
             } else {
-                LOGDBG("laminating gfid=%d, received %zu extents from %d",
+                LOGINFO("laminating gfid=%d, received %zu extents from %d",
                        gfid, num_extents, (int)in.root);
 
                 if (NULL != requests) {

@@ -30,6 +30,7 @@
 #include <margo.h>
 
 typedef struct ServerRpcIds {
+    /* server-server rpcs */
     hg_id_t chunk_read_request_id;
     hg_id_t chunk_read_response_id;
     hg_id_t extent_add_id;
@@ -45,6 +46,10 @@ typedef struct ServerRpcIds {
     hg_id_t truncate_id;
     hg_id_t truncate_bcast_id;
     hg_id_t unlink_bcast_id;
+
+    /* client-server rpcs */
+    hg_id_t client_mread_data_id;
+    hg_id_t client_mread_complete_id;
 } server_rpcs_t;
 
 typedef struct ServerRpcContext {
@@ -62,5 +67,21 @@ int margo_server_rpc_init(void);
 int margo_server_rpc_finalize(void);
 
 int margo_connect_servers(void);
+
+/* invokes the client mread request data response rpc function */
+int invoke_client_mread_req_data_rpc(int app_id,
+                                     int client_id,
+                                     int mread_id,
+                                     int read_index,
+                                     size_t read_offset,
+                                     size_t extent_size,
+                                     void* extent_buffer);
+
+/* invokes the client mread request completion rpc function */
+int invoke_client_mread_req_complete_rpc(int app_id,
+                                         int client_id,
+                                         int mread_id,
+                                         int read_index,
+                                         int read_error);
 
 #endif // MARGO_SERVER_H

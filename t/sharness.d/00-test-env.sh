@@ -41,5 +41,15 @@ export JOB_RUN_COMMAND
 # Set paths to executables
 #
 export UNIFYFSD=$UNIFYFS_BUILD_DIR/server/src/unifyfsd
-export TEST_WRITE_GOTCHA=$UNIFYFS_BUILD_DIR/client/tests/test_write_gotcha
-export TEST_READ_GOTCHA=$UNIFYFS_BUILD_DIR/client/tests/test_read_gotcha
+
+
+# On systems with YAMA kernel support, Mercury's shared memory NA
+# requires cross-memory attach to be enabled:
+#    sysctl -w kernel.yama.ptrace_scope=0
+if [ -f /proc/sys/kernel/yama/ptrace_scope ]; then
+    scope_val=`cat /proc/sys/kernel/yama/ptrace_scope`
+    if [ $scope_val -ne 0 ]; then
+        sudo echo 0 > /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || \
+          echo >&2 "Failed to enable cross-memory attach for Mercury shmem NA"
+    fi
+fi

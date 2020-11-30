@@ -18,14 +18,7 @@
  * segments in the tree.  This is used to coalesce writes before an fsync.
  */
 
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
-#include <stdlib.h>
-#include <pthread.h>
-
 #include "extent_tree.h"
-#include "tree.h"
 #include "unifyfs_metadata_mdhim.h"
 
 #undef MIN
@@ -46,8 +39,8 @@ int compare_func(
     }
 }
 
-RB_PROTOTYPE(inttree, extent_tree_node, entry, compare_func)
-RB_GENERATE(inttree, extent_tree_node, entry, compare_func)
+RB_PROTOTYPE(ext_tree, extent_tree_node, entry, compare_func)
+RB_GENERATE(ext_tree, extent_tree_node, entry, compare_func)
 
 /* Returns 0 on success, positive non-zero error code otherwise */
 int extent_tree_init(struct extent_tree* extent_tree)
@@ -173,7 +166,7 @@ int extent_tree_add(
      * returned in 'overlap'.  If 'overlap' is NULL, then there were no
      * overlaps, and our range was successfully inserted. */
     struct extent_tree_node* overlap;
-    while ((overlap = RB_INSERT(inttree, &extent_tree->head, node))) {
+    while ((overlap = RB_INSERT(ext_tree, &extent_tree->head, node))) {
         /* Our range overlaps with another range (in 'overlap'). Is there any
          * any part of 'overlap' that does not overlap our range?  If so,
          * delete the old 'overlap' and insert the smaller, non-overlapping
@@ -187,7 +180,7 @@ int extent_tree_add(
              * range in the tree defined in overlap.
              * We can't find a non-overlapping range.
              * Delete the existing range. */
-            RB_REMOVE(inttree, &extent_tree->head, overlap);
+            RB_REMOVE(ext_tree, &extent_tree->head, overlap);
             free(overlap);
             extent_tree->count--;
         } else {
@@ -233,19 +226,19 @@ int extent_tree_add(
             }
 
             /* Remove our old range and release it */
-            RB_REMOVE(inttree, &extent_tree->head, overlap);
+            RB_REMOVE(ext_tree, &extent_tree->head, overlap);
             free(overlap);
             extent_tree->count--;
 
             /* Insert the non-overlapping part of the new range */
-            RB_INSERT(inttree, &extent_tree->head, resized);
+            RB_INSERT(ext_tree, &extent_tree->head, resized);
             extent_tree->count++;
 
             /* if we have a trailing portion, insert range for that,
              * and increase our extent count since we just turned one
              * range entry into two */
             if (remaining != NULL) {
-                RB_INSERT(inttree, &extent_tree->head, remaining);
+                RB_INSERT(ext_tree, &extent_tree->head, remaining);
                 extent_tree->count++;
             }
         }
@@ -264,7 +257,7 @@ int extent_tree_add(
 
     /* check whether we can coalesce new extent with any preceding extent */
     struct extent_tree_node* prev = RB_PREV(
-        inttree, &extent_tree->head, target);
+        ext_tree, &extent_tree->head, target);
     if (prev != NULL && prev->end + 1 == target->start) {
         /* found a extent that ends just before the new extent starts,
          * check whether they are also contiguous in the log */
@@ -279,7 +272,7 @@ int extent_tree_add(
             prev->end = target->end;
 
             /* delete new extent from the tree and free it */
-            RB_REMOVE(inttree, &extent_tree->head, target);
+            RB_REMOVE(ext_tree, &extent_tree->head, target);
             free(target);
             extent_tree->count--;
 
@@ -291,7 +284,7 @@ int extent_tree_add(
 
     /* check whether we can coalesce new extent with any trailing extent */
     struct extent_tree_node* next = RB_NEXT(
-        inttree, &extent_tree->head, target);
+        ext_tree, &extent_tree->head, target);
     if (next != NULL && target->end + 1 == next->start) {
         /* found a extent that starts just after the new extent ends,
          * check whether they are also contiguous in the log */
@@ -306,7 +299,7 @@ int extent_tree_add(
             target->end = next->end;
 
             /* delete next extent from the tree and free it */
-            RB_REMOVE(inttree, &extent_tree->head, next);
+            RB_REMOVE(ext_tree, &extent_tree->head, next);
             free(next);
             extent_tree->count--;
         }
@@ -339,7 +332,7 @@ struct extent_tree_node* extent_tree_find(
      * the target range (starting byte), or otherwise the
      * node for the next biggest starting byte */
     struct extent_tree_node* next = RB_NFIND(
-        inttree, &extent_tree->head, node);
+        ext_tree, &extent_tree->head, node);
 
     free(node);
 
@@ -372,7 +365,7 @@ int extent_tree_truncate(
     extent_tree_wrlock(tree);
 
     /* lookup node with the extent that has the maximum offset */
-    struct extent_tree_node* node = RB_MAX(inttree, &tree->head);
+    struct extent_tree_node* node = RB_MAX(ext_tree, &tree->head);
 
     /* iterate backwards until we find an extent below
      * the truncated size */
@@ -386,12 +379,12 @@ int extent_tree_truncate(
              * meaning the entire range is beyond the truncated size,
              * get pointer to next previous extent in tree */
             struct extent_tree_node* oldnode = node;
-            node = RB_PREV(inttree, &tree->head, node);
+            node = RB_PREV(ext_tree, &tree->head, node);
 
             /* remove this node from the tree and release it */
             LOGDBG("removing node [%lu, %lu] due to truncate=%lu",
                    node->start, node->end, size);
-            RB_REMOVE(inttree, &tree->head, oldnode);
+            RB_REMOVE(ext_tree, &tree->head, oldnode);
             free(oldnode);
 
             /* decrement the number of extents in the tree */
@@ -446,7 +439,7 @@ struct extent_tree_node* extent_tree_iter(
     struct extent_tree_node* next = NULL;
     if (start == NULL) {
         /* Initial case, no starting node */
-        next = RB_MIN(inttree, &extent_tree->head);
+        next = RB_MIN(ext_tree, &extent_tree->head);
         return next;
     }
 
@@ -454,14 +447,14 @@ struct extent_tree_node* extent_tree_iter(
      * We were given a valid start node.  Look it up to start our traversal
      * from there.
      */
-    next = RB_FIND(inttree, &extent_tree->head, start);
+    next = RB_FIND(ext_tree, &extent_tree->head, start);
     if (!next) {
         /* Some kind of error */
         return NULL;
     }
 
     /* Look up our next node */
-    next = RB_NEXT(inttree, &extent_tree->head, start);
+    next = RB_NEXT(ext_tree, &extent_tree->head, start);
 
     return next;
 }
@@ -525,13 +518,13 @@ void extent_tree_clear(struct extent_tree* extent_tree)
     /* Remove and free each node in the tree */
     while ((node = extent_tree_iter(extent_tree, node))) {
         if (oldnode) {
-            RB_REMOVE(inttree, &extent_tree->head, oldnode);
+            RB_REMOVE(ext_tree, &extent_tree->head, oldnode);
             free(oldnode);
         }
         oldnode = node;
     }
     if (oldnode) {
-        RB_REMOVE(inttree, &extent_tree->head, oldnode);
+        RB_REMOVE(ext_tree, &extent_tree->head, oldnode);
         free(oldnode);
     }
 

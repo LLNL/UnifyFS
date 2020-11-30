@@ -24,6 +24,9 @@
 extern "C" {
 #endif
 
+/* convenience method to return system page size */
+size_t get_page_size(void);
+
 /* log-based I/O context structure */
 typedef struct logio_context {
     shm_context* shmem;   /* shmem region for memory storage */

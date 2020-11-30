@@ -1,7 +1,6 @@
 # unifyfs.conf
 
 # NOTE:
-#  - settings with default values are commented out
 #  - string values should not be quoted, e.g., /var/tmp is correct but
 #    "/var/tmp" is not.
 #
@@ -10,34 +9,22 @@
 #  ';' end of line comment character, must be preceded by a space
 
 # SECTION: top-level configuration
-[unifyfs]
-# consistency = LAMINATED ; NONE | LAMINATED | POSIX
-# daemonize = on          ; servers will become daemons
-# mountpoint = /unifyfs   ; mountpoint (i.e., prefix path)
-
-# SECTION: client settings
-[client]
-max_files = 64 ; max open files per client (default: 128)
+# [unifyfs]
+# daemonize = off ; servers will become daemons (default: on)
 
 # SECTION: log settings
-[log]
+# [log]
 # dir = /tmp          ; log file directory path
 # file = unifyfsd.log ; log file name (server rank will be appended)
-verbosity = 5         ; logging verbosity level [0-5] (default: 0)
+# verbosity = 5       ; logging verbosity level [0-5] (default: 0)
 
-# SECTION: metadata settings
-[meta]
-# db_name = unifyfs_metadb ; metadata datbase name
-db_path = /var/tmp         ; metadata database directory path (default: /tmp)
+# SECTION: log-based I/O configuration (NOTE: values are per-client)
+# [logio]
+# chunk_size = 65536      ; data chunk size (B) (default: 4 MiB)
+# shmem_size = 67108864   ; maximum size (B) of data in shared memory (default: 256 MiB)
+# spill_size = 5368709120 ; maximum size (B) of data in spillover file (default: 1 GiB)
 
-# SECTION: shared memory segment settings
-[shmem]
-chunk_mem = 67108864 ; segment size for data chunks (default: 256 MiB)
-# single = off       ; use single region for all clients
-
-# SECTION: spillover local to each node
-[spillover]
-# enabled = on        ; enable spillover to local storage
-# data_dir = /mnt/ssd ; directory path for data spillover
-# meta_dir = /mnt/ssd ; directory path for metadata spillover
-size = 268435456      ; data spillover max size (default: 1 GiB)
+# SECTION: server settings
+# [server]
+# max_app_clients = 64 ; max client processes per mountpoint (default: 256)
+# init_timeout = 300   ; timeout (seconds) for server initialization and communication bootstrapping (default: 120)

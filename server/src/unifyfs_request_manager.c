@@ -41,30 +41,28 @@
 #include "unifyfs_server_rpcs.h"
 #include "margo_server.h"
 
-// system headers
-#include <time.h> // nanosleep
 
 #define RM_LOCK(rm) \
 do { \
-    LOGDBG("locking RM[%d:%d] state", rm->app_id, rm->client_id); \
+    /*LOGDBG("locking RM[%d:%d] state", rm->app_id, rm->client_id);*/ \
     pthread_mutex_lock(&(rm->thrd_lock)); \
 } while (0)
 
 #define RM_UNLOCK(rm) \
 do { \
-    LOGDBG("unlocking RM[%d:%d] state", rm->app_id, rm->client_id); \
+    /*LOGDBG("unlocking RM[%d:%d] state", rm->app_id, rm->client_id);*/ \
     pthread_mutex_unlock(&(rm->thrd_lock)); \
 } while (0)
 
 #define RM_REQ_LOCK(rm) \
 do { \
-    LOGDBG("locking RM[%d:%d] reqs", rm->app_id, rm->client_id); \
+    /*LOGDBG("locking RM[%d:%d] requests", rm->app_id, rm->client_id);*/ \
     ABT_mutex_lock(rm->reqs_sync); \
 } while (0)
 
 #define RM_REQ_UNLOCK(rm) \
 do { \
-    LOGDBG("unlocking RM[%d:%d] reqs", rm->app_id, rm->client_id); \
+    /*LOGDBG("unlocking RM[%d:%d] requests", rm->app_id, rm->client_id);*/ \
     ABT_mutex_unlock(rm->reqs_sync); \
 } while (0)
 
@@ -131,7 +129,8 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
     ABT_mutex_create(&(thrd_ctrl->reqs_sync));
 
     /* allocate a list to track client rpc requests */
-    thrd_ctrl->client_reqs = arraylist_create();
+    thrd_ctrl->client_reqs =
+        arraylist_create(UNIFYFS_CLIENT_MAX_ACTIVE_REQUESTS);
     if (thrd_ctrl->client_reqs == NULL) {
         LOGERR("failed to allocate request manager client_reqs!");
         pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
@@ -177,13 +176,13 @@ server_read_req_t* rm_reserve_read_req(reqmgr_thrd_t* thrd_ctrl)
 {
     server_read_req_t* rdreq = NULL;
     RM_REQ_LOCK(thrd_ctrl);
-    if (thrd_ctrl->num_read_reqs < RM_MAX_ACTIVE_REQUESTS) {
-        if (thrd_ctrl->next_rdreq_ndx < (RM_MAX_ACTIVE_REQUESTS - 1)) {
+    if (thrd_ctrl->num_read_reqs < RM_MAX_SERVER_READS) {
+        if (thrd_ctrl->next_rdreq_ndx < (RM_MAX_SERVER_READS - 1)) {
             rdreq = thrd_ctrl->read_reqs + thrd_ctrl->next_rdreq_ndx;
             assert((rdreq->req_ndx == 0) && (rdreq->in_use == 0));
             rdreq->req_ndx = thrd_ctrl->next_rdreq_ndx++;
         } else { // search for unused slot
-            for (int i = 0; i < RM_MAX_ACTIVE_REQUESTS; i++) {
+            for (int i = 0; i < RM_MAX_SERVER_READS; i++) {
                 rdreq = thrd_ctrl->read_reqs + i;
                 if ((rdreq->req_ndx == 0) && (rdreq->in_use == 0)) {
                     rdreq->req_ndx = i;
@@ -259,6 +258,7 @@ static void signal_new_requests(reqmgr_thrd_t* reqmgr)
         }
         /* have a reqmgr thread waiting on condition variable,
          * signal it to begin processing the requests we just added */
+        LOGDBG("signaling new requests");
         pthread_cond_signal(&reqmgr->thrd_cond);
     }
     RM_UNLOCK(reqmgr);
@@ -273,6 +273,7 @@ static void signal_new_responses(reqmgr_thrd_t* reqmgr)
         if (reqmgr->waiting_for_work) {
             /* have a reqmgr thread waiting on condition variable,
              * signal it to begin processing the responses we just added */
+            LOGDBG("signaling new responses");
             pthread_cond_signal(&reqmgr->thrd_cond);
         }
     }
@@ -374,7 +375,6 @@ int rm_create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
          * initialize fields on the per-server read request
          * structure */
         if (0 == reads->num_chunks) {
-            /* TODO: let's describe what these fields are for */
             reads->rank     = curr_del;
             reads->rdreq_id = rdreq->req_ndx;
             reads->reqs     = all_chunk_reads + i;
@@ -413,88 +413,41 @@ int rm_submit_read_request(server_read_req_t* req)
         return EINVAL;
     }
 
+    /* get reqmgr for app-client */
     client = get_app_client(req->app_id, req->client_id);
     if (NULL == client) {
         return UNIFYFS_FAILURE;
     }
-
     thrd_ctrl = client->reqmgr;
 
+    /* reserve an available reqmgr request slot */
     rdreq = rm_reserve_read_req(thrd_ctrl);
     if (!rdreq) {
         LOGERR("failed to allocate a request");
         return UNIFYFS_FAILURE;
     }
 
+    /* get assigned slot index, then copy request parameters to reserved
+     * req from input req. note we can't use memcpy or struct assignment
+     * because there are other fields set by rm_reserve_read_req() */
+    int rm_req_index = rdreq->req_ndx;
     rdreq->app_id = req->app_id;
     rdreq->client_id = req->client_id;
+    rdreq->client_mread = req->client_mread;
+    rdreq->client_read_ndx = req->client_read_ndx;
     rdreq->num_server_reads = req->num_server_reads;
     rdreq->chunks = req->chunks;
     rdreq->remote_reads = req->remote_reads;
+    rdreq->extent = req->extent;
 
     for (i = 0; i < rdreq->num_server_reads; i++) {
-        server_chunk_reads_t* read = &rdreq->remote_reads[i];
-        read->rdreq_id = rdreq->req_ndx;
+        rdreq->remote_reads[i].rdreq_id = rm_req_index;
     }
 
     rdreq->status = READREQ_READY;
     signal_new_requests(thrd_ctrl);
 
     return ret;
-}
-
-/* signal the client process for it to start processing read
- * data in shared memory */
-static int client_signal(shm_data_header* hdr,
-                         shm_data_state_e flag)
-{
-    if (flag == SHMEM_REGION_DATA_READY) {
-        LOGDBG("setting data-ready");
-    } else if (flag == SHMEM_REGION_DATA_COMPLETE) {
-        LOGDBG("setting data-complete");
-    }
-
-    /* we signal the client by setting a flag value within
-     * a shared memory segment that the client is monitoring */
-    hdr->state = flag;
-
-    /* TODO: MEM_FLUSH */
-
-    return UNIFYFS_SUCCESS;
-}
-
-/* wait until client has processed all read data in shared memory */
-static int client_wait(shm_data_header* hdr)
-{
-    int rc = (int)UNIFYFS_SUCCESS;
-
-    /* specify time to sleep between checking flag in shared
-     * memory indicating client has processed data */
-    struct timespec shm_wait_tm;
-    shm_wait_tm.tv_sec  = 0;
-    shm_wait_tm.tv_nsec = SHM_WAIT_INTERVAL;
-
-    /* wait for client to set flag to 0 */
-    int max_sleep = 10000000; // 10s
-    volatile int* vip = (volatile int*)&(hdr->state);
-    while (*vip != SHMEM_REGION_EMPTY) {
-        /* not there yet, sleep for a while */
-        nanosleep(&shm_wait_tm, NULL);
-
-        /* TODO: MEM_FETCH */
-
-        max_sleep--;
-        if (0 == max_sleep) {
-            LOGERR("timed out waiting for empty");
-            rc = (int)UNIFYFS_ERROR_SHMEM;
-            break;
-        }
-    }
-
-    /* reset header to reflect empty state */
-    hdr->meta_cnt = 0;
-    hdr->bytes = 0;
-    return rc;
 }
 
 /* function called by main thread to instruct
@@ -510,23 +463,15 @@ int rm_request_exit(reqmgr_thrd_t* thrd_ctrl)
     /* grab the lock */
     RM_LOCK(thrd_ctrl);
 
-    /* if reqmgr thread is not waiting in critical
-     * section, let's wait on it to come back */
-    if (!thrd_ctrl->waiting_for_work) {
-        /* reqmgr thread is not in critical section,
-         * tell it we've got something and signal it */
-        thrd_ctrl->has_waiting_dispatcher = 1;
-        pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
-
-        /* we're no longer waiting */
-        thrd_ctrl->has_waiting_dispatcher = 0;
-    }
-
     /* inform reqmgr thread that it's time to exit */
     thrd_ctrl->exit_flag = 1;
 
-    /* signal reqmgr thread */
-    pthread_cond_signal(&thrd_ctrl->thrd_cond);
+    /* if reqmgr thread is not waiting in critical
+     * section, let's wait on it to come back */
+    if (thrd_ctrl->waiting_for_work) {
+         /* signal reqmgr thread */
+        pthread_cond_signal(&thrd_ctrl->thrd_cond);
+    }
 
     /* release the lock */
     RM_UNLOCK(thrd_ctrl);
@@ -605,7 +550,7 @@ static int rm_request_remote_chunks(reqmgr_thrd_t* thrd_ctrl)
 
     /* iterate over each active read request */
     RM_REQ_LOCK(thrd_ctrl);
-    for (i = 0; i < RM_MAX_ACTIVE_REQUESTS; i++) {
+    for (i = 0; i < RM_MAX_SERVER_READS; i++) {
         server_read_req_t* req = thrd_ctrl->read_reqs + i;
         if (req->num_server_reads > 0) {
             LOGDBG("read req %d is active", i);
@@ -665,10 +610,9 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
 
     int i, j, rc;
     int ret = (int)UNIFYFS_SUCCESS;
-    shm_data_header* shm_hdr;
 
     /* iterate over each active read request */
-    for (i = 0; i < RM_MAX_ACTIVE_REQUESTS; i++) {
+    for (i = 0; i < RM_MAX_SERVER_READS; i++) {
         server_read_req_t* req = thrd_ctrl->read_reqs + i;
         if (req->status == READREQ_STARTED) {
             if (req->num_server_reads > 0) {
@@ -687,77 +631,18 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
                         ret = rc;
                     }
                 }
-            } else if (req->num_server_reads == 0) {
-                /* look up client shared memory region */
-                int app_id = req->app_id;
-                int client_id = req->client_id;
-                app_client* client = get_app_client(app_id, client_id);
-                if (NULL != client) {
-                    shm_context* client_shm = client->shmem_data;
-                    assert(NULL != client_shm);
-                    shm_hdr = (shm_data_header*) client_shm->addr;
-
-                    /* mark request as complete */
-                    req->status = READREQ_COMPLETE;
-
-                    /* signal client that we're now done writing data */
-                    client_signal(shm_hdr, SHMEM_REGION_DATA_COMPLETE);
-
-                    /* wait for client to read data */
-                    client_wait(shm_hdr);
-                }
-
-                rc = release_read_req(thrd_ctrl, req);
-                if (rc != (int)UNIFYFS_SUCCESS) {
-                    LOGERR("failed to release server_read_req_t");
-                    ret = rc;
-                }
+            }
+        } else if (req->status == READREQ_COMPLETE) {
+            /* cleanup completed server_read_req */
+            rc = release_read_req(thrd_ctrl, req);
+            if (rc != (int)UNIFYFS_SUCCESS) {
+                LOGERR("failed to release server_read_req_t");
+                ret = rc;
             }
         }
     }
 
     return ret;
-}
-
-static shm_data_meta* reserve_shmem_meta(shm_context* shmem_data,
-                                         size_t data_sz)
-{
-    shm_data_meta* meta = NULL;
-    shm_data_header* hdr = (shm_data_header*) shmem_data->addr;
-
-    if (NULL == hdr) {
-        LOGERR("invalid header");
-    } else {
-        pthread_mutex_lock(&(hdr->sync));
-        LOGDBG("shm_data_header(cnt=%zu, bytes=%zu)",
-               hdr->meta_cnt, hdr->bytes);
-        size_t remain_size = shmem_data->size -
-                             (sizeof(shm_data_header) + hdr->bytes);
-        size_t meta_size = sizeof(shm_data_meta) + data_sz;
-        if (meta_size > remain_size) {
-            /* client-side receive buffer is full,
-             * inform client to start reading */
-            LOGDBG("need more space in client recv buffer");
-            client_signal(hdr, SHMEM_REGION_DATA_READY);
-
-            /* wait for client to read data */
-            int rc = client_wait(hdr);
-            if (rc != (int)UNIFYFS_SUCCESS) {
-                LOGERR("wait for client recv buffer space failed");
-                pthread_mutex_unlock(&(hdr->sync));
-                return NULL;
-            }
-        }
-        size_t shm_offset = hdr->bytes;
-        char* shm_buf = ((char*)hdr) + sizeof(shm_data_header);
-        meta = (shm_data_meta*)(shm_buf + shm_offset);
-        LOGDBG("reserved shm_data_meta[%zu] and %zu payload bytes",
-               hdr->meta_cnt, data_sz);
-        hdr->meta_cnt++;
-        hdr->bytes += meta_size;
-        pthread_mutex_unlock(&(hdr->sync));
-    }
-    return meta;
 }
 
 int rm_post_chunk_read_responses(int app_id,
@@ -780,7 +665,7 @@ int rm_post_chunk_read_responses(int app_id,
     reqmgr_thrd_t* thrd_ctrl = client->reqmgr;
     assert(NULL != thrd_ctrl);
 
-    server_chunk_reads_t* del_reads = NULL;
+    server_chunk_reads_t* server_chunks = NULL;
 
     /* find read req associated with req_id */
     if (src_rank != glb_pmi_rank) {
@@ -791,20 +676,20 @@ int rm_post_chunk_read_responses(int app_id,
     server_read_req_t* rdreq = thrd_ctrl->read_reqs + req_id;
     for (int i = 0; i < rdreq->num_server_reads; i++) {
         if (rdreq->remote_reads[i].rank == src_rank) {
-            del_reads = rdreq->remote_reads + i;
+            server_chunks = rdreq->remote_reads + i;
             break;
         }
     }
 
-    if (NULL != del_reads) {
+    if (NULL != server_chunks) {
         LOGDBG("posting chunk responses for req %d from server %d",
                req_id, src_rank);
-        del_reads->resp = (chunk_read_resp_t*)resp_buf;
-        if (del_reads->num_chunks != num_chks) {
+        server_chunks->resp = (chunk_read_resp_t*)resp_buf;
+        if (server_chunks->num_chunks != num_chks) {
             LOGERR("mismatch on request vs. response chunks");
-            del_reads->num_chunks = num_chks;
+            server_chunks->num_chunks = num_chks;
         }
-        del_reads->total_sz = bulk_sz;
+        server_chunks->total_sz = bulk_sz;
         rc = (int)UNIFYFS_SUCCESS;
     } else {
         LOGERR("failed to find matching chunk-reads request");
@@ -820,58 +705,66 @@ int rm_post_chunk_read_responses(int app_id,
     return rc;
 }
 
-static int send_data_to_client(shm_context* shm, chunk_read_resp_t* resp,
-                               char* data, size_t* bytes_processed)
+static
+int send_data_to_client(server_read_req_t* rdreq,
+                        chunk_read_resp_t* resp,
+                        char* data,
+                        size_t* bytes_processed)
 {
     int ret = UNIFYFS_SUCCESS;
-    int errcode = 0;
-    size_t offset = 0;
-    size_t data_size = 0;
-    size_t bytes_left = 0;
-    size_t tx_size = MAX_DATA_TX_SIZE;
-    char* bufpos = data;
-    shm_data_meta* meta = NULL;
+    int errcode;
+    int app_id = rdreq->app_id;
+    int client_id = rdreq->client_id;
+    int mread_id = rdreq->client_mread;
+    int read_ndx = rdreq->client_read_ndx;
 
     if (resp->read_rc < 0) {
+        /* server read returned error */
         errcode = (int) -(resp->read_rc);
-        data_size = 0;
-    } else {
-        data_size = resp->nbytes;
+        *bytes_processed = 0;
+        return invoke_client_mread_req_complete_rpc(app_id, client_id,
+                                                    mread_id, read_ndx,
+                                                    errcode);
     }
+
+    size_t data_size = (size_t) resp->read_rc;
+    size_t send_sz = MAX_DATA_TX_SIZE;
+    char* bufpos = data;
+
+    size_t resp_file_offset = resp->offset;
+    size_t req_file_offset = (size_t) rdreq->extent.offset;
+    assert(resp_file_offset >= req_file_offset);
+
+    size_t read_byte_offset = resp_file_offset - req_file_offset;
+    errcode = 0;
 
     /* data can be larger than the shmem buffer size. split the data into
      * pieces and send them */
-    bytes_left = data_size;
-    offset = resp->offset;
-
-    for (bytes_left = data_size; bytes_left > 0; bytes_left -= tx_size) {
-        if (bytes_left < tx_size) {
-            tx_size = bytes_left;
+    size_t bytes_left = data_size;
+    for ( ; bytes_left > 0; bytes_left -= send_sz) {
+        if (bytes_left < send_sz) {
+            send_sz = bytes_left;
         }
 
-        meta = reserve_shmem_meta(shm, tx_size);
-        if (meta) {
-            meta->gfid = resp->gfid;
-            meta->errcode = errcode;
-            meta->offset = offset;
-            meta->length = tx_size;
+        LOGDBG("sending data for client[%d:%d] mread[%d] request %d "
+               "(gfid=%d, offset=%zu, length=%zu, remaining=%zu)",
+               app_id, client_id, mread_id, read_ndx,
+               resp->gfid, req_file_offset + read_byte_offset,
+               send_sz, bytes_left);
 
-            LOGDBG("sending data to client (gfid=%d, offset=%zu, length=%zu) "
-                   "%zu bytes left",
-                   resp->gfid, offset, tx_size, bytes_left);
-
-            if (tx_size) {
-                void* shm_buf = (void*) ((char*) meta + sizeof(shm_data_meta));
-                memcpy(shm_buf, bufpos, tx_size);
-            }
-        } else {
-            /* do we need to stop processing and exit loop here? */
-            LOGERR("failed to reserve shmem space for read reply");
-            ret = UNIFYFS_ERROR_SHMEM;
+        int rc = invoke_client_mread_req_data_rpc(app_id, client_id, mread_id,
+                                                  read_ndx, read_byte_offset,
+                                                  send_sz, bufpos);
+        if (rc != UNIFYFS_SUCCESS) {
+            ret = rc;
+            LOGERR("failed data rpc for mread[%d] request %d "
+                   "(gfid=%d, offset=%zu, length=%zu)",
+                   mread_id, read_ndx, resp->gfid,
+                   req_file_offset + read_byte_offset, send_sz);
         }
 
-        bufpos += tx_size;
-        offset += tx_size;
+        bufpos += send_sz;
+        read_byte_offset += send_sz;
     }
 
     *bytes_processed = data_size - bytes_left;
@@ -879,61 +772,54 @@ static int send_data_to_client(shm_context* shm, chunk_read_resp_t* resp,
     return ret;
 }
 
-/* process the requested chunk data returned from service managers
+/**
+ * process the requested chunk data returned from service managers
  *
- * @param thrd_ctrl  : request manager thread state
- * @param rdreq      : server read request
- * @param del_reads  : remote server chunk reads
+ * @param thrd_ctrl      request manager thread state
+ * @param rdreq          server read request
+ * @param server_chunks  remote server chunk reads
  * @return success/error code
  */
 int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
                                    server_read_req_t* rdreq,
-                                   server_chunk_reads_t* del_reads)
+                                   server_chunk_reads_t* server_chunks)
 {
     // NOTE: this fn assumes thrd_ctrl->thrd_lock is locked
 
     int i, num_chks, rc;
     int ret = (int)UNIFYFS_SUCCESS;
     chunk_read_resp_t* responses = NULL;
-    shm_context* client_shm = NULL;
-    shm_data_header* shm_hdr = NULL;
     char* data_buf = NULL;
 
     assert((NULL != thrd_ctrl) &&
            (NULL != rdreq) &&
-           (NULL != del_reads) &&
-           (NULL != del_reads->resp));
+           (NULL != server_chunks) &&
+           (NULL != server_chunks->resp));
 
-    /* look up client shared memory region */
-    app_client* clnt = get_app_client(rdreq->app_id, rdreq->client_id);
-    if (NULL == clnt) {
-        return (int)UNIFYFS_FAILURE;
-    }
-    client_shm = clnt->shmem_data;
-    shm_hdr = (shm_data_header*) client_shm->addr;
-
-    num_chks = del_reads->num_chunks;
-    if (del_reads->status != READREQ_STARTED) {
+    num_chks = server_chunks->num_chunks;
+    if (server_chunks->status != READREQ_STARTED) {
         LOGERR("chunk read response for non-started req @ index=%d",
                rdreq->req_ndx);
         ret = (int32_t)EINVAL;
-    } else if (0 == del_reads->total_sz) {
-        LOGERR("empty chunk read response from server %d", del_reads->rank);
+    } else if (0 == server_chunks->total_sz) {
+        LOGERR("empty chunk read response from server %d",
+               server_chunks->rank);
         ret = (int32_t)EINVAL;
     } else {
         LOGDBG("handling chunk read responses from server %d: "
                "num_chunks=%d buf_size=%zu",
-               del_reads->rank, num_chks, del_reads->total_sz);
-        responses = del_reads->resp;
+               server_chunks->rank, num_chks, server_chunks->total_sz);
+        responses = server_chunks->resp;
         data_buf = (char*)(responses + num_chks);
 
         for (i = 0; i < num_chks; i++) {
             chunk_read_resp_t* resp = responses + i;
             size_t processed = 0;
 
-            ret = send_data_to_client(client_shm, resp, data_buf, &processed);
-            if (ret != UNIFYFS_SUCCESS) {
-                LOGERR("failed to send data to client (ret=%d)", ret);
+            rc = send_data_to_client(rdreq, resp, data_buf, &processed);
+            if (rc != UNIFYFS_SUCCESS) {
+                LOGERR("failed to send data to client (ret=%d)", rc);
+                ret = rc;
             }
 
             data_buf += processed;
@@ -941,10 +827,10 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
 
         /* cleanup */
         free((void*)responses);
-        del_reads->resp = NULL;
+        server_chunks->resp = NULL;
 
         /* update request status */
-        del_reads->status = READREQ_COMPLETE;
+        server_chunks->status = READREQ_COMPLETE;
 
         /* if all remote reads are complete, mark the request as complete */
         int completed_remote_reads = 0;
@@ -957,15 +843,21 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
         if (completed_remote_reads == rdreq->num_server_reads) {
             rdreq->status = READREQ_COMPLETE;
 
-            /* signal client that we're now done writing data */
-            client_signal(shm_hdr, SHMEM_REGION_DATA_COMPLETE);
-
-            /* wait for client to read data */
-            client_wait(shm_hdr);
-
-            rc = release_read_req(thrd_ctrl, rdreq);
-            if (rc != (int)UNIFYFS_SUCCESS) {
-                LOGERR("failed to release server_read_req_t");
+            int app_id = rdreq->app_id;
+            int client_id = rdreq->client_id;
+            int mread_id = rdreq->client_mread;
+            int read_ndx = rdreq->client_read_ndx;
+            int errcode = 0;
+            if (ret != UNIFYFS_SUCCESS) {
+                errcode = ret;
+            }
+            rc = invoke_client_mread_req_complete_rpc(app_id, client_id,
+                                                      mread_id, read_ndx,
+                                                      errcode);
+            if (rc != UNIFYFS_SUCCESS) {
+                LOGERR("mread[%d] request %d completion rpc failed",
+                       mread_id, read_ndx);
+                ret = rc;
             }
         }
     }
@@ -997,6 +889,53 @@ int rm_submit_client_rpc_request(unifyfs_fops_ctx_t* ctx,
     signal_new_requests(reqmgr);
 
     return UNIFYFS_SUCCESS;
+}
+
+static int process_attach_rpc(reqmgr_thrd_t* reqmgr,
+                              client_rpc_req_t* req)
+{
+    int ret = UNIFYFS_SUCCESS;
+
+    unifyfs_attach_in_t* in = req->input;
+    assert(in != NULL);
+
+    /* lookup client structure and attach it */
+    int app_id = reqmgr->app_id;
+    int client_id = reqmgr->client_id;
+    app_client* client = get_app_client(app_id, client_id);
+    if (NULL != client) {
+        LOGDBG("attaching client %d:%d", app_id, client_id);
+        ret = attach_app_client(client,
+                                in->logio_spill_dir,
+                                in->logio_spill_size,
+                                in->logio_mem_size,
+                                in->shmem_super_size,
+                                in->meta_offset,
+                                in->meta_size);
+        if (ret != UNIFYFS_SUCCESS) {
+            LOGERR("attach_app_client() failed");
+        }
+    } else {
+        LOGERR("client not found (app_id=%d, client_id=%d)",
+            app_id, client_id);
+        ret = (int)UNIFYFS_FAILURE;
+    }
+
+    margo_free_input(req->handle, in);
+    free(in);
+
+    /* send rpc response */
+    unifyfs_attach_out_t out;
+    out.ret = (int32_t) ret;
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
 }
 
 static int process_filesize_rpc(reqmgr_thrd_t* reqmgr,
@@ -1048,7 +987,7 @@ static int process_fsync_rpc(reqmgr_thrd_t* reqmgr,
     margo_free_input(req->handle, in);
     free(in);
 
-    LOGDBG("syncing gfid=%d", gfid);
+    LOGINFO("syncing gfid=%d", gfid);
 
     unifyfs_fops_ctx_t ctx = {
         .app_id = reqmgr->app_id,
@@ -1130,7 +1069,7 @@ static int process_metaget_rpc(reqmgr_thrd_t* reqmgr,
     memset(&fattr, 0, sizeof(fattr));
     ret = unifyfs_fops_metaget(&ctx, gfid, &fattr);
     if (ret != UNIFYFS_SUCCESS) {
-        LOGERR("unifyfs_fops_metaget() failed");
+        LOGDBG("unifyfs_fops_metaget() failed");
     }
 
     /* send rpc response */
@@ -1172,7 +1111,7 @@ static int process_metaset_rpc(reqmgr_thrd_t* reqmgr,
     };
     ret = unifyfs_fops_metaset(&ctx, gfid, attr_op, &fattr);
     if (ret != UNIFYFS_SUCCESS) {
-        LOGERR("unifyfs_fops_metaset() failed");
+        LOGDBG("unifyfs_fops_metaset() failed");
     }
 
     if (NULL != fattr.filename) {
@@ -1198,28 +1137,27 @@ static int process_read_rpc(reqmgr_thrd_t* reqmgr,
 {
     int ret = UNIFYFS_SUCCESS;
 
-    unifyfs_read_in_t* in = req->input;
+    unifyfs_mread_in_t* in = req->input;
     assert(in != NULL);
-    int gfid = in->gfid;
-    off_t offset = in->offset;
-    size_t len = in->length;
+    int mread_id = in->mread_id;
+    size_t read_count = in->read_count;
     margo_free_input(req->handle, in);
     free(in);
 
-    LOGDBG("reading gfid=%d (offset=%zu, length=%zu)",
-           gfid, (size_t)offset, len);
+    LOGDBG("processing mread[%d] with %zu requests", mread_id, read_count);
 
     unifyfs_fops_ctx_t ctx = {
         .app_id = reqmgr->app_id,
         .client_id = reqmgr->client_id,
+        .mread_id = mread_id
     };
-    ret = unifyfs_fops_read(&ctx, gfid, offset, len);
+    ret = unifyfs_fops_mread(&ctx, read_count, req->bulk_buf);
     if (ret != UNIFYFS_SUCCESS) {
         LOGERR("unifyfs_fops_read() failed");
     }
 
     /* send rpc response */
-    unifyfs_read_out_t out;
+    unifyfs_mread_out_t out;
     out.ret = (int32_t) ret;
     hg_return_t hret = margo_respond(req->handle, &out);
     if (hret != HG_SUCCESS) {
@@ -1323,23 +1261,27 @@ static int rm_process_client_requests(reqmgr_thrd_t* reqmgr)
      * list on the request manager structure */
     int num_client_reqs = arraylist_size(reqmgr->client_reqs);
     if (num_client_reqs) {
-        /* got some chunk read requets, take the list and replace
+        /* got some client requets, take the list and replace
          * it with an empty list */
         LOGDBG("processing %d client requests", num_client_reqs);
         client_reqs = reqmgr->client_reqs;
-        reqmgr->client_reqs = arraylist_create();
+        reqmgr->client_reqs =
+            arraylist_create(UNIFYFS_CLIENT_MAX_ACTIVE_REQUESTS);
     }
 
     /* release lock on reqmgr requests */
     RM_REQ_UNLOCK(reqmgr);
 
-    /* iterate over each chunk read request */
+    /* iterate over each client request */
     for (int i = 0; i < num_client_reqs; i++) {
         /* process next request */
         int rret;
         client_rpc_req_t* req = (client_rpc_req_t*)
             arraylist_get(client_reqs, i);
         switch (req->req_type) {
+        case UNIFYFS_CLIENT_RPC_ATTACH:
+            rret = process_attach_rpc(reqmgr, req);
+            break;
         case UNIFYFS_CLIENT_RPC_FILESIZE:
             rret = process_filesize_rpc(reqmgr, req);
             break;
@@ -1370,8 +1312,10 @@ static int rm_process_client_requests(reqmgr_thrd_t* reqmgr)
             break;
         }
         if (rret != UNIFYFS_SUCCESS) {
-            LOGERR("client rpc request %d failed (%s)",
-                   i, unifyfs_rc_enum_description(rret));
+            if ((rret != ENOENT) && (rret != EEXIST)) {
+                LOGERR("client rpc request %d failed (%s)",
+                       i, unifyfs_rc_enum_description(rret));
+            }
             ret = rret;
         }
     }
@@ -1404,20 +1348,26 @@ void* request_manager_thread(void* arg)
      * with main thread, new items inserted by the rpc handler */
     int rc;
     while (1) {
-        /* grab lock */
-        RM_LOCK(thrd_ctrl);
-
         /* process any client requests */
         rc = rm_process_client_requests(thrd_ctrl);
         if (rc != UNIFYFS_SUCCESS) {
-            LOGERR("failed to process client rpc requests");
+            LOGWARN("failed to process client rpc requests");
+        }
+
+         /* send chunk read requests to remote servers */
+        rc = rm_request_remote_chunks(thrd_ctrl);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGWARN("failed to request remote chunks");
         }
 
         /* process any chunk read responses */
         rc = rm_process_remote_chunk_responses(thrd_ctrl);
         if (rc != UNIFYFS_SUCCESS) {
-            LOGERR("failed to process remote chunk responses");
+            LOGWARN("failed to process remote chunk responses");
         }
+
+        /* grab lock */
+        RM_LOCK(thrd_ctrl);
 
         /* inform dispatcher that we're waiting for work
          * inside the critical section */
@@ -1429,16 +1379,29 @@ void* request_manager_thread(void* arg)
          * some work (rather than the dispatcher grabbing the lock
          * and assigning yet more work) */
         if (thrd_ctrl->has_waiting_dispatcher == 1) {
-            /* TODO - should this be pthread_cond_broadcast() since we
-             * might have multiple requestors waiting? */
             pthread_cond_signal(&thrd_ctrl->thrd_cond);
         }
 
         /* release lock and wait to be signaled by dispatcher */
         LOGDBG("RM[%d:%d] waiting for work",
                thrd_ctrl->app_id, thrd_ctrl->client_id);
-        pthread_cond_wait(&thrd_ctrl->thrd_cond, &thrd_ctrl->thrd_lock);
-        LOGDBG("RM[%d:%d] got work", thrd_ctrl->app_id, thrd_ctrl->client_id);
+        struct timespec timeout;
+        clock_gettime(CLOCK_REALTIME, &timeout);
+        timeout.tv_nsec += 10000000; /* 10 ms */
+        if (timeout.tv_nsec >= 1000000000) {
+            timeout.tv_nsec -= 1000000000;
+            timeout.tv_sec++;
+        }
+        int wait_rc = pthread_cond_timedwait(&thrd_ctrl->thrd_cond,
+                                             &thrd_ctrl->thrd_lock,
+                                             &timeout);
+        if (0 == wait_rc) {
+            LOGDBG("RM[%d:%d] got work",
+                   thrd_ctrl->app_id, thrd_ctrl->client_id);
+        } else if (ETIMEDOUT != wait_rc) {
+            LOGERR("RM[%d:%d] work condition wait failed (rc=%d)",
+                   thrd_ctrl->app_id, thrd_ctrl->client_id, wait_rc);
+        }
 
         /* set flag to indicate we're no longer waiting */
         thrd_ctrl->waiting_for_work = 0;
@@ -1447,12 +1410,6 @@ void* request_manager_thread(void* arg)
         /* bail out if we've been told to exit */
         if (thrd_ctrl->exit_flag == 1) {
             break;
-        }
-
-        /* send chunk read requests to remote servers */
-        rc = rm_request_remote_chunks(thrd_ctrl);
-        if (rc != UNIFYFS_SUCCESS) {
-            LOGERR("failed to request remote chunks");
         }
     }
 
