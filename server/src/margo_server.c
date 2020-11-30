@@ -232,6 +232,7 @@ static margo_instance_id setup_local_target(void)
 /* register client-server RPCs */
 static void register_client_server_rpcs(margo_instance_id mid)
 {
+    /* register the RPC handler functions */
     MARGO_REGISTER(mid, "unifyfs_attach_rpc",
                    unifyfs_attach_in_t, unifyfs_attach_out_t,
                    unifyfs_attach_rpc);
@@ -272,13 +273,22 @@ static void register_client_server_rpcs(margo_instance_id mid)
                    unifyfs_laminate_in_t, unifyfs_laminate_out_t,
                    unifyfs_laminate_rpc);
 
-    MARGO_REGISTER(mid, "unifyfs_read_rpc",
-                   unifyfs_read_in_t, unifyfs_read_out_t,
-                   unifyfs_read_rpc)
-
     MARGO_REGISTER(mid, "unifyfs_mread_rpc",
                    unifyfs_mread_in_t, unifyfs_mread_out_t,
                    unifyfs_mread_rpc);
+
+    /* register the RPCs we call (and capture assigned hg_id_t) */
+    unifyfsd_rpc_context->rpcs.client_mread_data_id =
+        MARGO_REGISTER(mid, "unifyfs_mread_req_data_rpc",
+                       unifyfs_mread_req_data_in_t,
+                       unifyfs_mread_req_data_out_t,
+                       NULL);
+
+    unifyfsd_rpc_context->rpcs.client_mread_complete_id =
+        MARGO_REGISTER(mid, "unifyfs_mread_req_complete_rpc",
+                       unifyfs_mread_req_complete_in_t,
+                       unifyfs_mread_req_complete_out_t,
+                       NULL);
 }
 
 /* margo_server_rpc_init
@@ -419,6 +429,152 @@ int margo_connect_servers(void)
             }
         }
     }
+
+    return ret;
+}
+
+/* create and return a margo handle for given rpc id and app-client */
+static hg_handle_t create_client_handle(hg_id_t id,
+                                        int app_id,
+                                        int client_id)
+{
+    hg_handle_t handle = HG_HANDLE_NULL;
+
+    /* lookup application client */
+    app_client* client = get_app_client(app_id, client_id);
+    if (NULL != client) {
+        hg_addr_t client_addr = client->margo_addr;
+
+        /* create handle for specified rpc */
+        hg_return_t hret = margo_create(unifyfsd_rpc_context->shm_mid,
+                                        client_addr, id, &handle);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_create() failed");
+        }
+    } else {
+        LOGERR("invalid app-client [%d:%d]", app_id, client_id);
+    }
+    return handle;
+}
+
+/* invokes the client mread request data response rpc function */
+int invoke_client_mread_req_data_rpc(int app_id,
+                                     int client_id,
+                                     int mread_id,
+                                     int read_index,
+                                     size_t read_offset,
+                                     size_t extent_size,
+                                     void* extent_buffer)
+{
+    hg_return_t hret;
+
+    /* check that we have initialized margo */
+    if (NULL == unifyfsd_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* fill input struct */
+    unifyfs_mread_req_data_in_t in;
+    in.mread_id      = (int32_t) mread_id;
+    in.read_index    = (int32_t) read_index;
+    in.read_offset   = (hg_size_t) read_offset;
+    in.bulk_size     = (hg_size_t) extent_size;
+
+    if (extent_size > 0) {
+        /* initialize bulk handle for extents */
+        hret = margo_bulk_create(unifyfsd_rpc_context->shm_mid,
+                                 1, &extent_buffer, &extent_size,
+                                 HG_BULK_READ_ONLY, &in.bulk_data);
+        if (hret != HG_SUCCESS) {
+            return UNIFYFS_ERROR_MARGO;
+        }
+    }
+
+    /* get handle to rpc function */
+    hg_id_t rpc_id = unifyfsd_rpc_context->rpcs.client_mread_data_id;
+    hg_handle_t handle = create_client_handle(rpc_id, app_id, client_id);
+
+    /* call rpc function */
+    LOGDBG("invoking the mread req data rpc function in client");
+    hret = margo_forward(handle, &in);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_forward() failed");
+        margo_destroy(handle);
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    /* decode response */
+    int ret;
+    unifyfs_mread_req_data_out_t out;
+    hret = margo_get_output(handle, &out);
+    if (hret == HG_SUCCESS) {
+        LOGDBG("Got response ret=%" PRIi32, out.ret);
+        ret = (int) out.ret;
+        margo_free_output(handle, &out);
+    } else {
+        LOGERR("margo_get_output() failed");
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+
+    if (extent_size > 0) {
+        margo_bulk_free(in.bulk_data);
+    }
+
+    /* free resources */
+    margo_destroy(handle);
+
+    return ret;
+}
+
+/* invokes the client mread request completion rpc function */
+int invoke_client_mread_req_complete_rpc(int app_id,
+                                         int client_id,
+                                         int mread_id,
+                                         int read_index,
+                                         int read_error)
+{
+    hg_return_t hret;
+
+    /* check that we have initialized margo */
+    if (NULL == unifyfsd_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* fill input struct */
+    unifyfs_mread_req_complete_in_t in;
+    in.mread_id      = (int32_t) mread_id;
+    in.read_index    = (int32_t) read_index;
+    in.read_error    = (int32_t) read_error;
+
+    /* get handle to rpc function */
+    hg_id_t rpc_id = unifyfsd_rpc_context->rpcs.client_mread_complete_id;
+    hg_handle_t handle = create_client_handle(rpc_id, app_id, client_id);
+
+    /* call rpc function */
+    LOGDBG("invoking the mread[%d] complete rpc function in client",
+            mread_id);
+    hret = margo_forward(handle, &in);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_forward() failed");
+        margo_destroy(handle);
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    /* decode response */
+    int ret;
+    unifyfs_mread_req_complete_out_t out;
+    hret = margo_get_output(handle, &out);
+    if (hret == HG_SUCCESS) {
+        LOGDBG("Got response ret=%" PRIi32, out.ret);
+        ret = (int) out.ret;
+        margo_free_output(handle, &out);
+    } else {
+        LOGERR("margo_get_output() failed");
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+
+    /* free resources */
+    margo_destroy(handle);
 
     return ret;
 }

@@ -145,7 +145,7 @@ static void add_extents_rpc(hg_handle_t handle)
                     ret = UNIFYFS_ERROR_MARGO;
                 } else {
                     /* store new extents */
-                    LOGDBG("received %zu extents for gfid=%d from %d",
+                    LOGINFO("received %zu extents for gfid=%d from %d",
                            num_extents, gfid, sender);
                     struct extent_tree_node* extents = extents_buf;
                     ret = unifyfs_inode_add_extents(gfid, num_extents, extents);
@@ -273,6 +273,9 @@ static void find_extents_rpc(hg_handle_t handle)
         size_t num_extents = (size_t) in.num_extents;
         size_t bulk_sz = num_extents * sizeof(unifyfs_inode_extent_t);
 
+        /* make sure I'm the owner */
+        assert(glb_pmi_rank == hash_gfid_to_server(gfid));
+
         /* allocate memory for extents */
         void* extents_buf = malloc(bulk_sz);
         if (NULL == extents_buf) {
@@ -297,16 +300,18 @@ static void find_extents_rpc(hg_handle_t handle)
                     ret = UNIFYFS_ERROR_MARGO;
                 } else {
                     /* lookup requested extents */
-                    LOGDBG("received %zu extent lookups for gfid=%d from %d",
-                           num_extents, gfid, sender);
                     unifyfs_inode_extent_t* extents = extents_buf;
-                    ret = unifyfs_inode_resolve_extent_chunks(num_extents,
-                                                              extents,
+                    unsigned int n_ext = (unsigned int) num_extents;
+                    LOGDBG("received %u extent lookups for gfid=%d from %d",
+                           n_ext, gfid, sender);
+                    ret = unifyfs_inode_resolve_extent_chunks(n_ext, extents,
                                                               &num_chunks,
                                                               &chunk_locs);
                     if (ret) {
                         LOGERR("failed to find extents for %d (ret=%d)",
                                sender, ret);
+                    } else if (num_chunks == 0) {
+                        LOGDBG("extent lookup found no matching chunks");
                     }
                 }
                 margo_bulk_free(bulk_req_handle);
@@ -372,12 +377,14 @@ int unifyfs_invoke_find_extents_rpc(int gfid,
     if (ret == UNIFYFS_SUCCESS) {
         if (attrs.is_laminated || (owner_rank == glb_pmi_rank)) {
             /* do local lookup */
-            ret = unifyfs_inode_resolve_extent_chunks((size_t)num_extents,
+            ret = unifyfs_inode_resolve_extent_chunks(num_extents,
                                                       extents,
                                                       num_chunks, chunks);
             if (ret) {
                 LOGERR("failed to find extents for gfid=%d (ret=%d)",
                        gfid, ret);
+            } else if (*num_chunks == 0) {
+                LOGDBG("extent lookup found no matching chunks");
             }
             return ret;
         }

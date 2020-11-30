@@ -151,7 +151,7 @@ unifyfsd_stop_daemon()
     killsig="TERM"
     srvrpids="$(pgrep unifyfsd)"
     while [ -n "$srvrpids" ]; do
-        killall -q -s $killsig unifyfsd 2>/dev/null
+        pkill --signal $killsig unifyfsd 2>/dev/null
         sleep 5
         srvrpids="$(pgrep unifyfsd)"
         killsig="KILL"

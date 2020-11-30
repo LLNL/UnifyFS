@@ -555,7 +555,7 @@ static int unifyfs_stream_read(
     /* associate buffer with stream if we need to */
     if (s->buf == NULL) {
         int setvbuf_rc = unifyfs_setvbuf(stream, NULL, s->buftype,
-                                         UNIFYFS_STREAM_BUFSIZE);
+                                         UNIFYFS_CLIENT_STREAM_BUFSIZE);
         if (setvbuf_rc != UNIFYFS_SUCCESS) {
             /* ERROR: failed to associate buffer */
             s->err = 1;
@@ -756,7 +756,7 @@ static int unifyfs_stream_write(
     /* associate buffer with stream if we need to */
     if (s->buf == NULL) {
         int setvbuf_rc = unifyfs_setvbuf(stream, NULL, s->buftype,
-                                         UNIFYFS_STREAM_BUFSIZE);
+                                         UNIFYFS_CLIENT_STREAM_BUFSIZE);
         if (setvbuf_rc != UNIFYFS_SUCCESS) {
             /* ERROR: failed to associate buffer */
             s->err = 1;
@@ -1725,7 +1725,7 @@ int UNIFYFS_WRAP(fflush)(FILE* stream)
 
         /* flush each active unifyfs stream */
         int i;
-        for (i = 0; i < UNIFYFS_MAX_FILEDESCS; i++) {
+        for (i = 0; i < UNIFYFS_CLIENT_MAX_FILEDESCS; i++) {
             /* get stream and check whether it's active */
             unifyfs_stream_t* s = &(unifyfs_streams[i]);
             if (s->fd >= 0) {
@@ -2281,7 +2281,7 @@ static int __srefill(unifyfs_stream_t* stream)
     /* associate buffer with stream if we need to */
     if (s->buf == NULL) {
         int setvbuf_rc = unifyfs_setvbuf((FILE*)stream, NULL, s->buftype,
-                                         UNIFYFS_STREAM_BUFSIZE);
+                                         UNIFYFS_CLIENT_STREAM_BUFSIZE);
         if (setvbuf_rc != UNIFYFS_SUCCESS) {
             /* ERROR: failed to associate buffer */
             s->err = 1;

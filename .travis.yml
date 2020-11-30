@@ -22,6 +22,7 @@ before_install:
   # The default environment variable $CC is known to interfere with
   # MPI projects.
   - test -n $CC && unset CC
+  - echo kernel.yama.ptrace_scope=0 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p
   - (cd $HOME/spack; git describe) || git clone https://github.com/spack/spack $HOME/spack
   # Create packages.yaml to prevent building dependencies that time out
   - |
@@ -86,7 +87,7 @@ script:
   - export DISTCHECK_CONFIGURE_FLAGS="--enable-fortran"
   - ./autogen.sh
   - ./configure $DISTCHECK_CONFIGURE_FLAGS || cat config.log
-  - make distcheck
+  - make distcheck V=1
   - ./scripts/checkpatch.sh || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
 
 after_failure:

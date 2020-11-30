@@ -14,7 +14,7 @@ AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
-AM_INIT_AUTOMAKE([foreign tar-pax subdir-objects])
+AM_INIT_AUTOMAKE([foreign tar-pax])
 AM_SILENT_RULES([yes])
 
 AM_MAINTAINER_MODE([disable])
@@ -71,7 +71,7 @@ AC_FUNC_MALLOC
 AC_FUNC_MMAP
 AC_FUNC_REALLOC
 AC_FUNC_STRTOD
-AC_CHECK_FUNCS([ftruncate getpagesize gettimeofday memset socket floor])
+AC_CHECK_FUNCS([ftruncate gettimeofday memset socket floor])
 AC_CHECK_FUNCS([gethostbyname strcasecmp strdup strerror strncasecmp strrchr])
 AC_CHECK_FUNCS([gethostname strstr strtoumax strtol uname posix_fallocate])
 
@@ -376,8 +376,6 @@ AC_SUBST(CP_WRAPPERS)
 AC_SUBST(DISABLE_LDPRELOAD)
 
 AC_CONFIG_FILES([Makefile
-                 common/Makefile
-                 common/src/Makefile
                  meta/Makefile
                  meta/src/Makefile
                  server/Makefile

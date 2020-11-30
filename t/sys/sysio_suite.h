@@ -49,7 +49,7 @@ int open64_test(char* unifyfs_root);
 int lseek_test(char* unifyfs_root);
 
 int write_read_test(char* unifyfs_root);
-
+int write_max_read_test(char* unifyfs_root);
 int write_pre_existing_file_test(char* unifyfs_root);
 
 /* test reading from file with holes */

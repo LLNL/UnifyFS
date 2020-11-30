@@ -49,14 +49,19 @@ slot_map* log_header_to_chunkmap(log_header* hdr)
     return (slot_map*)(hdrp + sizeof(log_header));
 }
 
-/* method to get page size once, then re-use it */
+/* convenience method to return system page size */
 size_t get_page_size(void)
 {
-    static size_t page_sz; // = 0
-    if (0 == page_sz) {
-        page_sz = (size_t) getpagesize();
+    size_t unifyfs_page_size = 4096;
+    long sz = sysconf(_SC_PAGESIZE);
+    if (sz != -1) {
+        unifyfs_page_size = (size_t) sz;
+    } else {
+        LOGERR("sysconf(_SC_PAGESIZE) failed - errno=%d (%s)",
+               errno, strerror(errno));
     }
-    return page_sz;
+    LOGDBG("returning page size %zu B", unifyfs_page_size);
+    return unifyfs_page_size;
 }
 
 /* calculate number of chunks needed for requested bytes */
@@ -131,11 +136,13 @@ static int get_spillfile(const char* path,
 static void* map_spillfile(int spill_fd, int mmap_prot)
 {
     size_t pgsz = get_page_size();
+    LOGDBG("mapping spillfile - fd=%d, pgsz=%zu", spill_fd, pgsz);
     void* addr = mmap(NULL, pgsz, mmap_prot, MAP_SHARED, spill_fd, 0);
-    if (NULL == addr) {
+    if (MAP_FAILED == addr) {
         int err = errno;
         LOGERR("mmap(fd=%d, sz=%zu, MAP_SHARED) failed - %s",
                spill_fd, pgsz, strerror(err));
+        return NULL;
     }
     return addr;
 }
@@ -206,6 +213,9 @@ int unifyfs_logio_init_server(const int app_id,
         ctx->spill_file = strdup(spillfile);
     }
     *pctx = ctx;
+    LOGDBG("logio_context for client [%d:%d] - "
+           "shmem(sz=%zu, hdr=%p), spill(sz=%zu, hdr=%p)",
+           app_id, client_id, mem_size, shm_ctx, spill_size, spill_mapping);
 
     return UNIFYFS_SUCCESS;
 }
@@ -689,6 +699,8 @@ int unifyfs_logio_read(logio_context* ctx,
     off_t spill_offset = 0;
     get_log_sizes(log_offset, nbytes, mem_size,
                   &sz_in_mem, &sz_in_spill, &spill_offset);
+    LOGDBG("log_off=%zu, nbytes=%zu : mem_sz=%zu spill_sz=%zu spill_off=%zu",
+           log_offset, nbytes, sz_in_mem, sz_in_spill, (size_t)spill_offset);
 
     /* do reads */
     int err_rc = 0;

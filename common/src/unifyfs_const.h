@@ -54,26 +54,25 @@
 #define MAX_META_PER_SEND (4 * KIB)  /* max read request count per server */
 #define REQ_BUF_LEN (MAX_META_PER_SEND * 64) /* chunk read reqs buffer size */
 #define SHM_WAIT_INTERVAL 1000       /* unit: ns */
-#define RM_MAX_ACTIVE_REQUESTS 64    /* number of concurrent read requests */
-
-// Server - Service Manager
-#define MIN_SLEEP_INTERVAL 50  /* unit: us */
+#define RM_MAX_SERVER_READS KIB
 
 // Server - General
 #define MAX_BULK_TX_SIZE (8 * MIB) /* bulk transfer size (between servers) */
 #define MAX_NUM_APPS 64            /* max # apps/mountpoints supported */
 #define MAX_APP_CLIENTS 256        /* max # clients per application */
+#define MIN_USLEEP_INTERVAL 50     /* unit: us */
 #define UNIFYFS_DEFAULT_INIT_TIMEOUT 120 /* server init timeout (seconds) */
 #define UNIFYFSD_PID_FILENAME "unifyfsd.pids"
 #define UNIFYFS_STAGE_STATUS_FILENAME "unifyfs-stage.status"
 
 // Client
-#define UNIFYFS_MAX_FILES 128
-#define UNIFYFS_MAX_FILEDESCS UNIFYFS_MAX_FILES
-#define UNIFYFS_STREAM_BUFSIZE MIB
-#define UNIFYFS_DATA_RECV_SIZE (32 * MIB)
-#define UNIFYFS_INDEX_BUF_SIZE  (20 * MIB)
-#define UNIFYFS_MAX_READ_CNT KIB
+#define UNIFYFS_CLIENT_MAX_FILES 128
+#define UNIFYFS_CLIENT_MAX_FILEDESCS UNIFYFS_CLIENT_MAX_FILES
+#define UNIFYFS_CLIENT_STREAM_BUFSIZE MIB
+#define UNIFYFS_CLIENT_WRITE_INDEX_SIZE (20 * MIB)
+#define UNIFYFS_CLIENT_MAX_READ_COUNT KIB      /* max # active read requests */
+#define UNIFYFS_CLIENT_READ_TIMEOUT_SECONDS 60
+#define UNIFYFS_CLIENT_MAX_ACTIVE_REQUESTS 64  /* max concurrent client reqs */
 
 // Log-based I/O
 #define UNIFYFS_LOGIO_CHUNK_SIZE (4 * MIB)

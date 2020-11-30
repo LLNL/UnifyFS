@@ -253,7 +253,7 @@ int unifyfs_sync(int target_fid)
 
     /* to get here, caller specified target_fid = -1,
      * so sync every file descriptor */
-    for (int i = 0; i < UNIFYFS_MAX_FILEDESCS; i++) {
+    for (int i = 0; i < UNIFYFS_CLIENT_MAX_FILEDESCS; i++) {
         /* get file id for each file descriptor */
         int fid = unifyfs_fds[i].fid;
         if (-1 == fid) {
