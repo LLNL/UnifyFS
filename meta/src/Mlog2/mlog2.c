@@ -1174,6 +1174,8 @@ void mlog_setmasks(char *mstr, int mlen0)
         /* process priority */
         if (prilen > 5) {    /* we know it can't be longer than this */
             prino = -1;
+        } else if (prilen < 0) {     /* This if() block gets rid of a */
+            prino = -1;              /* compiler warning.             */
         } else {
             memset(pbuf, 0, sizeof(pbuf));
             strncpy(pbuf, pri, prilen);

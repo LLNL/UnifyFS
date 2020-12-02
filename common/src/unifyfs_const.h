@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -30,9 +30,8 @@
 #ifndef UNIFYFS_CONST_H
 #define UNIFYFS_CONST_H
 
-/* ********************** ERROR CODES ************************ */
-#include "err_enumerator.h"
-#define ULFS_SUCCESS ((int)UNIFYFS_SUCCESS)
+/* ********************** RETURN CODES ************************ */
+#include "unifyfs_rc.h"
 
 /* ********************** STRING CONSTANTS ************************ */
 #define DEFAULT_INTERFACE "ib0"
@@ -50,47 +49,38 @@
 #define UNIFYFS_MAX_FILENAME KIB
 #define UNIFYFS_MAX_HOSTNAME 64
 
-// Metadata
-#define MAX_FILE_CNT_PER_NODE KIB
-
-// Request Manager
-#define RECV_BUF_CNT 4               /* number of remote read buffers */
-#define SENDRECV_BUF_LEN (8 * MIB)   /* remote read buffer size */
+// Server - Request Manager
+#define MAX_DATA_TX_SIZE (4 * MIB)   /* data transfer size (to client) */
 #define MAX_META_PER_SEND (4 * KIB)  /* max read request count per server */
-#define REQ_BUF_LEN (MAX_META_PER_SEND * 128) /* read requests (send_msg_t) */
+#define REQ_BUF_LEN (MAX_META_PER_SEND * 64) /* chunk read reqs buffer size */
 #define SHM_WAIT_INTERVAL 1000       /* unit: ns */
 #define RM_MAX_ACTIVE_REQUESTS 64    /* number of concurrent read requests */
 
-// Service Manager
-#define LARGE_BURSTY_DATA (512 * MIB)
-#define MAX_BURSTY_INTERVAL 10000 /* unit: us */
-#define MIN_SLEEP_INTERVAL 10     /* unit: us */
-#define SLEEP_INTERVAL 500        /* unit: us */
-#define SLEEP_SLICE_PER_UNIT 50   /* unit: us */
-#define READ_BLOCK_SIZE MIB
-#define READ_BUF_SZ GIB
+// Server - Service Manager
+#define MIN_SLEEP_INTERVAL 50  /* unit: us */
 
-// Request and Service Managers, Command Handler
-#define MAX_NUM_CLIENTS 64 /* app processes per server */
-
-// Client and Command Handler
-#define CMD_BUF_SIZE (2 * KIB)
+// Server - General
+#define MAX_BULK_TX_SIZE (8 * MIB) /* bulk transfer size (between servers) */
+#define MAX_NUM_APPS 64            /* max # apps/mountpoints supported */
+#define MAX_APP_CLIENTS 256        /* max # clients per application */
+#define UNIFYFS_DEFAULT_INIT_TIMEOUT 120 /* server init timeout (seconds) */
+#define UNIFYFSD_PID_FILENAME "unifyfsd.pids"
+#define UNIFYFS_STAGE_STATUS_FILENAME "unifyfs-stage.status"
 
 // Client
 #define UNIFYFS_MAX_FILES 128
 #define UNIFYFS_MAX_FILEDESCS UNIFYFS_MAX_FILES
 #define UNIFYFS_STREAM_BUFSIZE MIB
-#define UNIFYFS_CHUNK_BITS 24
-#define UNIFYFS_CHUNK_MEM (256 * MIB)
-#define UNIFYFS_SPILLOVER_SIZE (KIB * MIB)
-#define UNIFYFS_SUPERBLOCK_KEY 4321
-#define UNIFYFS_SHMEM_REQ_SIZE (8 * MIB)
-#define UNIFYFS_SHMEM_RECV_SIZE (32 * MIB)
+#define UNIFYFS_DATA_RECV_SIZE (32 * MIB)
 #define UNIFYFS_INDEX_BUF_SIZE  (20 * MIB)
-#define UNIFYFS_FATTR_BUF_SIZE MIB
 #define UNIFYFS_MAX_READ_CNT KIB
 
-/* max read size = UNIFYFS_MAX_SPLIT_CNT * META_DEFAULT_RANGE_SZ */
+// Log-based I/O
+#define UNIFYFS_LOGIO_CHUNK_SIZE (4 * MIB)
+#define UNIFYFS_LOGIO_SHMEM_SIZE (256 * MIB)
+#define UNIFYFS_LOGIO_SPILL_SIZE (GIB)
+
+/* NOTE: max read size = UNIFYFS_MAX_SPLIT_CNT * META_DEFAULT_RANGE_SZ */
 #define UNIFYFS_MAX_SPLIT_CNT (4 * KIB)
 
 // Metadata/MDHIM Default Values

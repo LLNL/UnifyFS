@@ -44,7 +44,9 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <unistd.h>
+#include <unifyfs_misc.h>
 
 #include "unifyfs.h"
 
@@ -56,12 +58,16 @@ typedef int (*unifyfs_rm_launch_t)(unifyfs_resource_t* resource,
 typedef int (*unifyfs_rm_terminate_t)(unifyfs_resource_t* resource,
                                       unifyfs_args_t* args);
 
+typedef int (*unifyfs_rm_stage_t)(unifyfs_resource_t* resource,
+                                  unifyfs_args_t* args);
+
 struct _ucr_resource_manager {
     const char* type;
 
     unifyfs_rm_read_resource_t read_resource;
     unifyfs_rm_launch_t launch;
     unifyfs_rm_terminate_t terminate;
+    unifyfs_rm_stage_t stage;
 };
 
 typedef struct _ucr_resource_manager _ucr_resource_manager_t;
@@ -101,7 +107,7 @@ static int parse_hostfile(unifyfs_resource_t* resource,
     int i = 0;
     FILE* fp = NULL;
     char** nodes = NULL;
-    char buf[1024] = { 0, };
+    char buf[1024];
 
     if (hostfile == NULL) {
         return -EINVAL;
@@ -185,6 +191,241 @@ static int write_hostfile(unifyfs_resource_t* resource,
 }
 
 /**
+ * @brief wait until servers become ready for client connections
+ *
+ * @param resource  The job resource record
+ * @param args      The command-line options
+ *
+ * @return 0 on success, negative errno otherwise
+ */
+static int wait_server_initialization(unifyfs_resource_t* resource,
+                                      unifyfs_args_t* args)
+{
+    int ret = UNIFYFS_SUCCESS;
+    int count = 0;
+    unsigned int interval = 3;
+    unsigned int wait_time = 0;
+    FILE* fp = NULL;
+    char linebuf[32];
+    char filename[PATH_MAX];
+    int return_val_from_scnprintf;
+
+    return_val_from_scnprintf =
+        scnprintf(filename, PATH_MAX,
+                  "%s/%s", args->share_dir, UNIFYFSD_PID_FILENAME);
+    if (return_val_from_scnprintf > (PATH_MAX - 2)) {
+        fprintf(stderr, "Unifyfs status filename is too long!\n");
+        return -ENOMEM;
+    }
+
+    while (1) {
+        int err;
+        errno = 0;
+        fp = fopen(filename, "r");
+        err = errno;
+        if (fp) {
+            while (fgets(linebuf, 31, fp) != NULL) {
+                count++;
+            }
+
+            if (count != resource->n_nodes) {
+                fprintf(stderr,
+                        "incorrect server initialization: "
+                        "expected %lu processes but only %u processes found\n",
+                        resource->n_nodes, count);
+                ret = UNIFYFS_FAILURE;
+            }
+
+            fclose(fp);
+            break;
+        } else if (err != ENOENT) {
+            fprintf(stderr, "failed to open file %s (%s)\n",
+                    filename, strerror(err));
+            ret = -err;
+            break;
+        }
+
+        wait_time += interval;
+        sleep(interval);
+
+        if (wait_time > args->timeout) {
+            ret = UNIFYFS_FAILURE;
+            break;
+        }
+    }
+
+    return ret;
+}
+
+enum {
+    UNIFYFS_STAGE_IN = 0,
+    UNIFYFS_STAGE_OUT = 1,
+};
+
+static inline unsigned int estimate_timeout(const char* manifest_file)
+{
+    /* crude guess: 20 minutes */
+    return 20 * 60;
+}
+
+
+/**
+ * @brief wait until data stage operation finishes
+ *
+ * @param resource
+ * @param args
+ *
+ * @return
+ */
+static
+int wait_stage(unifyfs_resource_t* resource, unifyfs_args_t* args)
+{
+    int ret = UNIFYFS_SUCCESS;
+    unsigned int interval = 5;
+    unsigned int wait_time = 0;
+    unsigned int timeout = 0;
+    FILE* fp = NULL;
+    const char* manifest_file = NULL;
+    char filename[PATH_MAX];
+    char linebuf[16];
+    int return_val_from_scnprintf;
+
+    return_val_from_scnprintf =
+        scnprintf(filename, PATH_MAX,
+                  "%s/%s", args->share_dir, UNIFYFS_STAGE_STATUS_FILENAME);
+    if (return_val_from_scnprintf > (PATH_MAX - 2)) {
+        fprintf(stderr, "Unifyfs status filename is too long!\n");
+        return -ENOMEM;
+    }
+
+    if (args->stage_timeout > 0) {
+        timeout = args->stage_timeout;
+    } else {
+        timeout = estimate_timeout(manifest_file);
+    }
+
+    while (1) {
+        fp = fopen(filename, "r");
+        if (fp) {
+            char* line = fgets(linebuf, 15, fp);
+            if (0 == strncmp("success", line, strlen("success"))) {
+                fclose(fp);
+                fp = NULL;
+                ret = 0;
+                break;      // transfer completed
+            } else if (0 == strncmp("fail", line, strlen("fail"))) {
+                fclose(fp);
+                fp = NULL;
+                ret = -EIO;
+                break;      // transfer failed
+            } else {
+                fclose(fp); // try again
+            }
+        }
+
+
+        if (errno != ENOENT) {
+            fprintf(stderr, "failed to open file %s (%s)\n",
+                    UNIFYFS_STAGE_STATUS_FILENAME, strerror(errno));
+            ret = -errno;
+            break;
+        }
+
+        wait_time += interval;
+        sleep(interval);
+
+        if (wait_time > timeout) {
+            ret = UNIFYFS_FAILURE;
+            break;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * @brief remove server pid file if exists (possibly from previous run).
+ * returns 0 (success) if the pid file does not exist.
+ *
+ * @return 0 on success, negative errno otherwise
+ */
+static int remove_server_pid_file(unifyfs_args_t* args)
+{
+    int ret = 0;
+    char filename[PATH_MAX];
+    int return_val_from_scnprintf;
+
+    return_val_from_scnprintf =
+        scnprintf(filename, PATH_MAX,
+                  "%s/%s", args->share_dir, UNIFYFSD_PID_FILENAME);
+    if (return_val_from_scnprintf > (PATH_MAX - 2)) {
+        fprintf(stderr, "Unifyfs status filename is too long!\n");
+        return -ENOMEM;
+    }
+
+    ret = unlink(filename);
+    if (ret) {
+        if (ENOENT == errno) {
+            ret = 0;
+        } else {
+            fprintf(stderr, "failed to unlink existing pid file %s (%s)\n",
+                    filename, strerror(errno));
+            ret = -errno;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * @brief remove stagein/out status file if exists (possibly from previous run).
+ * returns 0 (success) if the pid file does not exist.
+ *
+ * @return 0 on success, negative errno otherwise
+ */
+static int remove_stage_status_file(unifyfs_args_t* args)
+{
+    int ret = 0;
+    char filename[PATH_MAX];
+    int return_val_from_scnprintf;
+
+    return_val_from_scnprintf =
+        scnprintf(filename, PATH_MAX,
+                  "%s/%s", args->share_dir, UNIFYFS_STAGE_STATUS_FILENAME);
+    if (return_val_from_scnprintf > (PATH_MAX - 2)) {
+        fprintf(stderr, "Unifyfs stage status filename is too long!\n");
+        return -ENOMEM;
+    }
+
+    ret = unlink(filename);
+    if (ret) {
+        if (ENOENT == errno) {
+            ret = 0;
+        } else {
+            fprintf(stderr, "failed to unlink existing stage status file "
+                    "%s (%s)\n", filename, strerror(errno));
+            ret = -errno;
+        }
+    }
+
+    return ret;
+}
+
+static inline char* str_rtrim(char* str)
+{
+    if (str) {
+        char* pos = &str[strlen(str) - 1];
+
+        while (pos >= str && isspace(*pos)) {
+            *pos = '\0';
+            pos--;
+        }
+    }
+
+    return str;
+}
+
+/**
  * @brief Get node list from $LSB_HOSTS or $LSB_MCPU_HOSTS.
  *
  * @param resource  The job resource record to be filled
@@ -196,7 +437,7 @@ static int lsf_read_resource(unifyfs_resource_t* resource)
     size_t i, n_nodes;
     char* val;
     char* node;
-    char* last_node;
+    char* last_node = NULL;
     char* lsb_hosts;
     char* pos;
     char** nodes;
@@ -216,7 +457,15 @@ static int lsf_read_resource(unifyfs_resource_t* resource)
         }
     }
 
-    lsb_hosts = strdup(val);
+    // LSB_MCPU_HOSTS string includes a space at the end, which causes extra
+    // node count (n_nodes).
+    lsb_hosts = str_rtrim(strdup(val));
+
+    // get length of host string
+    size_t hosts_len = strlen(lsb_hosts) + 1;
+
+    // pointer to character just past terminating NULL
+    char* hosts_end = lsb_hosts + hosts_len;
 
     // replace spaces with zeroes
     for (pos = lsb_hosts; *pos; pos++) {
@@ -232,7 +481,7 @@ static int lsf_read_resource(unifyfs_resource_t* resource)
     } else {
         pos += (strlen(pos) + 1);    // skip launch node slot count
     }
-    for (n_nodes = 0; *pos;) {
+    for (n_nodes = 0; pos < hosts_end;) {
         node = pos;
         if (!mcpu) {
             if (strcmp(last_node, node) != 0) {
@@ -259,7 +508,7 @@ static int lsf_read_resource(unifyfs_resource_t* resource)
     } else {
         pos += (strlen(pos) + 1);    // skip launch node slot count
     }
-    for (i = 0; *pos && i < n_nodes;) {
+    for (i = 0; pos < hosts_end && i < n_nodes;) {
         node = pos;
         if (!mcpu) {
             if (strcmp(last_node, node) != 0) {
@@ -363,8 +612,16 @@ static int slurm_read_resource(unifyfs_resource_t* resource)
     return ret;
 }
 
+// construct_server_argv():
+// This function is called in two ways.
+// Call it once with server_argv==NULL and it
+// will count up the number of arguments you'll have, but
+// doesn't construct the list itself.  Call it again with
+// the same args but with a buffer in server_argv, and it will
+// construct the argument list there.
 /**
- * @brief Default server launch routine
+ * @brief Constructs argument chain to mpi-start (or terminate)
+ *        unifyfs server processes.
  *
  * @param args         The command-line options
  * @param server_args  Server argument vector to be filled
@@ -430,6 +687,51 @@ static size_t construct_server_argv(unifyfs_args_t* args,
     return argc;
 }
 
+// construct_stage_argv:
+// this is currently set up to create one rank per compute node,
+// mirroring the configuration of the servers.  However, in the
+// future, this may be reconfigured to have more, to support
+// more files being staged in or out more quickly.
+/**
+ * @brief Constructs argument chain to mpi-start (or terminate)
+ *        unifyfs-stage stagein/out process.
+ *
+ * @param args        The command-line options
+ * @param stage_args  unifyfs-stage argument vector to be filled
+ *
+ * @return number of server arguments
+ */
+static size_t construct_stage_argv(unifyfs_args_t* args,
+                                   char** stage_argv)
+{
+    size_t argc = 0;
+
+    if (stage_argv != NULL) {
+        stage_argv[0] = strdup(LIBEXECDIR "/unifyfs-stage");
+    }
+    argc = 1;
+
+    if (args->mountpoint != NULL) {
+        if (stage_argv != NULL) {
+            stage_argv[argc] = strdup("-m");
+            stage_argv[argc + 1] = strdup(args->mountpoint);
+        }
+        argc += 2;
+    }
+
+    if (stage_argv != NULL) {
+        char* manifest_file = args->stage_in ? args->stage_in
+                              : args->stage_out;
+
+        stage_argv[argc] = strdup("-s");
+        stage_argv[argc + 1] = strdup(args->share_dir);
+        stage_argv[argc + 2] = strdup(manifest_file);
+    }
+    argc += 3;
+
+    return argc;
+}
+
 /**
  * @brief Default server launch routine
  *
@@ -459,6 +761,20 @@ static int invalid_terminate(unifyfs_resource_t* resource,
 }
 
 /**
+ * @brief Default data stage routine
+ *
+ * @param resource  Not used
+ * @param args      Not used
+ *
+ * @return -ENOSYS
+ */
+static int invalid_stage(unifyfs_resource_t* resource,
+                         unifyfs_args_t* args)
+{
+    return -ENOSYS;
+}
+
+/**
  * @brief Launch servers using IBM jsrun
  *
  * @param resource The job resource record
@@ -474,7 +790,7 @@ static int jsrun_launch(unifyfs_resource_t* resource,
     char n_nodes[16];
 
     // full command: jsrun <jsrun args> <server args>
-    jsrun_argc = 9;
+    jsrun_argc = 13;
     snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
 
     server_argc = construct_server_argv(args, NULL);
@@ -486,11 +802,15 @@ static int jsrun_launch(unifyfs_resource_t* resource,
     argv[1] = strdup("--immediate");
     argv[2] = strdup("-e");
     argv[3] = strdup("individual");
-    argv[4] = strdup("--nrs");
-    argv[5] = strdup(n_nodes);
-    argv[6] = strdup("-r1");
-    argv[7] = strdup("-c1");
-    argv[8] = strdup("-a1");
+    argv[4] = strdup("--stdio_stderr");
+    argv[5] = strdup("unifyfsd.err.%h.%p");
+    argv[6] = strdup("--stdio_stdout");
+    argv[7] = strdup("unifyfsd.out.%h.%p");
+    argv[8] = strdup("--nrs");
+    argv[9] = strdup(n_nodes);
+    argv[10] = strdup("-r1");
+    argv[11] = strdup("-c1");
+    argv[12] = strdup("-a1");
     construct_server_argv(args, argv + jsrun_argc);
 
     execvp(argv[0], argv);
@@ -535,6 +855,50 @@ static int jsrun_terminate(unifyfs_resource_t* resource,
 
     execvp(argv[0], argv);
     perror("failed to execvp() jsrun to pkill unifyfsd");
+    return -errno;
+}
+
+/**
+ * @brief Launch data stage using IBM jsrun
+ *
+ * @param resource The job resource record
+ * @param args     The command-line options
+ *
+ * @return
+ */
+static int jsrun_stage(unifyfs_resource_t* resource,
+                       unifyfs_args_t* args)
+{
+    size_t argc, jsrun_argc, stage_argc;
+    char** argv = NULL;
+    char n_nodes[16];
+
+    // full command: jsrun <jsrun args> <server args>
+    jsrun_argc = 13;
+    snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
+
+    stage_argc = construct_stage_argv(args, NULL);
+
+    // setup full command argv
+    argc = 1 + jsrun_argc + stage_argc;
+    argv = calloc(argc, sizeof(char*));
+    argv[0] = strdup("jsrun");
+    argv[1] = strdup("--immediate");
+    argv[2] = strdup("-e");
+    argv[3] = strdup("individual");
+    argv[4] = strdup("--stdio_stderr");
+    argv[5] = strdup("unifyfs-stage.err.%h.%p");
+    argv[6] = strdup("--stdio_stdout");
+    argv[7] = strdup("unifyfs-stage.out.%h.%p");
+    argv[8] = strdup("--nrs");
+    argv[9] = strdup(n_nodes);
+    argv[10] = strdup("-r1");
+    argv[11] = strdup("-c1");
+    argv[12] = strdup("-a1");
+    construct_stage_argv(args, argv + jsrun_argc);
+
+    execvp(argv[0], argv);
+    perror("failed to execvp() mpirun to handle data stage");
     return -errno;
 }
 
@@ -611,6 +975,42 @@ static int mpirun_terminate(unifyfs_resource_t* resource,
     return -errno;
 }
 
+/**
+ * @brief Launch unifyfs-stage using mpirun (OpenMPI)
+ *
+ * @param resource The job resource record
+ * @param args     The command-line options
+ *
+ * @return
+ */
+static int mpirun_stage(unifyfs_resource_t* resource,
+                        unifyfs_args_t* args)
+{
+    size_t argc, mpirun_argc, stage_argc;
+    char** argv = NULL;
+    char n_nodes[16];
+
+    // full command: mpirun <mpirun args> <server args>
+
+    mpirun_argc = 5;
+    snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
+
+    stage_argc = construct_stage_argv(args, NULL);
+
+    // setup full command argv
+    argc = 1 + mpirun_argc + stage_argc;
+    argv = calloc(argc, sizeof(char*));
+    argv[0] = strdup("mpirun");
+    argv[1] = strdup("-np");
+    argv[2] = strdup(n_nodes);
+    argv[3] = strdup("--map-by");
+    argv[4] = strdup("ppr:1:node");
+    construct_stage_argv(args, argv + mpirun_argc);
+
+    execvp(argv[0], argv);
+    perror("failed to execvp() mpirun to handle data stage");
+    return -errno;
+}
 
 /**
  * @brief Launch servers using SLURM srun
@@ -686,6 +1086,43 @@ static int srun_terminate(unifyfs_resource_t* resource,
 }
 
 /**
+ * @brief Launch unifyfs-stage using SLURM srun
+ *
+ * @param resource The job resource record
+ * @param args     The command-line options
+ *
+ * @return
+ */
+static int srun_stage(unifyfs_resource_t* resource,
+                      unifyfs_args_t* args)
+{
+    size_t argc, srun_argc, stage_argc;
+    char** argv = NULL;
+    char n_nodes[16];
+
+    // full command: srun <srun args> <server args>
+
+    srun_argc = 5;
+    snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
+
+    stage_argc = construct_stage_argv(args, NULL);
+
+    // setup full command argv
+    argc = 1 + srun_argc + stage_argc;
+    argv = calloc(argc, sizeof(char*));
+    argv[0] = strdup("srun");
+    argv[1] = strdup("-N");
+    argv[2] = strdup(n_nodes);
+    argv[3] = strdup("--ntasks-per-node");
+    argv[4] = strdup("1");
+    construct_stage_argv(args, argv + srun_argc);
+
+    execvp(argv[0], argv);
+    perror("failed to execvp() srun to launch unifyfsd");
+    return -errno;
+}
+
+/**
  * @brief Launch servers using custom script
  *
  * @param resource The job resource record
@@ -756,11 +1193,41 @@ static int script_terminate(unifyfs_resource_t* resource,
  * match the definition in common/src/rm_enumerator.h
  */
 static _ucr_resource_manager_t resource_managers[] = {
-    { "none", &invalid_read_resource, &invalid_launch, &invalid_terminate },
-    { "pbs", &pbs_read_resource, &mpirun_launch, &mpirun_terminate },
-    { "slurm", &slurm_read_resource, &srun_launch, &srun_terminate },
-    { "lsf", &lsf_read_resource, &mpirun_launch, &mpirun_terminate },
-    { "lsfcsm", &lsf_read_resource, &jsrun_launch, &jsrun_terminate },
+    {
+        .type = "none",
+        .read_resource = &invalid_read_resource,
+        .launch = &invalid_launch,
+        .terminate = &invalid_terminate,
+        .stage = &invalid_stage,
+    },
+    {
+        .type = "pbs",
+        .read_resource = &pbs_read_resource,
+        .launch = &mpirun_launch,
+        .terminate = &mpirun_terminate,
+        .stage = &mpirun_stage,
+    },
+    {
+        .type = "slurm",
+        .read_resource = &slurm_read_resource,
+        .launch = &srun_launch,
+        .terminate = &srun_terminate,
+        .stage = &srun_stage,
+    },
+    {
+        .type = "lsf",
+        .read_resource = &lsf_read_resource,
+        .launch = &mpirun_launch,
+        .terminate = &mpirun_terminate,
+        .stage = &mpirun_stage,
+    },
+    {
+        .type = "lsfcsm",
+        .read_resource = &lsf_read_resource,
+        .launch = &jsrun_launch,
+        .terminate = &jsrun_terminate,
+        .stage = &jsrun_stage,
+    },
 };
 
 int unifyfs_detect_resources(unifyfs_resource_t* resource)
@@ -786,6 +1253,7 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
                           unifyfs_args_t* args)
 {
     int rc;
+    pid_t pid;
 
     if ((resource == NULL) || (args == NULL)) {
         return -EINVAL;
@@ -793,23 +1261,91 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
 
     rc = write_hostfile(resource, args);
     if (rc) {
-        fprintf(stderr, "ERROR: failed to write shared server hostfile\n");
+        fprintf(stderr, "Failed to write shared server hostfile!\n");
         return rc;
     }
 
-    if (args->script != NULL) {
-        return script_launch(resource, args);
-    } else {
-        return resource_managers[resource->rm].launch(resource, args);
+    rc = remove_server_pid_file(args);
+    if (rc) {
+        fprintf(stderr, "Failed to remove server pid file!\n");
+        return rc;
     }
+
+    pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "Failed to create server launch process (%s)\n",
+                strerror(errno));
+        return -errno;
+    } else if (pid == 0) {
+        if (args->script != NULL) {
+            return script_launch(resource, args);
+        } else {
+            return resource_managers[resource->rm].launch(resource, args);
+        }
+    }
+
+    rc = wait_server_initialization(resource, args);
+    if (rc) {
+        fprintf(stderr, "Failed to wait for server initialization\n");
+    }
+
+    if (args->stage_in) {
+        rc = remove_stage_status_file(args);
+        if (rc) {
+            fprintf(stderr, "Failed to remove stage status file\n");
+            return rc;
+        }
+
+        pid = fork();
+        if (pid < 0) {
+            fprintf(stderr, "failed to create stage-in launch process (%s)\n",
+                    strerror(errno));
+            return -errno;
+        } else if (pid == 0) {
+            return resource_managers[resource->rm].stage(resource, args);
+        }
+
+        rc = wait_stage(resource, args);
+        if (rc) {
+            fprintf(stderr, "failed to detect the stage in status (rc=%d)\n",
+                    rc);
+        }
+    }
+
+    return rc;
 }
 
 int unifyfs_stop_servers(unifyfs_resource_t* resource,
                          unifyfs_args_t* args)
 {
+    int rc;
+    pid_t pid;
 
     if ((resource == NULL) || (args == NULL)) {
         return -EINVAL;
+    }
+
+    if (args->stage_out) {
+        rc = remove_stage_status_file(args);
+        if (rc) {
+            fprintf(stderr, "Failed to remove stage status file\n");
+            return rc;
+        }
+
+        pid = fork();
+        if (pid < 0) {
+            fprintf(stderr, "failed to create stage-out launch process (%s)\n",
+                    strerror(errno));
+            return -errno;
+        } else if (pid == 0) {
+            return resource_managers[resource->rm].stage(resource, args);
+        }
+
+        rc = wait_stage(resource, args);
+        if (rc) {
+            fprintf(stderr, "failed to detect the data out status (rc=%d)\n",
+                    rc);
+        }
     }
 
     if (args->script != NULL) {

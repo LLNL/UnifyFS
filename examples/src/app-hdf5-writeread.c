@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -11,6 +11,7 @@
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
+
 /*
  * Copyright by The HDF Group.
  * Copyright by the Board of Trustees of the University of Illinois.
@@ -186,11 +187,11 @@ int main(int argc, char** argv)
 
         /* Open an existing file. */
         file_id = H5Fopen(targetfile, H5F_ACC_RDWR, H5P_DEFAULT);
-        printf("H5Fopen: %d\n", file_id);
+        printf("H5Fopen: %ld\n", (long) file_id);
 
         /* Open an existing dataset. */
         dataset_id = H5Dopen2(file_id, "/dset", H5P_DEFAULT);
-        printf("H5open2: %d\n", dataset_id);
+        printf("H5open2: %ld\n", (long) dataset_id);
 
         if (!readonly) {
             /* Write the dataset. */

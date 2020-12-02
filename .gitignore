@@ -71,6 +71,7 @@ examples/src/*-static
 t/sys/open.t
 t/test-results/
 t/unifyfs_unmount.t
+t/seg_tree_test.t
 t/test_run_env.sh
 deps
 install

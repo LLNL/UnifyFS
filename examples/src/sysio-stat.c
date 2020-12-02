@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -11,6 +11,7 @@
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
+
 #include <config.h>
 
 #include <stdio.h>
@@ -40,7 +41,8 @@ static int debug;
 
 static char* mountpoint = "/unifyfs";  /* unifyfs mountpoint */
 static char* filename = "/unifyfs";
-static int unmount;                /* unmount unifyfs after running the test */
+static int unmount;        /* unmount unifyfs after running the test */
+static int testrank = -1;  /* if negative, execute from all ranks */
 
 #define FP_SPECIAL 1
 
@@ -108,15 +110,30 @@ static void dump_stat(int rank, const struct stat* sb)
     printf("Last status change:       %s\n\n", ctime(&sb->st_ctime));
 }
 
+static void do_stat(int rank)
+{
+    int ret = 0;
+    struct stat sb;
+
+    ret = stat(filename, &sb);
+    if (ret < 0) {
+        test_print(rank, "stat failed on \"%s\" (%d:%s)",
+                   filename, errno, strerror(errno));
+    } else {
+        dump_stat(rank, &sb);
+    }
+}
+
 static struct option const long_opts[] = {
     { "debug", 0, 0, 'd' },
     { "help", 0, 0, 'h' },
     { "mount", 1, 0, 'm' },
     { "unmount", 0, 0, 'u' },
+    { "rank", 1, 0, 'r' },
     { 0, 0, 0, 0},
 };
 
-static char* short_opts = "dhm:u";
+static char* short_opts = "dhm:ur:";
 
 static const char* usage_str =
     "\n"
@@ -129,6 +146,7 @@ static const char* usage_str =
     " -m, --mount=<mountpoint>         use <mountpoint> for unifyfs\n"
     "                                  (default: /unifyfs)\n"
     " -u, --unmount                    unmount the filesystem after test\n"
+    " -r, --rank=<rank>                only test on rank <rank>\n"
     "\n";
 
 static char* program;
@@ -167,6 +185,10 @@ int main(int argc, char** argv)
             unmount = 1;
             break;
 
+        case 'r':
+            testrank = atoi(optarg);
+            break;
+
         case 'h':
         default:
             print_usage();
@@ -175,6 +197,11 @@ int main(int argc, char** argv)
     }
 
     if (argc - optind != 1) {
+        print_usage();
+    }
+
+    if (testrank > total_ranks - 1) {
+        test_print(0, "Please specify a valid rank number.");
         print_usage();
     }
 
@@ -192,11 +219,21 @@ int main(int argc, char** argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    ret = stat(filename, &sb);
-    if (ret < 0) {
-        test_print(rank, "stat failed on \"%s\"", filename);
+    if (testrank < 0) { /* execute from all ranks in order */
+        int i = 0;
+
+        for (i = 0; i < total_ranks; i++) {
+            if (rank == i) {
+                do_stat(rank);
+            }
+
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+
     } else {
-        dump_stat(rank, &sb);
+        if (rank == testrank) {
+            do_stat(rank);
+        }
     }
 
     MPI_Barrier(MPI_COMM_WORLD);

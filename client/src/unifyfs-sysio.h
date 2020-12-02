@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -55,15 +55,20 @@
 UNIFYFS_DECL(access, int, (const char* pathname, int mode));
 UNIFYFS_DECL(mkdir, int, (const char* path, mode_t mode));
 UNIFYFS_DECL(rmdir, int, (const char* path));
+UNIFYFS_DECL(chdir, int, (const char* path));
+UNIFYFS_DECL(__getcwd_chk, char*, (char* path, size_t, size_t));
+UNIFYFS_DECL(getcwd, char*, (char* path, size_t));
+UNIFYFS_DECL(getwd, char*, (char* path));
+UNIFYFS_DECL(get_current_dir_name, char*, (void));
 UNIFYFS_DECL(unlink, int, (const char* path));
 UNIFYFS_DECL(remove, int, (const char* path));
 UNIFYFS_DECL(rename, int, (const char* oldpath, const char* newpath));
 UNIFYFS_DECL(truncate, int, (const char* path, off_t length));
 UNIFYFS_DECL(stat, int, (const char* path, struct stat* buf));
-//UNIFYFS_DECL(fstat, int, (int fd, struct stat* buf));
 UNIFYFS_DECL(__xstat, int, (int vers, const char* path, struct stat* buf));
 UNIFYFS_DECL(__lxstat, int, (int vers, const char* path, struct stat* buf));
-UNIFYFS_DECL(__fxstat, int, (int vers, int fd, struct stat* buf));
+UNIFYFS_DECL(statfs, int, (const char* path, struct statfs* fsbuf));
+
 
 /* ---------------------------------------
  * POSIX wrappers: file descriptors
@@ -88,7 +93,11 @@ UNIFYFS_DECL(pwrite64, ssize_t, (int fd, const void* buf, size_t count,
 UNIFYFS_DECL(posix_fadvise, int, (int fd, off_t offset, off_t len, int advice));
 UNIFYFS_DECL(lseek, off_t, (int fd, off_t offset, int whence));
 UNIFYFS_DECL(lseek64, off64_t, (int fd, off64_t offset, int whence));
+UNIFYFS_DECL(fchdir, int, (int fd));
 UNIFYFS_DECL(ftruncate, int, (int fd, off_t length));
+UNIFYFS_DECL(fstat, int, (int fd, struct stat* buf));
+UNIFYFS_DECL(__fxstat, int, (int vers, int fd, struct stat* buf));
+UNIFYFS_DECL(fstatfs, int, (int fd, struct statfs* fsbuf));
 UNIFYFS_DECL(fsync, int, (int fd));
 UNIFYFS_DECL(fdatasync, int, (int fd));
 UNIFYFS_DECL(flock, int, (int fd, int operation));
@@ -103,18 +112,31 @@ UNIFYFS_DECL(close, int, (int fd));
 UNIFYFS_DECL(lio_listio, int, (int mode, struct aiocb* const aiocb_list[],
                                int nitems, struct sigevent* sevp));
 
-/* read count bytes info buf from file starting at offset pos,
- * returns number of bytes actually read in retcount,
- * retcount will be less than count only if an error occurs
- * or end of file is reached */
-int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count,
-                    size_t* retcount);
+/*
+ * Read 'count' bytes info 'buf' from file starting at offset 'pos'.
+ * Returns UNIFYFS_SUCCESS and sets number of bytes actually read in bytes
+ * on success.  Otherwise returns error code on error.
+ */
+int unifyfs_fd_read(
+    int fd,       /* file descriptor to read from */
+    off_t pos,    /* offset within file to read from */
+    void* buf,    /* buffer to hold data */
+    size_t count, /* number of bytes to read */
+    size_t* nread /* number of bytes read */
+);
 
-/* write count bytes from buf into file starting at offset pos,
- * allocates new bytes and updates file size as necessary,
- * fills any gaps with zeros */
-int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count);
-int unifyfs_fd_logreadlist(read_req_t* read_req, int count);
+/*
+ * Write 'count' bytes from 'buf' into file starting at offset 'pos'.
+ * Returns UNIFYFS_SUCCESS and sets number of bytes actually written in bytes
+ * on success.  Otherwise returns error code on error.
+ */
+int unifyfs_fd_write(
+    int fd,          /* file descriptor to write to */
+    off_t pos,       /* offset within file to write to */
+    const void* buf, /* buffer holding data to write */
+    size_t count,    /* number of bytes to write */
+    size_t* nwritten /* number of bytes written */
+);
 
 #include "unifyfs-dirops.h"
 

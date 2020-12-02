@@ -71,6 +71,14 @@ int main(int argc, char* argv[])
 
     fopen_fclose_test(unifyfs_root);
 
+    fseek_ftell_test(unifyfs_root);
+
+    fwrite_fread_test(unifyfs_root);
+
+    fflush_test(unifyfs_root);
+
+    size_test(unifyfs_root);
+
     MPI_Finalize();
 
     done_testing();

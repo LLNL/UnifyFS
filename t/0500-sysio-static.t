@@ -5,4 +5,4 @@
 #
 . $(dirname $0)/sharness.d/00-test-env.sh
 . $(dirname $0)/sharness.d/01-unifyfs-settings.sh
-$UNIFYFS_BUILD_DIR/t/sys/sysio-static.t
+$JOB_RUN_COMMAND $UNIFYFS_BUILD_DIR/t/sys/sysio-static.t

@@ -7,13 +7,13 @@
 # desired. To run all tests simply run the RUN_TESTS.sh script. If Individual
 # tests are desired to be run, source the 001-setup.sh script first, followed by
 # 002-start-server.sh. Then source each desired script after that preceded by
-# `$CI_DIR`. When finished, source the 990-stop-server.sh script last.
+# `$UNIFYFS_CI_DIR`. When finished, source the 990-stop-server.sh script last.
 #
 # E.g.:
 #      $ . full/path/to/001-setup.sh
-#      $ . $CI_DIR/002-start-server.sh
-#      $ . $CI_DIR/100-writeread-tests.sh
-#      $ . $CI_DIR/990-stop-server.sh
+#      $ . $UNIFYFS_CI_DIR/002-start-server.sh
+#      $ . $UNIFYFS_CI_DIR/100-writeread-tests.sh
+#      $ . $UNIFYFS_CI_DIR/990-stop-server.sh
 #
 # To run all of the tests, simply run RUN_CI_TESTS.sh
 #
@@ -36,9 +36,9 @@ Then source any desired test files. Lastly, source 990-stop-server.sh.
 
 E.g.:
     $ . full/path/to/001-setup.sh
-    $ . $CI_DIR/002-start-server.sh
-    $ . $CI_DIR/100-writeread-tests.sh
-    $ . $CI_DIR/990-stop-server.sh
+    $ . \$UNIFYFS_CI_DIR/002-start-server.sh
+    $ . \$UNIFYFS_CI_DIR/100-writeread-tests.sh
+    $ . \$UNIFYFS_CI_DIR/990-stop-server.sh
 
 To run all of the tests, simply run RUN_CI_TESTS.sh.
 
@@ -72,7 +72,6 @@ done
 [[ -z $infomsg ]] && infomsg="-- UNIFYFS JOB INFO:"
 [[ -z $errmsg ]] && errmsg="!!!! UNIFYFS JOB ERROR:"
 
-export CI_PROJDIR=${CI_PROJDIR:-$HOME}
 export TMPDIR=${TMPDIR:-/tmp}
 export SYSTEM_NAME=$(echo $(hostname) | sed -r 's/(^[[:alpha:]]*)(.*)/\1/')
 
@@ -81,13 +80,19 @@ export SYSTEM_NAME=$(echo $(hostname) | sed -r 's/(^[[:alpha:]]*)(.*)/\1/')
 
 # Set up sharness variables and functions for TAP testing.
 echo "$infomsg Setting up sharness"
-CI_DIR=${CI_DIR:-$(dirname "$(readlink -fm $BASH_SOURCE)")}
-SHARNESS_DIR="$(dirname "$CI_DIR")"
-echo "$infomsg CI_DIR: $CI_DIR"
+UNIFYFS_CI_DIR=${UNIFYFS_CI_DIR:-$(dirname "$(readlink -fm $BASH_SOURCE)")}
+SHARNESS_DIR="$(dirname "$UNIFYFS_CI_DIR")"
+UNIFYFS_SOURCE_DIR="$(dirname "$SHARNESS_DIR")"
+BASE_SEARCH_DIR=${BASE_SEARCH_DIR:-"$(dirname "$UNIFYFS_SOURCE_DIR")"}
+echo "$infomsg UNIFYFS_CI_DIR: $UNIFYFS_CI_DIR"
 echo "$infomsg SHARNESS_DIR: $SHARNESS_DIR"
+echo "$infomsg UNIFYFS_SOURCE_DIR: $UNIFYFS_SOURCE_DIR"
+echo "$infomsg BASE_SEARCH_DIR: $BASE_SEARCH_DIR"
+
+SHARNESS_TEST_DIRECTORY=${SHARNESS_TEST_DIRECTORY:-$UNIFYFS_CI_DIR}
 source ${SHARNESS_DIR}/sharness.sh
 source $SHARNESS_DIR/sharness.d/02-functions.sh
-source $CI_DIR/ci-functions.sh
+source $UNIFYFS_CI_DIR/ci-functions.sh
 
 
 ########## Locate UnifyFS install and examples ##########
@@ -101,22 +106,21 @@ echo "$infomsg Looking for UnifyFS install directory..."
 # Look for UnifyFS install directory if the user didn't already set
 # $UNIFYFS_INSTALL to the directory containing bin/ and libexec/
 if [[ -z $UNIFYFS_INSTALL ]]; then
-    # Check for $SPACK_ROOT and if unifyfs is installed
-    if [[ -n $SPACK_ROOT && -d $(spack location -i unifyfs 2>/dev/null) ]];
+    # Search for unifyfsd starting in $BASE_SEARCH_DIR and omitting SPACK_ROOT
+    unifyfsd_exe="$(find_executable $BASE_SEARCH_DIR "*/bin/unifyfsd"\
+                    $SPACK_ROOT)"
+    if [[ -x $unifyfsd_exe ]]; then
+        # Set UNIFYFS_INSTALL to the dir containing bin/ and libexec/
+        UNIFYFS_INSTALL="$(dirname "$(dirname "$unifyfsd_exe")")"
+    # Else check for $SPACK_ROOT and if unifyfs is installed
+    elif [[ -n $SPACK_ROOT && -d $(spack location -i unifyfs 2>/dev/null) ]];
     then
         # Might have a problem with variants and arch
         UNIFYFS_INSTALL="$(spack location -i unifyfs)"
-    # Else search for unifyfsd starting in $CI_PROJDIR and omitting spack_root
-    elif [[ -x $(find_executable $CI_PROJDIR "*/bin/unifyfsd" $SPACK_ROOT) ]];
-    then
-        # Set UNIFYFS_INSTALL to the dir containing bin/ and libexec/
-        UNIFYFS_INSTALL="$(dirname "$(dirname \
-            "$(find_executable $CI_PROJDIR "*/bin/unifyfsd" $SPACK_ROOT)")")"
     else
         echo >&2 "$errmsg Unable to find UnifyFS install directory"
-        echo >&2 "$errmsg \`spack install unifyfs\`, set the" \
-                 "\$UNIFYFS_INSTALL envar to the directory containing bin/" \
-                 "and libexec/, or manually install to \$CI_PROJDIR/*"
+        echo >&2 "$errmsg Set \$UNIFYFS_INSTALL to the directory containing" \
+                 "bin/ and libexec/ or \`spack install unifyfs\`"
         exit 1
     fi
 fi
@@ -133,6 +137,7 @@ if [[ -d $UNIFYFS_INSTALL && -d ${UNIFYFS_INSTALL}/bin &&
 else
     echo >&2 "$errmsg Ensure \$UNIFYFS_INSTALL exists and is the directory" \
              "containing bin/ and libexec/"
+    exit 1
 fi
 
 # Check for necessary Spack modules if Spack is detected
@@ -140,7 +145,7 @@ fi
 # don't fail out
 if [[ -n $(which spack 2>/dev/null) ]]; then
     loaded_modules=$(module list 2>&1)
-    modules="gotcha leveldb flatcc argobots mercury margo"
+    modules="gotcha argobots mercury margo spath"
     for mod in $modules; do
         if ! [[ $(echo "$loaded_modules" | fgrep "$mod") ]]; then
             echo "$errmsg $mod not detected. Please 'spack load $mod'"
@@ -155,9 +160,9 @@ fi
 # TODO: mpirun compatibility
 echo "$infomsg Finding job launcher"
 if [[ -n $(which jsrun 2>/dev/null) ]]; then
-    source $CI_DIR/setup-lsf.sh
+    source $UNIFYFS_CI_DIR/setup-lsf.sh
 elif [[ -n $(which srun 2>/dev/null) ]]; then
-    source $CI_DIR/setup-slurm.sh
+    source $UNIFYFS_CI_DIR/setup-slurm.sh
 else
     echo >&2 "$errmsg Failed to find a suitable parallel job launcher"
     exit 1
@@ -174,19 +179,23 @@ export UNIFYFS_LOG_VERBOSITY=${UNIFYFS_LOG_VERBOSITY:-5}
 # an alternate location for the logs
 if [[ -z $UNIFYFS_LOG_DIR ]]; then
     # User can choose to not cleanup logs on success
-    export CI_LOG_CLEANUP=${CI_LOG_CLEANUP:-yes}
-    # If no log cleanup, move logs to $CI_DIR
-    if [[ $CI_LOG_CLEANUP =~ ^(no|NO)$ || $CI_CLEANUP =~ ^(no|NO)$ ]]; then
-        logdir=$CI_DIR/${SYSTEM_NAME}_${JOB_ID}_logs
+    export UNIFYFS_CI_LOG_CLEANUP=${UNIFYFS_CI_LOG_CLEANUP:-yes}
+    # If no log cleanup, move logs to $UNIFYFS_CI_DIR
+    if [[ $UNIFYFS_CI_LOG_CLEANUP =~ ^(no|NO)$ ]] || \
+       [[ $UNIFYFS_CI_CLEANUP =~ ^(no|NO)$ ]]
+    then
+        logdir=$UNIFYFS_CI_DIR/${SYSTEM_NAME}_${JOB_ID}_logs
     else # else put logs in sharness trash dir that sharness deletes
         logdir=$SHARNESS_TRASH_DIRECTORY/${SYSTEM_NAME}_${JOB_ID}_logs
-        echo "$infomsg Set CI_LOG_CLEANUP=no to keep logs when all tests pass"
+        echo "$infomsg Set UNIFYFS_CI_LOG_CLEANUP=no to keep logs when all" \
+             "tests pass"
     fi
-    mkdir -p $logdir
 fi
 export UNIFYFS_LOG_DIR=${UNIFYFS_LOG_DIR:-$logdir}
+mkdir -p $UNIFYFS_LOG_DIR
 echo "$infomsg Logs are in UNIFYFS_LOG_DIR: $UNIFYFS_LOG_DIR"
 
+# sharedfs
 export UNIFYFS_SHAREDFS_DIR=${UNIFYFS_SHAREDFS_DIR:-$UNIFYFS_LOG_DIR}
 echo "$infomsg UNIFYFS_SHAREDFS_DIR set as $UNIFYFS_SHAREDFS_DIR"
 
@@ -195,50 +204,47 @@ export UNIFYFS_DAEMONIZE=${UNIFYFS_DAEMONIZE:-off}
 
 # temp
 nlt=${TMPDIR}/unifyfs.${USER}.${SYSTEM_NAME}.${JOB_ID}
-export CI_TEMP_DIR=${CI_TEMP_DIR:-$nlt}
-export UNIFYFS_RUNSTATE_DIR=${UNIFYFS_RUNSTATE_DIR:-$CI_TEMP_DIR}
-export UNIFYFS_META_DB_PATH=${UNIFYFS_META_DB_PATH:-$CI_TEMP_DIR}
+export UNIFYFS_CI_TEMP_DIR=${UNIFYFS_CI_TEMP_DIR:-$nlt}
+$JOB_RUN_ONCE_PER_NODE mkdir -p $UNIFYFS_CI_TEMP_DIR
+export UNIFYFS_RUNSTATE_DIR=${UNIFYFS_RUNSTATE_DIR:-$UNIFYFS_CI_TEMP_DIR}
+export UNIFYFS_META_DB_PATH=${UNIFYFS_META_DB_PATH:-$UNIFYFS_CI_TEMP_DIR}
 echo "$infomsg UNIFYFS_RUNSTATE_DIR set as $UNIFYFS_RUNSTATE_DIR"
 echo "$infomsg UNIFYFS_META_DB_PATH set as $UNIFYFS_META_DB_PATH"
-echo "$infomsg Set CI_TEMP_DIR to change both of these to same path"
+echo "$infomsg Set UNIFYFS_CI_TEMP_DIR to change both of these to same path"
 
 # storage
 nls=$nlt
-export CI_STORAGE_DIR=${CI_STORAGE_DIR:-$nls}
-export UNIFYFS_SPILLOVER_SIZE=${UNIFYFS_SPILLOVER_SIZE:-$GB}
-export UNIFYFS_SPILLOVER_ENABLED=${UNIFYFS_SPILLOVER_ENABLED:-yes}
-export UNIFYFS_SPILLOVER_DATA_DIR=${UNIFYFS_SPILLOVER_DATA_DIR:-$CI_STORAGE_DIR}
-export UNIFYFS_SPILLOVER_META_DIR=${UNIFYFS_SPILLOVER_META_DIR:-$CI_STORAGE_DIR}
-echo "$infomsg UNIFYFS_SPILLOVER_DATA_DIR set as $UNIFYFS_SPILLOVER_DATA_DIR"
-echo "$infomsg UNIFYFS_SPILLOVER_META_DIR set as $UNIFYFS_SPILLOVER_META_DIR"
-echo "$infomsg Set CI_STORAGE_DIR to change both of these to same path"
+export UNIFYFS_LOGIO_SPILL_SIZE=${UNIFYFS_LOGIO_SPILL_SIZE:-$((5 * GB))}
+export UNIFYFS_LOGIO_SPILL_DIR=${UNIFYFS_LOGIO_SPILL_DIR:-$nls}
+echo "$infomsg UNIFYFS_LOGIO_SPILL_SIZE set as $UNIFYFS_LOGIO_SPILL_SIZE"
+echo "$infomsg UNIFYFS_LOGIO_SPILL_DIR set as $UNIFYFS_LOGIO_SPILL_DIR"
 
 
 ########## Set up mountpoints and sharness testing prereqs ##########
 
 # Running tests with UNIFYFS_MOUNTPOINT set to a real dir will disable posix
-# tests unless user sets CI_TEST_POSIX=yes
+# tests unless user sets UNIFYFS_CI_TEST_POSIX=yes
 export UNIFYFS_MP=${UNIFYFS_MOUNTPOINT:-/unifyfs}
 # If UNIFYFS_MOUNTPOINT is real dir, disable posix tests (unless user wants it)
 # and set REAL_MP prereq to enable test that checks if UNIFYFS_MOUNTPOINT is
 # empty
 if [[ -d $UNIFYFS_MP ]]; then
-    export CI_TEST_POSIX=no
+    export UNIFYFS_CI_TEST_POSIX=no
     test_set_prereq REAL_MP
 fi
 echo "$infomsg UNIFYFS_MOUNTPOINT established: $UNIFYFS_MP"
 
-export CI_TEST_POSIX=${CI_TEST_POSIX:-yes}
+export UNIFYFS_CI_TEST_POSIX=${UNIFYFS_CI_TEST_POSIX:-yes}
 # Set up a real mountpoint for posix tests to write files to and allow tests to
 # check that those files exist
-if [[ ! $CI_TEST_POSIX =~ ^(no|NO)$ ]]; then
-    if [[ -z $CI_POSIX_MP ]]; then
+if [[ ! $UNIFYFS_CI_TEST_POSIX =~ ^(no|NO)$ ]]; then
+    if [[ -z $UNIFYFS_CI_POSIX_MP ]]; then
         # needs to be a shared file system
         pmp=${SHARNESS_TRASH_DIRECTORY}/unify_posix_mp.${SYSTEM_NAME}.${JOB_ID}
-        mkdir $pmp
     fi
-    export CI_POSIX_MP=${CI_POSIX_MP:-$pmp}
-    echo "$infomsg CI_POSIX_MP established: $CI_POSIX_MP"
+    export UNIFYFS_CI_POSIX_MP=${UNIFYFS_CI_POSIX_MP:-$pmp}
+    mkdir -p $UNIFYFS_CI_POSIX_MP
+    echo "$infomsg UNIFYFS_CI_POSIX_MP established: $UNIFYFS_CI_POSIX_MP"
 
     # Set test_posix prereq
     test_set_prereq TEST_POSIX
@@ -248,8 +254,9 @@ fi
 [[ -n $(which pdsh 2>/dev/null) ]] && test_set_prereq PDSH
 
 # skip cleanup_hosts test in 990-stop_server.sh if cleanup is not desired
-export CI_HOST_CLEANUP=${CI_HOST_CLEANUP:-yes}
-if ! [[ $CI_HOST_CLEANUP =~ ^(no|NO)$ || $CI_CLEANUP =~ ^(no|NO)$ ]]; then
+export UNIFYFS_CI_HOST_CLEANUP=${UNIFYFS_CI_HOST_CLEANUP:-yes}
+if ! [[ $UNIFYFS_CI_HOST_CLEANUP =~ ^(no|NO)$ ]] || \
+     [[ $UNIFYFS_CI_CLEANUP =~ ^(no|NO)$ ]]; then
     test_set_prereq CLEAN
 fi
 

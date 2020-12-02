@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -14,6 +14,8 @@
 
 #ifndef UNIFYFS_PMPI_WRAPPERS_H
 #define UNIFYFS_PMPI_WRAPPERS_H
+
+#include <mpi.h>
 
 /* MPI_Init PMPI wrapper */
 int unifyfs_mpi_init(int* argc, char*** argv);

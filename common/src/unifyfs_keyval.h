@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -22,11 +22,10 @@ extern "C" {
 #endif
 
 // keys we use
-const char* key_runstate;           // path to runstate file
-const char* key_unifyfsd_socket;    // server domain socket path
-const char* key_unifyfsd_margo_shm; // client-server margo address
-const char* key_unifyfsd_margo_svr; // server-server margo address
-const char* key_unifyfsd_mpi_rank;  // server-server MPI rank
+extern const char* const key_unifyfsd_socket;    // server domain socket path
+extern const char* const key_unifyfsd_margo_shm; // client-server margo address
+extern const char* const key_unifyfsd_margo_svr; // server-server margo address
+extern const char* const key_unifyfsd_pmi_rank;  // server-server pmi rank
 
 // initialize key-value store
 int unifyfs_keyval_init(unifyfs_cfg_t* cfg,
@@ -52,6 +51,9 @@ int unifyfs_keyval_lookup_local(const char* key,
 int unifyfs_keyval_lookup_remote(int rank,
                                  const char* key,
                                  char** oval);
+
+// block until a particular key-value pair published by all servers
+int unifyfs_keyval_fence_remote(void);
 
 #ifdef __cplusplus
 } // extern "C"

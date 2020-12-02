@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2017, 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2017, 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -11,14 +11,11 @@
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
+
 #ifndef __UNIFYFS_DIROPS_H
 #define __UNIFYFS_DIROPS_H
 
-#include <config.h>
-
-#include <sys/types.h>
-#include <dirent.h>
-#include <pthread.h>
+#include "unifyfs-internal.h"
 
 /*
  * FIXME: is this portable to use the linux dirent structure?

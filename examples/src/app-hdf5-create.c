@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -11,6 +11,7 @@
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
+
 /*
  * Copyright by The HDF Group.
  * Copyright by the Board of Trustees of the University of Illinois.
@@ -162,18 +163,18 @@ int main(int argc, char** argv)
         /* Create a new file using default properties. */
         file_id = H5Fcreate(targetfile, H5F_ACC_TRUNC, H5P_DEFAULT,
                             H5P_DEFAULT);
-        printf("H5Fcreate: %d\n", file_id);
+        printf("H5Fcreate: %ld\n", (long) file_id);
 
         /* Create the data space for the dataset. */
         dims[0] = 4;
         dims[1] = 6;
         dataspace_id = H5Screate_simple(2, dims, NULL);
-        printf("H5Screate_simple: %d\n", dataspace_id);
+        printf("H5Screate_simple: %ld\n", (long) dataspace_id);
 
         /* Create the dataset. */
         dataset_id = H5Dcreate2(file_id, "/dset", H5T_STD_I32BE, dataspace_id,
                                 H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        printf("H5Dcreate2: %d\n", dataset_id);
+        printf("H5Dcreate2: %ld\n", (long) dataset_id);
 
         if (write_data) {
             int i, j;

@@ -12,13 +12,15 @@ INSTALL_DIR=$ROOT/install
 cd deps
 
 repos=(	https://xgitlab.cels.anl.gov/sds/bmi.git
-	https://github.com/google/leveldb.git
 	https://github.com/LLNL/GOTCHA.git
 	https://github.com/pmodels/argobots.git
 	https://github.com/mercury-hpc/mercury.git
 	https://xgitlab.cels.anl.gov/sds/margo.git
-	https://github.com/dvidelabs/flatcc.git
 )
+
+if [ $1 = "--with-leveldb" ]; then
+    repos+=(https://github.com/google/leveldb.git)
+fi
 
 for i in "${repos[@]}" ; do
 	# Get just the name of the project (like "mercury")
@@ -41,20 +43,24 @@ cd bmi
 make -j $(nproc) && make install
 cd ..
 
-echo "### building leveldb ###"
-cd leveldb
-git checkout 1.22
-mkdir -p build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-	-DBUILD_SHARED_LIBS=yes ..
-make -j $(nproc) && make install
-cd ..
-cd ..
+if [ $1 = "--with-leveldb" ]; then
+    echo "### building leveldb ###"
+    cd leveldb
+    git checkout 1.22
+    mkdir -p build && cd build
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+        -DBUILD_SHARED_LIBS=yes ..
+    make -j $(nproc) && make install
+    cd ..
+    cd ..
+else
+    echo "### skipping leveldb build ###"
+fi
 
 echo "### building GOTCHA ###"
 cd GOTCHA
 # Unify won't build against latest GOTCHA, so use a known compatible version.
-git checkout 0.0.2
+git checkout 1.0.3
 mkdir -p build && cd build
 cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" ..
 make -j $(nproc) && make install
@@ -63,21 +69,25 @@ cd ..
 
 echo "### building argobots ###"
 cd argobots
+git checkout v1.0
 ./autogen.sh && CC=gcc ./configure --prefix="$INSTALL_DIR"
 make -j $(nproc) && make install
 cd ..
 
 echo "### building mercury ###"
 cd mercury
+git checkout v1.0.1
+git submodule update --init
 mkdir -p build && cd build
 cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+      -DMERCURY_USE_SELF_FORWARD=ON \
       -DMERCURY_USE_BOOST_PP=ON \
       -DMERCURY_USE_CHECKSUMS=ON \
       -DMERCURY_USE_EAGER_BULK=ON \
       -DMERCURY_USE_SYSTEM_MCHECKSUM=OFF \
       -DNA_USE_BMI=ON \
       -DMERCURY_USE_XDR=OFF \
-      -DBUILD_SHARED_LIBS=on ..
+      -DBUILD_SHARED_LIBS=ON ..
 make -j $(nproc) && make install
 cd ..
 cd ..
@@ -87,28 +97,19 @@ cd margo
 git checkout v0.4.3
 export PKG_CONFIG_PATH="$INSTALL_DIR/lib/pkgconfig"
 ./prepare.sh
-./configure --prefix="$INSTALL_DIR"
+./configure --prefix="$INSTALL_DIR" --enable-shared
 make -j $(nproc) && make install
-cd ..
-
-echo "### building flatcc ###"
-cd flatcc
-# need -DBUILD_SHARED_LIBS=ye
-mkdir -p build && cd build
-cmake -DBUILD_SHARED_LIBS=on -DCMAKE_BUILD_TYPE=Release \
-	-DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DFLATCC_INSTALL=on ..
-make -j $(nproc) && make install
-cd ..
 cd ..
 
 cd "$ROOT"
 
 echo "*************************************************************************"
-echo "Dependencies are all built.  You can now build Unify with:"
+echo "Dependencies are all built.  You can now build UnifyFS with:"
 echo ""
-echo "  export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig"
-echo "  ./autogen.sh && ./configure --with-leveldb=$INSTALL_DIR" \
-	"--with-gotcha=$INSTALL_DIR --with-flatcc=$INSTALL_DIR"
+echo -n "  export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig && "
+echo "export LEVELDB_ROOT=$INSTALL_DIR"
+echo -n "  ./autogen.sh && ./configure --with-gotcha=$INSTALL_DIR"
+echo " --prefix=$INSTALL_DIR"
 echo "  make"
 echo ""
 echo "*************************************************************************"

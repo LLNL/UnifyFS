@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -43,14 +43,6 @@
 #include "unifyfs-internal.h"
 #include "unifyfs-sysio.h"
 #include "margo_client.h"
-#include "ucr_read_builder.h"
-
-/* -------------------
- * define external variables
- * --------------------*/
-
-extern int unifyfs_spilloverblock;
-extern int unifyfs_use_spillover;
 
 /* ---------------------------------------
  * POSIX wrappers: paths
@@ -59,17 +51,18 @@ extern int unifyfs_use_spillover;
 int UNIFYFS_WRAP(access)(const char* path, int mode)
 {
     /* determine whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* check if path exists */
-        if (unifyfs_get_fid_from_path(path) < 0) {
+        if (unifyfs_get_fid_from_path(upath) < 0) {
             LOGDBG("access: unifyfs_get_id_from path failed, returning -1, %s",
-                   path);
+                   upath);
             errno = ENOENT;
             return -1;
         }
 
         /* currently a no-op */
-        LOGDBG("access: path intercepted, returning 0, %s", path);
+        LOGDBG("access: path intercepted, returning 0, %s", upath);
         return 0;
     } else {
         LOGDBG("access: calling MAP_OR_FAIL, %s", path);
@@ -88,19 +81,20 @@ int UNIFYFS_WRAP(mkdir)(const char* path, mode_t mode)
      * It doesn't check to see if parent directory exists */
 
     /* determine whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* check if it already exists */
-        if (unifyfs_get_fid_from_path(path) >= 0) {
+        if (unifyfs_get_fid_from_path(upath) >= 0) {
             errno = EEXIST;
             return -1;
         }
 
         /* add directory to file list */
-        int ret = unifyfs_fid_create_directory(path);
+        int ret = unifyfs_fid_create_directory(upath);
         if (ret != UNIFYFS_SUCCESS) {
             /* failed to create the directory,
              * set errno and return */
-            errno = unifyfs_err_map_to_errno(ret);
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
 
@@ -116,15 +110,16 @@ int UNIFYFS_WRAP(mkdir)(const char* path, mode_t mode)
 int UNIFYFS_WRAP(rmdir)(const char* path)
 {
     /* determine whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* check if the mount point itself is being deleted */
-        if (!strcmp(path, unifyfs_mount_prefix)) {
+        if (!strcmp(upath, unifyfs_mount_prefix)) {
             errno = EBUSY;
             return -1;
         }
 
         /* check if path exists */
-        int fid = unifyfs_get_fid_from_path(path);
+        int fid = unifyfs_get_fid_from_path(upath);
         if (fid < 0) {
             errno = ENOENT;
             return -1;
@@ -137,7 +132,7 @@ int UNIFYFS_WRAP(rmdir)(const char* path)
         }
 
         /* is it empty? */
-        if (!unifyfs_fid_is_dir_empty(path)) {
+        if (!unifyfs_fid_is_dir_empty(upath)) {
             errno = ENOTEMPTY;
             return -1;
         }
@@ -147,7 +142,7 @@ int UNIFYFS_WRAP(rmdir)(const char* path)
         if (ret != UNIFYFS_SUCCESS) {
             /* failed to remove the directory,
              * set errno and return */
-            errno = unifyfs_err_map_to_errno(ret);
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
 
@@ -160,32 +155,340 @@ int UNIFYFS_WRAP(rmdir)(const char* path)
     }
 }
 
+int UNIFYFS_WRAP(chdir)(const char* path)
+{
+    /* determine whether we should intercept this path */
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        /* TODO: check that path is not a file? */
+        /* we're happy to change into any directory in unifyfs */
+        if (unifyfs_cwd != NULL) {
+            free(unifyfs_cwd);
+        }
+        unifyfs_cwd = strdup(upath);
+        return 0;
+    } else {
+        MAP_OR_FAIL(chdir);
+        int ret = UNIFYFS_REAL(chdir)(path);
+
+        /* if the change dir was successful,
+         * update our current working directory */
+        if (unifyfs_initialized && ret == 0) {
+            if (unifyfs_cwd != NULL) {
+                free(unifyfs_cwd);
+            }
+
+            /* if we did a real chdir, let's use a real getcwd
+             * to get the current working directory */
+            MAP_OR_FAIL(getcwd);
+            char* cwd = UNIFYFS_REAL(getcwd)(NULL, 0);
+            if (cwd != NULL) {
+                unifyfs_cwd = cwd;
+
+                /* parts of the code may assume unifyfs_cwd is a max size */
+                size_t len = strlen(cwd) + 1;
+                if (len > UNIFYFS_MAX_FILENAME) {
+                    LOGERR("Current working dir longer (%lu bytes) "
+                        "than UNIFYFS_MAX_FILENAME=%d",
+                        (unsigned long) len, UNIFYFS_MAX_FILENAME);
+                }
+            } else {
+                /* ERROR */
+                LOGERR("Failed to getcwd after chdir(%s) errno=%d %s",
+                    path, errno, strerror(errno));
+            }
+        }
+
+        return ret;
+    }
+}
+
+/* common logic for getcwd and __getcwd_chk */
+static char* _getcwd_impl(char* path, size_t size)
+{
+    /* man page if size=0 and path not NULL, return EINVAL */
+    if (size == 0 && path != NULL) {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    /* get length of current working dir */
+    size_t len = strlen(unifyfs_cwd) + 1;
+
+    /* if user didn't provide a buffer,
+     * we attempt to allocate and return one for them */
+    if (path == NULL) {
+        /* we'll allocate a buffer to return to the caller */
+        char* buf = NULL;
+
+        /* if path is NULL and size is positive, we must
+         * allocate a buffer of length size and copy into it */
+        if (size > 0) {
+            /* check that size is big enough for the string */
+            if (len <= size) {
+                /* path will fit, allocate buffer and copy */
+                buf = (char*) malloc(size);
+                if (buf != NULL) {
+                    strncpy(buf, unifyfs_cwd, size);
+                } else {
+                    errno = ENOMEM;
+                }
+                return buf;
+            } else {
+                /* user's buffer limit is too small */
+                errno = ERANGE;
+                return NULL;
+            }
+        }
+
+        /* otherwise size == 0, so allocate a buffer
+         * that is big enough */
+        buf = (char*) malloc(len);
+        if (buf != NULL) {
+            strncpy(buf, unifyfs_cwd, len);
+        } else {
+            errno = ENOMEM;
+        }
+        return buf;
+    }
+
+    /* to get here, caller provided an actual buffer,
+     * check that path fits in the caller's buffer */
+    if (len <= size) {
+        /* current working dir fits, copy and return */
+        strncpy(path, unifyfs_cwd, size);
+        return path;
+    } else {
+        /* user's buffer is too small */
+        errno = ERANGE;
+        return NULL;
+    }
+}
+
+char* UNIFYFS_WRAP(__getcwd_chk)(char* path, size_t size, size_t buflen)
+{
+    /* if we're initialized, we're tracking the current working dir */
+    if (unifyfs_initialized) {
+        /* check that we have a string,
+         * return unusual error in case we don't */
+        if (unifyfs_cwd == NULL) {
+            errno = EACCES;
+            return NULL;
+        }
+
+        /* If unifyfs_cwd is in unifyfs space, handle the cwd logic.
+         * Otherwise, call the real getcwd, and if actual cwd does
+         * not match what we expect, throw an error (the user somehow
+         * changed dir without us noticing, so there is a bug here) */
+        char upath[UNIFYFS_MAX_FILENAME];
+        if (unifyfs_intercept_path(unifyfs_cwd, upath)) {
+#if 0
+            /* TODO: what to do here? */
+            if (size > buflen) {
+                __chk_fail();
+            }
+#endif
+
+            /* delegate the rest to our common getcwd function */
+            return _getcwd_impl(path, size);
+        } else {
+            /* current working dir is in real file system,
+             * fall through to real getcwd call */
+            MAP_OR_FAIL(__getcwd_chk);
+            char* ret = UNIFYFS_REAL(__getcwd_chk)(path, size, buflen);
+
+            /* check that current working dir is what we think
+             * it should be as a sanity check */
+            if (ret != NULL && strcmp(unifyfs_cwd, ret) != 0) {
+                LOGERR("Expcted cwd=%s vs actual=%s",
+                    unifyfs_cwd, ret);
+            }
+
+            return ret;
+        }
+    } else {
+        /* not initialized, so fall through to real __getcwd_chk */
+        MAP_OR_FAIL(__getcwd_chk);
+        char* ret = UNIFYFS_REAL(__getcwd_chk)(path, size, buflen);
+        return ret;
+    }
+}
+
+char* UNIFYFS_WRAP(getcwd)(char* path, size_t size)
+{
+    /* if we're initialized, we're tracking the current working dir */
+    if (unifyfs_initialized) {
+
+        /* check that we have a string,
+         * return unusual error in case we don't */
+        if (unifyfs_cwd == NULL) {
+            errno = EACCES;
+            return NULL;
+        }
+
+        /* If unifyfs_cwd is in unifyfs space, handle the cwd logic.
+         * Otherwise, call the real getcwd, and if actual cwd does
+         * not match what we expect, throw an error (the user somehow
+         * changed dir without us noticing, so there is a bug here) */
+        char upath[UNIFYFS_MAX_FILENAME];
+        if (unifyfs_intercept_path(unifyfs_cwd, upath)) {
+            /* delegate the rest to our common getcwd function */
+            return _getcwd_impl(path, size);
+        } else {
+            /* current working dir is in real file system,
+             * fall through to real getcwd call */
+            MAP_OR_FAIL(getcwd);
+            char* ret = UNIFYFS_REAL(getcwd)(path, size);
+
+            /* check that current working dir is what we think
+             * it should be as a sanity check */
+            if (ret != NULL && strcmp(unifyfs_cwd, ret) != 0) {
+                LOGERR("Expcted cwd=%s vs actual=%s",
+                    unifyfs_cwd, ret);
+            }
+
+            return ret;
+        }
+    } else {
+        /* not initialized, so fall through to real getcwd */
+        MAP_OR_FAIL(getcwd);
+        char* ret = UNIFYFS_REAL(getcwd)(path, size);
+        return ret;
+    }
+}
+
+char* UNIFYFS_WRAP(getwd)(char* path)
+{
+    /* if we're initialized, we're tracking the current working dir */
+    if (unifyfs_initialized) {
+        /* check that we have a string,
+         * return unusual error in case we don't */
+        if (unifyfs_cwd == NULL) {
+            errno = EACCES;
+            return NULL;
+        }
+
+        /* If unifyfs_cwd is in unifyfs space, handle the cwd logic.
+         * Otherwise, call the real getwd, and if actual cwd does
+         * not match what we expect, throw an error (the user somehow
+         * changed dir without us noticing, so there is a bug here) */
+        char upath[UNIFYFS_MAX_FILENAME];
+        if (unifyfs_intercept_path(unifyfs_cwd, upath)) {
+            /* check that we got a valid path */
+            if (path == NULL) {
+                errno = EINVAL;
+                return NULL;
+            }
+
+            /* finally get length of current working dir and check
+             * that it fits in the caller's buffer */
+            size_t len = strlen(unifyfs_cwd) + 1;
+            if (len <= PATH_MAX) {
+                strncpy(path, unifyfs_cwd, PATH_MAX);
+                return path;
+            } else {
+                /* user's buffer is too small */
+                errno = ENAMETOOLONG;
+                return NULL;
+            }
+        } else {
+            /* current working dir is in real file system,
+             * fall through to real getwd call */
+            MAP_OR_FAIL(getwd);
+            char* ret = UNIFYFS_REAL(getwd)(path);
+
+            /* check that current working dir is what we think
+             * it should be as a sanity check */
+            if (ret != NULL && strcmp(unifyfs_cwd, ret) != 0) {
+                LOGERR("Expcted cwd=%s vs actual=%s",
+                    unifyfs_cwd, ret);
+            }
+
+            return ret;
+        }
+    } else {
+        /* not initialized, so fall through to real getwd */
+        MAP_OR_FAIL(getwd);
+        char* ret = UNIFYFS_REAL(getwd)(path);
+        return ret;
+    }
+}
+
+char* UNIFYFS_WRAP(get_current_dir_name)(void)
+{
+    /* if we're initialized, we're tracking the current working dir */
+    if (unifyfs_initialized) {
+        /* check that we have a string, return unusual error
+         * in case we don't */
+        if (unifyfs_cwd == NULL) {
+            errno = EACCES;
+            return NULL;
+        }
+
+        /* If unifyfs_cwd is in unifyfs space, handle the cwd logic.
+         * Otherwise, call real get_current_dir_name, and if actual cwd does
+         * not match what we expect, throw an error (the user somehow
+         * changed dir without us noticing, so there is a bug here) */
+        char upath[UNIFYFS_MAX_FILENAME];
+        if (unifyfs_intercept_path(unifyfs_cwd, upath)) {
+            /* supposed to allocate a copy of the current working dir
+             * and return that to caller, to be freed by caller */
+            char* ret = strdup(unifyfs_cwd);
+            if (ret == NULL) {
+                errno = ENOMEM;
+            }
+            return ret;
+        } else {
+            /* current working dir is in real file system,
+             * fall through to real get_current_dir_name call */
+            MAP_OR_FAIL(get_current_dir_name);
+            char* ret = UNIFYFS_REAL(get_current_dir_name)();
+
+            /* check that current working dir is what we think
+             * it should be as a sanity check */
+            if (ret != NULL && strcmp(unifyfs_cwd, ret) != 0) {
+                LOGERR("Expcted cwd=%s vs actual=%s",
+                    unifyfs_cwd, ret);
+            }
+
+            return ret;
+        }
+    } else {
+        /* not initialized, so fall through to real get_current_dir_name */
+        MAP_OR_FAIL(get_current_dir_name);
+        char* ret = UNIFYFS_REAL(get_current_dir_name)();
+        return ret;
+    }
+}
+
 int UNIFYFS_WRAP(rename)(const char* oldpath, const char* newpath)
 {
     /* TODO: allow oldpath / newpath to split across memfs and normal
      * linux fs, which means we'll need to do a read / write */
 
     /* check whether the old path is in our file system */
-    if (unifyfs_intercept_path(oldpath)) {
+    char old_upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(oldpath, old_upath)) {
         /* for now, we can only rename within our file system */
-        if (!unifyfs_intercept_path(newpath)) {
+        char new_upath[UNIFYFS_MAX_FILENAME];
+        if (!unifyfs_intercept_path(newpath, new_upath)) {
             /* ERROR: can't yet rename across file systems */
             errno = EXDEV;
             return -1;
         }
 
         /* verify that we really have a file by the old name */
-        int fid = unifyfs_get_fid_from_path(oldpath);
+        int fid = unifyfs_get_fid_from_path(old_upath);
         if (fid < 0) {
             /* ERROR: oldname does not exist */
-            LOGDBG("Couldn't find entry for %s in UNIFYFS", oldpath);
+            LOGDBG("Couldn't find entry for %s in UNIFYFS", old_upath);
             errno = ENOENT;
             return -1;
         }
         LOGDBG("orig file in position %d", fid);
 
         /* check that new name is within bounds */
-        size_t newpathlen = strlen(newpath) + 1;
+        size_t newpathlen = strlen(new_upath) + 1;
         if (newpathlen > UNIFYFS_MAX_FILENAME) {
             errno = ENAMETOOLONG;
             return -1;
@@ -194,7 +497,7 @@ int UNIFYFS_WRAP(rename)(const char* oldpath, const char* newpath)
         /* TODO: rename should replace existing file atomically */
 
         /* verify that we don't already have a file by the new name */
-        int newfid = unifyfs_get_fid_from_path(newpath);
+        int newfid = unifyfs_get_fid_from_path(new_upath);
         if (newfid >= 0) {
             /* something exists in newpath, need to delete it */
             int ret = UNIFYFS_WRAP(unlink)(newpath);
@@ -207,14 +510,15 @@ int UNIFYFS_WRAP(rename)(const char* oldpath, const char* newpath)
 
         /* finally overwrite the old name with the new name */
         LOGDBG("Changing %s to %s",
-               (char*)&unifyfs_filelist[fid].filename, newpath);
-        strcpy((void*)&unifyfs_filelist[fid].filename, newpath);
+               (char*)&unifyfs_filelist[fid].filename, new_upath);
+        strcpy((void*)&unifyfs_filelist[fid].filename, new_upath);
 
         /* success */
         return 0;
     } else {
         /* for now, we can only rename within our file system */
-        if (unifyfs_intercept_path(newpath)) {
+        char upath[UNIFYFS_MAX_FILENAME];
+        if (unifyfs_intercept_path(newpath, upath)) {
             /* ERROR: can't yet rename across file systems */
             errno = EXDEV;
             return -1;
@@ -230,22 +534,26 @@ int UNIFYFS_WRAP(rename)(const char* oldpath, const char* newpath)
 int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
 {
     /* determine whether we should intercept this path or not */
-    if (unifyfs_intercept_path(path)) {
-        /* lookup the fid for the path */
-        int fid = unifyfs_get_fid_from_path(path);
-        if (fid < 0) {
-            /* ERROR: file does not exist */
-            LOGDBG("Couldn't find entry for %s in UNIFYFS", path);
-            errno = ENOENT;
-            return -1;
-        }
-
-        /* truncate the file */
-        int rc = unifyfs_fid_truncate(fid, length);
-        if (rc != UNIFYFS_SUCCESS) {
-            LOGDBG("unifyfs_fid_truncate failed for %s in UNIFYFS", path);
-            errno = EIO;
-            return -1;
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        /* get file id for path name */
+        int fid = unifyfs_get_fid_from_path(upath);
+        if (fid >= 0) {
+            /* got the file locally, use fid_truncate the file */
+            int rc = unifyfs_fid_truncate(fid, length);
+            if (rc != UNIFYFS_SUCCESS) {
+                errno = unifyfs_rc_errno(rc);
+                return -1;
+            }
+        } else {
+            /* invoke truncate rpc */
+            int gfid = unifyfs_generate_gfid(upath);
+            int rc = invoke_client_truncate_rpc(gfid, length);
+            if (rc != UNIFYFS_SUCCESS) {
+                LOGDBG("truncate rpc failed %s in UNIFYFS", upath);
+                errno = unifyfs_rc_errno(rc);
+                return -1;
+            }
         }
 
         /* success */
@@ -260,12 +568,13 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
 int UNIFYFS_WRAP(unlink)(const char* path)
 {
     /* determine whether we should intercept this path or not */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* get file id for path name */
-        int fid = unifyfs_get_fid_from_path(path);
+        int fid = unifyfs_get_fid_from_path(upath);
         if (fid < 0) {
             /* ERROR: file does not exist */
-            LOGDBG("Couldn't find entry for %s in UNIFYFS", path);
+            LOGDBG("Couldn't find entry for %s in UNIFYFS", upath);
             errno = ENOENT;
             return -1;
         }
@@ -273,7 +582,7 @@ int UNIFYFS_WRAP(unlink)(const char* path)
         /* check that it's not a directory */
         if (unifyfs_fid_is_dir(fid)) {
             /* ERROR: is a directory */
-            LOGDBG("Attempting to unlink a directory %s in UNIFYFS", path);
+            LOGDBG("Attempting to unlink a directory %s in UNIFYFS", upath);
             errno = EISDIR;
             return -1;
         }
@@ -281,7 +590,7 @@ int UNIFYFS_WRAP(unlink)(const char* path)
         /* delete the file */
         int ret = unifyfs_fid_unlink(fid);
         if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(ret);
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
 
@@ -297,12 +606,13 @@ int UNIFYFS_WRAP(unlink)(const char* path)
 int UNIFYFS_WRAP(remove)(const char* path)
 {
     /* determine whether we should intercept this path or not */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* get file id for path name */
-        int fid = unifyfs_get_fid_from_path(path);
+        int fid = unifyfs_get_fid_from_path(upath);
         if (fid < 0) {
             /* ERROR: file does not exist */
-            LOGDBG("Couldn't find entry for %s in UNIFYFS", path);
+            LOGDBG("Couldn't find entry for %s in UNIFYFS", upath);
             errno = ENOENT;
             return -1;
         }
@@ -311,7 +621,7 @@ int UNIFYFS_WRAP(remove)(const char* path)
         if (unifyfs_fid_is_dir(fid)) {
             /* TODO: shall be equivalent to rmdir(path) */
             /* ERROR: is a directory */
-            LOGDBG("Attempting to remove a directory %s in UNIFYFS", path);
+            LOGDBG("Attempting to remove a directory %s in UNIFYFS", upath);
             errno = EISDIR;
             return -1;
         }
@@ -320,7 +630,7 @@ int UNIFYFS_WRAP(remove)(const char* path)
         /* delete the file */
         int ret = unifyfs_fid_unlink(fid);
         if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(ret);
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
 
@@ -333,29 +643,90 @@ int UNIFYFS_WRAP(remove)(const char* path)
     }
 }
 
+/* Get global file meta data with accurate file size */
+static int unifyfs_get_meta_with_size(int gfid, unifyfs_file_attr_t* pfattr)
+{
+    /* lookup global meta data for this file */
+    int ret = unifyfs_get_global_file_meta(gfid, pfattr);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGDBG("get metadata rpc failed");
+        return ret;
+    }
+
+    /* if file is laminated, we assume the file size in the meta
+     * data is already accurate, if not, look up the current file
+     * size with an rpc */
+    if (!pfattr->is_laminated) {
+        /* lookup current global file size */
+        size_t filesize;
+        ret = invoke_client_filesize_rpc(gfid, &filesize);
+        if (ret == UNIFYFS_SUCCESS) {
+            /* success, we have a file size value */
+            pfattr->size = (uint64_t) filesize;
+        } else {
+            /* failed to get file size for some reason */
+            LOGDBG("filesize rpc failed");
+            return ret;
+        }
+    }
+
+    return UNIFYFS_SUCCESS;
+}
+
+/* The main stat call for all the *stat() functions */
+static int __stat(const char* path, struct stat* buf)
+{
+    /* check that caller gave us a buffer to write to */
+    if (!buf) {
+        /* forgot buffer for stat */
+        LOGDBG("invalid stat buffer");
+        errno = EINVAL;
+        return -1;
+    }
+
+    /* flush any pending writes if needed */
+    int fid = unifyfs_get_fid_from_path(path);
+    if (fid != -1) {
+        int sync_rc = unifyfs_fid_sync(fid);
+        if (sync_rc != UNIFYFS_SUCCESS) {
+            errno = unifyfs_rc_errno(sync_rc);
+            return -1;
+        }
+    }
+
+    /* clear the user buffer */
+    memset(buf, 0, sizeof(*buf));
+
+    /* get global file id for given path */
+    int gfid = unifyfs_generate_gfid(path);
+
+    /* get stat information for file */
+    unifyfs_file_attr_t fattr;
+    memset(&fattr, 0, sizeof(fattr));
+    int ret = unifyfs_get_meta_with_size(gfid, &fattr);
+    if (ret != UNIFYFS_SUCCESS) {
+        errno = unifyfs_rc_errno(ret);
+        return -1;
+    }
+
+    /* update local file metadata (if applicable) */
+    if (fid != -1) {
+        unifyfs_fid_update_file_meta(fid, &fattr);
+    }
+
+    /* copy attributes to stat struct */
+    unifyfs_file_attr_to_stat(&fattr, buf);
+
+    return 0;
+}
+
 int UNIFYFS_WRAP(stat)(const char* path, struct stat* buf)
 {
     LOGDBG("stat was called for %s", path);
-
-    if (unifyfs_intercept_path(path)) {
-        /* check that caller gave us a buffer to write to */
-        if (!buf) {
-            errno = EFAULT;
-            return -1;
-        }
-
-        /* get global file id for path */
-        int gfid = unifyfs_generate_gfid(path);
-
-        /* lookup stat info for global file id */
-        int ret = unifyfs_gfid_stat(gfid, buf);
-        if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(ret);
-            return -1;
-        }
-
-        /* success */
-        return 0;
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        int ret = __stat(upath, buf);
+        return ret;
     } else {
         MAP_OR_FAIL(stat);
         int ret = UNIFYFS_REAL(stat)(path, buf);
@@ -363,41 +734,22 @@ int UNIFYFS_WRAP(stat)(const char* path, struct stat* buf)
     }
 }
 
-#if 0
 int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
 {
     LOGDBG("fstat was called for fd: %d", fd);
 
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
-        if (!buf) {
-            errno = EFAULT;
-            return -1;
-        }
-
-        /* get the file id for this file descriptor */
         int fid = unifyfs_get_fid_from_fd(fd);
-        if (fid < 0) {
-            errno = EBADF;
-            return -1;
-        }
-
-        /* lookup stat info for this file id */
-        int ret = unifyfs_fid_stat(fid, buf);
-        if (ret < 0) {
-            errno = unifyfs_err_map_to_errno(ret);
-            return -1;
-        }
-
-        /* success */
-        return 0;
+        const char* path = unifyfs_path_from_fid(fid);
+        int ret = __stat(path, buf);
+        return ret;
     } else {
         MAP_OR_FAIL(fstat);
         int ret = UNIFYFS_REAL(fstat)(fd, buf);
         return ret;
     }
 }
-#endif
 
 /*
  * NOTE on __xstat(2), __lxstat(2), and __fxstat(2)
@@ -408,74 +760,49 @@ int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
  * instead of using the absolute value 3.
  */
 
+#ifdef HAVE___XSTAT
 int UNIFYFS_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
 {
     LOGDBG("xstat was called for %s", path);
 
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         if (vers != _STAT_VER) {
             errno = EINVAL;
             return -1;
         }
-
-        if (!buf) {
-            errno = EFAULT;
-            return -1;
-        }
-
-        /* get global file id for path */
-        int gfid = unifyfs_generate_gfid(path);
-
-        /* lookup stat info for global file id */
-        int ret = unifyfs_gfid_stat(gfid, buf);
-        if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(ret);
-            return -1;
-        }
-
-        /* success */
-        return 0;
+        int ret = __stat(upath, buf);
+        return ret;
     } else {
         MAP_OR_FAIL(__xstat);
         int ret = UNIFYFS_REAL(__xstat)(vers, path, buf);
         return ret;
     }
 }
+#endif
 
+#ifdef HAVE___LXSTAT
 int UNIFYFS_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
 {
     LOGDBG("lxstat was called for %s", path);
 
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         if (vers != _STAT_VER) {
             errno = EINVAL;
             return -1;
         }
-
-        if (!buf) {
-            errno = EFAULT;
-            return -1;
-        }
-
-        /* get global file id for path */
-        int gfid = unifyfs_generate_gfid(path);
-
-        /* lookup stat info for global file id */
-        int ret = unifyfs_gfid_stat(gfid, buf);
-        if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(ret);
-            return -1;
-        }
-
-        /* success */
-        return 0;
+        int ret = __stat(upath, buf);
+        return ret;
     } else {
         MAP_OR_FAIL(__lxstat);
         int ret = UNIFYFS_REAL(__lxstat)(vers, path, buf);
         return ret;
     }
 }
+#endif
 
+#ifdef HAVE___FXSTAT
 int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
 {
     LOGDBG("fxstat was called for fd %d", fd);
@@ -487,209 +814,247 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
             return -1;
         }
 
-        if (!buf) {
-            errno = EINVAL;
-            return -1;
-        }
-
-        /* get the file id for this file descriptor */
         int fid = unifyfs_get_fid_from_fd(fd);
-        if (fid < 0) {
-            errno = EBADF;
-            return -1;
-        }
-
-        /* lookup stat info for this file id */
-        int ret = unifyfs_fid_stat(fid, buf);
-        if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(ret);
-            return -1;
-        }
-
-        /* success */
-        return 0;
+        const char* path = unifyfs_path_from_fid(fid);
+        int ret = __stat(path, buf);
+        return ret;
     } else {
         MAP_OR_FAIL(__fxstat);
         int ret = UNIFYFS_REAL(__fxstat)(vers, fd, buf);
         return ret;
     }
 }
+#endif
+
+
+#ifdef HAVE_SYS_STATFS_H
+
+/* tmpfs seems like a safe choice for something like UnifyFS */
+#ifndef TMPFS_MAGIC
+#define TMPFS_MAGIC 0x01021994
+#endif
+
+static int unifyfs_statfs(struct statfs* fsbuf)
+{
+    if (NULL != fsbuf) {
+        memset(fsbuf, 0, sizeof(*fsbuf));
+
+        fsbuf->f_type = TMPFS_MAGIC; /* File system type */
+        fsbuf->f_bsize = UNIFYFS_LOGIO_CHUNK_SIZE; /* Optimal block size */
+        //fsbuf->f_blocks = ??;  /* Total data blocks in filesystem */
+        //fsbuf->f_bfree = ??;   /* Free blocks in filesystem */
+        //fsbuf->f_bavail = ??;  /* Free blocks available */
+        fsbuf->f_files = unifyfs_max_files;   /* Total file nodes */
+        //fsbuf->f_ffree = ??;   /* Free file nodes in filesystem */
+        fsbuf->f_namelen = UNIFYFS_MAX_FILENAME; /* Max filename length */
+        return 0;
+    } else {
+        return EFAULT;
+    }
+}
+
+#ifdef HAVE_STATFS
+int UNIFYFS_WRAP(statfs)(const char* path, struct statfs* fsbuf)
+{
+    LOGDBG("statfs() was called for %s", path);
+
+    int ret;
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        ret = unifyfs_statfs(fsbuf);
+        if (ret) {
+            errno = ret;
+            ret = -1;
+        }
+    } else {
+        MAP_OR_FAIL(statfs);
+        ret = UNIFYFS_REAL(statfs)(path, fsbuf);
+    }
+    return ret;
+}
+#endif
+
+#ifdef HAVE_FSTATFS
+int UNIFYFS_WRAP(fstatfs)(int fd, struct statfs* fsbuf)
+{
+    LOGDBG("fstatfs() was called for fd: %d", fd);
+
+    /* check whether we should intercept this file descriptor */
+    int ret;
+    if (unifyfs_intercept_fd(&fd)) {
+        ret = unifyfs_statfs(fsbuf);
+        if (ret) {
+            errno = ret;
+            ret = -1;
+        }
+    } else {
+        MAP_OR_FAIL(fstatfs);
+        ret = UNIFYFS_REAL(fstatfs)(fd, fsbuf);
+    }
+    return ret;
+}
+#endif
+
+#endif /* HAVE_SYS_STATFS_H */
 
 /* ---------------------------------------
  * POSIX wrappers: file descriptors
  * --------------------------------------- */
 
-/* read count bytes info buf from file starting at offset pos,
- * returns number of bytes actually read in retcount,
- * retcount will be less than count only if an error occurs
- * or end of file is reached */
-int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count,
-                    size_t* retcount)
+/*
+ * Read 'count' bytes info 'buf' from file starting at offset 'pos'.
+ *
+ * Returns success or error code.
+ */
+int unifyfs_fd_read(int fd, off_t pos, void* buf, size_t count, size_t* nread)
 {
+    /* assume we'll fail, set bytes read to 0 as a clue */
+    *nread = 0;
+
     /* get the file id for this file descriptor */
     int fid = unifyfs_get_fid_from_fd(fd);
     if (fid < 0) {
-        return UNIFYFS_ERROR_BADF;
+        return EBADF;
     }
 
     /* it's an error to read from a directory */
     if (unifyfs_fid_is_dir(fid)) {
         /* TODO: note that read/pread can return this, but not fread */
-        return UNIFYFS_ERROR_ISDIR;
+        return EISDIR;
     }
 
     /* check that file descriptor is open for read */
     unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(fd);
     if (!filedesc->read) {
-        return UNIFYFS_ERROR_BADF;
+        return EBADF;
     }
 
     /* TODO: is it safe to assume that off_t is bigger than size_t? */
     /* check that we don't overflow the file length */
     if (unifyfs_would_overflow_offt(pos, (off_t) count)) {
-        return UNIFYFS_ERROR_OVERFLOW;
+        return EOVERFLOW;
     }
-
-    /* TODO: check that file is open for reading */
-
-    /* check that we don't try to read past the end of the file */
-    off_t lastread = pos + (off_t) count;
-    off_t filesize = unifyfs_fid_size(fid);
-    if (filesize < lastread) {
-        /* adjust count so we don't read past end of file */
-        if (filesize > pos) {
-            /* read all bytes until end of file */
-            count = (size_t)(filesize - pos);
-        } else {
-            /* pos is already at or past the end of the file */
-            count = 0;
-        }
-    }
-
-    /* record number of bytes that we'll actually read */
-    *retcount = count;
 
     /* if we don't read any bytes, return success */
     if (count == 0) {
+        LOGDBG("returning EOF");
         return UNIFYFS_SUCCESS;
     }
 
-    /* read data from file */
-    int read_rc = unifyfs_fid_read(fid, pos, buf, count);
-    return read_rc;
+    /* TODO: handle error if sync fails? */
+    /* sync data for file before reading, if needed */
+    unifyfs_fid_sync(fid);
+
+    /* fill in read request */
+    read_req_t req;
+    req.gfid    = unifyfs_gfid_from_fid(fid);
+    req.offset  = (size_t) pos;
+    req.length  = count;
+    req.nread   = 0;
+    req.errcode = EINPROGRESS;
+    req.buf     = buf;
+
+    /* execute read operation */
+    int ret = unifyfs_gfid_read_reqs(&req, 1);
+    if (ret != UNIFYFS_SUCCESS) {
+        /* failed to issue read operation */
+        return ret;
+    } else if (req.errcode != UNIFYFS_SUCCESS) {
+        /* read executed, but failed */
+        return req.errcode;
+    }
+
+    /* success, get number of bytes read from read request field */
+    *nread = req.nread;
+
+    return UNIFYFS_SUCCESS;
 }
 
-/* write count bytes from buf into file starting at offset pos,
- * allocates new bytes and updates file size as necessary,
- * fills any gaps with zeros */
-int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count)
+/*
+ * Write 'count' bytes from 'buf' into file starting at offset' pos'.
+ * Allocates new bytes and updates file size as necessary.  It is assumed
+ * that 'pos' is actually where you want to write, and so O_APPEND behavior
+ * is ignored.  Fills any gaps with zeros
+ */
+int unifyfs_fd_write(int fd, off_t pos, const void* buf, size_t count,
+                     size_t* nwritten)
 {
+    /* assume we'll fail, set bytes written to 0 as a clue */
+    *nwritten = 0;
+
     /* get the file id for this file descriptor */
     int fid = unifyfs_get_fid_from_fd(fd);
     if (fid < 0) {
-        return UNIFYFS_ERROR_BADF;
+        return EBADF;
     }
 
     /* it's an error to write to a directory */
     if (unifyfs_fid_is_dir(fid)) {
-        return UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     /* check that file descriptor is open for write */
     unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(fd);
     if (!filedesc->write) {
-        return UNIFYFS_ERROR_BADF;
+        return EBADF;
     }
 
     /* TODO: is it safe to assume that off_t is bigger than size_t? */
     /* check that our write won't overflow the length */
     if (unifyfs_would_overflow_offt(pos, (off_t) count)) {
         /* TODO: want to return EFBIG here for streams */
-        return UNIFYFS_ERROR_OVERFLOW;
-    }
-
-    /* TODO: check that file is open for writing */
-
-    /* get current file size before extending the file */
-    off_t filesize = unifyfs_fid_size(fid);
-
-    /* compute new position based on storage type */
-    off_t newpos;
-    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    if (meta->storage == FILE_STORAGE_FIXED_CHUNK) {
-        /* extend file size and allocate chunks if needed */
-        newpos = pos + (off_t) count;
-        int extend_rc = unifyfs_fid_extend(fid, newpos);
-        if (extend_rc != UNIFYFS_SUCCESS) {
-            return extend_rc;
-        }
-
-        /* fill any new bytes between old size and pos with zero values */
-        if (filesize < pos) {
-            off_t gap_size = pos - filesize;
-            int zero_rc = unifyfs_fid_write_zero(fid, filesize, gap_size);
-            if (zero_rc != UNIFYFS_SUCCESS) {
-                return zero_rc;
-            }
-        }
-    } else if (meta->storage == FILE_STORAGE_LOGIO) {
-        newpos = filesize + (off_t)count;
-        int extend_rc = unifyfs_fid_extend(fid, newpos);
-        if (extend_rc != UNIFYFS_SUCCESS) {
-            return extend_rc;
-        }
-    } else {
-        return UNIFYFS_ERROR_IO;
+        return EOVERFLOW;
     }
 
     /* finally write specified data to file */
-    int write_rc = unifyfs_fid_write(fid, pos, buf, count);
-    if (write_rc == 0) {
-        meta->needs_sync = 1;
-        if (meta->storage == FILE_STORAGE_LOGIO) {
-            meta->size = newpos;
-            meta->log_size = pos + count;
-        }
-    }
+    int write_rc = unifyfs_fid_write(fid, pos, buf, count, nwritten);
     return write_rc;
+}
+
+static int unifyfs_create(char* upath, mode_t mode)
+{
+    /* equivalent to open(path, O_WRONLY|O_CREAT|O_TRUNC, mode) */
+
+    /* create the file */
+    int fid;
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+    off_t pos;
+    int rc = unifyfs_fid_open(upath, flags, mode, &fid, &pos);
+    if (rc != UNIFYFS_SUCCESS) {
+        errno = unifyfs_rc_errno(rc);
+        return -1;
+    }
+
+    /* allocate a free file descriptor value */
+    int fd = unifyfs_stack_pop(unifyfs_fd_stack);
+    if (fd < 0) {
+        /* ran out of file descriptors */
+        errno = EMFILE;
+        return -1;
+    }
+
+     /* set file id and file pointer, flags include O_WRONLY */
+    unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(fd);
+    filedesc->fid   = fid;
+    filedesc->pos   = pos;
+    filedesc->read  = 0;
+    filedesc->write = 1;
+
+
+    /* don't conflict with active system fds that range from 0 - (fd_limit) */
+    int ret = fd + unifyfs_fd_limit;
+    LOGDBG("using fds (internal=%d, external=%d) for fid %d file %s",
+           fd, ret, fid, upath);
+    return ret;
 }
 
 int UNIFYFS_WRAP(creat)(const char* path, mode_t mode)
 {
-    /* equivalent to open(path, O_WRONLY|O_CREAT|O_TRUNC, mode) */
-
     /* check whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* TODO: handle relative paths using current working directory */
-
-        /* create the file */
-        int fid;
-        off_t pos;
-        int rc = unifyfs_fid_open(path, O_WRONLY | O_CREAT | O_TRUNC, mode, &fid, &pos);
-        if (rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(rc);
-            return -1;
-        }
-
-        /* allocate a free file descriptor value */
-        int fd = unifyfs_stack_pop(unifyfs_fd_stack);
-        if (fd < 0) {
-            /* ran out of file descriptors */
-            errno = EMFILE;
-            return -1;
-        }
-
-        /* set file id and file pointer, flags include O_WRONLY */
-        unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(fd);
-        filedesc->fid   = fid;
-        filedesc->pos   = pos;
-        filedesc->read  = 0;
-        filedesc->write = 1;
-        LOGDBG("UNIFYFS_open generated fd %d for file %s", fd, path);
-
-        /* don't conflict with active system fds that range from 0 - (fd_limit) */
-        int ret = fd + unifyfs_fd_limit;
-        return ret;
+        return unifyfs_create(upath, mode);
     } else {
         MAP_OR_FAIL(creat);
         int ret = UNIFYFS_REAL(creat)(path, mode);
@@ -700,12 +1065,10 @@ int UNIFYFS_WRAP(creat)(const char* path, mode_t mode)
 int UNIFYFS_WRAP(creat64)(const char* path, mode_t mode)
 {
     /* check whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
-        /* ERROR: fn not yet supported */
-        fprintf(stderr, "Function not yet supported @ %s:%d\n",
-                __FILE__, __LINE__);
-        errno = ENOTSUP;
-        return -1;
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        /* TODO: handle relative paths using current working directory */
+        return unifyfs_create(upath, mode);
     } else {
         MAP_OR_FAIL(creat64);
         int ret = UNIFYFS_REAL(creat64)(path, mode);
@@ -726,15 +1089,16 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
 
     /* determine whether we should intercept this path */
     int ret;
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* TODO: handle relative paths using current working directory */
 
         /* create the file */
         int fid;
         off_t pos;
-        int rc = unifyfs_fid_open(path, flags, mode, &fid, &pos);
+        int rc = unifyfs_fid_open(upath, flags, mode, &fid, &pos);
         if (rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(rc);
+            errno = unifyfs_rc_errno(rc);
             return -1;
         }
 
@@ -754,10 +1118,12 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
                           || ((flags & O_RDWR) == O_RDWR);
         filedesc->write = ((flags & O_WRONLY) == O_WRONLY)
                           || ((flags & O_RDWR) == O_RDWR);
-        LOGDBG("UNIFYFS_open generated fd %d for file %s", fd, path);
+        filedesc->append = (flags & O_APPEND);
 
         /* don't conflict with active system fds that range from 0 - (fd_limit) */
         ret = fd + unifyfs_fd_limit;
+        LOGDBG("using fds (internal=%d, external=%d) for fid %d file %s",
+               fd, ret, fid, upath);
         return ret;
     } else {
         MAP_OR_FAIL(open);
@@ -770,6 +1136,7 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
     }
 }
 
+#ifdef HAVE_OPEN64
 int UNIFYFS_WRAP(open64)(const char* path, int flags, ...)
 {
     /* if O_CREAT is set, we should also have some mode flags */
@@ -783,7 +1150,8 @@ int UNIFYFS_WRAP(open64)(const char* path, int flags, ...)
 
     /* check whether we should intercept this path */
     int ret;
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* Call open wrapper with LARGEFILE flag set*/
         if (flags & O_CREAT) {
             ret = UNIFYFS_WRAP(open)(path, flags | O_LARGEFILE, mode);
@@ -801,6 +1169,7 @@ int UNIFYFS_WRAP(open64)(const char* path, int flags, ...)
 
     return ret;
 }
+#endif
 
 int UNIFYFS_WRAP(__open_2)(const char* path, int flags, ...)
 {
@@ -818,8 +1187,9 @@ int UNIFYFS_WRAP(__open_2)(const char* path, int flags, ...)
     }
 
     /* check whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
-        LOGDBG("__open_2 was intercepted for path %s", path);
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        LOGDBG("__open_2 was intercepted for path %s", upath);
 
         /* Call open wrapper */
         if (flags & O_CREAT) {
@@ -866,29 +1236,65 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
 
         /* get current file position */
         off_t current_pos = filedesc->pos;
-
-        /* TODO: support SEEK_DATA and SEEK_HOLE? */
+        off_t logical_eof;
 
         /* compute final file position */
-        LOGDBG("seeking from %ld", current_pos);
         switch (whence) {
         case SEEK_SET:
             /* seek to offset */
+            if (offset < 0) {
+                /* negative offset is invalid */
+                errno = EINVAL;
+                return (off_t)(-1);
+            }
             current_pos = offset;
             break;
         case SEEK_CUR:
             /* seek to current position + offset */
+            if (current_pos + offset < 0) {
+                /* offset is negative and will result in negative position */
+                errno = EINVAL;
+                return (off_t)(-1);
+            }
             current_pos += offset;
             break;
         case SEEK_END:
             /* seek to EOF + offset */
-            current_pos = meta->size + offset;
+            logical_eof = unifyfs_fid_logical_size(fid);
+            LOGDBG("fid=%d EOF is offset %zu", fid, (size_t)logical_eof);
+            if (logical_eof + offset < 0) {
+                /* offset is negative and will result in negative position */
+                errno = EINVAL;
+                return (off_t)(-1);
+            }
+            current_pos = logical_eof + offset;
+            break;
+        case SEEK_DATA:
+            /* Using fallback approach: always return offset */
+            logical_eof = unifyfs_fid_logical_size(fid);
+            LOGDBG("fid=%d EOF is offset %zu", fid, (size_t)logical_eof);
+            if (offset < 0 || offset > logical_eof) {
+                /* negative offset and offset beyond EOF are invalid */
+                errno = ENXIO;
+                return (off_t)(-1);
+            }
+            current_pos = offset;
+            break;
+        case SEEK_HOLE:
+            /* Using fallback approach: always return offset for EOF */
+            logical_eof = unifyfs_fid_logical_size(fid);
+            LOGDBG("fid=%d EOF is offset %zu", fid, (size_t)logical_eof);
+            if (offset < 0 || offset > logical_eof) {
+                /* negative offset and offset beyond EOF are invalid */
+                errno = ENXIO;
+                return (off_t)(-1);
+            }
+            current_pos = logical_eof;
             break;
         default:
             errno = EINVAL;
             return (off_t)(-1);
         }
-        LOGDBG("seeking to %ld", current_pos);
 
         /* set and return final file position */
         filedesc->pos = current_pos;
@@ -907,9 +1313,9 @@ off64_t UNIFYFS_WRAP(lseek64)(int fd, off64_t offset, int whence)
     if (unifyfs_intercept_fd(&fd)) {
         if (sizeof(off_t) == sizeof(off64_t)) {
             /* off_t and off64_t are the same size,
-             * delegate to lseek warpper */
+             * delegate to lseek wrapper */
             off64_t ret = (off64_t)UNIFYFS_WRAP(lseek)(
-                              origfd, (off_t) offset, whence);
+                origfd, (off_t) offset, whence);
             return ret;
         } else {
             /* ERROR: fn not yet supported */
@@ -925,6 +1331,7 @@ off64_t UNIFYFS_WRAP(lseek64)(int fd, off64_t offset, int whence)
     }
 }
 
+#ifdef HAVE_POSIX_FADVISE
 int UNIFYFS_WRAP(posix_fadvise)(int fd, off_t offset, off_t len, int advice)
 {
     /* check whether we should intercept this file descriptor */
@@ -973,6 +1380,7 @@ int UNIFYFS_WRAP(posix_fadvise)(int fd, off_t offset, off_t len, int advice)
         return ret;
     }
 }
+#endif
 
 ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
 {
@@ -994,54 +1402,20 @@ ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
             return (ssize_t)(-1);
         }
 
-#if 0 // THIS IS BROKEN UNTIL WE HAVE GLOBAL SIZE
-        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-        if (meta == NULL) {
-            /* ERROR: invalid file descriptor */
-            errno = EBADF;
+        /* execute read */
+        size_t bytes;
+        int read_rc = unifyfs_fd_read(fd, filedesc->pos, buf, count, &bytes);
+        if (read_rc != UNIFYFS_SUCCESS) {
+            /* read operation failed */
+            errno = unifyfs_rc_errno(read_rc);
             return (ssize_t)(-1);
         }
 
-        /* check for end of file */
-        if (filedesc->pos >= meta->size) {
-            return 0;   /* EOF */
-        }
-#endif
-
-        /* assume we'll succeed in read */
-        size_t retcount = count;
-
-        read_req_t tmp_req;
-        tmp_req.fid     = fid;
-        tmp_req.offset  = (size_t) filedesc->pos;
-        tmp_req.length  = count;
-        tmp_req.errcode = UNIFYFS_SUCCESS;
-        tmp_req.buf     = buf;
-
-        /*
-         * this returns error code, which is zero for successful cases.
-         */
-        int ret = unifyfs_fd_logreadlist(&tmp_req, 1);
-
-        /*
-         * FIXME: when we can get the global file size correctly, the following
-         * should be rewritten. currently, we cannot detect EOF reliably.
-         */
-        if (ret != UNIFYFS_SUCCESS) {
-            if (tmp_req.errcode != UNIFYFS_SUCCESS) {
-                /* error reading data */
-                errno = EIO;
-                retcount = -1;
-            } else {
-                retcount = 0; /* possible EOF */
-            }
-        } else {
-            /* success, update position */
-            filedesc->pos += (off_t) retcount;
-        }
+        /* success, update file pointer position */
+        filedesc->pos += (off_t)bytes;
 
         /* return number of bytes read */
-        return (ssize_t) retcount;
+        return (ssize_t)bytes;
     } else {
         MAP_OR_FAIL(read);
         ssize_t ret = UNIFYFS_REAL(read)(fd, buf, count);
@@ -1052,8 +1426,6 @@ ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
 /* TODO: find right place to msync spillover mapping */
 ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
 {
-    ssize_t ret;
-
     LOGDBG("write was called for fd %d", fd);
 
     /* check whether we should intercept this file descriptor */
@@ -1066,22 +1438,37 @@ ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
             return (ssize_t)(-1);
         }
 
+        /* compute starting position to write within file,
+         * assume at current position on file descriptor */
+        off_t pos = filedesc->pos;
+        if (filedesc->append) {
+            /*
+             * With O_APPEND we always write to the end, despite the current
+             * file position.
+             */
+            int fid = unifyfs_get_fid_from_fd(fd);
+            pos = unifyfs_fid_logical_size(fid);
+        }
+
         /* write data to file */
-        int write_rc = unifyfs_fd_write(fd, filedesc->pos, buf, count);
+        size_t bytes;
+        int write_rc = unifyfs_fd_write(fd, pos, buf, count, &bytes);
         if (write_rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(write_rc);
+            /* write failed */
+            errno = unifyfs_rc_errno(write_rc);
             return (ssize_t)(-1);
         }
-        ret = count;
 
         /* update file position */
-        filedesc->pos += ret;
+        filedesc->pos = pos + bytes;
+
+        /* return number of bytes written */
+        return (ssize_t)bytes;
     } else {
         MAP_OR_FAIL(write);
-        ret = UNIFYFS_REAL(write)(fd, buf, count);
+        ssize_t ret = UNIFYFS_REAL(write)(fd, buf, count);
+        return ret;
     }
-
-    return ret;
 }
 
 ssize_t UNIFYFS_WRAP(readv)(int fd, const struct iovec* iov, int iovcnt)
@@ -1089,13 +1476,14 @@ ssize_t UNIFYFS_WRAP(readv)(int fd, const struct iovec* iov, int iovcnt)
     ssize_t ret;
 
     /* check whether we should intercept this file descriptor */
+    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
         ssize_t rret;
         int i;
         ret = 0;
         for (i = 0; i < iovcnt; i++) {
-            rret = UNIFYFS_WRAP(read)(fd, (void*)iov[i].iov_base,
-                                      iov[i].iov_len);
+            rret = UNIFYFS_WRAP(read)(origfd, (void*)iov[i].iov_base,
+                iov[i].iov_len);
             if (-1 == rret) {
                 return -1;
             } else if (0 == rret) {
@@ -1117,13 +1505,14 @@ ssize_t UNIFYFS_WRAP(writev)(int fd, const struct iovec* iov, int iovcnt)
     ssize_t ret;
 
     /* check whether we should intercept this file descriptor */
+    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
         ssize_t wret;
         int i;
         ret = 0;
         for (i = 0; i < iovcnt; i++) {
-            wret = UNIFYFS_WRAP(write)(fd, (const void*)iov[i].iov_base,
-                                       iov[i].iov_len);
+            wret = UNIFYFS_WRAP(write)(origfd, (const void*)iov[i].iov_base,
+                iov[i].iov_len);
             if (-1 == wret) {
                 return -1;
             } else {
@@ -1141,6 +1530,7 @@ ssize_t UNIFYFS_WRAP(writev)(int fd, const struct iovec* iov, int iovcnt)
     }
 }
 
+#ifdef HAVE_LIO_LISTIO
 int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
                              int nitems, struct sigevent* sevp)
 {
@@ -1160,6 +1550,11 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
     for (i = 0; i < nitems; i++) {
         cbp = aiocb_list[i];
         fd = cbp->aio_fildes;
+
+        /* LOGDBG("aiocb(fd=%d, op=%d, count=%zu, offset=%zu, buf=%p)",
+         *      cbp->aio_fildes, cbp->aio_lio_opcode, cbp->aio_nbytes,
+         *      cbp->aio_offset, cbp->aio_buf); */
+
         switch (cbp->aio_lio_opcode) {
         case LIO_WRITE: {
             ssize_t wret;
@@ -1180,11 +1575,18 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
                 if (fid < 0) {
                     AIOCB_ERROR_CODE(cbp) = EINVAL;
                 } else {
-                    reqs[reqcnt].fid     = fid;
+                    /* TODO: handle error if sync fails? */
+                    /* sync data for file before reading, if needed */
+                    unifyfs_fid_sync(fid);
+
+                    /* define read request for this file */
+                    reqs[reqcnt].gfid    = unifyfs_gfid_from_fid(fid);
                     reqs[reqcnt].offset  = (size_t)(cbp->aio_offset);
                     reqs[reqcnt].length  = cbp->aio_nbytes;
+                    reqs[reqcnt].nread   = 0;
                     reqs[reqcnt].errcode = EINPROGRESS;
                     reqs[reqcnt].buf     = (char*)(cbp->aio_buf);
+                    reqs[reqcnt].aiocbp  = cbp;
                     reqcnt++;
                 }
             } else {
@@ -1201,24 +1603,26 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
             break;
         }
         default: // LIO_NOP
+            LOGDBG("lio_vec[%d] - unexpected LIO op %d",
+                   i, cbp->aio_lio_opcode);
             break;
         }
     }
 
     if (reqcnt) {
-        rc = unifyfs_fd_logreadlist(reqs, reqcnt);
+        rc = unifyfs_gfid_read_reqs(reqs, reqcnt);
         if (rc != UNIFYFS_SUCCESS) {
             /* error reading data */
-            ret = -1;
+            ret = rc;
         }
+
         /* update aiocb fields to record error status and return value */
-        ndx = 0;
         for (i = 0; i < reqcnt; i++) {
-            char* buf = reqs[i].buf;
-            for (; ndx < nitems; ndx++) {
+            for (ndx = 0; ndx < nitems; ndx++) {
                 cbp = aiocb_list[ndx];
-                if ((char*)(cbp->aio_buf) == buf) {
-                    AIOCB_ERROR_CODE(cbp) = reqs[i].errcode;
+                if (cbp == reqs[i].aiocbp) {
+                    AIOCB_ERROR_CODE(cbp) =
+                        unifyfs_rc_errno((unifyfs_rc)(reqs[i].errcode));
                     if (0 == reqs[i].errcode) {
                         AIOCB_RETURN_VAL(cbp) = reqs[i].length;
                     }
@@ -1230,714 +1634,13 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
 
     free(reqs);
 
-    if (-1 == ret) {
-        errno = EIO;
+    if (ret) {
+        errno = unifyfs_rc_errno(ret);
+        ret = -1;
     }
     return ret;
 }
-
-/* order by file id then by file position */
-static int compare_index_entry(const void* a, const void* b)
-{
-    const unifyfs_index_t* ptr_a = a;
-    const unifyfs_index_t* ptr_b = b;
-
-    if (ptr_a->fid != ptr_b->fid) {
-        if (ptr_a->fid < ptr_b->fid) {
-            return -1;
-        } else {
-            return 1;
-        }
-    }
-
-    if (ptr_a->file_pos == ptr_b->file_pos) {
-        return 0;
-    } else if (ptr_a->file_pos < ptr_b->file_pos) {
-        return -1;
-    } else {
-        return 1;
-    }
-}
-
-/* order by file id then by offset */
-static int compare_read_req(const void* a, const void* b)
-{
-    const read_req_t* ptr_a = a;
-    const read_req_t* ptr_b = b;
-
-    if (ptr_a->fid != ptr_b->fid) {
-        if (ptr_a->fid < ptr_b->fid) {
-            return -1;
-        } else {
-            return 1;
-        }
-    }
-
-    if (ptr_a->offset == ptr_b->offset) {
-        return 0;
-    } else if (ptr_a->offset < ptr_b->offset) {
-        return -1;
-    } else {
-        return 1;
-    }
-}
-
-/* returns index into read_req of item whose offset is
- * just below offset of target item (if one exists) */
-static int unifyfs_locate_req(read_req_t* read_reqs, int count,
-                              read_req_t* match_req)
-{
-    /* if list is empty, indicate that there is valid starting request */
-    if (count == 0) {
-        return -1;
-    }
-
-    /* if we only have one item, return its index */
-    if (count == 1) {
-        return 0;
-    }
-
-    /* if we have two items, return index to item that must come before */
-    if (count == 2) {
-        if (compare_read_req(match_req, &read_reqs[1]) < 0) {
-            /* second item is clearly bigger, so try first */
-            return 0;
-        }
-
-        /* second item is less than or equal to target */
-        return 1;
-    }
-
-    /* execute binary search comparing target to list of requests */
-
-    int left  = 0;
-    int right = count - 1;
-    int mid   = (left + right) / 2;
-
-    /* binary search until we find an exact match or have cut the list
-     * to just two items */
-    int cmp;
-    while ((left + 1) < right) {
-        cmp = compare_read_req(match_req, &read_reqs[mid]);
-        if (cmp == 0) {
-            /* found exact match */
-            return mid;
-        } else if (cmp > 0) {
-            /* if target if bigger than mid, set left bound to mid */
-            left = mid;
-        } else {
-            /* if target is smaller than mid, set right bounds to mid */
-            right = mid;
-        }
-
-        /* update middle index */
-        mid = (left + right) / 2;
-    }
-
-    /* got two items, let's pick one */
-    if (compare_read_req(match_req, &read_reqs[left]) < 0) {
-        /* target is smaller than left item,
-         * return index to left of left item if we can */
-        if (left == 0) {
-            /* at left most item, so return this index */
-            return 0;
-        }
-        return left - 1;
-    } else if (compare_read_req(match_req, &read_reqs[right]) < 0) {
-        /* target is smaller than right item,
-         * return index of item one less than right */
-        return right - 1;
-    } else {
-        /* target is greater or equal to right item */
-        return right;
-    }
-}
-
-/*
- * given an read request, split it into multiple indices whose range
- * is equal or smaller than slice_range size
- * @param cur_read_req: the read request to split
- * @param slice_range: the slice size of the key-value store
- * @return out_set: the set of split read requests
- * */
-static int unifyfs_split_read_requests(read_req_t* req,
-                                       read_req_set_t* out_set,
-                                       size_t slice_range)
-{
-    /* compute offset of first and last byte in request */
-    size_t req_start = req->offset;
-    size_t req_end   = req->offset + req->length - 1;
-
-    /* compute offset of first and last byte of slice
-     * that contains first byte of request */
-    size_t slice_start = (req->offset / slice_range) * slice_range;
-    size_t slice_end   = slice_start + slice_range - 1;
-
-    /* initialize request count in output set */
-    memset(out_set, 0, sizeof(read_req_set_t));
-    int count = 0;
-
-    if (req_end <= slice_end) {
-        /* slice fully contains request
-         *
-         * slice_start                         slice_end
-         *                req_start     req_end
-         *
-         */
-        out_set->read_reqs[count] = *req;
-        count++;
-    } else {
-        /* read request spans multiple slices
-         *
-         * slice_start       slice_end  next_slice_start      next_slice_end
-         *           req_start                          req_end
-         *
-         */
-
-        /* account for leading bytes in read request in first slice */
-        out_set->read_reqs[count] = *req;
-        out_set->read_reqs[count].length = slice_end - req_start + 1;
-        count++;
-
-        /* account for all middle slices */
-        do {
-            /* advance to next slice */
-            slice_start = slice_end + 1;
-            slice_end   = slice_start + slice_range - 1;
-
-            if (req_end <= slice_end) {
-                /* found the slice that contains end byte in read request */
-                break;
-            }
-
-            /* full slice is contained in read request */
-            out_set->read_reqs[count].fid     = req->fid;
-            out_set->read_reqs[count].offset  = slice_start;
-            out_set->read_reqs[count].length  = slice_range;
-            out_set->read_reqs[count].errcode = UNIFYFS_SUCCESS;
-            count++;
-        } while (1);
-
-        /* account for bytes in final slice */
-        out_set->read_reqs[count].fid     = req->fid;
-        out_set->read_reqs[count].offset  = slice_start;
-        out_set->read_reqs[count].length  = req_end - slice_start + 1;
-        out_set->read_reqs[count].errcode = UNIFYFS_SUCCESS;
-        count++;
-    }
-
-    /* set size of output set */
-    out_set->count = count;
-
-    return 0;
-}
-
-/*
- * coalesce read requests referring to contiguous data within a given
- * file id, and split read requests whose size is larger than
- * unifyfs_key_slice_range into more requests that are smaller
- *
- * Note: a series of read requests that have overlapping spans
- * will prevent merging of contiguous ranges, this should still
- * function, but performance may be lost
- *
- * @param read_req: a list of read requests
- * @param count: number of read requests
- * @param tmp_set: a temporary read requests buffer
- * to hold the intermediate result
- * @param unifyfs_key_slice_range: slice size of distributed
- * key-value store
- * @return out_set: the coalesced read requests
- *
- * */
-static int unifyfs_coalesce_read_reqs(read_req_t* read_req, int count,
-                                      size_t slice_range,
-                                      read_req_set_t* out_set)
-{
-    read_req_set_t tmp_set;
-
-    /* initialize output and temporary sets */
-    out_set->count = 0;
-    memset(&tmp_set, 0, sizeof(tmp_set));
-
-    int i;
-    int out_idx = 0;
-    for (i = 0; i < count; i++) {
-        /* index into temp set */
-        int tmp_idx = 0;
-
-        /* split this read request into parts based on slice range
-         * store resulting requests in tmp_set */
-        unifyfs_split_read_requests(&read_req[i], &tmp_set, slice_range);
-
-        /* look to merge last item in output set with first item
-         * in split requests */
-        if (out_idx > 0) {
-            /* get pointer to last item in out_set */
-            read_req_t* out_req = &(out_set->read_reqs[out_idx - 1]);
-
-            /* get pointer to first item in tmp_set */
-            read_req_t* tmp_req = &(tmp_set.read_reqs[0]);
-
-            /* look to merge these items if they are contiguous */
-            if (out_req->fid == tmp_req->fid &&
-                out_req->offset + out_req->length == tmp_req->offset) {
-                /* refers to contiguous range in the same file,
-                 * coalesce if also in the same slice */
-                uint64_t cur_slice = out_req->offset / slice_range;
-                uint64_t tmp_slice = tmp_req->offset / slice_range;
-                if (cur_slice == tmp_slice) {
-                    /* just increase length to merge */
-                    out_req->length += tmp_req->length;
-
-                    /* bump offset into tmp set array */
-                    tmp_idx++;
-                }
-            }
-        }
-
-        /* tack on remaining items from tmp set into output set */
-        for (; tmp_idx < tmp_set.count; tmp_idx++) {
-            out_set->read_reqs[out_idx] = tmp_set.read_reqs[tmp_idx];
-            out_set->count++;
-            out_idx++;
-        }
-    }
-
-    return 0;
-}
-
-/*
- * match the received read_requests with the
- * client's read requests
- * @param read_reqs: a list of read requests
- * @param count: number of read requests
- * @param match_req: received read request to match
- * @return error code
- *
- * */
-static int unifyfs_match_received_ack(read_req_t* read_reqs, int count,
-                                      read_req_t* match_req)
-{
-    /* given fid, offset, and length of match_req that holds read reply,
-     * identify which read request this belongs to in read_req array,
-     * then copy data to user buffer */
-
-    /* create a request corresponding to the first byte in read reply */
-    read_req_t match_start = *match_req;
-
-    /* create a request corresponding to last byte in read reply */
-    read_req_t match_end = *match_req;
-    match_end.offset += match_end.length - 1;
-
-    /* find index of read request that contains our first byte */
-    int start_pos = unifyfs_locate_req(read_reqs, count, &match_start);
-
-    /* find index of read request that contains our last byte */
-    int end_pos = unifyfs_locate_req(read_reqs, count, &match_end);
-
-    /* could not find a valid read request in read_req array */
-    if (start_pos == -1) {
-        return UNIFYFS_FAILURE;
-    }
-
-    /* s: start of match_req, e: end of match_req */
-
-    if (start_pos == 0) {
-        if (compare_read_req(&match_start, &read_reqs[0]) < 0) {
-            /* starting offset in read reply comes before lowest
-             * offset in read requests, consider this to be an error
-             *
-             *   ************    ***********         *************
-             * s
-             *
-             * */
-            return UNIFYFS_FAILURE;
-        }
-    }
-
-    /* create read request corresponding to first byte of first read request */
-    read_req_t first_start = read_reqs[start_pos];
-
-    /* create read request corresponding to last byte of first read request */
-    read_req_t first_end = read_reqs[start_pos];
-    first_end.offset += first_end.length - 1;
-
-    /* check whether read reply is fully contained by first read request */
-    if (compare_read_req(&match_start, &first_start) >= 0 &&
-        compare_read_req(&match_end,   &first_end)   <= 0) {
-        /* read reply is fully contained within first read request
-         *
-         * first_s   first_e
-         * *****************           *************
-         *        s  e
-         *
-         * */
-
-        /* copy data to user buffer if no error */
-        if (match_req->errcode == UNIFYFS_SUCCESS) {
-            /* compute buffer location to copy data */
-            size_t offset = (size_t)(match_start.offset - first_start.offset);
-            char* buf = first_start.buf + offset;
-
-            /* copy data to user buffer */
-            memcpy(buf, match_req->buf, match_req->length);
-
-            return UNIFYFS_SUCCESS;
-        } else {
-            /* hit an error during read, so record this fact
-             * in user's original read request */
-            read_reqs[start_pos].errcode = match_req->errcode;
-            return UNIFYFS_FAILURE;
-        }
-    }
-
-    /* define read request for offset of first byte in last read request */
-    read_req_t last_start = read_reqs[end_pos];
-
-    /* define read request for offset of last byte in last read request */
-    read_req_t last_end = read_reqs[end_pos];
-    last_end.offset += last_end.length - 1;
-
-    /* determine whether read reply is contained in a range of read requests */
-    if (compare_read_req(&match_start, &first_start) >= 0 &&
-        compare_read_req(&match_end,   &last_end)    <= 0) {
-        /* read reply spans multiple read requests
-         *
-         *  first_s   first_e  req_s req_e  req_s req_e  last_s    last_e
-         *  *****************  ***********  ***********  ****************
-         *          s                                              e
-         *
-         * */
-
-        /* check that read requests from start_pos to end_pos
-         * define a contiguous set of bytes */
-        int i;
-        for (i = start_pos + 1; i <= end_pos; i++) {
-            if ((read_reqs[i - 1].offset + read_reqs[i - 1].length)
-                != read_reqs[i].offset) {
-                /* read requests are noncontiguous, error */
-                return UNIFYFS_FAILURE;
-            }
-        }
-
-        /* read requests are contiguous, fill all buffers in middle */
-        if (match_req->errcode == UNIFYFS_SUCCESS) {
-            /* get pointer to start of read reply data */
-            char* ptr = match_req->buf;
-
-            /* compute position in user buffer to copy data */
-            size_t offset = (size_t)(match_start.offset - first_start.offset);
-            char* buf = first_start.buf + offset;
-
-            /* compute number of bytes to copy into first read request */
-            size_t length =
-                (size_t)(first_end.offset - match_start.offset + 1);
-
-            /* copy data into user buffer for first read request */
-            memcpy(buf, ptr, length);
-            ptr += length;
-
-            /* copy data for middle read requests */
-            for (i = start_pos + 1; i < end_pos; i++) {
-                memcpy(read_reqs[i].buf, ptr, read_reqs[i].length);
-                ptr += read_reqs[i].length;
-            }
-
-            /* compute bytes for last read request */
-            length = (size_t)(match_end.offset - last_start.offset + 1);
-
-            /* copy data into user buffer for last read request */
-            memcpy(last_start.buf, ptr, length);
-            ptr += length;
-
-            return UNIFYFS_SUCCESS;
-        } else {
-            /* hit an error during read, update errcode in user's
-             * original read request from start to end inclusive */
-            for (i = start_pos; i <= end_pos; i++) {
-                read_reqs[i].errcode = match_req->errcode;
-            }
-            return UNIFYFS_FAILURE;
-        }
-    }
-
-    /* could not find a matching read request, return an error */
-    return UNIFYFS_FAILURE;
-}
-
-/* notify our delegator that the shared memory buffer
- * is now clear and ready to hold more read data */
-static void delegator_signal(void)
-{
-    LOGDBG("receive buffer now empty");
-
-    /* set shm flag to signal delegator we're done */
-    shm_header_t* hdr = (shm_header_t*)shm_recv_buf;
-    hdr->state = SHMEM_REGION_EMPTY;
-
-    /* TODO: MEM_FLUSH */
-}
-
-/* wait for delegator to inform us that shared memory buffer
- * is filled with read data */
-static int delegator_wait(void)
-{
-    int rc = (int)UNIFYFS_SUCCESS;
-
-#if defined(UNIFYFS_USE_DOMAIN_SOCKET)
-    /* wait for signal on socket */
-    cmd_fd.events = POLLIN | POLLPRI;
-    cmd_fd.revents = 0;
-    rc = poll(&cmd_fd, 1, -1);
-
-    /* check that we got something good */
-    if (rc == 0) {
-        if (cmd_fd.revents != 0) {
-            if (cmd_fd.revents == POLLIN) {
-                return UNIFYFS_SUCCESS;
-            } else {
-                printf("poll returned %d; error: %s\n", rc,  strerror(errno));
-            }
-        } else {
-            printf("poll returned %d; error: %s\n", rc,  strerror(errno));
-        }
-    } else {
-        printf("poll returned %d; error: %s\n", rc,  strerror(errno));
-    }
 #endif
-
-    /* specify time to sleep between checking flag in shared
-     * memory indicating server has produced */
-    struct timespec shm_wait_tm;
-    shm_wait_tm.tv_sec  = 0;
-    shm_wait_tm.tv_nsec = SHM_WAIT_INTERVAL;
-
-    /* get pointer to flag in shared memory */
-    shm_header_t* hdr = (shm_header_t*)shm_recv_buf;
-
-    /* wait for server to set flag to non-zero */
-    int max_sleep = 5000000; // 5s
-    volatile int* vip = (volatile int*)&(hdr->state);
-    while (*vip == SHMEM_REGION_EMPTY) {
-        /* not there yet, sleep for a while */
-        nanosleep(&shm_wait_tm, NULL);
-        /* TODO: MEM_FETCH */
-        max_sleep--;
-        if (0 == max_sleep) {
-            LOGERR("timed out waiting for non-empty");
-            rc = (int)UNIFYFS_ERROR_SHMEM;
-            break;
-        }
-    }
-
-    return rc;
-}
-
-/* copy read data from shared memory buffer to user buffers from read
- * calls, sets done=1 on return when delegator informs us it has no
- * more data */
-static int process_read_data(read_req_t* read_reqs, int count, int* done)
-{
-    /* assume we'll succeed */
-    int rc = UNIFYFS_SUCCESS;
-
-    /* get pointer to start of shared memory buffer */
-    shm_header_t* shm_hdr = (shm_header_t*)shm_recv_buf;
-    char* shmptr = ((char*)shm_hdr) + sizeof(shm_header_t);
-
-    size_t num = shm_hdr->meta_cnt;
-    if (0 == num) {
-        LOGDBG("no read responses available");
-        return rc;
-    }
-
-    /* process each of our replies */
-    size_t i;
-    for (i = 0; i < num; i++) {
-        /* get pointer to current read reply header */
-        shm_meta_t* msg = (shm_meta_t*)shmptr;
-        shmptr += sizeof(shm_meta_t);
-
-        /* define request object */
-        read_req_t req;
-        req.fid     = msg->gfid;
-        req.offset  = msg->offset;
-        req.length  = msg->length;
-        req.errcode = msg->errcode;
-
-        LOGDBG("read reply: gfid=%d offset=%zu size=%zu",
-               req.fid, req.offset, req.length);
-
-        /* get pointer to data */
-        req.buf = shmptr;
-        shmptr += msg->length;
-
-        /* process this read reply, identify which application read
-         * request this reply goes to and copy data to user buffer */
-        int tmp_rc = unifyfs_match_received_ack(read_reqs, count, &req);
-        if (tmp_rc != UNIFYFS_SUCCESS) {
-            rc = UNIFYFS_FAILURE;
-        }
-    }
-
-    /* set done flag if there is no more data */
-    if (shm_hdr->state == SHMEM_REGION_DATA_COMPLETE) {
-        *done = 1;
-    }
-
-    return rc;
-}
-
-/*
- * get data for a list of read requests from the
- * delegator
- * @param read_reqs: a list of read requests
- * @param count: number of read requests
- * @return error code
- *
- * */
-int unifyfs_fd_logreadlist(read_req_t* read_reqs, int count)
-{
-    int i;
-    int tot_sz = 0;
-    int rc = UNIFYFS_SUCCESS;
-    int num = 0;
-    int* ptr_size = NULL;
-    int* ptr_num = NULL;
-
-#if 0 /* TODO: when meta has correct file size, we can use this code */
-    /* Adjust length for fitting the EOF. */
-    for (i = 0; i < count; i++) {
-        /* get pointer to read request */
-        read_req_t* req = &read_reqs[i];
-
-        /* get metadata for this file */
-        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(req->fid);
-        if (meta == NULL) {
-            return UNIFYFS_ERROR_BADF;
-        }
-
-        /* compute last byte of read request */
-        size_t last_offset = req->offset + req->length;
-        if (last_offset > meta->size) {
-            /* shorten the request to read just up to end */
-            req->length = meta->size - req->offset;
-        }
-    }
-#endif
-
-    /*
-     * Todo: When the number of read requests exceed the
-     * request buffer, split list io into multiple bulk
-     * sends and transfer in bulks
-     * */
-
-    /* convert local fid to global fid */
-    unifyfs_file_attr_t tmp_meta_entry;
-    unifyfs_file_attr_t* ptr_meta_entry;
-    for (i = 0; i < count; i++) {
-        /* look for global meta data for this local file id */
-        tmp_meta_entry.fid = read_reqs[i].fid;
-        ptr_meta_entry =
-            (unifyfs_file_attr_t*) bsearch(&tmp_meta_entry,
-                                           unifyfs_fattrs.meta_entry,
-                                           *unifyfs_fattrs.ptr_num_entries,
-                                           sizeof(unifyfs_file_attr_t),
-                                           compare_fattr);
-
-        /* replace local file id with global file id in request */
-        if (ptr_meta_entry != NULL) {
-            read_reqs[i].fid = ptr_meta_entry->gfid;
-        } else {
-            /* failed to find gfid for this request */
-            return UNIFYFS_ERROR_BADF;
-        }
-    }
-
-    /* order read request by increasing file id, then increasing offset */
-    qsort(read_reqs, count, sizeof(read_req_t), compare_read_req);
-
-    /* coalesce the contiguous read requests */
-    read_req_set_t read_req_set;
-    unifyfs_coalesce_read_reqs(read_reqs, count,
-                               unifyfs_key_slice_range,
-                               &read_req_set);
-
-    /* prepare our shared memory buffer for delegator */
-    delegator_signal();
-
-    int read_rc;
-    if (read_req_set.count > 1) {
-        /* got multiple read requests,
-         * build up a flat buffer to include them all */
-        flatcc_builder_t builder;
-        flatcc_builder_init(&builder);
-
-        /* create request vector */
-        unifyfs_Extent_vec_start(&builder);
-
-        /* fill in values for each request entry */
-        for (i = 0; i < read_req_set.count; i++) {
-            unifyfs_Extent_vec_push_create(&builder,
-                                           read_req_set.read_reqs[i].fid,
-                                           read_req_set.read_reqs[i].offset,
-                                           read_req_set.read_reqs[i].length);
-        }
-
-        /* complete the array */
-        unifyfs_Extent_vec_ref_t extents = unifyfs_Extent_vec_end(&builder);
-        unifyfs_ReadRequest_create_as_root(&builder, extents);
-        //unifyfs_ReadRequest_end_as_root(&builder);
-
-        /* allocate our buffer to be sent */
-        size_t size = 0;
-        void* buffer = flatcc_builder_finalize_buffer(&builder, &size);
-        assert(buffer);
-        LOGDBG("mread: n_reqs:%d, flatcc buffer (%p) sz:%zu",
-               read_req_set.count, buffer, size);
-
-        /* invoke read rpc here */
-        read_rc = invoke_client_mread_rpc(read_req_set.count, size, buffer);
-
-        flatcc_builder_clear(&builder);
-        free(buffer);
-    } else {
-        /* got a single read request */
-        int gfid = ptr_meta_entry->gfid;
-        size_t offset = read_req_set.read_reqs[0].offset;
-        size_t length = read_req_set.read_reqs[0].length;
-        LOGDBG("read: offset:%zu, len:%zu", offset, length);
-        read_rc = invoke_client_read_rpc(gfid, offset, length);
-    }
-
-    /* bail out with error if we failed to even start the read */
-    if (read_rc != UNIFYFS_SUCCESS) {
-        return read_rc;
-    }
-
-    /*
-     * ToDo: Exception handling when some of the requests
-     * are missed
-     * */
-
-    int done = 0;
-    while (!done) {
-        int tmp_rc = delegator_wait();
-        if (tmp_rc != UNIFYFS_SUCCESS) {
-            rc = UNIFYFS_FAILURE;
-            done = 1;
-        } else {
-            tmp_rc = process_read_data(read_reqs, count, &done);
-            if (tmp_rc != UNIFYFS_SUCCESS) {
-                rc = UNIFYFS_FAILURE;
-            }
-            delegator_signal();
-        }
-    }
-
-    return rc;
-}
 
 ssize_t UNIFYFS_WRAP(pread)(int fd, void* buf, size_t count, off_t offset)
 {
@@ -1954,44 +1657,37 @@ ssize_t UNIFYFS_WRAP(pread)(int fd, void* buf, size_t count, off_t offset)
             return (ssize_t)(-1);
         }
 
-#if 0 // THIS IS BROKEN UNTIL WE HAVE GLOBAL SIZE
-        /* get pointer to file descriptor structure */
-        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-        if (meta == NULL) {
-            /* ERROR: invalid file descriptor */
-            errno = EBADF;
-            return (ssize_t)(-1);
-        }
+        /* TODO: handle error if sync fails? */
+        /* sync data for file before reading, if needed */
+        unifyfs_fid_sync(fid);
 
-        /* check for end of file */
-        if (offset >= meta->size) {
-            return 0;
-        }
-#endif
+        /* fill in read request */
+        read_req_t req;
+        req.gfid    = unifyfs_gfid_from_fid(fid);
+        req.offset  = offset;
+        req.length  = count;
+        req.nread   = 0;
+        req.errcode = EINPROGRESS;
+        req.buf     = buf;
 
-        /* assume we'll succeed in read */
-        size_t retcount = count;
-
-        read_req_t tmp_req;
-        tmp_req.fid     = fid;
-        tmp_req.offset  = offset;
-        tmp_req.length  = count;
-        tmp_req.errcode = UNIFYFS_SUCCESS;
-        tmp_req.buf     = buf;
-
-        int ret = unifyfs_fd_logreadlist(&tmp_req, 1);
+        /* execute read operation */
+        ssize_t retcount;
+        int ret = unifyfs_gfid_read_reqs(&req, 1);
         if (ret != UNIFYFS_SUCCESS) {
             /* error reading data */
-            errno = EIO;
+            errno = unifyfs_rc_errno(ret);
             retcount = -1;
-        } else if (tmp_req.errcode != UNIFYFS_SUCCESS) {
+        } else if (req.errcode != UNIFYFS_SUCCESS) {
             /* error reading data */
-            errno = EIO;
+            errno = unifyfs_rc_errno((unifyfs_rc)req.errcode);
             retcount = -1;
+        } else {
+            /* read succeeded, get number of bytes from nread field */
+            retcount = (ssize_t) req.nread;
         }
 
         /* return number of bytes read */
-        return (ssize_t) retcount;
+        return retcount;
     } else {
         MAP_OR_FAIL(pread);
         ssize_t ret = UNIFYFS_REAL(pread)(fd, buf, count, offset);
@@ -2002,8 +1698,9 @@ ssize_t UNIFYFS_WRAP(pread)(int fd, void* buf, size_t count, off_t offset)
 ssize_t UNIFYFS_WRAP(pread64)(int fd, void* buf, size_t count, off64_t offset)
 {
     /* check whether we should intercept this file descriptor */
+    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
-        return UNIFYFS_WRAP(pread)(fd, buf, count, (off_t)offset);
+        return UNIFYFS_WRAP(pread)(origfd, buf, count, (off_t)offset);
     } else {
         MAP_OR_FAIL(pread64);
         ssize_t ret = UNIFYFS_REAL(pread64)(fd, buf, count, offset);
@@ -2027,14 +1724,17 @@ ssize_t UNIFYFS_WRAP(pwrite)(int fd, const void* buf, size_t count,
         }
 
         /* write data to file */
-        int write_rc = unifyfs_fd_write(fd, offset, buf, count);
+        size_t bytes;
+        LOGDBG("pwrite - fd=%d offset=%zu count=%zu",
+               fd, (size_t)offset, count);
+        int write_rc = unifyfs_fd_write(fd, offset, buf, count, &bytes);
         if (write_rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(write_rc);
+            errno = unifyfs_rc_errno(write_rc);
             return (ssize_t)(-1);
         }
 
-        /* return number of bytes read */
-        return (ssize_t) count;
+        /* return number of bytes written */
+        return (ssize_t)bytes;
     } else {
         MAP_OR_FAIL(pwrite);
         ssize_t ret = UNIFYFS_REAL(pwrite)(fd, buf, count, offset);
@@ -2046,11 +1746,71 @@ ssize_t UNIFYFS_WRAP(pwrite64)(int fd, const void* buf, size_t count,
                                off64_t offset)
 {
     /* check whether we should intercept this file descriptor */
+    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
-        return UNIFYFS_WRAP(pwrite)(fd, buf, count, (off_t)offset);
+        return UNIFYFS_WRAP(pwrite)(origfd, buf, count, (off_t)offset);
     } else {
         MAP_OR_FAIL(pwrite64);
         ssize_t ret = UNIFYFS_REAL(pwrite64)(fd, buf, count, offset);
+        return ret;
+    }
+}
+
+int UNIFYFS_WRAP(fchdir)(int fd)
+{
+    /* determine whether we should intercept this path */
+    if (unifyfs_intercept_fd(&fd)) {
+        /* lookup file id for file descriptor */
+        int fid = unifyfs_get_fid_from_fd(fd);
+        if (fid < 0) {
+            errno = EBADF;
+            return -1;
+        }
+
+        /* lookup path for fd */
+        const char* path = unifyfs_path_from_fid(fid);
+
+        /* TODO: test that path is not a file? */
+
+        /* we're happy to change into any directory in unifyfs
+         * should we check that we don't change into a file at least? */
+        if (unifyfs_cwd != NULL) {
+            free(unifyfs_cwd);
+        }
+        unifyfs_cwd = strdup(path);
+        return 0;
+    } else {
+        MAP_OR_FAIL(fchdir);
+        int ret = UNIFYFS_REAL(fchdir)(fd);
+
+        /* if the change dir was successful,
+         * update our current working directory */
+        if (unifyfs_initialized && ret == 0) {
+            if (unifyfs_cwd != NULL) {
+                free(unifyfs_cwd);
+            }
+
+            /* if we did a real chdir, let's use a real getcwd
+             * to get the current working directory */
+            MAP_OR_FAIL(getcwd);
+            char* cwd = UNIFYFS_REAL(getcwd)(NULL, 0);
+            if (cwd != NULL) {
+                unifyfs_cwd = cwd;
+
+                /* parts of the code may assume unifyfs_cwd is a max size */
+                size_t len = strlen(cwd) + 1;
+                if (len > UNIFYFS_MAX_FILENAME) {
+                    LOGERR("Current working dir longer (%lu bytes) "
+                        "than UNIFYFS_MAX_FILENAME=%d",
+                        (unsigned long) len, UNIFYFS_MAX_FILENAME);
+                }
+            } else {
+                /* ERROR */
+                LOGERR("Failed to getcwd after fchdir(%d) errno=%d %s",
+                    fd, errno, strerror(errno));
+            }
+        }
+
         return ret;
     }
 }
@@ -2077,7 +1837,7 @@ int UNIFYFS_WRAP(ftruncate)(int fd, off_t length)
         /* truncate the file */
         int rc = unifyfs_fid_truncate(fid, length);
         if (rc != UNIFYFS_SUCCESS) {
-            errno = EIO;
+            errno = unifyfs_rc_errno(rc);
             return -1;
         }
 
@@ -2089,31 +1849,6 @@ int UNIFYFS_WRAP(ftruncate)(int fd, off_t length)
     }
 }
 
-/* get the gfid for use in fsync wrapper
- * TODO: maybe move this somewhere else */
-uint32_t get_gfid(int fid)
-{
-    unifyfs_file_attr_t target;
-    target.fid = fid;
-
-    const void* entries = unifyfs_fattrs.meta_entry;
-    size_t num  = *unifyfs_fattrs.ptr_num_entries;
-    size_t size = sizeof(unifyfs_file_attr_t);
-
-    unifyfs_file_attr_t* entry =
-        (unifyfs_file_attr_t*) bsearch(&target, entries, num, size,
-                                       compare_fattr);
-
-    uint32_t gfid;
-    if (entry != NULL) {
-        gfid = (uint32_t)entry->gfid;
-    } else {
-        return -1;
-    }
-
-    return gfid;
-}
-
 int UNIFYFS_WRAP(fsync)(int fd)
 {
     /* check whether we should intercept this file descriptor */
@@ -2121,34 +1856,19 @@ int UNIFYFS_WRAP(fsync)(int fd)
         /* get the file id for this file descriptor */
         int fid = unifyfs_get_fid_from_fd(fd);
         if (fid < 0) {
+            LOGERR("Couldn't get fid from fd %d", fd);
             errno = EBADF;
             return -1;
         }
 
-        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-        if (!meta->needs_sync) {
-            return 0;
+        /* invoke fsync rpc to register index metadata with server */
+        int ret = unifyfs_fid_sync(fid);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* sync failed for some reason, set errno and return error */
+            errno = unifyfs_rc_errno(ret);
+            return -1;
         }
 
-        /* if using spill over, fsync spillover data to disk */
-        if (unifyfs_use_spillover) {
-            int ret = __real_fsync(unifyfs_spilloverblock);
-            if (ret != 0) {
-                /* error, need to set errno appropriately,
-                 * we called the real fsync which should
-                 * have already set errno to something reasonable */
-                return -1;
-            }
-        }
-
-        /* if using LOGIO, call fsync rpc */
-        if (meta->storage == FILE_STORAGE_LOGIO) {
-            /* invoke fsync rpc to register index metadata with server */
-            int gfid = get_gfid(fid);
-            invoke_client_fsync_rpc(gfid);
-        }
-
-        meta->needs_sync = 0;
         return 0;
     } else {
         MAP_OR_FAIL(fsync);
@@ -2319,8 +2039,11 @@ void* UNIFYFS_WRAP(mmap64)(void* addr, size_t length, int prot, int flags,
                            int fd, off64_t offset)
 {
     /* check whether we should intercept this file descriptor */
+    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
-        return UNIFYFS_WRAP(mmap)(addr, length, prot, flags, fd, (off_t)offset);
+        void* ret = UNIFYFS_WRAP(mmap)(addr, length, prot, flags, origfd,
+            (off_t)offset);
+        return ret;
     } else {
         MAP_OR_FAIL(mmap64);
         void* ret = UNIFYFS_REAL(mmap64)(addr, length, prot, flags, fd, offset);
@@ -2331,7 +2054,6 @@ void* UNIFYFS_WRAP(mmap64)(void* addr, size_t length, int prot, int flags,
 int UNIFYFS_WRAP(close)(int fd)
 {
     /* check whether we should intercept this file descriptor */
-    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
         LOGDBG("closing fd %d", fd);
 
@@ -2351,15 +2073,19 @@ int UNIFYFS_WRAP(close)(int fd)
             return -1;
         }
 
-        /* if file was opened for writing, fsync it */
+        /* if file was opened for writing, sync it */
         if (filedesc->write) {
-            UNIFYFS_WRAP(fsync)(origfd);
+            int sync_rc = unifyfs_fid_sync(fid);
+            if (sync_rc != UNIFYFS_SUCCESS) {
+                errno = unifyfs_rc_errno(sync_rc);
+                return -1;
+            }
         }
 
         /* close the file id */
         int close_rc = unifyfs_fid_close(fid);
         if (close_rc != UNIFYFS_SUCCESS) {
-            errno = EIO;
+            errno = unifyfs_rc_errno(close_rc);
             return -1;
         }
 
@@ -2382,28 +2108,29 @@ int UNIFYFS_WRAP(close)(int fd)
 /* Helper function used by fchmod() and chmod() */
 static int __chmod(int fid, mode_t mode)
 {
-    int gfid;
-    unifyfs_filemeta_t* meta;
-    const char* path;
     int ret;
 
-    path =  unifyfs_path_from_fid(fid);
+    /* get path for printing debug messages */
+    const char* path = unifyfs_path_from_fid(fid);
 
-    meta = unifyfs_get_meta_from_fid(fid);
-    if (!meta) {
-        LOGDBG("chmod: %s no metadata info", path);
+    /* lookup metadata for this file */
+    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+    if (NULL == meta) {
+        LOGDBG("no metadata info for %s", path);
         errno = ENOENT;
         return -1;
     }
 
     /* Once a file is laminated, you can't modify it in any way */
     if (meta->is_laminated) {
-        LOGDBG("chmod: %s is already laminated", path);
+        LOGDBG("%s is already laminated", path);
         errno = EROFS;
         return -1;
     }
 
-    gfid = unifyfs_generate_gfid(path);
+    /* found file, and it's not yet laminated,
+     * get the global file id */
+    int gfid = unifyfs_gfid_from_fid(fid);
 
     /*
      * If the chmod clears all the existing write bits, then it's a laminate.
@@ -2413,40 +2140,52 @@ static int __chmod(int fid, mode_t mode)
      */
     if ((meta->mode & 0222) &&
         (((meta->mode & 0222) & mode) == 0)) {
-
-        /*
-         * We're laminating. Calculate the file size so we can cache it
-         * (both locally and on the server).
-         */
-        ret = invoke_client_filesize_rpc(gfid, &meta->size);
+        /* We're laminating. */
+        ret = invoke_client_laminate_rpc(gfid);
         if (ret) {
-            LOGERR("chmod: couldn't get the global file size on laminate");
-            errno = EIO;
+            LOGERR("laminate failed");
+            errno = unifyfs_rc_errno(ret);
             return -1;
         }
-        meta->is_laminated = 1;
     }
 
     /* Clear out our old permission bits, and set the new ones in */
     meta->mode = meta->mode & ~0777;
     meta->mode = meta->mode | mode;
 
-    ret = unifyfs_set_global_file_meta(fid, gfid);
+    /* update the global meta data to reflect new permissions */
+    unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_CHMOD;
+    ret = unifyfs_set_global_file_meta_from_fid(fid, op);
     if (ret) {
         LOGERR("chmod: can't set global meta entry for %s (fid:%d)",
                path, fid);
-        errno = EIO;
+        errno = unifyfs_rc_errno(ret);
         return -1;
     }
+
+    /* read metadata back to pick up file size and laminated flag */
+    unifyfs_file_attr_t attr = {0};
+    ret = unifyfs_get_global_file_meta(gfid, &attr);
+    if (ret) {
+        LOGERR("chmod: can't get global meta entry for %s (fid:%d)",
+               path, fid);
+        errno = unifyfs_rc_errno(ret);
+        return -1;
+    }
+
+    LOGDBG("attributes from global metadata");
+    debug_print_file_attr(&attr);
+
+    /* update global size of file from global metadata */
+    unifyfs_fid_update_file_meta(fid, &attr);
+
     return 0;
 }
 
 int UNIFYFS_WRAP(fchmod)(int fd, mode_t mode)
 {
     /* check whether we should intercept this file descriptor */
-    int origfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
-
         /* TODO: what to do if underlying file has been deleted? */
 
         /* check that fd is actually in use */
@@ -2455,9 +2194,9 @@ int UNIFYFS_WRAP(fchmod)(int fd, mode_t mode)
             errno = EBADF;
             return -1;
         }
+
         LOGDBG("fchmod: setting fd %d to %o", fd, mode);
         return __chmod(fid, mode);
-
     } else {
         MAP_OR_FAIL(fchmod);
         int ret = UNIFYFS_REAL(fchmod)(fd, mode);
@@ -2465,24 +2204,21 @@ int UNIFYFS_WRAP(fchmod)(int fd, mode_t mode)
     }
 }
 
-
 int UNIFYFS_WRAP(chmod)(const char* path, mode_t mode)
 {
-    int fid, gfid;
-    int ret;
-    unifyfs_filemeta_t* meta;
     /* determine whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         /* check if path exists */
-        fid = unifyfs_get_fid_from_path(path);
+        int fid = unifyfs_get_fid_from_path(upath);
         if (fid < 0) {
             LOGDBG("chmod: unifyfs_get_id_from path failed, returning -1, %s",
-                   path);
+                   upath);
             errno = ENOENT;
             return -1;
         }
 
-        LOGDBG("chmod: setting %s to %o", path, mode);
+        LOGDBG("chmod: setting %s to %o", upath, mode);
         return __chmod(fid, mode);
     } else {
         MAP_OR_FAIL(chmod);

@@ -17,6 +17,7 @@ https://github.com/benhoyt/inih
 #include <string.h>
 
 #include "ini.h"
+#include "unifyfs_misc.h"
 
 #if !INI_USE_STACK
 #include <stdlib.h>
@@ -73,8 +74,7 @@ static char *find_chars_or_comment(const char *s, const char *chars)
 /* Version of strncpy that ensures dest (size bytes) is null-terminated. */
 static char *strncpy0(char *dest, const char *src, size_t size)
 {
-    strncpy(dest, src, size);
-    dest[size - 1] = '\0';
+    strlcpy(dest, src, size);
     return dest;
 }
 

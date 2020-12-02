@@ -20,6 +20,7 @@
 - [ ] Performance enhancement (non-breaking change which improves efficiency)
 - [ ] Code cleanup (non-breaking change which makes code smaller or more readable)
 - [ ] Breaking change (fix or feature that would cause existing functionality to change)
+- [ ] Testing (addition of new tests or update to current tests)
 - [ ] Documentation (a change to man pages or other documentation)
 
 ### Checklist:

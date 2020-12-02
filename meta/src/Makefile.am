@@ -1,4 +1,6 @@
+if USE_MDHIM
 noinst_LIBRARIES = libmdhim.a
+endif
 
 libmdhim_a_SOURCES = Mlog2/mlog2.c \
                      Mlog2/mlog2.h \
@@ -36,6 +38,6 @@ AM_CPPFLAGS = -I$(top_srcdir)/meta/src/Mlog2 \
               -I$(top_srcdir)/server/src
 
 AM_CFLAGS = -DLEVELDB_SUPPORT $(LEVELDB_CFLAGS) $(MPI_CFLAGS) $(MARGO_CFLAGS)
-AM_CFLAGS += -Wall
+AM_CFLAGS += -Wall -Werror
 
 CLEANFILES =

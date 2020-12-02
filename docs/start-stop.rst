@@ -40,17 +40,17 @@ for further details on customizing the UnifyFS runtime configuration.
 .. code-block:: Bash
     :linenos:
 
-        #!/bin/bash
+    #!/bin/bash
 
-        # spillover checkpoint data to node-local ssd storage
-        export UNIFYFS_SPILLOVER_DATA_DIR=/mnt/ssd/$USER/data
-        export UNIFYFS_SPILLOVER_META_DIR=/mnt/ssd/$USER/meta
+    # spillover data to node-local ssd storage
+    export UNIFYFS_LOGIO_SPILL_DIR=/mnt/ssd/$USER/data
 
-        # store server logs in job-specific scratch area
-        export UNIFYFS_LOG_DIR=$JOBSCRATCH/logs
+    # store server logs in job-specific scratch area
+    export UNIFYFS_LOG_DIR=$JOBSCRATCH/logs
 
-        unifyfs start --share-dir=/path/to/shared/file/system &
+    unifyfs start --share-dir=/path/to/shared/file/system
 
+.. _unifyfs_utility_label:
 
 ``unifyfs`` provides command-line options to choose the client mountpoint,
 adjust the consistency model, and control stage-in and stage-out of files.
@@ -59,30 +59,31 @@ The full usage for ``unifyfs`` is as follows:
 .. code-block:: Bash
     :linenos:
 
-        [prompt]$ unifyfs --help
+    [prompt]$ unifyfs --help
 
-        Usage: unifyfs <command> [options...]
+    Usage: unifyfs <command> [options...]
 
-        <command> should be one of the following:
-          start       start the UnifyFS server daemons
-          terminate   terminate the UnifyFS server daemons
+    <command> should be one of the following:
+      start       start the UnifyFS server daemons
+      terminate   terminate the UnifyFS server daemons
 
-        Common options:
-          -d, --debug               enable debug output
-          -h, --help                print usage
+    Common options:
+      -d, --debug               enable debug output
+      -h, --help                print usage
 
-        Command options for "start":
-          -c, --cleanup             [OPTIONAL] clean up the UnifyFS storage upon server exit
-          -C, --consistency=<model> [OPTIONAL] consistency model (NONE | LAMINATED | POSIX)
-          -e, --exe=<path>          [OPTIONAL] <path> where unifyfsd is installed
-          -m, --mount=<path>        [OPTIONAL] mount UnifyFS at <path>
-          -s, --script=<path>       [OPTIONAL] <path> to custom launch script
-          -S, --share-dir=<path>    [REQUIRED] shared file system <path> for use by servers
-          -i, --stage-in=<path>     [OPTIONAL] stage in file(s) at <path>
-          -o, --stage-out=<path>    [OPTIONAL] stage out file(s) to <path> on termination
+    Command options for "start":
+      -C, --consistency=<model> [OPTIONAL] consistency model (NONE | LAMINATED | POSIX)
+      -e, --exe=<path>          [OPTIONAL] <path> where unifyfsd is installed
+      -m, --mount=<path>        [OPTIONAL] mount UnifyFS at <path>
+      -s, --script=<path>       [OPTIONAL] <path> to custom launch script
+      -t, --timeout=<sec>       [OPTIONAL] wait <sec> until all servers become ready
+      -S, --share-dir=<path>    [REQUIRED] shared file system <path> for use by servers
+      -c, --cleanup             [OPTIONAL] clean up the UnifyFS storage upon server exit
+      -i, --stage-in=<path>     [OPTIONAL] stage in manifest file(s) at <path>
 
-        Command options for "terminate":
-          -s, --script=<path>       <path> to custom termination script
+    Command options for "terminate":
+      -s, --script=<path>       [OPTIONAL] <path> to custom termination script
+      -o, --stage-out=<path>    [OPTIONAL] stage out manifest file(s) at <path>
 
 
 After UnifyFS servers have been successfully started, you may run your
@@ -100,3 +101,45 @@ use ``unifyfs terminate`` to terminate the servers. Typically, one would pass
 the ``--cleanup`` option to ``unifyfs start`` to have the servers remove
 temporary data locally stored on each node after termination.
 
+------------------------------------
+  Resource Manager Job Integration
+------------------------------------
+
+UnifyFS includes optional support for integrating directly with compatible
+resource managers to automatically start and stop servers at the beginning
+and end of a job when requested by users. Resource manager integration
+requires administrator privileges to deploy.
+
+Currently, only IBM's Platform LSF with Cluster System Manager (LSF-CSM)
+is supported. LSF-CSM is the resource manager on the CORAL2 IBM systems
+at ORNL and LLNL. The required job prologue and epilogue scripts, along
+with a README documenting the installation instructions, is available
+within the source repository at ``util/scripts/lsfcsm``.
+
+Support for the SLURM resource manager is under development.
+
+-----------------------------------------------
+  Stage-in and Stage-out Manifest File Format
+-----------------------------------------------
+
+The manifest file contains one or more file copy requests.
+Each line in the manifest corresponds to one file copy request,
+and contains both the source and destination file paths. Currently,
+directory copies are not supported.
+
+Each line is formatted as <source filename><whitespace><destination filename>.
+If either of the filenames
+contain whitespace or special characters, then both filenames should
+be surrounded by double-quote characters (") (ASCII character 34 decimal).
+The double-quote character and the linefeed end-of-line character are forbidden
+in any filenames used in a unifyfs manifest file, but any other
+characters are allowed, including control characters.
+If a filename contains any characters that might be misinterpreted, then
+enclosing the filename in double-quotes is always
+a safe thing to do.
+
+Here is an example of a valid stage-in manifest file:
+
+``/scratch/users/me/input_data/input_1.dat /unifyfs/input/input_1.dat``
+``/home/users/me/configuration/run_12345.conf /unifyfs/config/run_12345.conf``
+``"/home/users/me/file with space.dat" "/unifyfs/file with space.dat"``

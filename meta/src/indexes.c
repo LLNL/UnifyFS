@@ -287,8 +287,8 @@ int update_stat(struct mdhim_t *md, struct index_t *index, void *key, uint32_t k
 		*(unsigned long  *)val1 = get_byte_num(key, key_len);
 		*(unsigned long  *)val2 = *(unsigned long *)val1;
 	} else if (index->key_type == MDHIM_UNIFYFS_KEY) {
-			val1 = get_meta_pair(key, key_len);
-			val2 = get_meta_pair(key, key_len);
+		val1 = copy_unifyfs_key(key, key_len);
+		val2 = copy_unifyfs_key(key, key_len);
 	}
 			gettimeofday(&metaend, NULL);
 			metatime+=1000000*(metaend.tv_sec-metastart.tv_sec)+metaend.tv_usec-metastart.tv_usec;

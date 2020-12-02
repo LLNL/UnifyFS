@@ -1,12 +1,13 @@
 language: c
-sudo: required
-dist: xenial
+dist: bionic
+os: linux
 
 addons:
   apt:
     update: true
     packages:
       - autoconf
+      - autoconf-archive
       - automake
       - build-essential
       - cmake
@@ -26,38 +27,48 @@ before_install:
   - |
     test -f $HOME/spack/etc/spack/packages.yaml || cat > $HOME/spack/etc/spack/packages.yaml << '  EOF'
     packages:
+      all:
+        target: [x86_64]
+        providers:
+            mpi: [openmpi]
       autoconf:
         buildable: False
-        paths:
-          autoconf@2.69: /usr
+        externals:
+        - spec: "autoconf@2.69"
+          prefix: /usr
       automake:
         buildable: False
-        paths:
-          automake@1.15: /usr
+        externals:
+        - spec: "automake@1.15.1"
+          prefix: /usr
       cmake:
         buildable: False
-        paths:
-            cmake@3.12.4: /usr/local/cmake-3.12.4
+        externals:
+        - spec: "cmake@3.12.4"
+          prefix: /usr/local/cmake-3.12.4
       libtool:
         buildable: False
-        paths:
-          libtool@2.4.6: /usr
+        externals:
+        - spec: "libtool@2.4.6"
+          prefix: /usr
       m4:
         buildable: False
-        paths:
-          m4@4.17: /usr
+        externals:
+        - spec: "m4@1.4.18"
+          prefix: /usr
+      openmpi:
+        buildable: False
+        externals:
+        - spec: "openmpi@2.1.1"
+          prefix: /usr
     EOF
 
 install:
-  - $HOME/spack/bin/spack install environment-modules
   - . $HOME/spack/share/spack/setup-env.sh
-  - spack install leveldb
-  - spack install gotcha@0.0.2
-  - spack install flatcc
-  - spack install margo^mercury+bmi~boostsys
+  - spack install gotcha@1.0.3 && spack load gotcha@1.0.3
+  - spack install margo^mercury@1.0.1+bmi~ofi~boostsys && spack load argobots && spack load mercury && spack load margo
+  - spack install spath && spack load spath
   # prepare build environment
-  - spack load environment-modules
-  - source <(spack module tcl loads leveldb gotcha@0.0.2 flatcc mercury argobots margo)
   - eval $(./scripts/git_log_test_env.sh)
   - export TEST_CHECKPATCH_SKIP_FILES
 
@@ -72,9 +83,10 @@ before_cache:
 script:
   # Force git to update the shallow clone and include tags so git-describe works
   - git fetch --unshallow --tags
-  - sh autogen.sh
-  - ./configure --enable-fortran || cat config.log
-  - make -k && make distcheck
+  - export DISTCHECK_CONFIGURE_FLAGS="--enable-fortran"
+  - ./autogen.sh
+  - ./configure $DISTCHECK_CONFIGURE_FLAGS || cat config.log
+  - make distcheck
   - ./scripts/checkpatch.sh || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
 
 after_failure:

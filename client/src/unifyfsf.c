@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017-2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -94,6 +94,11 @@ static int unifyfs_fstr2cstr(const char* fstr, int flen, char* cstr, int clen)
     return rc;
 }
 
+/*
+ * Marking unifyfs_cstr2fstr() with an '#if 0' block, since this function
+ * isn't used yet.
+ */
+#if 0
 /* convert a C string to a Fortran string, adding trailing spaces
  * as necessary */
 static int unifyfs_cstr2fstr(const char* cstr, char* fstr, int flen)
@@ -128,6 +133,7 @@ static int unifyfs_cstr2fstr(const char* cstr, char* fstr, int flen)
 
     return rc;
 }
+#endif
 
 /*================================================
  * Mount, Unmount
