@@ -47,16 +47,16 @@ $ prove -v RUN_CI_TESTS.sh
 
 In order to run individual tests, source the `001-setup.sh` script first,
 followed by `002-start-server.sh`. Then source each desired script after that
-preceded by `$CI_DIR`. When finished, source the `990-stop-server.sh` script
-last.
+preceded by `$UNIFYFS_CI_DIR`. When finished, source the `990-stop-server.sh`
+script last.
 
 E.g.:
 
 ```shell
-$ . full/path/to/001-setup.sh
-$ . $CI_DIR/002-start-server.sh
-$ . $CI_DIR/100-writeread-tests.sh
-$ . $CI_DIR/990-stop-server.sh
+$ . ./001-setup.sh
+$ . $UNIFYFS_CI_DIR/002-start-server.sh
+$ . $UNIFYFS_CI_DIR/100-writeread-tests.sh
+$ . $UNIFYFS_CI_DIR/990-stop-server.sh
 ```
 
 If additional tests are desired, create a script after the fashion of

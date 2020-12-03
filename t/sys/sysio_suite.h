@@ -45,4 +45,29 @@ int open_test(char* unifyfs_root);
 /* Tests for UNIFYFS_WRAP(open64) */
 int open64_test(char* unifyfs_root);
 
+/* Tests for UNIFYFS_WRAP(lseek) */
+int lseek_test(char* unifyfs_root);
+
+int write_read_test(char* unifyfs_root);
+
+int write_pre_existing_file_test(char* unifyfs_root);
+
+/* test reading from file with holes */
+int write_read_hole_test(char* unifyfs_root);
+
+/* Tests for UNIFYFS_WRAP(ftruncate) and UNIFYFS_WRAP(truncate) */
+int truncate_test(char* unifyfs_root);
+int truncate_bigempty(char* unifyfs_root);
+int truncate_eof(char* unifyfs_root);
+int truncate_truncsync(char* unifyfs_root);
+int truncate_pattern_size(char* unifyfs_root, int pos);
+int truncate_empty_read(char* unifyfs_root, int pos);
+int truncate_ftrunc_before_sync(char* unifyfs_root);
+int truncate_trunc_before_sync(char* unifyfs_root);
+
+/* Test for UNIFYFS_WRAP(unlink) */
+int unlink_test(char* unifyfs_root);
+
+int chdir_test(char* unifyfs_root);
+
 #endif /* SYSIO_SUITE_H */

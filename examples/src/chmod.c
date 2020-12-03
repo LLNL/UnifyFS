@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -10,7 +10,9 @@
  * This is the license for UnifyFS.
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
- *
+ */
+
+/*
  * Test chmod() and fchmod()
  *
  * Test description:
@@ -23,6 +25,7 @@
  * 7. Laminate it using fchmod()
  * 8. Check file is laminated after
  */
+
 #include "testutil.h"
 
 int do_test(test_cfg* cfg)
@@ -32,7 +35,9 @@ int do_test(test_cfg* cfg)
     int fd;
 
     file = mktemp_cmd(cfg, "/unifyfs");
-    assert(file);
+    if (NULL == file) {
+        return ENOMEM;
+    }
 
     test_print(cfg, "Create empty file %s", file);
     test_print(cfg, "Before lamination stat() is:");
@@ -87,9 +92,14 @@ int main(int argc, char* argv[])
         fflush(NULL);
         return rc;
     }
-    do_test(cfg);
+
+    rc = do_test(cfg);
+    if (rc) {
+        test_print(cfg, "ERROR - Test %s failed! rc=%d", argv[0], rc);
+        fflush(NULL);
+    }
 
     test_fini(cfg);
 
-    return 0;
+    return rc;
 }

@@ -10,8 +10,8 @@
 # Returns the unique hosts being used on LSF, exluding the launch host.
 get_lsf_hosts()
 {
-    # NOTE: There's potential that some versions of LSF may change to where
-    # they put the user on the first compute node rather than a launch node.
+    # NOTE: It's possible that some systems with LSF may place the user on the
+    # first compute node rather than a launch node.
     local l_hosts=$(uniq $LSB_DJOB_HOSTFILE | tail -n +2)
     echo $l_hosts
 }
@@ -33,31 +33,31 @@ get_hostlist()
 nnodes=$(get_lsf_hosts | wc -w)
 
 # Define each resource set
-nprocs=${CI_NPROCS:-$nnodes}
-ncores=${CI_NCORES:-20}
+nprocs=${UNIFYFS_CI_NPROCS:-1}
+ncores=${UNIFYFS_CI_NCORES:-20}
 
 # Total resource sets and how many per host
-nrs_per_node=${CI_NRS_PER_NODE:-1}
-nres_sets=${CI_NRES_SETS:-$(($nnodes * $nrs_per_node))}
+nrs_per_node=${UNIFYFS_CI_NRS_PER_NODE:-1}
+nres_sets=${UNIFYFS_CI_NRES_SETS:-$(($nnodes * $nrs_per_node))}
 
 if [[ $ncores -gt 20 ]]; then
-    echo >&2 "$errmsg Number of cores-per-resource-set (\$CI_NCORES=$ncores)" \
-        "needs to be <= 20."
+    echo >&2 "$errmsg Number of cores-per-resource-set" \
+             "(\$UNIFYFS_CI_NCORES=$ncores) needs to be <= 20."
     exit 1
 fi
 
 if (($nres_sets % $nrs_per_node)); then
     echo >&2 "$errmsg Total number of resource sets ($nres_sets) must be" \
         "divisible by resource-sets-per-node ($nrs_per_node). Set" \
-        "\$CI_NRES_SETS and/or \$CI_NRS_PER_NODE accordingly."
+        "\$UNIFYFS_CI_NRES_SETS and/or \$UNIFYFS_CI_NRS_PER_NODE accordingly."
     exit 1
 fi
 
 if [ $(($nrs_per_node * $ncores)) -gt 40 ]; then
     echo >&2 "$errmsg Number of cores-per-resource-set ($ncores) *"\
         "resource-sets-per-node ($nrs_per_node) = $(($nrs_per_node*$ncores))" \
-        "needs to be <= 40. Set \$CI_NCORES and/or \$CI_NRS_PER_NODE" \
-        "accordingly."
+        "needs to be <= 40. Set \$UNIFYFS_CI_NCORES and/or" \
+        "\$UNIFYFS_CI_NRS_PER_NODE accordingly."
     exit 1
 fi
 

@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -15,6 +15,7 @@
 #include "unifyfs_const.h"
 #include "unifyfs_keyval.h"
 #include "unifyfs_log.h"
+#include "unifyfs_misc.h"
 
 //#include "config.h"
 
@@ -33,11 +34,10 @@
 #include <sys/stat.h>
 
 // UnifyFS keys
-const char* key_runstate           = "unifyfs.runstate";
-const char* key_unifyfsd_socket    = "unifyfsd.socket";
-const char* key_unifyfsd_margo_shm = "unifyfsd.margo-shm";
-const char* key_unifyfsd_margo_svr = "unifyfsd.margo-svr";
-const char* key_unifyfsd_mpi_rank  = "unifyfsd.mpi-rank";
+const char* const key_unifyfsd_socket    = "unifyfsd.socket";
+const char* const key_unifyfsd_margo_shm = "unifyfsd.margo-shm";
+const char* const key_unifyfsd_margo_svr = "unifyfsd.margo-svr";
+const char* const key_unifyfsd_pmi_rank  = "unifyfsd.pmi-rank";
 
 // key-value store state
 static int kv_initialized; // = 0
@@ -143,7 +143,7 @@ static int unifyfs_pmi2_init(void)
         if (rc != PMI2_SUCCESS) {
             unifyfs_pmi2_errstr(rc);
             LOGERR("PMI2_Init() failed: %s", pmi2_errstr);
-            return (int)UNIFYFS_FAILURE;
+            return (int)UNIFYFS_ERROR_PMI;
         }
         pmi_world_rank = rank;
         pmi_world_nprocs = nprocs;
@@ -155,7 +155,7 @@ static int unifyfs_pmi2_init(void)
         if (rc != PMI2_SUCCESS) {
             unifyfs_pmi2_errstr(rc);
             LOGERR("PMI2_Job_GetRank() failed: %s", pmi2_errstr);
-            return (int)UNIFYFS_FAILURE;
+            return (int)UNIFYFS_ERROR_PMI;
         } else {
             pmi_world_rank = rank;
         }
@@ -185,7 +185,7 @@ static int unifyfs_pmi2_init(void)
     if (rc != PMI2_SUCCESS) {
         unifyfs_pmi2_errstr(rc);
         LOGERR("PMI2_Job_GetId() failed: %s", pmi2_errstr);
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_PMI;
     }
 
     kv_myrank = pmi_world_rank;
@@ -209,7 +209,7 @@ static int unifyfs_pmi2_fini(void)
         if (rc != PMI2_SUCCESS) {
             unifyfs_pmi2_errstr(rc);
             LOGERR("PMI2_Finalize() failed: %s", pmi2_errstr);
-            return (int)UNIFYFS_FAILURE;
+            return (int)UNIFYFS_ERROR_PMI;
         }
         pmi2_need_finalize = 0;
         pmi2_initialized = 0;
@@ -227,7 +227,7 @@ static int unifyfs_pmi2_lookup(const char* key,
     char pmi2_val[PMI2_MAX_VALLEN] = {0};
 
     if (!pmi2_initialized) {
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_PMI;
     }
 
     strncpy(pmi2_key, key, sizeof(pmi2_key));
@@ -237,7 +237,7 @@ static int unifyfs_pmi2_lookup(const char* key,
     if (rc != PMI2_SUCCESS) {
         unifyfs_pmi2_errstr(rc);
         LOGERR("PMI2_KVS_Get(%s) failed: %s", key, pmi2_errstr);
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_PMI;
     }
     *oval = strdup(pmi2_val);
     return (int)UNIFYFS_SUCCESS;
@@ -252,7 +252,7 @@ static int unifyfs_pmi2_publish(const char* key,
     char pmi2_val[PMI2_MAX_VALLEN] = {0};
 
     if (!pmi2_initialized) {
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_PMI;
     }
 
     strncpy(pmi2_key, key, sizeof(pmi2_key));
@@ -261,13 +261,20 @@ static int unifyfs_pmi2_publish(const char* key,
     if (rc != PMI2_SUCCESS) {
         unifyfs_pmi2_errstr(rc);
         LOGERR("PMI2_KVS_Put(%s) failed: %s", key, pmi2_errstr);
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_PMI;
     }
-    rc = PMI2_KVS_Fence();
+    return (int)UNIFYFS_SUCCESS;
+}
+
+static int unifyfs_pmi2_fence(void)
+{
+    /* PMI2_KVS_Fence() is a collective barrier that ensures
+     * all previous KVS_Put()s are visible */
+    int rc = PMI2_KVS_Fence();
     if (rc != PMI2_SUCCESS) {
         unifyfs_pmi2_errstr(rc);
         LOGERR("PMI2_KVS_Fence() failed: %s", pmi2_errstr);
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_PMI;
     }
     return (int)UNIFYFS_SUCCESS;
 }
@@ -300,7 +307,7 @@ static int unifyfs_pmix_init(void)
     rc = PMIx_Init(&pmix_myproc, NULL, 0);
     if (rc != PMIX_SUCCESS) {
         LOGERR("PMIx_Init() failed: %s", PMIx_Error_string(rc));
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_PMI;
     }
 
     kv_max_keylen = PMIX_MAX_KEYLEN;
@@ -314,7 +321,7 @@ static int unifyfs_pmix_init(void)
     if (rc != PMIX_SUCCESS) {
         LOGERR("PMIx rank %d: PMIx_Get(UNIV_SIZE) failed: %s",
                pmix_myproc.rank, PMIx_Error_string(rc));
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_PMI;
     }
     pmix_univ_nprocs = (size_t) valp->data.uint32;
 
@@ -358,7 +365,7 @@ static int unifyfs_pmix_fini(void)
     if (rc != PMIX_SUCCESS) {
         LOGERR("PMIx rank %d: PMIx_Finalize() failed: %s",
                pmix_myproc.rank, PMIx_Error_string(rc));
-        rc = (int) UNIFYFS_FAILURE;
+        rc = (int) UNIFYFS_ERROR_PMI;
     } else {
         PMIX_PROC_DESTRUCT(&pmix_myproc);
         pmix_initialized = 0;
@@ -378,7 +385,7 @@ static int unifyfs_pmix_lookup(const char* key,
     char pmix_key[PMIX_MAX_KEYLEN+1];
 
     if (!pmix_initialized) {
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_PMI;
     }
 
     /* set key to lookup */
@@ -400,7 +407,7 @@ static int unifyfs_pmix_lookup(const char* key,
         LOGERR("PMIx rank %d: PMIx_Lookup(%s) failed: %s",
                pmix_myproc.rank, pmix_key, PMIx_Error_string(rc));
         *oval = NULL;
-        rc = (int)UNIFYFS_FAILURE;
+        rc = (int)UNIFYFS_ERROR_PMI;
     } else {
         if (pdata[0].value.data.string != NULL) {
             *oval = strdup(pdata[0].value.data.string);
@@ -409,7 +416,7 @@ static int unifyfs_pmix_lookup(const char* key,
             LOGERR("PMIx rank %d: PMIx_Lookup(%s) returned NULL string",
                    pmix_myproc.rank, pmix_key);
             *oval = NULL;
-            rc = (int)UNIFYFS_FAILURE;
+            rc = (int)UNIFYFS_ERROR_PMI;
         }
     }
     /* cleanup */
@@ -429,7 +436,7 @@ static int unifyfs_pmix_publish(const char* key,
     char pmix_key[PMIX_MAX_KEYLEN+1];
 
     if (!pmix_initialized) {
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_PMI;
     }
 
     /* set key-val and modify publish behavior */
@@ -445,12 +452,26 @@ static int unifyfs_pmix_publish(const char* key,
     if (rc != PMIX_SUCCESS) {
         LOGERR("PMIx rank %d: PMIx_Publish failed: %s",
                pmix_myproc.rank, PMIx_Error_string(rc));
-        rc = (int)UNIFYFS_FAILURE;
+        rc = (int)UNIFYFS_ERROR_PMI;
     } else {
         rc = (int)UNIFYFS_SUCCESS;
     }
     /* cleanup */
     PMIX_INFO_FREE(info, ninfo);
+    return rc;
+}
+
+static int unifyfs_pmix_fence(void)
+{
+    // PMIx_Fence is a collective barrier across all processes in my namespace
+    int rc = PMIx_Fence(NULL, 0, NULL, 0);
+    if (rc != PMIX_SUCCESS) {
+        LOGERR("PMIx rank %d: PMIx_Fence failed: %s",
+               pmix_myproc.rank, PMIx_Error_string(rc));
+        rc = (int)UNIFYFS_ERROR_PMI;
+    } else {
+        rc = (int)UNIFYFS_SUCCESS;
+    }
     return rc;
 }
 
@@ -472,7 +493,7 @@ static int unifyfs_fskv_init(unifyfs_cfg_t* cfg)
 
     if (NULL == cfg) {
         LOGERR("NULL config");
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     memset(localfs_kvdir, 0, sizeof(localfs_kvdir));
@@ -482,7 +503,7 @@ static int unifyfs_fskv_init(unifyfs_cfg_t* cfg)
     // find or create local kvstore directory
     if (NULL == cfg->runstate_dir) {
         LOGERR("local file system k-v store requires cfg.runstate_dir");
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_BADCONFIG;
     }
     snprintf(localfs_kvdir, sizeof(localfs_kvdir), "%s/kvstore",
                 cfg->runstate_dir);
@@ -496,11 +517,11 @@ static int unifyfs_fskv_init(unifyfs_cfg_t* cfg)
             if ((rc != 0) && (err != EEXIST)) {
                 LOGERR("failed to create local kvstore directory %s - %s",
                     localfs_kvdir, strerror(err));
-                return (int)UNIFYFS_FAILURE;
+                return (int)UNIFYFS_ERROR_KEYVAL;
             }
         } else {
             LOGERR("missing local kvstore directory %s", localfs_kvdir);
-            return (int)UNIFYFS_FAILURE;
+            return (int)UNIFYFS_ERROR_KEYVAL;
         }
     }
 
@@ -517,12 +538,12 @@ static int unifyfs_fskv_init(unifyfs_cfg_t* cfg)
             if ((rc != 0) && (err != EEXIST)) {
                 LOGERR("failed to create kvstore directory %s - %s",
                        sharedfs_kvdir, strerror(err));
-                return (int)UNIFYFS_FAILURE;
+                return (int)UNIFYFS_ERROR_KEYVAL;
             }
         }
 
         // find or create rank-specific subdir
-        snprintf(sharedfs_rank_kvdir, sizeof(sharedfs_rank_kvdir), "%s/%d",
+        scnprintf(sharedfs_rank_kvdir, sizeof(sharedfs_rank_kvdir), "%s/%d",
                  sharedfs_kvdir, kv_myrank);
         memset(&s, 0, sizeof(struct stat));
         rc = stat(sharedfs_rank_kvdir, &s);
@@ -533,7 +554,7 @@ static int unifyfs_fskv_init(unifyfs_cfg_t* cfg)
             if ((rc != 0) && (err != EEXIST)) {
                 LOGERR("failed to create rank kvstore directory %s - %s",
                        sharedfs_rank_kvdir, strerror(err));
-                return (int)UNIFYFS_FAILURE;
+                return (int)UNIFYFS_ERROR_KEYVAL;
             }
         }
         have_sharedfs_kvstore = 1;
@@ -562,7 +583,7 @@ static int unifyfs_fskv_fini(void)
         DIR* lkv = opendir(localfs_kvdir);
         if (NULL == lkv) {
             LOGERR("failed to opendir(%s)", localfs_kvdir);
-            return (int)UNIFYFS_FAILURE;
+            return (int)UNIFYFS_ERROR_KEYVAL;
         }
         while (NULL != (de = readdir(lkv))) {
             if ((0 == strcmp(".", de->d_name)) ||
@@ -570,7 +591,7 @@ static int unifyfs_fskv_fini(void)
                 continue;
             }
             memset(kvfile, 0, sizeof(kvfile));
-            snprintf(kvfile, sizeof(kvfile), "%s/%s",
+            scnprintf(kvfile, sizeof(kvfile), "%s/%s",
                      localfs_kvdir, de->d_name);
             rc = remove(kvfile);
             if (rc != 0) {
@@ -585,7 +606,7 @@ static int unifyfs_fskv_fini(void)
         if (rc != 0) {
             LOGERR("failed to remove local kvstore dir %s",
                    sharedfs_rank_kvdir);
-            return (int)UNIFYFS_FAILURE;
+            return (int)UNIFYFS_ERROR_KEYVAL;
         }
     }
 
@@ -599,7 +620,7 @@ static int unifyfs_fskv_fini(void)
             DIR* rkv = opendir(sharedfs_rank_kvdir);
             if (NULL == rkv) {
                 LOGERR("failed to opendir(%s)", sharedfs_rank_kvdir);
-                return (int)UNIFYFS_FAILURE;
+                return (int)UNIFYFS_ERROR_KEYVAL;
             }
             while (NULL != (de = readdir(rkv))) {
                 if ((0 == strcmp(".", de->d_name)) ||
@@ -607,7 +628,7 @@ static int unifyfs_fskv_fini(void)
                     continue;
                 }
                 memset(rank_kvfile, 0, sizeof(rank_kvfile));
-                snprintf(rank_kvfile, sizeof(rank_kvfile), "%s/%s",
+                scnprintf(rank_kvfile, sizeof(rank_kvfile), "%s/%s",
                         sharedfs_rank_kvdir, de->d_name);
                 rc = remove(rank_kvfile);
                 if (rc != 0) {
@@ -622,7 +643,7 @@ static int unifyfs_fskv_fini(void)
             if (rc != 0) {
                 LOGERR("failed to remove rank-specific kvstore dir %s",
                     sharedfs_rank_kvdir);
-                return (int)UNIFYFS_FAILURE;
+                return (int)UNIFYFS_ERROR_KEYVAL;
             }
         }
 
@@ -635,7 +656,7 @@ static int unifyfs_fskv_fini(void)
                 DIR* skv = opendir(sharedfs_kvdir);
                 if (NULL == skv) {
                     LOGERR("failed to opendir(%s)", sharedfs_kvdir);
-                    return (int)UNIFYFS_FAILURE;
+                    return (int)UNIFYFS_ERROR_KEYVAL;
                 }
                 while (NULL != (de = readdir(skv))) {
                     if ((0 == strcmp(".", de->d_name)) ||
@@ -651,7 +672,7 @@ static int unifyfs_fskv_fini(void)
                     if (rc != 0) {
                         LOGERR("failed to remove sharedfs kvstore dir %s",
                                sharedfs_kvdir);
-                        return (int)UNIFYFS_FAILURE;
+                        return (int)UNIFYFS_ERROR_KEYVAL;
                     }
                 }
             }
@@ -667,17 +688,22 @@ static int unifyfs_fskv_lookup_local(const char* key,
     FILE* kvf;
     char kvfile[UNIFYFS_MAX_FILENAME];
     char kvalue[kv_max_vallen];
+    int rc;
 
-    snprintf(kvfile, sizeof(kvfile), "%s/%s",
+    scnprintf(kvfile, sizeof(kvfile), "%s/%s",
              localfs_kvdir, key);
     kvf = fopen(kvfile, "r");
     if (NULL == kvf) {
         LOGERR("failed to open kvstore entry %s", kvfile);
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_KEYVAL;
     }
     memset(kvalue, 0, sizeof(kvalue));
-    fscanf(kvf, "%s\n", kvalue);
+    rc = fscanf(kvf, "%s\n", kvalue);
     fclose(kvf);
+    if (rc != 1) {
+        *oval = NULL;
+        return (int)UNIFYFS_FAILURE;
+    }
 
     *oval = strdup(kvalue);
     return (int)UNIFYFS_SUCCESS;
@@ -690,21 +716,27 @@ static int unifyfs_fskv_lookup_remote(int rank,
     FILE* kvf;
     char rank_kvfile[UNIFYFS_MAX_FILENAME];
     char kvalue[kv_max_vallen];
+    int rc;
 
     if (!have_sharedfs_kvstore) {
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_KEYVAL;
     }
 
-    snprintf(rank_kvfile, sizeof(rank_kvfile), "%s/%d/%s",
+    scnprintf(rank_kvfile, sizeof(rank_kvfile), "%s/%d/%s",
              sharedfs_kvdir, rank, key);
     kvf = fopen(rank_kvfile, "r");
     if (NULL == kvf) {
         LOGERR("failed to open kvstore entry %s", rank_kvfile);
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_KEYVAL;
     }
     memset(kvalue, 0, sizeof(kvalue));
-    fscanf(kvf, "%s\n", kvalue);
+    rc = fscanf(kvf, "%s\n", kvalue);
     fclose(kvf);
+
+    if (rc != 1) {
+        *oval = NULL;
+        return (int)UNIFYFS_FAILURE;
+    }
 
     *oval = strdup(kvalue);
     return (int)UNIFYFS_SUCCESS;
@@ -717,12 +749,12 @@ static int unifyfs_fskv_publish_local(const char* key,
     FILE* kvf;
     char kvfile[UNIFYFS_MAX_FILENAME];
 
-    snprintf(kvfile, sizeof(kvfile), "%s/%s",
+    scnprintf(kvfile, sizeof(kvfile), "%s/%s",
              localfs_kvdir, key);
     kvf = fopen(kvfile, "w");
     if (NULL == kvf) {
         LOGERR("failed to create kvstore entry %s", kvfile);
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_KEYVAL;
     }
     fprintf(kvf, "%s\n", val);
     fclose(kvf);
@@ -737,18 +769,34 @@ static int unifyfs_fskv_publish_remote(const char* key,
     char rank_kvfile[UNIFYFS_MAX_FILENAME];
 
     if (!have_sharedfs_kvstore) {
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_KEYVAL;
     }
 
-    snprintf(rank_kvfile, sizeof(rank_kvfile), "%s/%s",
+    scnprintf(rank_kvfile, sizeof(rank_kvfile), "%s/%s",
              sharedfs_rank_kvdir, key);
     kvf = fopen(rank_kvfile, "w");
     if (NULL == kvf) {
         LOGERR("failed to create kvstore entry %s", rank_kvfile);
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_KEYVAL;
     }
     fprintf(kvf, "%s\n", val);
     fclose(kvf);
+
+    return (int)UNIFYFS_SUCCESS;
+}
+
+static int unifyfs_fskv_fence(void)
+{
+    if (!have_sharedfs_kvstore) {
+        return (int)UNIFYFS_ERROR_KEYVAL;
+    }
+
+    if (1 == kv_nranks) {
+        return (int)UNIFYFS_SUCCESS;
+    }
+
+    // TODO - use a file as a counting semaphore??
+    sleep(10);
 
     return (int)UNIFYFS_SUCCESS;
 }
@@ -836,11 +884,11 @@ int unifyfs_keyval_fini(void)
 int unifyfs_keyval_lookup_local(const char* key,
                                 char** oval)
 {
-    int rc = UNIFYFS_FAILURE;
+    int rc;
 
     if ((NULL == key) || (NULL == oval)) {
         LOGERR("NULL parameter");
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     if (!kv_initialized) {
@@ -854,7 +902,7 @@ int unifyfs_keyval_lookup_local(const char* key,
     if (len >= (kv_max_keylen - 1)) {
         LOGERR("length of key (%zd) exceeds max %zd",
                len, kv_max_keylen);
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     // do the lookup
@@ -870,11 +918,11 @@ int unifyfs_keyval_lookup_remote(int rank,
                                  const char* key,
                                  char** oval)
 {
-    int rc = UNIFYFS_FAILURE;
+    int rc;
 
     if ((NULL == key) || (NULL == oval)) {
         LOGERR("NULL parameter");
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     if (!kv_initialized) {
@@ -889,7 +937,7 @@ int unifyfs_keyval_lookup_remote(int rank,
     if (len >= (kv_max_keylen - 1)) {
         LOGERR("length of key (%zd) exceeds max %zd",
                len, kv_max_keylen);
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     // generate full key, which includes remote host
@@ -902,6 +950,8 @@ int unifyfs_keyval_lookup_remote(int rank,
     rc = unifyfs_pmix_lookup(rank_key, oval);
 #elif defined(USE_PMI2)
     rc = unifyfs_pmi2_lookup(rank_key, oval);
+#else
+    rc = (int)UNIFYFS_FAILURE;
 #endif
     if (rc != (int)UNIFYFS_SUCCESS) {
         rc = unifyfs_fskv_lookup_remote(rank, key, oval);
@@ -916,29 +966,29 @@ int unifyfs_keyval_lookup_remote(int rank,
 int unifyfs_keyval_publish_local(const char* key,
                                  const char* val)
 {
-    int rc = UNIFYFS_FAILURE;
+    int rc;
 
     if (!kv_initialized) {
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_KEYVAL;
     }
 
     if ((key == NULL) || (val == NULL)) {
         LOGERR("NULL key or value");
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     size_t len = strlen(key);
     if (len >= (kv_max_keylen - 1)) {
         LOGERR("length of key (%zd) exceeds max %zd",
                len, kv_max_keylen);
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     len = strlen(val);
     if (len >= kv_max_vallen) {
         LOGERR("length of val (%zd) exceeds max %zd",
                len, kv_max_vallen);
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     // publish it
@@ -955,15 +1005,15 @@ int unifyfs_keyval_publish_local(const char* key,
 int unifyfs_keyval_publish_remote(const char* key,
                                   const char* val)
 {
-    int rc = UNIFYFS_FAILURE;
+    int rc;
 
     if (!kv_initialized) {
-        return (int)UNIFYFS_FAILURE;
+        return (int)UNIFYFS_ERROR_KEYVAL;
     }
 
     if ((key == NULL) || (val == NULL)) {
         LOGERR("NULL key or value");
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     // NOTE: assumes rank value fits in 10 characters
@@ -971,7 +1021,7 @@ int unifyfs_keyval_publish_remote(const char* key,
     if (len >= (kv_max_keylen - 1)) {
         LOGERR("length of key (%zd) exceeds max %zd",
                len, kv_max_keylen);
-        return (int)UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     // generate full key, which includes remote host
@@ -980,10 +1030,12 @@ int unifyfs_keyval_publish_remote(const char* key,
     snprintf(rank_key, sizeof(rank_key), "%d.%s", kv_myrank, key);
 
     // publish it
- #if defined(USE_PMIX)
+#if defined(USE_PMIX)
     rc = unifyfs_pmix_publish(rank_key, val);
 #elif defined(USE_PMI2)
     rc = unifyfs_pmi2_publish(rank_key, val);
+#else
+    rc = (int)UNIFYFS_FAILURE;
 #endif
     if (rc != (int)UNIFYFS_SUCCESS) {
         rc = unifyfs_fskv_publish_remote(key, val);
@@ -994,5 +1046,19 @@ int unifyfs_keyval_publish_remote(const char* key,
     } else {
         kv_published = 1;
     }
+    return rc;
+}
+
+// block until a particular key-value pair published by all servers
+int unifyfs_keyval_fence_remote(void)
+{
+    int rc;
+#if defined(USE_PMIX)
+    rc = unifyfs_pmix_fence();
+#elif defined(USE_PMI2)
+    rc = unifyfs_pmi2_fence();
+#else
+    rc = unifyfs_fskv_fence();
+#endif
     return rc;
 }

@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -29,11 +29,15 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+
 #include "unifyfs_log.h"
 #include "unifyfs_const.h"
 
 /* one of the loglevel values */
-unifyfs_log_level_t unifyfs_log_level = 5;
+unifyfs_log_level_t unifyfs_log_level = LOG_ERR;
 
 /* pointer to log file stream */
 FILE* unifyfs_log_stream; // = NULL
@@ -43,11 +47,12 @@ time_t unifyfs_log_time;
 struct tm* unifyfs_log_ltime;
 char unifyfs_log_timestamp[256];
 
-/* used to reduce source file name length */
+/* used to reduce source file pathname length */
 size_t unifyfs_log_source_base_len; // = 0
 static const char* this_file = __FILE__;
 
 /* open specified file as log file stream,
+ * or stderr if no file given.
  * returns UNIFYFS_SUCCESS on success */
 int unifyfs_log_open(const char* file)
 {
@@ -59,30 +64,55 @@ int unifyfs_log_open(const char* file)
         }
     }
 
-    FILE* logf = fopen(file, "a");
-    if (logf == NULL) {
-        /* failed to open file name, fall back to stderr */
+    if (NULL == unifyfs_log_stream) {
+        /* stderr is the default log stream */
         unifyfs_log_stream = stderr;
-        return (int)UNIFYFS_ERROR_DBG;
-    } else {
-        unifyfs_log_stream = logf;
-        return UNIFYFS_SUCCESS;
     }
+
+    if (NULL != file) {
+        FILE* logf = fopen(file, "a");
+        if (logf == NULL) {
+            return ENOENT;
+        } else {
+            unifyfs_log_stream = logf;
+        }
+    }
+
+    return (int)UNIFYFS_SUCCESS;
 }
 
-/* close our log file stream,
+/* close our log file stream.
  * returns UNIFYFS_SUCCESS on success */
 int unifyfs_log_close(void)
 {
-    if (unifyfs_log_stream == NULL) {
-        /* nothing to close */
-        return (int)UNIFYFS_ERROR_DBG;
-    } else {
-        /* if stream is open, and its not stderr, close it */
-        if (unifyfs_log_stream != stderr &&
-            fclose(unifyfs_log_stream) == 0) {
-            return UNIFYFS_SUCCESS;
+    /* if stream is open, and its not stderr, close it */
+    if (NULL != unifyfs_log_stream) {
+        if (unifyfs_log_stream != stderr) {
+            fclose(unifyfs_log_stream);
+
+            /* revert to stderr for any future log messages */
+            unifyfs_log_stream = stderr;
         }
-        return (int)UNIFYFS_ERROR_DBG;
     }
+    return (int)UNIFYFS_SUCCESS;
+}
+
+/* set log level */
+void unifyfs_set_log_level(unifyfs_log_level_t lvl)
+{
+    if (lvl < LOG_LEVEL_MAX) {
+        unifyfs_log_level = lvl;
+    }
+}
+
+pid_t unifyfs_gettid(void)
+{
+#if defined(gettid)
+    return gettid();
+#elif defined(SYS_gettid)
+    return syscall(SYS_gettid);
+#else
+#error no gettid()
+#endif
+    return 0;
 }

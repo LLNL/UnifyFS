@@ -2,7 +2,7 @@ SUBDIRS = common meta server client examples extras t util
 
 CONFIG = ordered
 
-#ACLOCAL_AMFLAGS = -I m4
+ACLOCAL_AMFLAGS = -I m4
 
 pkgconfigdir = @pkgconfigdir@
 pkgconfig_DATA = client/unifyfs.pc

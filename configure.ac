@@ -1,12 +1,15 @@
-dnl 
+dnl
 dnl This file is a part of UnifyFS. Please see LICENSE for the license
 dnl information.
 dnl Process this file with autoconf to produce a configure script.
+
+AC_LANG([C])
 
 AC_INIT([unifyfs],
         m4_esyscmd([git describe --always |
                    awk '/.*/{sub(/^v/,""); printf "%s",$1; exit}']),
         [unifycr@llnl.gov])
+AC_PREREQ(2.60)
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
@@ -16,32 +19,27 @@ AM_SILENT_RULES([yes])
 
 AM_MAINTAINER_MODE([disable])
 
-LT_INIT
-
 AC_PROG_CC_STDC
 AC_PROG_AWK
 AC_PROG_CPP
 AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_PROG_MAKE_SET
-AC_PROG_RANLIB
-
 
 # fortran support
-AC_ARG_ENABLE([fortran],
-              AC_HELP_STRING([--enable-fortran],
-                             [Enable fortran compatibility and features]))
+AC_ARG_ENABLE([fortran],[AS_HELP_STRING([--enable-fortran],[Enable fortran compatibility and features])])
 AC_MSG_CHECKING(if fortran is wanted )
-if test "x$enable_fortran" = "xyes"; then
-AC_MSG_RESULT(yes)
-AC_PROG_FC
-AC_FC_LIBRARY_LDFLAGS
-AC_FC_DUMMY_MAIN
-AM_CONDITIONAL([HAVE_FORTRAN], [true])
-else
-AC_MSG_RESULT(no)
-AM_CONDITIONAL([HAVE_FORTRAN], [false])
-fi
+AS_IF([test "x$enable_fortran" = "xyes"],[
+    AC_MSG_RESULT(yes)
+    AC_PROG_FC
+    AM_CONDITIONAL([HAVE_FORTRAN], [true])
+],[
+    AC_MSG_RESULT(no)
+    AM_CONDITIONAL([HAVE_FORTRAN], [false])
+])
+
+dnl Need to do Fortran checks before initializing LIBTOOL
+LT_INIT
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_MODE_T
@@ -62,12 +60,11 @@ AC_CHECK_MEMBERS([struct stat.st_rdev])
 AC_CHECK_TYPES([ptrdiff_t])
 
 # Checks for header files.
-AC_CHECK_HEADERS([fcntl.h limits.h stdlib.h string.h sys/socket.h sys/time.h])
-AC_CHECK_HEADERS([unistd.h arpa/inet.h inttypes.h netdb.h netinet/in.h])
-AC_CHECK_HEADERS([stddef.h stdint.h libgen.h strings.h syslog.h])
-AC_CHECK_HEADERS([inttypes.h wchar.h wctype.h])
-AC_CHECK_HEADER([openssl/md5.h], [], [AC_MSG_FAILURE([
-        *** openssl/md5.h missing, openssl-devel package required])])
+AC_CHECK_HEADERS([stddef.h stdint.h stdlib.h string.h unistd.h])
+AC_CHECK_HEADERS([fcntl.h inttypes.h libgen.h limits.h mntent.h strings.h syslog.h])
+AC_CHECK_HEADERS([wchar.h wctype.h])
+AC_CHECK_HEADERS([sys/mount.h sys/socket.h sys/statfs.h sys/time.h])
+AC_CHECK_HEADERS([arpa/inet.h netdb.h netinet/in.h])
 
 # Checks for library functions.
 AC_FUNC_MALLOC
@@ -79,69 +76,103 @@ AC_CHECK_FUNCS([gethostbyname strcasecmp strdup strerror strncasecmp strrchr])
 AC_CHECK_FUNCS([gethostname strstr strtoumax strtol uname posix_fallocate])
 
 # PMPI Init/Fini mount/unmount option
-AC_ARG_ENABLE([mpi-mount],
-              AC_HELP_STRING([--enable-mpi-mount],
-                             [Enable transparent mount/unmount at MPI_Init/Finalize.]))
-if test "x$enable_mpi_mount" = "xyes"; then
-AM_CONDITIONAL([USE_PMPI_WRAPPERS], [true])
-else
-AM_CONDITIONAL([USE_PMPI_WRAPPERS], [false])
-fi
+AC_ARG_ENABLE([mpi-mount],[AS_HELP_STRING([--enable-mpi-mount],[Enable transparent mount/unmount at MPI_Init/Finalize.])])
+AS_IF([test "x$enable_mpi_mount" = "xyes"],[
+    AM_CONDITIONAL([USE_PMPI_WRAPPERS], [true])
+],[
+    AM_CONDITIONAL([USE_PMPI_WRAPPERS], [false])
+])
 
 # PMIx support build option
-AC_ARG_ENABLE([pmix],
-              AC_HELP_STRING([--enable-pmix],
-                             [Enable PMIx build options.]))
-if test "x$enable_pmix" = "xyes"; then
-AC_CHECK_HEADERS([pmix.h],
-                 [AM_CONDITIONAL([USE_PMIX], [true])],
-                 [AM_CONDITIONAL([USE_PMIX], [false])])
-else
-AM_CONDITIONAL([USE_PMIX], [false])
-fi
+AC_ARG_ENABLE([pmix],[AS_HELP_STRING([--enable-pmix],[Enable PMIx build options.])])
+AS_IF([test "x$enable_pmix" = "xyes"],[
+    AC_CHECK_HEADERS([pmix.h],
+                     [AM_CONDITIONAL([USE_PMIX], [true])],
+                     [AM_CONDITIONAL([USE_PMIX], [false])])
+],[
+    AM_CONDITIONAL([USE_PMIX], [false])
+])
 
 # PMI2 support build option
-AC_ARG_ENABLE([pmi],
-              AC_HELP_STRING([--enable-pmi],
-                             [Enable PMI2 build options.]))
-if test "x$enable_pmi" = "xyes"; then
-AC_CHECK_HEADERS([pmi2.h],
-                 [AM_CONDITIONAL([USE_PMI2], [true])],
-                 [AM_CONDITIONAL([USE_PMI2], [false])])
-else
-AM_CONDITIONAL([USE_PMI2], [false])
-fi
+AC_ARG_ENABLE([pmi],[AS_HELP_STRING([--enable-pmi],[Enable PMI2 build options.])])
+AS_IF([test "x$enable_pmi" = "xyes"],[
+    AC_CHECK_HEADERS([pmi2.h],
+                     [AM_CONDITIONAL([USE_PMI2], [true])],
+                     [AM_CONDITIONAL([USE_PMI2], [false])])
+],[
+    AM_CONDITIONAL([USE_PMI2], [false])
+])
 
-CHECK_NUMA
+# MDHIM support build option
+AC_ARG_ENABLE([mdhim],[AS_HELP_STRING([--enable-mdhim],[Enable MDHIM build options.])])
+AS_IF([test "x$enable_mdhim" = "xyes"],[
+    AM_CONDITIONAL([USE_MDHIM], [true])
+    UNIFYFS_AC_LEVELDB
+],[
+    AM_CONDITIONAL([USE_MDHIM], [false])
+])
 
 AC_ARG_WITH(pkgconfigdir,
-            [  --with-pkgconfigdir=DIR      pkgconfig file in DIR @<:@LIBDIR/pkgconfig@:>@],
+    [AS_HELP_STRING([--with-pkgconfigdir=DIR],[pkgconfig file in DIR @<:@LIBDIR/pkgconfig@:>@])],
             [pkgconfigdir=$withval],
             [pkgconfigdir='${libdir}/pkgconfig'])
 AC_SUBST(pkgconfigdir)
 
 ## unifyfs options
-AC_ARG_ENABLE(cuserid, 
-[  --disable-cuserid       Disables attempted use of cuserid() at run time], 
-[if test "x$enableval" = "xno" ; then
-    AC_DEFINE(CRUISE_DISABLE_CUSERID, 1, Define if cuserid() should be disabled),
-fi]
+AC_ARG_ENABLE([cuserid],[AS_HELP_STRING([--disable-cuserid],[Disables attempted use of cuserid() at run time])],[
+        AS_IF([test "x$enableval" = "xno"],[
+            AC_DEFINE(CRUISE_DISABLE_CUSERID, 1, Define if cuserid() should be disabled),],[])]
 ,)
 
-AC_ARG_ENABLE(ld-preload, 
-[  --disable-ld-preload    Disables support for LD_PRELOAD library], 
-[if test "x$enableval" = "xno" ; then
-    DISABLE_LDPRELOAD="1"
-fi]
-,)
+AC_ARG_ENABLE(ld-preload,[AS_HELP_STRING([--disable-ld-preload],[Disables support for LD_PRELOAD library])],[
+        AS_IF([test "x$enableval" = "xno"],[
+            DISABLE_LDPRELOAD="1"
+        ],[])
+    ]
+,[])
 
-AC_ARG_ENABLE(st-dev-workaround, 
-[  --enable-st-dev-workaround Gather device id from parent directory instead of file], 
-[if test "x$enableval" = "xyes" ; then
-    AC_DEFINE(__CP_ST_DEV_WORKAROUND, 1, Define if device id should be taken from parent directory rather than file)
-    DISABLE_LDPRELOAD="1"
-fi]
-,)
+AC_ARG_ENABLE(st-dev-workaround,
+    [AS_HELP_STRING([--enable-st-dev-workaround],[Gather device id from parent directory instead of file])],[
+        AS_IF([test "x$enableval" = "xyes"],[
+            AC_DEFINE(__CP_ST_DEV_WORKAROUND, 1, Define if device id should be taken from parent directory rather than file)
+            DISABLE_LDPRELOAD="1"
+        ],[])
+    ]
+,[])
+
+# use mpi for bootstraping unifyfsd
+AC_ARG_ENABLE(unifyfsd-mpi,
+    [AS_HELP_STRING([--enable-unifyfsd-mpi],[Use MPI for bootstrapping unifyfsd])],[
+        AS_IF([test "x$enableval" = "xyes"],[
+            AC_DEFINE(UNIFYFSD_USE_MPI, 1, Define if unifyfsd has to use mpi for bootstrapping)],[])
+    ]
+,[])
+
+
+# look for MPI and set flags
+LX_FIND_MPI
+AS_IF([test "x$enable_fortran" = "xyes"],[
+    AC_LANG_PUSH([Fortran])
+    LX_FIND_MPI
+    AC_LANG_POP
+],[])
+
+AS_IF([test "$have_C_mpi" != "yes"],
+    AC_MSG_ERROR(["Couldn't find MPI"]),
+    []
+)
+
+# look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
+UNIFYFS_AC_GOTCHA
+
+# look for spath library, sets SPATH_CFLAGS, SPATH_LDFLAGS, SPATH_LIBS
+UNIFYFS_AC_SPATH
+
+# look for margo library, sets MARGO_CFLAGS, MARGO_LIBS
+UNIFYFS_AC_MARGO
+
+# openssl for md5 checksum
+UNIFYFS_AC_OPENSSL
 
 # checks to see how we can print 64 bit values on this architecture
 gt_INTTYPES_PRI
@@ -164,28 +195,20 @@ AC_TRY_COMPILE(
     AC_MSG_RESULT(no)
 )
 
-AC_CHECK_HEADERS(mntent.h sys/mount.h)
+AC_MSG_CHECKING(if linker supports -wrap)
+OLD_LDFLAGS=$LDFLAGS
+LDFLAGS=$LDFLAGS
+LDFLAGS+="-Wl,-wrap,malloc"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>]],[[void* __wrap_malloc(size_t size);]],[[int *test = malloc(sizeof(int));]])],
+[
+    AC_MSG_RESULT([yes])
+    AM_CONDITIONAL([HAVE_LD_WRAP],[true])
+],[
+    AC_MSG_RESULT([no])
+    AM_CONDITIONAL([HAVE_LD_WRAP],[false])
+])
+LDFLAGS=$OLD_LDFLAGS
 
-# look for MPI and set flags
-LX_FIND_MPI
-if test "x$enable_fortran" = "xyes"; then
-AC_LANG_PUSH([Fortran])
-LX_FIND_MPI
-AC_LANG_POP
-fi
-
-if test "$have_C_mpi" != "yes" ; then
-    AC_MSG_ERROR(["Couldn't find MPI"])
-fi
-
-# look for leveldb library, sets LEVELDB_CFLAGS/LDFLAGS/LIBS
-UNIFYFS_AC_LEVELDB
-
-# look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
-UNIFYFS_AC_GOTCHA
-
-UNIFYFS_AC_MARGO
-UNIFYFS_AC_FLATCC
 
 # HDF found?
 AX_LIB_HDF5
@@ -196,21 +219,52 @@ AM_CONDITIONAL([HAVE_HDF5], [test x$with_hdf5 = xyes])
 CP_WRAPPERS+="-Wl,-wrap,access"
 CP_WRAPPERS+=",-wrap,chmod"
 CP_WRAPPERS+=",-wrap,fchmod"
-CP_WRAPPERS+=",-wrap,lio_listio"
+
+OLD_LIBS=$LIBS
+LIBS+=" -lrt"
+AC_CHECK_FUNCS(lio_listio,[
+    CP_WRAPPERS+=",-wrap,lio_listio"
+], [])
+LIBS=$OLD_LIBS
+
 CP_WRAPPERS+=",-wrap,mkdir"
 CP_WRAPPERS+=",-wrap,rmdir"
+CP_WRAPPERS+=",-wrap,chdir"
+CP_WRAPPERS+=",-wrap,__getcwd_chk"
+CP_WRAPPERS+=",-wrap,getcwd"
+CP_WRAPPERS+=",-wrap,getwd"
+CP_WRAPPERS+=",-wrap,get_current_dir_name"
 CP_WRAPPERS+=",-wrap,unlink"
 CP_WRAPPERS+=",-wrap,remove"
 CP_WRAPPERS+=",-wrap,rename"
 CP_WRAPPERS+=",-wrap,truncate"
 CP_WRAPPERS+=",-wrap,stat"
-CP_WRAPPERS+=",-wrap,__lxstat"
-CP_WRAPPERS+=",-wrap,__xstat"
+CP_WRAPPERS+=",-wrap,fstat"
+
+
+AC_CHECK_FUNCS(statfs,[
+    CP_WRAPPERS+=",-wrap,statfs"
+],[])
+AC_CHECK_FUNCS(fstatfs,[
+    CP_WRAPPERS+=",-wrap,fstatfs"
+],[])
+
+AC_CHECK_FUNCS(__lxstat,[
+    CP_WRAPPERS+=",-wrap,__lxstat"
+],[])
+AC_CHECK_FUNCS(__xstat,[
+    CP_WRAPPERS+=",-wrap,__xstat"
+],[])
+AC_CHECK_FUNCS(__fxstat,[
+    CP_WRAPPERS+=",-wrap,__fxstat"
+],[])
 
 CP_WRAPPERS+=",-wrap,creat"
 CP_WRAPPERS+=",-wrap,creat64"
 CP_WRAPPERS+=",-wrap,open"
-CP_WRAPPERS+=",-wrap,open64"
+AC_CHECK_FUNCS(open64, [
+    CP_WRAPPERS+=",-wrap,open64"
+],[])
 CP_WRAPPERS+=",-wrap,__open_2"
 CP_WRAPPERS+=",-wrap,read"
 CP_WRAPPERS+=",-wrap,write"
@@ -220,9 +274,12 @@ CP_WRAPPERS+=",-wrap,pread"
 CP_WRAPPERS+=",-wrap,pread64"
 CP_WRAPPERS+=",-wrap,pwrite"
 CP_WRAPPERS+=",-wrap,pwrite64"
-CP_WRAPPERS+=",-wrap,posix_fadvise"
+AC_CHECK_FUNCS(posix_fadvise, [
+    CP_WRAPPERS+=",-wrap,posix_fadvise"
+],[])
 CP_WRAPPERS+=",-wrap,lseek"
 CP_WRAPPERS+=",-wrap,lseek64"
+CP_WRAPPERS+=",-wrap,fchdir"
 CP_WRAPPERS+=",-wrap,ftruncate"
 CP_WRAPPERS+=",-wrap,fsync"
 CP_WRAPPERS+=",-wrap,fdatasync"
@@ -231,7 +288,6 @@ CP_WRAPPERS+=",-wrap,mmap"
 CP_WRAPPERS+=",-wrap,mmap64"
 CP_WRAPPERS+=",-wrap,munmap"
 CP_WRAPPERS+=",-wrap,msync"
-CP_WRAPPERS+=",-wrap,__fxstat"
 CP_WRAPPERS+=",-wrap,close"
 
 # FILE* functions
@@ -288,11 +344,11 @@ CP_WRAPPERS+=",-wrap,ungetwc"
 
 # ,-u,__wrap___fxstat64,-u,pthread_mutex_lock,-u,pthread_mutex_unlock
 
-# We need to know the value of the $libdir and $bindir variables so that 
+# We need to know the value of the $libdir and $bindir variables so that
 # we can reference the correct path in the unifyfs compiler wrappers.
-# Unfortunately, those two variables are not normally evaluated by autoconf.  
-# They are evaluated at build time using Makefile variable substitutions.  
-# 
+# Unfortunately, those two variables are not normally evaluated by autoconf.
+# They are evaluated at build time using Makefile variable substitutions.
+#
 # The following logic was copied from mpich2 1.3.1 to resolve the $libdir
 # variable at configure time.
 #
@@ -339,7 +395,9 @@ AC_CONFIG_FILES([Makefile
                  util/scripts/Makefile
                  util/scripts/lsfcsm/Makefile
                  util/unifyfs/Makefile
-                 util/unifyfs/src/Makefile])
+                 util/unifyfs/src/Makefile
+                 util/unifyfs-stage/Makefile
+                 util/unifyfs-stage/src/Makefile])
 
 AC_CONFIG_FILES([client/unifyfs-config], [chmod +x client/unifyfs-config])
 AC_CONFIG_FILES([util/scripts/lsfcsm/unifyfs_lsfcsm_prolog], [chmod +x util/scripts/lsfcsm/unifyfs_lsfcsm_prolog])
@@ -358,15 +416,15 @@ AC_OUTPUT
 AC_MSG_RESULT([
 
     ==========================
-    UNIFYFS Checkpoint-Restart
+    UNIFYFS
     ==========================
     prefix      ${prefix}
     compiler    ${CC}
     CFLAGS      ${CFLAGS}
     ==========================
-    
+
     Supported POSIX wrappers:
-    
+
     ${CP_WRAPPERS}
 
 ])

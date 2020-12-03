@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -155,6 +155,8 @@ size_t generate_read_reqs(test_cfg* cfg, char* dstbuf,
  *    cfg.use_mapio - support is not yet implemented. When enabled,
  *    direct memory loads and stores will be used for reads and writes.
  *
+ *    cfg.use_mpiio - when enabled, MPI-IO will be used.
+ *
  *    cfg.use_prdwr - when enabled, pread(2) and pwrite(2) will be used.
  *
  *    cfg.use_stdio - when enabled, fread(2) and fwrite(2) will be used.
@@ -164,6 +166,12 @@ size_t generate_read_reqs(test_cfg* cfg, char* dstbuf,
  *
  *    cfg.io_check - when enabled, lipsum data is used when writing
  *    the file and verified when reading.
+ *
+ *    cfg.pre_wr_truncate - when enabled, truncate the file to specified
+ *    size before writing.
+ *
+ *    cfg.post_wr_truncate - when enabled, truncate the file to specified
+ *    size after writing.
  */
 
 int main(int argc, char* argv[])
@@ -171,19 +179,31 @@ int main(int argc, char* argv[])
     char* wr_buf;
     char* rd_buf;
     char* target_file;
-    struct aiocb* reqs;
+    struct aiocb* reqs = NULL;
     size_t num_reqs = 0;
     int rc;
 
     test_cfg test_config;
     test_cfg* cfg = &test_config;
+    test_timer time_create2laminate;
+    test_timer time_create;
     test_timer time_wr;
     test_timer time_rd;
     test_timer time_sync;
+    test_timer time_stat_pre;
+    test_timer time_stat_pre2;
+    test_timer time_laminate;
+    test_timer time_stat_post;
 
+    timer_init(&time_create2laminate, "create2laminate");
+    timer_init(&time_create, "create");
     timer_init(&time_wr, "write");
     timer_init(&time_rd, "read");
     timer_init(&time_sync, "sync");
+    timer_init(&time_stat_pre, "statpre");
+    timer_init(&time_stat_pre2, "statpre2");
+    timer_init(&time_laminate, "laminate");
+    timer_init(&time_stat_post, "statpost");
 
     rc = test_init(argc, argv, cfg);
     if (rc) {
@@ -200,12 +220,23 @@ int main(int argc, char* argv[])
         return -1;
     }
 
+    // timer to wrap all parts of write operation
+    timer_start_barrier(cfg, &time_create2laminate);
+
+    // create file
     target_file = test_target_filename(cfg);
     test_print_verbose_once(cfg, "DEBUG: creating target file %s",
                             target_file);
+    timer_start_barrier(cfg, &time_create);
     rc = test_create_file(cfg, target_file, O_RDWR);
     if (rc) {
         test_abort(cfg, rc);
+    }
+    timer_stop_barrier(cfg, &time_create);
+    test_print_verbose_once(cfg, "DEBUG: finished create");
+
+    if (cfg->pre_wr_trunc) {
+        write_truncate(cfg);
     }
 
     // generate write requests
@@ -221,8 +252,7 @@ int main(int argc, char* argv[])
 
     // do writes
     test_print_verbose_once(cfg, "DEBUG: starting write requests");
-    test_barrier(cfg);
-    timer_start(&time_wr);
+    timer_start_barrier(cfg, &time_wr);
     rc = issue_write_req_batch(cfg, num_reqs, reqs);
     if (rc) {
         test_abort(cfg, rc);
@@ -231,18 +261,48 @@ int main(int argc, char* argv[])
     if (rc) {
         test_abort(cfg, rc);
     }
-    timer_stop(&time_wr);
+    timer_stop_barrier(cfg, &time_wr);
     test_print_verbose_once(cfg, "DEBUG: finished write requests");
 
-    // sync/laminate
-    timer_start(&time_sync);
+    // sync
+    timer_start_barrier(cfg, &time_sync);
     rc = write_sync(cfg);
     if (rc) {
         test_abort(cfg, rc);
     }
-    timer_stop(&time_sync);
-    test_barrier(cfg);
+    timer_stop_barrier(cfg, &time_sync);
     test_print_verbose_once(cfg, "DEBUG: finished sync");
+
+    // stat file pre-laminate
+    timer_start_barrier(cfg, &time_stat_pre);
+    stat_file(cfg, target_file);
+    timer_stop_barrier(cfg, &time_stat_pre);
+    test_print_verbose_once(cfg, "DEBUG: finished stat pre-laminate");
+
+    if (cfg->post_wr_trunc) {
+        write_truncate(cfg);
+
+        // stat file post-truncate
+        timer_start_barrier(cfg, &time_stat_pre2);
+        stat_file(cfg, target_file);
+        timer_stop_barrier(cfg, &time_stat_pre2);
+        test_print_verbose_once(cfg, "DEBUG: finished stat pre2 (post trunc)");
+    }
+
+    // laminate
+    timer_start_barrier(cfg, &time_laminate);
+    rc = write_laminate(cfg, target_file);
+    if (rc) {
+        test_abort(cfg, rc);
+    }
+    timer_stop_barrier(cfg, &time_laminate);
+    test_print_verbose_once(cfg, "DEBUG: finished laminate");
+
+    // stat file post-laminate
+    timer_start_barrier(cfg, &time_stat_post);
+    stat_cmd(cfg, target_file);
+    timer_stop_barrier(cfg, &time_stat_post);
+    test_print_verbose_once(cfg, "DEBUG: finished stat post-laminate");
 
     // post-write cleanup
     free(wr_buf);
@@ -262,8 +322,7 @@ int main(int argc, char* argv[])
 
     // do reads
     test_print_verbose_once(cfg, "DEBUG: starting read requests");
-    test_barrier(cfg);
-    timer_start(&time_rd);
+    timer_start_barrier(cfg, &time_rd);
     rc = issue_read_req_batch(cfg, num_reqs, reqs);
     if (rc) {
         test_abort(cfg, rc);
@@ -272,8 +331,7 @@ int main(int argc, char* argv[])
     if (rc) {
         test_abort(cfg, rc);
     }
-    timer_stop(&time_rd);
-    test_barrier(cfg);
+    timer_stop_barrier(cfg, &time_rd);
     test_print_verbose_once(cfg, "DEBUG: finished read requests");
 
     if (test_config.io_check) {
@@ -288,46 +346,96 @@ int main(int argc, char* argv[])
 
     // calculate achieved bandwidth rates
     size_t rank_bytes = test_config.n_blocks * test_config.block_sz;
-    double write_bw, read_bw;
-    double aggr_write_bw, aggr_read_bw;
-    double max_write_time, max_read_time;
-    double min_sync_time, max_sync_time;
+    size_t total_bytes = rank_bytes * test_config.n_ranks;
 
-    write_bw = bandwidth_mib(rank_bytes, time_wr.elapsed_sec);
-    aggr_write_bw = test_reduce_double_sum(cfg, write_bw);
-    max_write_time = test_reduce_double_max(cfg, time_wr.elapsed_sec);
+    double min_local_write_time = test_reduce_double_min(cfg,
+        time_wr.elapsed_sec);
+    double max_local_write_time = test_reduce_double_max(cfg,
+        time_wr.elapsed_sec);
+    double max_global_write_time = test_reduce_double_max(cfg,
+        time_wr.elapsed_sec_all);
 
-    min_sync_time = test_reduce_double_min(cfg, time_sync.elapsed_sec);
-    max_sync_time = test_reduce_double_max(cfg, time_sync.elapsed_sec);
+    double local_write_bw = bandwidth_mib(rank_bytes, time_wr.elapsed_sec);
+    double min_local_write_bw = test_reduce_double_min(cfg, local_write_bw);
+    double max_local_write_bw = test_reduce_double_max(cfg, local_write_bw);
+    double aggr_local_write_bw = test_reduce_double_sum(cfg, local_write_bw);
 
-    read_bw = bandwidth_mib(rank_bytes, time_rd.elapsed_sec);
-    aggr_read_bw = test_reduce_double_sum(cfg, read_bw);
-    max_read_time = test_reduce_double_max(cfg, time_rd.elapsed_sec);
+    double global_write_bw = bandwidth_mib(total_bytes, max_global_write_time);
+
+    double min_local_sync_time  = test_reduce_double_min(cfg,
+        time_sync.elapsed_sec);
+    double max_local_sync_time  = test_reduce_double_max(cfg,
+        time_sync.elapsed_sec);
+    double max_global_sync_time = test_reduce_double_max(cfg,
+        time_sync.elapsed_sec_all);
+
+    double global_write_sync_bw = bandwidth_mib(total_bytes,
+        max_global_write_time + max_global_sync_time);
+
+    double min_local_read_time = test_reduce_double_min(cfg,
+        time_rd.elapsed_sec);
+    double max_local_read_time = test_reduce_double_max(cfg,
+        time_rd.elapsed_sec);
+    double max_global_read_time = test_reduce_double_max(cfg,
+        time_rd.elapsed_sec_all);
+
+    double local_read_bw = bandwidth_mib(rank_bytes, time_rd.elapsed_sec);
+    double min_local_read_bw = test_reduce_double_min(cfg, local_read_bw);
+    double max_local_read_bw = test_reduce_double_max(cfg, local_read_bw);
+    double aggr_local_read_bw = test_reduce_double_sum(cfg, local_read_bw);
+
+    double global_read_bw = bandwidth_mib(total_bytes, max_global_read_time);
 
     if (test_config.rank == 0) {
-        size_t total_bytes = rank_bytes * test_config.n_ranks;
-        double eff_write_bw, eff_read_bw;
-        eff_write_bw = bandwidth_mib(total_bytes, max_write_time);
-        eff_read_bw = bandwidth_mib(total_bytes, max_read_time);
-
-        printf("Aggregate Write BW is %.3lf MiB/s\n"
-               "Effective Write BW is %.3lf MiB/s\n\n",
-               aggr_write_bw, eff_write_bw);
-        printf("Minimum Sync Time is %.6lf s\n"
-               "Maximum Sync Time is %.6lf s\n\n",
-               min_sync_time, max_sync_time);
-        printf("Aggregate Read BW is %.3lf MiB/s\n"
-               "Effective Read BW is %.3lf MiB/s\n\n",
-               aggr_read_bw, eff_read_bw);
-        fflush(stdout);
+        errno = 0; /* just in case there was an earlier error */
+        test_print_once(cfg, "File Create Time is %.6lf s",
+                        time_create.elapsed_sec_all);
+        test_print_once(cfg, "Minimum Local Write BW is %.3lf MiB/s",
+                        min_local_write_bw);
+        test_print_once(cfg, "Maximum Local Write BW is %.3lf MiB/s",
+                        max_local_write_bw);
+        test_print_once(cfg, "Aggregate Local Write BW is %.3lf MiB/s",
+                        aggr_local_write_bw);
+        test_print_once(cfg, "Global Write BW is %.3lf MiB/s",
+                        global_write_bw);
+        test_print_once(cfg, "Minimum Local Sync Time is %.6lf s",
+                        min_local_sync_time);
+        test_print_once(cfg, "Maximum Local Sync Time is %.6lf s",
+                        max_local_sync_time);
+        test_print_once(cfg, "Global Sync Time is %.6lf s",
+                        max_global_sync_time);
+        test_print_once(cfg, "Global Write+Sync BW is %.3lf MiB/s",
+                        global_write_sync_bw);
+        test_print_once(cfg, "Stat Time Pre-Laminate is %.6lf s",
+                        time_stat_pre.elapsed_sec_all);
+        test_print_once(cfg, "Stat Time Pre-Laminate2 is %.6lf s",
+                        time_stat_pre.elapsed_sec_all);
+        test_print_once(cfg, "File Laminate Time is %.6lf s",
+                        time_laminate.elapsed_sec_all);
+        test_print_once(cfg, "Stat Time Post-Laminate is %.6lf s",
+                        time_stat_post.elapsed_sec_all);
+        test_print_once(cfg, "Minimum Local Read BW is %.3lf MiB/s",
+                        min_local_read_bw);
+        test_print_once(cfg, "Maximum Local Read BW is %.3lf MiB/s",
+                        max_local_read_bw);
+        test_print_once(cfg, "Aggregate Local Read BW is %.3lf MiB/s",
+                        aggr_local_read_bw);
+        test_print_once(cfg, "Global Read BW is %.3lf MiB/s",
+                        global_read_bw);
     }
 
     // cleanup
     free(target_file);
 
+    timer_fini(&time_create2laminate);
+    timer_fini(&time_create);
     timer_fini(&time_wr);
     timer_fini(&time_rd);
     timer_fini(&time_sync);
+    timer_fini(&time_stat_pre);
+    timer_fini(&time_stat_pre2);
+    timer_fini(&time_laminate);
+    timer_fini(&time_stat_post);
 
     test_fini(cfg);
 

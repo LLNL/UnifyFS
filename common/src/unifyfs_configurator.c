@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -58,7 +58,7 @@ int unifyfs_config_init(unifyfs_cfg_t *cfg,
     char *syscfg = NULL;
 
     if (cfg == NULL)
-        return -1;
+        return EINVAL;
 
     memset((void *)cfg, 0, sizeof(unifyfs_cfg_t));
 
@@ -101,14 +101,14 @@ int unifyfs_config_init(unifyfs_cfg_t *cfg,
     if (rc)
         return rc;
 
-    return 0;
+    return (int)UNIFYFS_SUCCESS;
 }
 
 // cleanup allocated state
 int unifyfs_config_fini(unifyfs_cfg_t *cfg)
 {
     if (cfg == NULL)
-        return -1;
+        return EINVAL;
 
 #define UNIFYFS_CFG(sec, key, typ, dv, desc, vfn)       \
     if (cfg->sec##_##key != NULL) {                     \
@@ -146,7 +146,7 @@ int unifyfs_config_fini(unifyfs_cfg_t *cfg)
 #undef UNIFYFS_CFG_MULTI
 #undef UNIFYFS_CFG_MULTI_CLI
 
-    return 0;
+    return (int)UNIFYFS_SUCCESS;
 }
 
 // print configuration to specified file (or stderr)
@@ -266,7 +266,7 @@ int unifyfs_config_set_defaults(unifyfs_cfg_t *cfg)
     char *val;
 
     if (cfg == NULL)
-        return -1;
+        return EINVAL;
 
 #define UNIFYFS_CFG(sec, key, typ, dv, desc, vfn)       \
     val = stringify(dv);                                \
@@ -292,7 +292,7 @@ int unifyfs_config_set_defaults(unifyfs_cfg_t *cfg)
 #undef UNIFYFS_CFG_MULTI
 #undef UNIFYFS_CFG_MULTI_CLI
 
-    return 0;
+    return (int)UNIFYFS_SUCCESS;
 }
 
 
@@ -363,7 +363,7 @@ int unifyfs_config_process_cli_args(unifyfs_cfg_t *cfg,
     extern int optind, optopt;
 
     if (cfg == NULL)
-        return -1;
+        return EINVAL;
 
     // setup short_opts and cli_options
     memset((void *)short_opts, 0, sizeof(short_opts));
@@ -461,9 +461,9 @@ int unifyfs_config_process_cli_args(unifyfs_cfg_t *cfg,
     }
 
     if (!usage_err)
-        rc = 0;
+        rc = (int)UNIFYFS_SUCCESS;
     else {
-        rc = -1;
+        rc = (int)UNIFYFS_FAILURE;
         unifyfs_config_cli_usage_error(argv[0], errmsg);
     }
 
@@ -512,7 +512,7 @@ int unifyfs_config_process_environ(unifyfs_cfg_t *cfg)
     char *envval;
 
     if (cfg == NULL)
-        return -1;
+        return EINVAL;
 
 
 #define UNIFYFS_CFG(sec, key, typ, dv, desc, vfn)       \
@@ -559,7 +559,7 @@ int unifyfs_config_process_environ(unifyfs_cfg_t *cfg)
 #undef UNIFYFS_CFG_MULTI
 #undef UNIFYFS_CFG_MULTI_CLI
 
-    return 0;
+    return (int)UNIFYFS_SUCCESS;
 }
 
 // inih callback handler
@@ -611,7 +611,7 @@ int inih_config_handler(void *user,
         cfg->sec##_##key[cfg->n_##sec##_##key++] = strdup(val);         \
     }
 
-    UNIFYFS_CONFIGS;
+UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
 #undef UNIFYFS_CFG_MULTI
@@ -636,7 +636,7 @@ int unifyfs_config_process_ini_file(unifyfs_cfg_t *cfg,
     inih_rc = ini_parse(file, inih_config_handler, cfg);
     switch (inih_rc) {
     case 0:
-        rc = 0;
+        rc = (int)UNIFYFS_SUCCESS;
         break;
     case -1:
         snprintf(errmsg, sizeof(errmsg),
@@ -662,7 +662,7 @@ int unifyfs_config_process_ini_file(unifyfs_cfg_t *cfg,
             snprintf(errmsg, sizeof(errmsg),
                      "failed to parse config file %s",
                      file);
-        rc = EINVAL;
+        rc = (int)UNIFYFS_ERROR_BADCONFIG;
         fprintf(stderr, "UNIFYFS CONFIG ERROR: %s\n", errmsg);
         break;
     }
@@ -697,7 +697,7 @@ int validate_value(const char *section,
 // validate configuration
 int unifyfs_config_validate(unifyfs_cfg_t *cfg)
 {
-    int rc = 0;
+    int rc = (int)UNIFYFS_SUCCESS;
     int vrc;
     char *new_val = NULL;
 

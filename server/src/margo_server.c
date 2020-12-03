@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017-2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -21,15 +21,31 @@
 // server headers
 #include "unifyfs_global.h"
 #include "margo_server.h"
+#include "na_config.h" // from mercury include lib
 
 // global variables
 ServerRpcContext_t* unifyfsd_rpc_context;
 bool margo_use_tcp = true;
 bool margo_lazy_connect; // = false
+int  margo_client_server_pool_sz = 4;
+int  margo_server_server_pool_sz = 4;
+int  margo_use_progress_thread = 1;
 
+#if defined(NA_HAS_SM)
 static const char* PROTOCOL_MARGO_SHM   = "na+sm://";
-static const char* PROTOCOL_MARGO_VERBS = "ofi+verbs://";
-static const char* PROTOCOL_MARGO_TCP   = "bmi+tcp://";
+#else
+#error Required Mercury NA shared memory plugin not found (please enable 'SM')
+#endif
+
+#if defined(NA_HAS_BMI)
+static const char* PROTOCOL_MARGO_TCP = "bmi+tcp://";
+static const char* PROTOCOL_MARGO_RMA = "bmi+tcp://";
+#elif defined(NA_HAS_OFI)
+static const char* PROTOCOL_MARGO_TCP = "ofi+tcp://";
+static const char* PROTOCOL_MARGO_RMA = "ofi+verbs://";
+#else
+#error No supported Mercury NA plugin found (please use one of: 'BMI', 'OFI')
+#endif
 
 /* setup_remote_target - Initializes the server-server margo target */
 static margo_instance_id setup_remote_target(void)
@@ -45,10 +61,11 @@ static margo_instance_id setup_remote_target(void)
     if (margo_use_tcp) {
         margo_protocol = PROTOCOL_MARGO_TCP;
     } else {
-        margo_protocol = PROTOCOL_MARGO_VERBS;
+        margo_protocol = PROTOCOL_MARGO_RMA;
     }
 
-    mid = margo_init(margo_protocol, MARGO_SERVER_MODE, 1, 4);
+    mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
+                     margo_use_progress_thread, margo_server_server_pool_sz);
     if (mid == MARGO_INSTANCE_NULL) {
         LOGERR("margo_init(%s)", margo_protocol);
         return mid;
@@ -82,15 +99,10 @@ static margo_instance_id setup_remote_target(void)
 /* register server-server RPCs */
 static void register_server_server_rpcs(margo_instance_id mid)
 {
-    unifyfsd_rpc_context->rpcs.hello_id =
-        MARGO_REGISTER(mid, "server_hello_rpc",
-                       server_hello_in_t, server_hello_out_t,
-                       server_hello_rpc);
-
-    unifyfsd_rpc_context->rpcs.request_id =
-        MARGO_REGISTER(mid, "server_request_rpc",
-                       server_request_in_t, server_request_out_t,
-                       server_request_rpc);
+    unifyfsd_rpc_context->rpcs.server_pid_id =
+        MARGO_REGISTER(mid, "server_pid_rpc",
+                       server_pid_in_t, server_pid_out_t,
+                       server_pid_rpc);
 
     unifyfsd_rpc_context->rpcs.chunk_read_request_id =
         MARGO_REGISTER(mid, "chunk_read_request_rpc",
@@ -101,6 +113,66 @@ static void register_server_server_rpcs(margo_instance_id mid)
         MARGO_REGISTER(mid, "chunk_read_response_rpc",
                        chunk_read_response_in_t, chunk_read_response_out_t,
                        chunk_read_response_rpc);
+
+    unifyfsd_rpc_context->rpcs.extent_add_id =
+        MARGO_REGISTER(mid, "add_extents_rpc",
+                       add_extents_in_t, add_extents_out_t,
+                       add_extents_rpc);
+
+    unifyfsd_rpc_context->rpcs.extent_bcast_id =
+        MARGO_REGISTER(mid, "extent_bcast_rpc",
+                       extent_bcast_in_t, extent_bcast_out_t,
+                       extent_bcast_rpc);
+
+    unifyfsd_rpc_context->rpcs.extent_lookup_id =
+        MARGO_REGISTER(mid, "find_extents_rpc",
+                       find_extents_in_t, find_extents_out_t,
+                       find_extents_rpc);
+
+    unifyfsd_rpc_context->rpcs.fileattr_bcast_id =
+        MARGO_REGISTER(mid, "fileattr_bcast_rpc",
+                       fileattr_bcast_in_t, fileattr_bcast_out_t,
+                       fileattr_bcast_rpc);
+
+    unifyfsd_rpc_context->rpcs.filesize_id =
+        MARGO_REGISTER(mid, "filesize_rpc",
+                       filesize_in_t, filesize_out_t,
+                       filesize_rpc);
+
+    unifyfsd_rpc_context->rpcs.laminate_id =
+        MARGO_REGISTER(mid, "laminate_rpc",
+                       laminate_in_t, laminate_out_t,
+                       laminate_rpc);
+
+    unifyfsd_rpc_context->rpcs.laminate_bcast_id =
+        MARGO_REGISTER(mid, "laminate_bcast_rpc",
+                       laminate_bcast_in_t, laminate_bcast_out_t,
+                       laminate_bcast_rpc);
+
+    unifyfsd_rpc_context->rpcs.metaget_id =
+        MARGO_REGISTER(mid, "metaget_rpc",
+                       metaget_in_t, metaget_out_t,
+                       metaget_rpc);
+
+    unifyfsd_rpc_context->rpcs.metaset_id =
+        MARGO_REGISTER(mid, "metaset_rpc",
+                       metaset_in_t, metaset_out_t,
+                       metaset_rpc);
+
+    unifyfsd_rpc_context->rpcs.truncate_id =
+        MARGO_REGISTER(mid, "truncate_rpc",
+                       truncate_in_t, truncate_out_t,
+                       truncate_rpc);
+
+    unifyfsd_rpc_context->rpcs.truncate_bcast_id =
+        MARGO_REGISTER(mid, "truncate_bcast_rpc",
+                       truncate_bcast_in_t, truncate_bcast_out_t,
+                       truncate_bcast_rpc);
+
+    unifyfsd_rpc_context->rpcs.unlink_bcast_id =
+        MARGO_REGISTER(mid, "unlink_bcast_rpc",
+                       unlink_bcast_in_t, unlink_bcast_out_t,
+                       unlink_bcast_rpc);
 }
 
 /* setup_local_target - Initializes the client-server margo target */
@@ -113,7 +185,8 @@ static margo_instance_id setup_local_target(void)
     hg_size_t self_string_sz = sizeof(self_string);
     margo_instance_id mid;
 
-    mid = margo_init(PROTOCOL_MARGO_SHM, MARGO_SERVER_MODE, 1, -1);
+    mid = margo_init(PROTOCOL_MARGO_SHM, MARGO_SERVER_MODE,
+                     margo_use_progress_thread, margo_client_server_pool_sz);
     if (mid == MARGO_INSTANCE_NULL) {
         LOGERR("margo_init(%s)", PROTOCOL_MARGO_SHM);
         return mid;
@@ -147,6 +220,10 @@ static margo_instance_id setup_local_target(void)
 /* register client-server RPCs */
 static void register_client_server_rpcs(margo_instance_id mid)
 {
+    MARGO_REGISTER(mid, "unifyfs_attach_rpc",
+                   unifyfs_attach_in_t, unifyfs_attach_out_t,
+                   unifyfs_attach_rpc);
+
     MARGO_REGISTER(mid, "unifyfs_mount_rpc",
                    unifyfs_mount_in_t, unifyfs_mount_out_t,
                    unifyfs_mount_rpc);
@@ -171,6 +248,18 @@ static void register_client_server_rpcs(margo_instance_id mid)
                    unifyfs_filesize_in_t, unifyfs_filesize_out_t,
                    unifyfs_filesize_rpc);
 
+    MARGO_REGISTER(mid, "unifyfs_truncate_rpc",
+                   unifyfs_truncate_in_t, unifyfs_truncate_out_t,
+                   unifyfs_truncate_rpc);
+
+    MARGO_REGISTER(mid, "unifyfs_unlink_rpc",
+                   unifyfs_unlink_in_t, unifyfs_unlink_out_t,
+                   unifyfs_unlink_rpc);
+
+    MARGO_REGISTER(mid, "unifyfs_laminate_rpc",
+                   unifyfs_laminate_in_t, unifyfs_laminate_out_t,
+                   unifyfs_laminate_rpc);
+
     MARGO_REGISTER(mid, "unifyfs_read_rpc",
                    unifyfs_read_in_t, unifyfs_read_out_t,
                    unifyfs_read_rpc)
@@ -193,13 +282,15 @@ int margo_server_rpc_init(void)
     if (NULL == unifyfsd_rpc_context) {
         /* create rpc server context */
         unifyfsd_rpc_context = calloc(1, sizeof(ServerRpcContext_t));
-        assert(unifyfsd_rpc_context);
+        if (NULL == unifyfsd_rpc_context) {
+            return ENOMEM;
+        }
     }
 
     margo_instance_id mid;
     mid = setup_local_target();
     if (mid == MARGO_INSTANCE_NULL) {
-        rc = UNIFYFS_FAILURE;
+        rc = UNIFYFS_ERROR_MARGO;
     } else {
         unifyfsd_rpc_context->shm_mid = mid;
         register_client_server_rpcs(mid);
@@ -207,7 +298,7 @@ int margo_server_rpc_init(void)
 
     mid = setup_remote_target();
     if (mid == MARGO_INSTANCE_NULL) {
-        rc = UNIFYFS_FAILURE;
+        rc = UNIFYFS_ERROR_MARGO;
     } else {
         unifyfsd_rpc_context->svr_mid = mid;
         register_server_server_rpcs(mid);
@@ -233,6 +324,18 @@ int margo_server_rpc_finalize(void)
 
         rpc_clean_local_server_addr();
 
+        /* free global server addresses */
+        for (int i = 0; i < glb_num_servers; i++) {
+            if (glb_servers[i].margo_svr_addr != HG_ADDR_NULL) {
+                margo_addr_free(ctx->svr_mid, glb_servers[i].margo_svr_addr);
+                glb_servers[i].margo_svr_addr = HG_ADDR_NULL;
+            }
+            if (NULL != glb_servers[i].margo_svr_addr_str) {
+                free(glb_servers[i].margo_svr_addr_str);
+                glb_servers[i].margo_svr_addr_str = NULL;
+            }
+        }
+
         /* shut down margo */
         margo_finalize(ctx->svr_mid);
         /* NOTE: 2nd call to margo_finalize() sometimes crashes - Margo bug? */
@@ -257,42 +360,51 @@ int margo_connect_servers(void)
     size_t i;
     hg_return_t hret;
 
+    // block until a margo_svr key pair published by all servers
+    rc = unifyfs_keyval_fence_remote();
+    if ((int)UNIFYFS_SUCCESS != rc) {
+        LOGERR("keyval fence on margo_svr key failed");
+        ret = (int)UNIFYFS_FAILURE;
+        return ret;
+    }
+
     for (i = 0; i < glb_num_servers; i++) {
-        int remote_mpi_rank = -1;
-        char* mpi_rank_str = NULL;
+        int remote_pmi_rank = -1;
+        char* pmi_rank_str = NULL;
         char* margo_addr_str = NULL;
 
-        // NOTE: this really doesn't belong here, and will eventually go away
-        rc = unifyfs_keyval_lookup_remote(i, key_unifyfsd_mpi_rank,
-                                          &mpi_rank_str);
-        if ((int)UNIFYFS_SUCCESS == rc) {
-            remote_mpi_rank = atoi(mpi_rank_str);
-            free(mpi_rank_str);
-        } else {
-            LOGERR("server index=%zu - MPI rank lookup failed", i);
+        rc = unifyfs_keyval_lookup_remote(i, key_unifyfsd_pmi_rank,
+                                          &pmi_rank_str);
+        if ((int)UNIFYFS_SUCCESS != rc) {
+            LOGERR("server index=%zu - pmi rank lookup failed", i);
             ret = (int)UNIFYFS_FAILURE;
+            return ret;
         }
-        glb_servers[i].mpi_rank = remote_mpi_rank;
+        if (NULL != pmi_rank_str) {
+            remote_pmi_rank = atoi(pmi_rank_str);
+            free(pmi_rank_str);
+        }
+        glb_servers[i].pmi_rank = remote_pmi_rank;
 
         margo_addr_str = rpc_lookup_remote_server_addr(i);
-        glb_servers[i].margo_svr_addr_str = margo_addr_str;
-        if (NULL != margo_addr_str) {
-            LOGDBG("server index=%zu, mpi_rank=%d, margo_addr=%s",
-                   i, remote_mpi_rank, margo_addr_str);
-            if (!margo_lazy_connect) {
-                glb_servers[i].margo_svr_addr = HG_ADDR_NULL;
-                hret = margo_addr_lookup(unifyfsd_rpc_context->svr_mid,
-                                         glb_servers[i].margo_svr_addr_str,
-                                         &(glb_servers[i].margo_svr_addr));
-                if (hret != HG_SUCCESS) {
-                    LOGERR("server index=%zu - margo_addr_lookup(%s) failed",
-                           i, margo_addr_str);
-                    ret = (int)UNIFYFS_FAILURE;
-                }
-            }
-        } else {
-            LOGERR("server index=%zu - margo addr string lookup failed", i);
+        if (NULL == margo_addr_str) {
+            LOGERR("server index=%zu - margo server lookup failed", i);
             ret = (int)UNIFYFS_FAILURE;
+            return ret;
+        }
+        glb_servers[i].margo_svr_addr = HG_ADDR_NULL;
+        glb_servers[i].margo_svr_addr_str = margo_addr_str;
+        LOGDBG("server index=%zu, pmi_rank=%d, margo_addr=%s",
+               i, remote_pmi_rank, margo_addr_str);
+        if (!margo_lazy_connect) {
+            hret = margo_addr_lookup(unifyfsd_rpc_context->svr_mid,
+                                     glb_servers[i].margo_svr_addr_str,
+                                     &(glb_servers[i].margo_svr_addr));
+            if (hret != HG_SUCCESS) {
+                LOGERR("server index=%zu - margo_addr_lookup(%s) failed",
+                       i, margo_addr_str);
+                ret = (int)UNIFYFS_FAILURE;
+            }
         }
     }
 

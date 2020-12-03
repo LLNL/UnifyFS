@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2019, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -176,6 +176,8 @@ int verify_restart_data(test_cfg* cfg, char* data, uint64_t last_ckpt_id)
  *
  *    cfg.use_mapio - support is not yet implemented. When enabled,
  *    direct memory loads and stores will be used for reads and writes.
+ *
+ *    cfg.use_mpiio - when enabled, MPI-IO will be used.
  *
  *    cfg.use_prdwr - when enabled, pread(2) and pwrite(2) will be used.
  *

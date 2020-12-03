@@ -1,15 +1,19 @@
+/*
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
+ * Produced at the Lawrence Livermore National Laboratory.
+ *
+ * Copyright 2020, UT-Battelle, LLC.
+ *
+ * LLNL-CODE-741539
+ * All rights reserved.
+ *
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
+ */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <time.h>
-#include <sys/sysmacros.h>
-#include <unistd.h>
-#include <errno.h>
-#include <stdarg.h>
-#include <ctype.h>
+#include <sys/sysmacros.h> /* device major() and minor() macros */
+
 #include "testutil.h"
 
 /* Clone of the apsrintf().  See the standard asprintf() man page for details */
@@ -96,7 +100,9 @@ int dd_cmd(test_cfg* cfg, char* infile, char* outfile, unsigned long bs,
         return errno;
     }
     buf = calloc(sizeof(*buf), bs);
-    assert(buf);
+    if (NULL == buf) {
+        return errno;
+    }
 
     rc = fseek(outfp, seek * bs, SEEK_SET);
     if (rc) {
@@ -270,13 +276,17 @@ int sync_cmd(test_cfg* cfg, char* filename)
 int stat_cmd(test_cfg* cfg, char* filename)
 {
     struct stat sb;
+    time_t timestamp;
     int rc;
     const char* typestr;
     char* tmp;
+    char* newline;
+    char datestr[32];
 
+    errno = 0;
     rc = stat(filename, &sb);
     if (rc) {
-        test_print(cfg, "Error stating %s: %s", filename, strerror(rc));
+        test_print(cfg, "ERROR: stat(%s) failed", filename);
         return rc;
     }
 
@@ -312,10 +322,11 @@ int stat_cmd(test_cfg* cfg, char* filename)
     test_print(cfg, "%-26s%s", tmp, typestr);
     free(tmp);
 
-    test_print(cfg, "Device containing i-node: major=%ld   minor=%ld",
+    test_print(cfg, "Device containing i-node:  major=%ld   minor=%ld",
            (long) major(sb.st_dev), (long) minor(sb.st_dev));
 
-    test_print(cfg, "I-node number:            %ld", (long) sb.st_ino);
+    test_print(cfg, "I-node number:            %lu",
+        (unsigned long) sb.st_ino);
 
     test_print(cfg, "Mode:                     %lo",
            (unsigned long) sb.st_mode);
@@ -327,7 +338,8 @@ int stat_cmd(test_cfg* cfg, char* filename)
                (sb.st_mode & S_ISVTX) ? "sticky " : "");
     }
 
-    test_print(cfg, "Number of (hard) links:   %ld", (long) sb.st_nlink);
+    test_print(cfg, "Number of (hard) links:   %lu",
+        (unsigned long) sb.st_nlink);
 
     test_print(cfg, "Ownership:                UID=%ld   GID=%ld",
            (long) sb.st_uid, (long) sb.st_gid);
@@ -337,12 +349,37 @@ int stat_cmd(test_cfg* cfg, char* filename)
                (long) major(sb.st_rdev), (long) minor(sb.st_rdev));
     }
 
-    test_print(cfg, "File size:                %lld bytes",
-        (long long) sb.st_size);
-    test_print(cfg, "Optimal I/O block size:   %ld bytes",
-        (long) sb.st_blksize);
-    test_print(cfg, "Blocks allocated:         %lld", (long long) sb.st_blocks);
-    test_print(cfg, "Last file access:         %s", ctime(&sb.st_atime));
-    test_print(cfg, "Last file modification:   %s", ctime(&sb.st_mtime));
-    test_print(cfg, "Last status change:       %s", ctime(&sb.st_ctime));
+    test_print(cfg, "File size:                %llu bytes",
+        (unsigned long long) sb.st_size);
+    test_print(cfg, "Optimal I/O block size:   %lu bytes",
+        (unsigned long) sb.st_blksize);
+    test_print(cfg, "Blocks allocated:         %llu",
+        (unsigned long long) sb.st_blocks);
+
+    memset(datestr, 0, sizeof(datestr));
+    timestamp = sb.st_atime;
+    ctime_r(&timestamp, datestr);
+    newline = strchr(datestr, '\n');
+    if (NULL != newline) {
+        *newline = '\0';
+    }
+    test_print(cfg, "Last file access:         %s", datestr);
+
+    memset(datestr, 0, sizeof(datestr));
+    timestamp = sb.st_mtime;
+    ctime_r(&timestamp, datestr);
+    newline = strchr(datestr, '\n');
+    if (NULL != newline) {
+        *newline = '\0';
+    }
+    test_print(cfg, "Last file modification:   %s", datestr);
+
+    memset(datestr, 0, sizeof(datestr));
+    timestamp = sb.st_ctime;
+    ctime_r(&timestamp, datestr);
+    newline = strchr(datestr, '\n');
+    if (NULL != newline) {
+        *newline = '\0';
+    }
+    test_print(cfg, "Last status change:       %s", datestr);
 }

@@ -397,6 +397,7 @@ int mdhim_leveldb_put(void *dbh, void *key, int key_len, void *data, int32_t dat
     gettimeofday(&start, NULL);
     options = mdhimdb->write_options;    	    
     leveldb_put(mdhimdb->db, options, key, key_len, data, data_len, &err);
+    gettimeofday(&end, NULL);
     /*
      * temporarily mute the error message until the file metadata
      * operation is fully defined and implemented */

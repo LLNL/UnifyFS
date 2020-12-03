@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -45,40 +45,23 @@
 
 #include "unifyfs-internal.h"
 
-/* if length is greater than reserved space,
- * reserve space up to length */
-int unifyfs_fid_store_fixed_extend(
-    int fid,                 /* file id to reserve space for */
-    unifyfs_filemeta_t* meta, /* meta data for file */
-    off_t length             /* number of bytes to reserve for file */
-);
+/* rewrite client's shared memory index of file write extents */
+off_t unifyfs_rewrite_index_from_seg_tree(unifyfs_filemeta_t* meta);
 
-/* if length is shorter than reserved space,
- * give back space down to length */
-int unifyfs_fid_store_fixed_shrink(
-    int fid,                 /* file id to free space for */
-    unifyfs_filemeta_t* meta, /* meta data for file */
-    off_t length             /* number of bytes to reserve for file */
-);
+/* remove/truncate write extents in client metadata */
+int truncate_write_meta(unifyfs_filemeta_t* meta, off_t trunc_sz);
 
-/* read data from file stored as fixed-size chunks,
- * returns UNIFYFS error code */
-int unifyfs_fid_store_fixed_read(
-    int fid,                 /* file id to read from */
-    unifyfs_filemeta_t* meta, /* meta data for file */
-    off_t pos,               /* position within file to read from */
-    void* buf,               /* user buffer to store data in */
-    size_t count             /* number of bytes to read */
-);
+/* sync all writes for target file(s) with the server */
+int unifyfs_sync(int target_fid);
 
-/* write data to file stored as fixed-size chunks,
- * returns UNIFYFS error code */
-int unifyfs_fid_store_fixed_write(
-    int fid,                 /* file id to write to */
+/* write data to file using log-based I/O */
+int unifyfs_fid_logio_write(
+    int fid,                  /* file id to write to */
     unifyfs_filemeta_t* meta, /* meta data for file */
-    off_t pos,               /* position within file to write to */
-    const void* buf,         /* user buffer holding data */
-    size_t count             /* number of bytes to write */
+    off_t pos,                /* file position to start writing at */
+    const void* buf,          /* user buffer holding data */
+    size_t count,             /* number of bytes to write */
+    size_t* nwritten          /* returns number of bytes written */
 );
 
 #endif /* UNIFYFS_FIXED_H */

@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -151,7 +151,7 @@ int main(int argc, char* argv[])
 #ifndef DISABLE_UNIFYFS
     if (use_unifyfs) {
         ret = unifyfs_mount(mntpt, rank, num_rank, 0);
-        if (UNIFYFS_SUCCESS != ret) {
+        if (0 != ret) {
             MPI_Abort(MPI_COMM_WORLD, ret);
         }
         MPI_Barrier(MPI_COMM_WORLD);

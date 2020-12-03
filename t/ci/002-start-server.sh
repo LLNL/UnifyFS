@@ -44,8 +44,8 @@ fi
 
 # If running posix tests, posix mountpoint needs to be a real, shared dir
 # If it's not, prereq will not be set and posix tests will be skipped
-test_expect_success TEST_POSIX "CI_POSIX_MP ($CI_POSIX_MP) is shared dir" '
-    test_path_is_shared_dir $CI_POSIX_MP &&
+test_expect_success TEST_POSIX "POSIX_MP ($UNIFYFS_CI_POSIX_MP) is shared dir" '
+    test_path_is_shared_dir $UNIFYFS_CI_POSIX_MP &&
     test_set_prereq POSIX
 '
 
@@ -55,7 +55,7 @@ test_expect_success "unifyfsd hasn't started yet" '
 '
 
 $UNIFYFS_BIN/unifyfs start -c -d -S $UNIFYFS_SHAREDFS_DIR \
-    -e $UNIFYFS_BIN/unifyfsd &> ${UNIFYFS_LOG_DIR}/unifyfs.start.out &
+    -e $UNIFYFS_BIN/unifyfsd &> ${UNIFYFS_LOG_DIR}/unifyfs.start.out
 
 test_expect_success "unifyfsd started" '
     process_is_running unifyfsd 10 ||

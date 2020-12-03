@@ -34,11 +34,14 @@
  *
  */
 
+#include <assert.h>
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/time.h>
 #include "partitioner.h"
+
+#include "unifyfs_metadata_mdhim.h"
 
 struct timeval calslicestart, calsliceend;
 double calslicetime = 0;
@@ -85,13 +88,12 @@ long double get_str_num(void *key, uint32_t key_len) {
   return str_num;
 }
 
-unsigned long * get_meta_pair(void *key, uint32_t key_len) {
-	ulong *meta_pair = (ulong *)malloc (2*sizeof(ulong));
-	memset(meta_pair, 0, 2*sizeof(unsigned long));
-	meta_pair[0] = *((unsigned long *)(((char *)key)));
-	meta_pair[1] = *((unsigned long *)(((char *)key)+sizeof(unsigned long)));
-	//	printf("meta_pair[1] is %ld\n", meta_pair[1]);
-	return meta_pair;
+/* Allocate a copy of a key and return it. The returned key must be freed. */
+void* copy_unifyfs_key(void* key, uint32_t key_len)
+{
+    void* key_copy = malloc((size_t)key_len);
+    memcpy(key_copy, key, (size_t)key_len);
+    return key_copy;
 }
 
 uint64_t get_byte_num(void *key, uint32_t key_len) {
@@ -386,26 +388,19 @@ int get_slice_num(struct mdhim_t *md, struct index_t *index, void *key, int key_
 		key_num = floorl(map_num * total_keys);
 
 		break;
+    case MDHIM_UNIFYFS_KEY:
+        /* Use only the gfid portion of the key, which ensures all extents
+         * for the same file hash to the same server */
+        key_num = (uint64_t) UNIFYFS_KEY_FID(key);
+        break;
 	default:
 		return 0;
-		break;
 	}
 
 
 	/* Convert the key to a slice number  */
 	slice_num = key_num/index->mdhim_max_recs_per_slice;
 
-	if (key_type == MDHIM_UNIFYFS_KEY) {
-		unsigned long *meta_pair = get_meta_pair(key, key_len);
-		unsigned long surplus =	meta_pair[1];
-		unsigned long highval = (meta_pair[0] << 1);
-		unsigned long multiply = (unsigned long)1 << (sizeof(unsigned long)*8 - 1);
-/*		slice_num = (surplus + highval * multiply%index->mdhim_max_recs_per_slice) % \
-				index->mdhim_max_recs_per_slice;
-*/
-		slice_num = highval * (multiply/index->mdhim_max_recs_per_slice) + surplus/index->mdhim_max_recs_per_slice;
-		free(meta_pair);
-	}
 	//Return the slice number
 	return slice_num;
 }

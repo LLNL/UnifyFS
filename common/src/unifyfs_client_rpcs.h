@@ -1,5 +1,19 @@
-#ifndef __UNIFYFS_CLIENT_RPCS_H
-#define __UNIFYFS_CLIENT_RPCS_H
+/*
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
+ * Produced at the Lawrence Livermore National Laboratory.
+ *
+ * Copyright 2020, UT-Battelle, LLC.
+ *
+ * LLNL-CODE-741539
+ * All rights reserved.
+ *
+ * This is the license for UnifyFS.
+ * For details, see https://github.com/LLNL/UnifyFS.
+ * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
+ */
+
+#ifndef UNIFYFS_CLIENT_RPCS_H
+#define UNIFYFS_CLIENT_RPCS_H
 
 /*
  * Declarations for client-server margo RPCs (shared-memory)
@@ -11,32 +25,55 @@
 #include <mercury_proc_string.h>
 #include <mercury_types.h>
 
+#include "unifyfs_rpc_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* unifyfs_mount_rpc (client => server)
+typedef enum {
+    UNIFYFS_CLIENT_RPC_INVALID = 0,
+    UNIFYFS_CLIENT_RPC_ATTACH,
+    UNIFYFS_CLIENT_RPC_FILESIZE,
+    UNIFYFS_CLIENT_RPC_LAMINATE,
+    UNIFYFS_CLIENT_RPC_METAGET,
+    UNIFYFS_CLIENT_RPC_METASET,
+    UNIFYFS_CLIENT_RPC_MOUNT,
+    UNIFYFS_CLIENT_RPC_MULTIREAD,
+    UNIFYFS_CLIENT_RPC_READ,
+    UNIFYFS_CLIENT_RPC_SYNC,
+    UNIFYFS_CLIENT_RPC_TRUNCATE,
+    UNIFYFS_CLIENT_RPC_UNLINK,
+    UNIFYFS_CLIENT_RPC_UNMOUNT
+} client_rpc_e;
+
+/* unifyfs_attach_rpc (client => server)
  *
- * connect application client to the server, and
- * initialize shared memory state */
-MERCURY_GEN_PROC(unifyfs_mount_in_t,
+ * initialize server access to client's shared memory and file state */
+MERCURY_GEN_PROC(unifyfs_attach_in_t,
                  ((int32_t)(app_id))
-                 ((int32_t)(local_rank_idx))
-                 ((int32_t)(dbg_rank))
-                 ((int32_t)(num_procs_per_node))
-                 ((hg_const_string_t)(client_addr_str))
-                 ((hg_size_t)(req_buf_sz))
-                 ((hg_size_t)(recv_buf_sz))
-                 ((hg_size_t)(superblock_sz))
+                 ((int32_t)(client_id))
+                 ((hg_size_t)(shmem_data_size))
+                 ((hg_size_t)(shmem_super_size))
                  ((hg_size_t)(meta_offset))
                  ((hg_size_t)(meta_size))
-                 ((hg_size_t)(fmeta_offset))
-                 ((hg_size_t)(fmeta_size))
-                 ((hg_size_t)(data_offset))
-                 ((hg_size_t)(data_size))
-                 ((hg_const_string_t)(external_spill_dir)))
+                 ((hg_size_t)(logio_mem_size))
+                 ((hg_size_t)(logio_spill_size))
+                 ((hg_const_string_t)(logio_spill_dir)))
+MERCURY_GEN_PROC(unifyfs_attach_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_attach_rpc)
+
+/* unifyfs_mount_rpc (client => server)
+ *
+ * connect application client to the server */
+MERCURY_GEN_PROC(unifyfs_mount_in_t,
+                 ((int32_t)(dbg_rank))
+                 ((hg_const_string_t)(mount_prefix))
+                 ((hg_const_string_t)(client_addr_str)))
 MERCURY_GEN_PROC(unifyfs_mount_out_t,
-                 ((hg_size_t)(max_recs_per_slice))
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_mount_rpc)
 
@@ -44,33 +81,20 @@ DECLARE_MARGO_RPC_HANDLER(unifyfs_mount_rpc)
  *
  * disconnect client from server */
 MERCURY_GEN_PROC(unifyfs_unmount_in_t,
-    ((int32_t)(app_id))
-    ((int32_t)(local_rank_idx)))
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id)))
 MERCURY_GEN_PROC(unifyfs_unmount_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_unmount_rpc)
-
-/* need to transfer timespec structs */
-typedef struct timespec sys_timespec_t;
-MERCURY_GEN_STRUCT_PROC(sys_timespec_t,
-                        ((uint64_t)(tv_sec))
-                        ((uint64_t)(tv_nsec)))
 
 /* unifyfs_metaset_rpc (client => server)
  *
  * given a global file id and a file name,
  * record key/value entry for this file */
 MERCURY_GEN_PROC(unifyfs_metaset_in_t,
-                 ((hg_const_string_t)(filename))
-                 ((int32_t)(fid))
-                 ((int32_t)(gfid))
-                 ((uint32_t)(mode))
-                 ((uint32_t)(uid))
-                 ((uint32_t)(gid))
-                 ((uint64_t)(size))
-                 ((sys_timespec_t)(atime))
-                 ((sys_timespec_t)(mtime))
-                 ((sys_timespec_t)(ctime))
-                 ((uint32_t)(is_laminated)))
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
+                 ((int32_t)(attr_op))
+                 ((unifyfs_file_attr_t)(attr)))
 MERCURY_GEN_PROC(unifyfs_metaset_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_metaset_rpc)
 
@@ -79,30 +103,22 @@ DECLARE_MARGO_RPC_HANDLER(unifyfs_metaset_rpc)
  * returns file metadata including size and name
  * given a global file id */
 MERCURY_GEN_PROC(unifyfs_metaget_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
                  ((int32_t)(gfid)))
 MERCURY_GEN_PROC(unifyfs_metaget_out_t,
                  ((int32_t)(ret))
-                 ((hg_const_string_t)(filename))
-                 ((int32_t)(fid))
-                 ((int32_t)(gfid))
-                 ((uint32_t)(mode))
-                 ((uint32_t)(uid))
-                 ((uint32_t)(gid))
-                 ((uint64_t)(size))
-                 ((sys_timespec_t)(atime))
-                 ((sys_timespec_t)(mtime))
-                 ((sys_timespec_t)(ctime))
-                 ((uint32_t)(is_laminated)))
+                 ((unifyfs_file_attr_t)(attr)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_metaget_rpc)
 
 /* unifyfs_fsync_rpc (client => server)
  *
- * given app_id, client_id, and a global file id as input,
- * read extent location metadata from client shared memory
- * and insert corresponding key/value pairs into global index */
+ * given a client identified by (app_id, client_id) as input, read the write
+ * extents for one or more of the client's files from the shared memory index
+ * and update the global metadata for the file(s) */
 MERCURY_GEN_PROC(unifyfs_fsync_in_t,
                  ((int32_t)(app_id))
-                 ((int32_t)(local_rank_idx))
+                 ((int32_t)(client_id))
                  ((int32_t)(gfid)))
 MERCURY_GEN_PROC(unifyfs_fsync_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_fsync_rpc)
@@ -113,12 +129,49 @@ DECLARE_MARGO_RPC_HANDLER(unifyfs_fsync_rpc)
  * return filesize for given file */
 MERCURY_GEN_PROC(unifyfs_filesize_in_t,
                  ((int32_t)(app_id))
-                 ((int32_t)(local_rank_idx))
+                 ((int32_t)(client_id))
                  ((int32_t)(gfid)))
 MERCURY_GEN_PROC(unifyfs_filesize_out_t,
                  ((int32_t)(ret))
                  ((hg_size_t)(filesize)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_filesize_rpc)
+
+/* unifyfs_truncate_rpc (client => server)
+ *
+ * given an app_id, client_id, global file id,
+ * and a filesize, truncate file to that size */
+MERCURY_GEN_PROC(unifyfs_truncate_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
+                 ((int32_t)(gfid))
+                 ((hg_size_t)(filesize)))
+MERCURY_GEN_PROC(unifyfs_truncate_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_truncate_rpc)
+
+/* unifyfs_unlink_rpc (client => server)
+ *
+ * given an app_id, client_id, and global file id,
+ * unlink the file */
+MERCURY_GEN_PROC(unifyfs_unlink_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
+                 ((int32_t)(gfid)))
+MERCURY_GEN_PROC(unifyfs_unlink_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_unlink_rpc)
+
+/* unifyfs_laminate_rpc (client => server)
+ *
+ * given an app_id, client_id, and global file id,
+ * laminate the file */
+MERCURY_GEN_PROC(unifyfs_laminate_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
+                 ((int32_t)(gfid)))
+MERCURY_GEN_PROC(unifyfs_laminate_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_laminate_rpc)
 
 /* unifyfs_read_rpc (client => server)
  *
@@ -126,7 +179,7 @@ DECLARE_MARGO_RPC_HANDLER(unifyfs_filesize_rpc)
  * initiate read request for data */
 MERCURY_GEN_PROC(unifyfs_read_in_t,
                  ((int32_t)(app_id))
-                 ((int32_t)(local_rank_idx))
+                 ((int32_t)(client_id))
                  ((int32_t)(gfid))
                  ((hg_size_t)(offset))
                  ((hg_size_t)(length)))
@@ -135,12 +188,12 @@ DECLARE_MARGO_RPC_HANDLER(unifyfs_read_rpc)
 
 /* unifyfs_mread_rpc (client => server)
  *
- * given an app_id, client_id, global file id, and a count
- * of read requests, followed by list of offset/length tuples
+ * given an app_id, client_id, and count of read requests,
+ * followed by list of (gfid, offset, length) tuples,
  * initiate read requests for data */
 MERCURY_GEN_PROC(unifyfs_mread_in_t,
                  ((int32_t)(app_id))
-                 ((int32_t)(local_rank_idx))
+                 ((int32_t)(client_id))
                  ((int32_t)(read_count))
                  ((hg_size_t)(bulk_size))
                  ((hg_bulk_t)(bulk_handle)))

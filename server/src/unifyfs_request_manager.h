@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017-2019, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -31,75 +31,62 @@
 #define UNIFYFS_REQUEST_MANAGER_H
 
 #include "unifyfs_global.h"
+#include "unifyfs_metadata_mdhim.h"
 
-/* one entry per delegator for which we have active read requests,
- * records rank of delegator and request count */
 typedef struct {
-    int req_cnt; /* number of requests to this delegator */
-    int del_id;  /* rank of delegator */
-} per_del_stat_t;
-
-/* records list of delegator information (rank, req count) for
- * set of delegators we have active read requests for */
-typedef struct {
-    per_del_stat_t* req_stat; /* delegator rank and request count */
-    int del_cnt; /* number of delegators we have read requests for */
-} del_req_stat_t;
-
-// NEW READ REQUEST STRUCTURES
+    client_rpc_e req_type;
+    hg_handle_t handle;
+    void* input;
+    void* bulk_buf;
+    size_t bulk_sz;
+} client_rpc_req_t;
 
 typedef struct {
     readreq_status_e status;   /* aggregate request status */
+    int in_use;                /* currently using this req? */
     int req_ndx;               /* index in reqmgr read_reqs array */
     int app_id;                /* app id of requesting client process */
     int client_id;             /* client id of requesting client process */
-    int num_remote_reads;      /* size of remote_reads array */
-    client_read_req_t extent;  /* client read extent, includes gfid */
+    int num_server_reads;      /* size of remote_reads array */
     chunk_read_req_t* chunks;  /* array of chunk-reads */
-    remote_chunk_reads_t* remote_reads; /* per-delegator remote reads array */
+    server_chunk_reads_t* remote_reads; /* per-server remote reads array */
 } server_read_req_t;
 
-/* this structure is created by the main thread for each request
- * manager thread, contains shared data structures where main thread
- * issues read requests and request manager processes them, contains
- * condition variable and lock for coordination between threads */
-typedef struct {
-    /* request manager thread */
+/* Request manager state structure - created by main thread for each request
+ * manager thread. Contains shared data structures for client-server and
+ * server-server requests and associated synchronization constructs */
+typedef struct reqmgr_thrd {
+    /* request manager (RM) thread */
     pthread_t thrd;
+    pid_t tid;
 
     /* condition variable to synchronize request manager thread
-     * and main thread delivering work */
-    pthread_cond_t  thrd_cond;
+     * and margo rpc handler ULT delivering work */
+    pthread_cond_t thrd_cond;
 
     /* lock for shared data structures (variables below) */
     pthread_mutex_t thrd_lock;
 
-    /* flag indicating that request manager thread is waiting
-     * for work inside of critical region */
-    int has_waiting_delegator;
+    /* flag indicating request manager thread is waiting on thrd_cond CV */
+    int waiting_for_work;
 
-    /* flag indicating main thread is in critical section waiting
-     * for request manager thread */
+    /* flag indicating a margo rpc handler ULT is waiting on thrd_cond CV */
     int has_waiting_dispatcher;
 
+    /* argobots mutex for synchronizing access to request state between
+     * margo rpc handler ULTs and request manager thread */
+    ABT_mutex reqs_sync;
+
+    /* array of server read requests */
     int num_read_reqs;
     int next_rdreq_ndx;
     server_read_req_t read_reqs[RM_MAX_ACTIVE_REQUESTS];
 
-    /* a list of read requests to be sent to each delegator,
-     * main thread adds items to this list, request manager
-     * processes them */
-    msg_meta_t* del_req_set;
-
-    /* statistics of read requests to be sent to each delegator */
-    del_req_stat_t* del_req_stat;
+    /* list of client rpc requests */
+    arraylist_t* client_reqs;
 
     /* buffer to build read request messages */
     char del_req_msg_buf[REQ_BUF_LEN];
-
-    /* memory for posting receives for incoming read reply messages
-     * from the service threads */
-    char del_recv_msg_buf[RECV_BUF_CNT][SENDRECV_BUF_LEN];
 
     /* flag set to indicate request manager thread should exit */
     int exit_flag;
@@ -112,44 +99,31 @@ typedef struct {
 
     /* client_id this thread is serving */
     int client_id;
-
-    /* index within rm_thrd_list */
-    int thrd_ndx;
 } reqmgr_thrd_t;
 
+/* reserve/release read requests */
+server_read_req_t* rm_reserve_read_req(reqmgr_thrd_t* thrd_ctrl);
+int rm_release_read_req(reqmgr_thrd_t* thrd_ctrl,
+                        server_read_req_t* rdreq);
+
+/* issue remote chunk read requests for extent chunks
+ * listed within keyvals */
+int rm_create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
+                             server_read_req_t* rdreq,
+                             int num_vals,
+                             unifyfs_keyval_t* keyvals);
 
 /* create Request Manager thread for application client */
 reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id,
                                       int client_id);
 
-/* lookup Request Manager thread by index */
-reqmgr_thrd_t* rm_get_thread(int thrd_id);
-
 /* Request Manager pthread main */
-void* rm_delegate_request_thread(void* arg);
-
-/* functions called by rpc handlers to assign work
- * to request manager threads */
-int rm_cmd_mread(int app_id, int client_id,
-                 size_t req_num, void* reqbuf);
-
-int rm_cmd_read(int app_id, int client_id, int gfid,
-                size_t offset, size_t length);
-
-int rm_cmd_filesize(int app_id, int client_id, int gfid, size_t* outsize);
+void* request_manager_thread(void* arg);
 
 /* function called by main thread to instruct
  * resource manager thread to exit,
  * returns UNIFYFS_SUCCESS on success */
-int rm_cmd_exit(reqmgr_thrd_t* thrd_ctrl);
-
-/*
- * synchronize all the indices and file attributes
- * to the key-value store
- * @param sock_id: the connection id in poll_set of the delegator
- * @return success/error code
- */
-int rm_cmd_fsync(int app_id, int client_side_id, int gfid);
+int rm_request_exit(reqmgr_thrd_t* thrd_ctrl);
 
 /* update state for remote chunk reads with received response data */
 int rm_post_chunk_read_responses(int app_id,
@@ -163,16 +137,31 @@ int rm_post_chunk_read_responses(int app_id,
 /* process the requested chunk data returned from service managers */
 int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
                                    server_read_req_t* rdreq,
-                                   remote_chunk_reads_t* del_reads);
+                                   server_chunk_reads_t* del_reads);
+
+/**
+ * @brief hand over a read request to the request manager thread.
+ *
+ * @param req all members except for status and req_ndx need to be filled by
+ * the caller. @req->chunks and @req->remote_reads should be allocated from
+ * heap, and should not be freed by the caller.
+ *
+ * @return 0 on success, errno otherwise
+ */
+int rm_submit_read_request(server_read_req_t* req);
+
+/**
+ * @brief submit a client rpc request to the request manager thread.
+ *
+ * @param client    application client context
+ * @param req       pointer to client rpc request struct
+ *
+ * @return UNIFYFS_SUCCESS, or error code
+ */
+int rm_submit_client_rpc_request(unifyfs_fops_ctx_t* ctx,
+                                 client_rpc_req_t* req);
 
 /* MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
-
-int invoke_server_hello_rpc(int dst_srvr_rank);
-
-int invoke_server_request_rpc(int dst_srvr_rank,
-                              int req_id,
-                              int tag,
-                              void* data_buf, size_t buf_sz);
 
 int invoke_chunk_read_request_rpc(int dst_srvr_rank,
                                   server_read_req_t* rdreq,

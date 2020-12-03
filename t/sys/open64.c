@@ -36,8 +36,7 @@ int open64_test(char* unifyfs_root)
 
     char path[64];
     int mode = 0600;
-    int fd;
-    int rc;
+    int err, fd;
 
     /* Create a random file name at the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifyfs_root);
@@ -46,33 +45,39 @@ int open64_test(char* unifyfs_root)
      * errno=ENOENT */
     errno = 0;
     fd = open64(path, O_RDWR, mode);
-    ok(fd < 0 && errno == ENOENT,
+    err = errno;
+    ok(fd < 0 && err == ENOENT,
        "open64 non-existing file %s w/out O_CREATE fails (fd=%d, errno=%d): %s",
-       path, fd, errno, strerror(errno));
+       path, fd, err, strerror(err));
 
     /* Verify we can create a new file. */
     errno = 0;
     fd = open64(path, O_CREAT|O_EXCL, mode);
-    ok(fd >= 0, "open64 non-existing file %s flags O_CREAT|O_EXCL (fd=%d): %s",
-       path, fd, strerror(errno));
+    err = errno;
+    ok(fd >= 0 && err == 0,
+       "open64 non-existing file %s flags O_CREAT|O_EXCL (fd=%d): %s",
+       path, fd, strerror(err));
 
-    rc = close(fd);
+    ok(close(fd) != -1, "close() worked");
 
     /* Verify opening an existing file with O_CREAT|O_EXCL fails with
      * errno=EEXIST. */
     errno = 0;
     fd = open64(path, O_CREAT|O_EXCL, mode);
-    ok(fd < 0 && errno == EEXIST,
+    err = errno;
+    ok(fd < 0 && err == EEXIST,
        "open64 existing file %s O_CREAT|O_EXCL fails (fd=%d, errno=%d): %s",
-       path, fd, errno, strerror(errno));
+       path, fd, err, strerror(err));
 
     /* Verify opening an existing file with O_RDWR succeeds. */
     errno = 0;
     fd = open64(path, O_RDWR, mode);
-    ok(fd >= 0, "open64 existing file %s O_RDWR (fd=%d): %s",
-       path, fd, strerror(errno));
+    err = errno;
+    ok(fd >= 0 && err == 0,
+       "open64 existing file %s O_RDWR (fd=%d): %s",
+       path, fd, strerror(err));
 
-    rc = close(fd);
+    ok(close(fd) != -1, "close() worked");
 
     diag("Finished UNIFYFS_WRAP(open64) tests");
 

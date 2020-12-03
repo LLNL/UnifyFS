@@ -36,8 +36,7 @@ int open_test(char* unifyfs_root)
     char dir_path[64];
     int file_mode = 0600;
     int dir_mode = 0700;
-    int fd;
-    int rc;
+    int err, fd, rc;
 
     /* Create a random file and dir name at the mountpoint path to test on */
     testutil_rand_path(path, sizeof(path), unifyfs_root);
@@ -47,52 +46,59 @@ int open_test(char* unifyfs_root)
      * errno=ENOENT */
     errno = 0;
     fd = open(path, O_RDWR, file_mode);
-    ok(fd < 0 && errno == ENOENT,
+    err = errno;
+    ok(fd < 0 && err == ENOENT,
        "open non-existing file %s w/out O_CREATE fails (fd=%d, errno=%d): %s",
-       path, fd, errno, strerror(errno));
+       path, fd, err, strerror(err));
 
     /* Verify we can create a new file. */
     errno = 0;
     fd = open(path, O_CREAT|O_EXCL, file_mode);
-    ok(fd >= 0, "open non-existing file %s flags O_CREAT|O_EXCL (fd=%d): %s",
-       path, fd, strerror(errno));
+    err = errno;
+    ok(fd >= 0 && err == 0,
+       "open non-existing file %s flags O_CREAT|O_EXCL (fd=%d): %s",
+       path, fd, strerror(err));
 
-    rc = close(fd);
+    ok(close(fd) != -1, "close() worked");
 
     /* Verify opening an existing file with O_CREAT|O_EXCL fails with
      * errno=EEXIST. */
     errno = 0;
     fd = open(path, O_CREAT|O_EXCL, file_mode);
-    ok(fd < 0 && errno == EEXIST,
+    err = errno;
+    ok(fd < 0 && err == EEXIST,
        "open existing file %s O_CREAT|O_EXCL should fail (fd=%d, errno=%d): %s",
-       path, fd, errno, strerror(errno));
+       path, fd, err, strerror(err));
 
     /* Verify opening an existing file with O_RDWR succeeds. */
     errno = 0;
     fd = open(path, O_RDWR, file_mode);
-    ok(fd >= 0, "open existing file %s O_RDWR (fd=%d): %s",
-       path, fd, strerror(errno));
+    err = errno;
+    ok(fd >= 0 && err == 0,
+       "open existing file %s O_RDWR (fd=%d): %s",
+       path, fd, strerror(err));
 
-    rc = close(fd);
+    ok(close(fd) != -1, "close() worked");
 
-    /* todo_open_1: Remove when issue is resolved */
-    todo("open_1: should fail with errno=EISDIR=21");
-    /* Verify opening a dir for write fails with errno=EISDIR */
+    errno = 0;
     rc = mkdir(dir_path, dir_mode);
+    err = errno;
+    ok(rc == 0 && err == 0, "mkdir(%s, %o) worked, (errno=%d): %s",
+       dir_path, dir_mode, err, strerror(err));
 
     errno = 0;
     fd = open(dir_path, O_RDWR, file_mode);
-    ok(fd < 0 && errno == EISDIR,
+    err = errno;
+    ok(fd < 0 && err == EISDIR,
        "open directory %s for write should fail (fd=%d, errno=%d): %s",
-       dir_path, fd, errno, strerror(errno));
-    end_todo; /* end todo_open_1 */
+       dir_path, fd, err, strerror(err));
 
-    /* ClEANUP
+    /* CLEANUP
      *
      * Don't unlink `path` so that the final test (9020-mountpoint-empty) can
      * check if open left anything in the mountpoint and thus wasn't wrapped
      * properly. */
-    rc = rmdir(dir_path);
+    ok(rmdir(dir_path) != -1, "rmdir() worked");
 
     diag("Finished UNIFYFS_WRAP(open) tests");
 

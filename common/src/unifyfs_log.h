@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -32,9 +32,8 @@
 
 #include <stdio.h>
 #include <time.h>
-#include <unistd.h>
-#include <sys/syscall.h>
 #include <sys/time.h>
+#include <sys/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,7 +44,8 @@ typedef enum {
     LOG_ERR   = 2,
     LOG_WARN  = 3,
     LOG_INFO  = 4,
-    LOG_DBG   = 5
+    LOG_DBG   = 5,
+    LOG_LEVEL_MAX
 } unifyfs_log_level_t;
 
 extern unifyfs_log_level_t unifyfs_log_level;
@@ -55,13 +55,7 @@ extern struct tm* unifyfs_log_ltime;
 extern char unifyfs_log_timestamp[256];
 extern size_t unifyfs_log_source_base_len;
 
-#if defined(__NR_gettid)
-#define gettid() syscall(__NR_gettid)
-#elif defined(SYS_gettid)
-#define gettid() syscall(SYS_gettid)
-#else
-#error gettid syscall is not defined
-#endif
+pid_t unifyfs_gettid(void);
 
 #define LOG(level, ...) \
     if (level <= unifyfs_log_level) { \
@@ -74,7 +68,7 @@ extern size_t unifyfs_log_source_base_len;
             unifyfs_log_stream = stderr; \
         } \
         fprintf(unifyfs_log_stream, "%s tid=%ld @ %s() [%s:%d] ", \
-            unifyfs_log_timestamp, (long)gettid(), \
+            unifyfs_log_timestamp, (long)unifyfs_gettid(), \
             __func__, srcfile, __LINE__); \
         fprintf(unifyfs_log_stream, __VA_ARGS__); \
         fprintf(unifyfs_log_stream, "\n"); \
@@ -83,6 +77,7 @@ extern size_t unifyfs_log_source_base_len;
 
 #define LOGERR(...)  LOG(LOG_ERR,  __VA_ARGS__)
 #define LOGWARN(...) LOG(LOG_WARN, __VA_ARGS__)
+#define LOGINFO(...) LOG(LOG_INFO, __VA_ARGS__)
 #define LOGDBG(...)  LOG(LOG_DBG,  __VA_ARGS__)
 
 /* open specified file as debug file stream,
@@ -92,6 +87,9 @@ int unifyfs_log_open(const char* file);
 /* close our debug file stream,
  * returns UNIFYFS_SUCCESS on success */
 int unifyfs_log_close(void);
+
+/* set log level */
+void unifyfs_set_log_level(unifyfs_log_level_t lvl);
 
 #ifdef __cplusplus
 } // extern "C"

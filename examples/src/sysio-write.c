@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -11,6 +11,7 @@
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
+
 #include <config.h>
 
 #include <stdio.h>
@@ -331,10 +332,22 @@ int main(int argc, char** argv)
         sprintf(&targetfile[strlen(targetfile)], "-%d", rank);
     }
 
-    fd = open(targetfile, O_RDWR | O_CREAT | O_TRUNC, 0600);
-    if (fd < 0) {
-        test_print(rank, "open failed");
-        exit(-1);
+    if (rank == 0) {
+        fd = open(targetfile, O_RDWR | O_CREAT | O_TRUNC, 0600);
+        if (fd < 0) {
+            test_print(rank, "open failed");
+            exit(-1);
+        }
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    if (rank != 0) {
+        fd = open(targetfile, O_RDWR, 0600);
+        if (fd < 0) {
+            test_print(rank, "open failed");
+            exit(-1);
+        }
     }
 
     ret = do_write();

@@ -1,46 +1,80 @@
+# Both testing stages depend on the build stage. By using the "needs"
+# keyword, we prevent the testing stages from blocking, in favor of a
+# DAG.
 stages:
+  - init
   - build
   - test-unit
   - test-integ
 
-cache:
-  paths:
-      - spack_ci/
+##### System Templates #####
 
-##### Templates #####
+# Generic system templates used to contruct the final jobs on specific
+# systems within their respective <system>.yml file. Currently
+# these are LLNL specific, but can be adjusted or added to as new
+# systems become available.
+#
+# The NNODES, WALL_TIME, and STORAGE_SIZE variables can be altered in
+# Gitlab interface if/when the defaults need to be changed.
 
-.quartz-template: &quartz_template
-  tags:
-    - quartz
-    - shell
-  variables:
-    LLNL_SERVICE_USER: "unifysrv"
+.base-template:
   retry:
     max: 1
     when:
       - unknown_failure
       - stuck_or_timeout_failure
 
-.butte-template: &butte_template
-  tags:
-    - butte
-    - shell
+.slurm-single-node-template:
   variables:
-    LLNL_SERVICE_USER: "unifysrv"
-  retry:
-    max: 1
-    when:
-      - unknown_failure
-      - stuck_or_timeout_failure
+    JOB_LAUNCH_COMMAND: "srun -N1 -n1"
+    LLNL_SLURM_SCHEDULER_PARAMETERS: "-N 1 -p $QUEUE -t $UNIT_WALL_TIME -J unifyfs-unit-tests"
 
-.build-template: &build_template
+.slurm-multi-node-template:
+  variables:
+    LLNL_SLURM_SCHEDULER_PARAMETERS: "-N $NNODES -p $QUEUE -t $INTEG_WALL_TIME -J unifyfs-integ-tests"
+
+.lsf-single-node-template:
+  variables:
+    JOB_LAUNCH_COMMAND: "jsrun -r1 -n1"
+    LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes 1 -q $QUEUE -W $UNIT_WALL_TIME -J unifyfs-unit-tests"
+    SCHEDULER_PARAMETERS: "-nnodes 1 -P $PROJECT_ID -W $UNIT_WALL_TIME -J unifyfs-unit-tests"
+
+.lsf-multi-node-template:
+  variables:
+    LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes $NNODES $STAGE_STORAGE -q $QUEUE -W $INTEG_WALL_TIME -J unifyfs-integ-tests"
+    SCHEDULER_PARAMETERS: "-nnodes $NNODES -P $PROJECT_ID -W $INTEG_WALL_TIME -J unifyfs-integ-tests"
+
+##### Job Templates #####
+
+# Only use this template in a pre-build job if needing to clone and
+# run subsequent jobs from a non-default location.
+# The WORKING_DIR envar needs to be defined in the job variables.
+#
+# The before_script section here overrides the default before_script
+# for jobs using this template.
+.init-template:
+  stage: init
+  before_script:
+    - mkdir -pv $WORKING_DIR
+    - cd $WORKING_DIR
+  script:
+    - git clone -b ${CI_COMMIT_BRANCH} --depth=1 ${CI_REPOSITORY_URL} $WORKING_DIR
+
+# Build script used by each system. The CC and FC variables are set in
+# the specific job scripts and evaluated in the before_script in order
+# to customize which compiler will be used for each job.
+# An artifact is created to pass on to the testing stages. The
+# test-unit stage requires the unifyfs-build/ files and the test-integ
+# stage requires the unifyfs-install/ files.
+.build-template:
   stage: build
   script:
     - ./autogen.sh
     - mkdir -p unifyfs-build unifyfs-install && cd unifyfs-build
-    - ../configure --prefix=$CI_PROJECT_DIR/unifyfs-install --enable-fortran --disable-silent-rules
+    - ../configure CC=$CC_PATH FC=$FC_PATH --prefix=${WORKING_DIR}/unifyfs-install --enable-fortran --disable-silent-rules
     - make V=1
     - make V=1 install
+  needs: []
   artifacts:
     name: "${CI_JOB_NAME}-${CI_PIPELINE_ID}"
     untracked: true
@@ -49,84 +83,54 @@ cache:
       - unifyfs-build/
       - unifyfs-install/
 
-.unit-test-template: &unit_test_template
+.unit-test-template:
   stage: test-unit
   script:
-    - cd unifyfs-build/t && make check
+    - cd unifyfs-build/t && $JOB_LAUNCH_COMMAND make check
   after_script:
-    - rm -rf /tmp/unify* /tmp/tmp.* /tmp/mdhim* /tmp/na_sm
+    - rm -rf /tmp/unify* /tmp/tmp.* /tmp/mdhim* /tmp/na_sm | true
 
-.quartz-batch-variables:
-  variables: &quartz_batch_variables
-    LLNL_SLURM_SCHEDULER_PARAMETERS: "-N $NNODES -p pbatch -t $WALL_TIME"
-    LLNL_SERVICE_USER: "unifysrv"
-    CI_PROJDIR: "$CI_PROJECT_DIR"
-    UNIFYFS_INSTALL: "$CI_PROJECT_DIR/unifyfs-install"
-    CI_NPROCS: "$NPROCS"
-
-.butte-batch-variables:
-  variables: &butte_batch_variables
-    LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes $NNODES -q pbatch -W $WALL_TIME"
-    LLNL_SERVICE_USER: "unifysrv"
-    CI_PROJDIR: "$CI_PROJECT_DIR"
-    UNIFYFS_INSTALL: "$CI_PROJECT_DIR/unifyfs-install"
-    CI_NPROCS: "$NPROCS"
+# Variables here are used for the integration test suite and can be
+# adjusted in the Gitlab interface. See our testing documentation for
+# full details.
+.integ-test-template:
+  stage: test-integ
+  script:
+    - cd t/ci && prove -v RUN_CI_TESTS.sh
 
 ##### Jobs #####
 
+# Since Gitlab currently runs in the user's home environment, the
+# before_script is currently only set up to load the proper Spack
+# modules, if they are available, to prevent changing the user's
+# environment. Install any needed modules in the user's environment
+# prior to running when new compilers or architectures need to be
+# tested.
+#
+# For jobs running in the not-default location, change directories
+# to the WORKING_DIR directory. Otherwise, set WORKING_DIR to be the
+# CI_PROJECT_DIR for the build step.
+#
+# The COMPILER, CC_PATH, and FC_PATH variables are evaluated here. Set
+# them in their specific job scripts.
+# SPACK_COMPILER and SPACK_ARCH are then set to load the matching
+# dependencies for the desired compiler.
 before_script:
-  # HERE BE DRAGONS!: Since on HPC and running as user, Spack might already
-  # exist and can get complicated if we install it again.
-  #
-  # check for sourced spack || check for unsourced spack in $HOME/spack and
-  # source it || check for cached spack, clone if none, and source it
-  - which spack || ((cd $HOME/spack && git describe) && . $HOME/spack/share/spack/setup-env.sh) || (((cd spack_ci && git describe) || git clone https://github.com/CamStan/spack spack_ci) && . spack_ci/share/spack/setup-env.sh)
-  - SPACK_ARCH=$(spack arch)
-  - spack install leveldb && spack load leveldb arch=$SPACK_ARCH
-  - spack install gotcha@0.0.2 && spack load gotcha@0.0.2 arch=$SPACK_ARCH
-  - spack install flatcc && spack load flatcc arch=$SPACK_ARCH
-  - spack install margo^mercury+bmi~boostsys && spack load argobots arch=$SPACK_ARCH && spack load mercury arch=$SPACK_ARCH && spack load margo arch=$SPACK_ARCH
+  - which spack || ((cd $HOME/spack && git describe) && . $HOME/spack/share/spack/setup-env.sh)
+  - if [[ -d $WORKING_DIR ]]; then cd ${WORKING_DIR}; else export WORKING_DIR=${CI_PROJECT_DIR}; fi
+  - module load $COMPILER
+  - CC_PATH=$($CC_COMMAND)
+  - FC_PATH=$($FC_COMMAND)
+  - SPACK_COMPILER=${COMPILER//\//@}
+  - SPACK_ARCH="$(spack arch -p)-$(spack arch -o)-$(uname -m)"
+  - spack load gotcha %$SPACK_COMPILER arch=$SPACK_ARCH
+  - spack load argobots %$SPACK_COMPILER arch=$SPACK_ARCH
+  - spack load mercury %$SPACK_COMPILER arch=$SPACK_ARCH
+  - spack load margo %$SPACK_COMPILER arch=$SPACK_ARCH
+  - spack load spath %$SPACK_COMPILER arch=$SPACK_ARCH
 
-build-quartz:
-  <<: *quartz_template
-  <<: *build_template
-
-build-butte:
-  <<: *butte_template
-  <<: *build_template
-
-unit-test-quartz:
-  <<: *quartz_template
-  <<: *unit_test_template
-  dependencies:
-    - build-quartz
-
-unit-test-butte:
-  <<: *butte_template
-  <<: *unit_test_template
-  dependencies:
-    - build-butte
-
-#integ-test-quartz:
-#  <<: *quartz_template
-#  stage: test-integ
-#  tags:
-#    - quartz
-#    - batch
-#  variables: *quartz_batch_variables
-#  script:
-#    - cd t/ci && prove -v RUN_CI_TESTS.sh
-#  dependencies:
-#    - build-quartz
-
-integ-test-butte:
-  <<: *butte_template
-  stage: test-integ
-  tags:
-    - butte
-    - batch
-  variables: *butte_batch_variables
-  script:
-    - cd t/ci && prove -v RUN_CI_TESTS.sh
-  dependencies:
-    - build-butte
+# System specific jobs
+include:
+  - local: .gitlab/ascent.yml
+  - local: .gitlab/catalyst.yml
+  - local: .gitlab/lassen.yml

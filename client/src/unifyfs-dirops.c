@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -11,7 +11,6 @@
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
-#include <config.h>
 
 #include "unifyfs-sysio.h"
 
@@ -89,7 +88,8 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
 {
     /* call real opendir and return early if this is
      * not one of our paths */
-    if (!unifyfs_intercept_path(name)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (!unifyfs_intercept_path(name, upath)) {
         MAP_OR_FAIL(opendir);
         return UNIFYFS_REAL(opendir)(name);
     }
@@ -99,11 +99,11 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
      * if valid, populate the local file meta cache accordingly.
      */
 
-    int fid  = unifyfs_get_fid_from_path(name);
-    int gfid = unifyfs_generate_gfid(name);
+    int fid  = unifyfs_get_fid_from_path(upath);
+    int gfid = unifyfs_generate_gfid(upath);
 
     unifyfs_file_attr_t gfattr = { 0, };
-    int ret = unifyfs_get_global_file_meta(fid, gfid, &gfattr);
+    int ret = unifyfs_get_global_file_meta(gfid, &gfattr);
     if (ret != UNIFYFS_SUCCESS) {
         errno = ENOENT;
         return NULL;
@@ -121,6 +121,7 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
     unifyfs_filemeta_t* meta = NULL;
     if (fid >= 0) {
         meta = unifyfs_get_meta_from_fid(fid);
+        assert(meta != NULL);
 
         /*
          * FIXME: We found an inconsistent status between local cache and
@@ -128,29 +129,22 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
          * re-populate with the global data?
          */
         if (!unifyfs_fid_is_dir(fid)) {
-            errno = EIO;
+            errno = ENOTDIR;
             return NULL;
         }
-
-        /*
-         * FIXME: also, is it safe to oeverride this local data?
-         */
-        meta->size = sb.st_size;
-        meta->chunks = sb.st_blocks;
-        meta->log_size = 0; /* no need of local storage for dir operations */
     } else {
-        fid = unifyfs_fid_create_file(name);
+        fid = unifyfs_fid_create_file(upath);
         if (fid < 0) {
-            errno = EIO;
+            errno = unifyfs_rc_errno(-fid);
             return NULL;
         }
 
         meta = unifyfs_get_meta_from_fid(fid);
+        assert(meta != NULL);
         meta->mode = (meta->mode & ~S_IFREG) | S_IFDIR; /* set as directory */
-        meta->size     = sb.st_size;
-        meta->chunks   = sb.st_blocks;
-        meta->log_size = 0;
     }
+
+    meta->global_size = sb.st_size;
 
     unifyfs_dirstream_t* dirp = unifyfs_dirstream_alloc(fid);
 
@@ -243,7 +237,8 @@ int UNIFYFS_WRAP(scandir)(const char* path, struct dirent** namelist,
                           int (*compar)(const struct dirent**,
                                         const struct dirent**))
 {
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         fprintf(stderr, "Function not yet supported @ %s:%d\n",
                 __FILE__, __LINE__);
         errno = ENOSYS;

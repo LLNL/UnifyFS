@@ -11,6 +11,17 @@ easily as they do the parallel file system. This section will provide a high
 level design of UnifyFS. It will describe the UnifyFS library and the UnifyFS
 daemon.
 
+The file system that UnifyFS instantiates only exists in user space and is
+only visible to applications linked against the UnifyFS client library.  Since
+traditional file system tools (ls, cd, etc.) are not linked against the
+UnifyFS client library they cannot see files within UnifyFS nor can they be
+used to manipulate files within UnifyFS.  Each UnifyFS file system lasts as
+long as the server processes are running, which is typically as long as the
+job they are running within.  When the servers exit the file system is
+deleted.  It is therefore the user's responsibility to copy out files that
+need to be persisted to another permanent file system. We provide an API and
+a utility to make this easier.
+
 ---------------------------
 High Level Design
 ---------------------------

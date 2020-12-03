@@ -9,9 +9,10 @@ unifyfs_LDADD = $(top_builddir)/common/src/libunifyfs_common.la
 
 AM_CPPFLAGS = -I$(top_srcdir)/common/src \
               -DBINDIR=\"$(bindir)\" \
-              -DSBINDIR=\"$(sbindir)\"
+              -DSBINDIR=\"$(sbindir)\" \
+              -DLIBEXECDIR=\"$(libexecdir)\"
 
-AM_CFLAGS = -Wall
+AM_CFLAGS = -Wall -Werror
 
 CLEANFILES = $(bin_PROGRAMS)
 

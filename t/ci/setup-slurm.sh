@@ -20,7 +20,7 @@ get_hostlist()
 # Variables specific to SLURM
 nnodes=$SLURM_NNODES
 nres_sets=$SLURM_NNODES
-nprocs=${CI_NPROCS:-$nnodes}
+nprocs=${UNIFYFS_CI_NPROCS:-1}
 
 app_out="-o"
 app_err="-e"

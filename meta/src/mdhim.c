@@ -108,8 +108,8 @@ struct mdhim_t *mdhimInit(void *appComm, struct mdhim_options_t *opts) {
 		}
 		//Quit if MPI didn't initialize with multiple threads
 		if (provided != MPI_THREAD_MULTIPLE) {
-			mlog(MDHIM_CLIENT_CRIT, "MDHIM - Error while initializing MPI with threads");
-			exit(1);
+			mlog(MDHIM_CLIENT_WARN, "MDHIM - Error while initializing MPI with threads");
+			//exit(1);
 		}
 	}
 

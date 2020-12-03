@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2017, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2017, UT-Battelle, LLC.
+ * Copyright 2020, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -152,7 +152,7 @@ int unifyfs_stream_set_pointers(unifyfs_stream_t* s)
         /* ERROR: invalid file descriptor */
         s->err = 1;
         errno = EBADF;
-        return UNIFYFS_ERROR_BADF;
+        return EBADF;
     }
 
     /* if we have anything on the push back buffer, that must be
@@ -189,7 +189,7 @@ int unifyfs_stream_set_pointers(unifyfs_stream_t* s)
 
 /* given a mode like "r", "wb+", or "a+" return flags read, write,
  * append, and plus to indicate which were set,
- * returns UNIFYFS_ERROR_INVAL if invalid character is found
+ * returns EINVAL if invalid character is found
  */
 static int unifyfs_fopen_parse_mode(
     const char* mode,
@@ -206,13 +206,13 @@ static int unifyfs_fopen_parse_mode(
 
     /* ensure that user specified an input mode */
     if (mode == NULL) {
-        return UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     /* get number of characters in mode */
     size_t len = strlen(mode);
     if (len <= 0 || len > 3) {
-        return UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     /* first character must either be r, w, or a */
@@ -228,7 +228,7 @@ static int unifyfs_fopen_parse_mode(
         *append = 1;
         break;
     default:
-        return UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     /* optional second character may either be + or b */
@@ -243,7 +243,7 @@ static int unifyfs_fopen_parse_mode(
                 char third = mode[2];
                 if (third != 'b') {
                     /* third character something other than + or b */
-                    return UNIFYFS_ERROR_INVAL;
+                    return EINVAL;
                 }
             }
         } else if (second == 'b') {
@@ -254,12 +254,12 @@ static int unifyfs_fopen_parse_mode(
                     *plus = 1;
                 } else {
                     /* third character something other than + or b */
-                    return UNIFYFS_ERROR_INVAL;
+                    return EINVAL;
                 }
             }
         } else {
             /* second character something other than + or b */
-            return UNIFYFS_ERROR_INVAL;
+            return EINVAL;
         }
     }
 
@@ -295,7 +295,7 @@ static int unifyfs_fopen(
     off_t pos;
     if (read) {
         /* read shall fail if file does not already exist, unifyfs_fid_open
-         * returns UNIFYFS_ERROR_NOENT if file does not exist w/o O_CREAT
+         * returns ENOENT if file does not exist w/o O_CREAT
          */
         if (plus) {
             /* r+ ==> open file for update (reading and writing) */
@@ -342,7 +342,7 @@ static int unifyfs_fopen(
          * process has hit file stream limit, not the OS */
 
         /* exhausted our file streams */
-        return UNIFYFS_ERROR_NFILE;
+        return ENFILE;
     }
 
     /* get stream structure corresponding to stream id */
@@ -358,7 +358,7 @@ static int unifyfs_fopen(
         unifyfs_stack_push(unifyfs_stream_stack, sid);
 
         /* exhausted our file descriptors */
-        return UNIFYFS_ERROR_NFILE;
+        return ENFILE;
     }
 
     /* set file pointer and read/write mode in file descriptor */
@@ -366,7 +366,7 @@ static int unifyfs_fopen(
     filedesc->fid   = fid;
     filedesc->pos   = pos;
     filedesc->read  = read  || plus;
-    filedesc->write = write || plus;
+    filedesc->write = write || plus || append;
 
     /* record our stream id value */
     s->sid = sid;
@@ -422,19 +422,19 @@ static int unifyfs_setvbuf(
     /* check whether we've already associated a buffer */
     if (s->buf != NULL) {
         /* ERROR: stream already has buffer */
-        return UNIFYFS_ERROR_BADF;
+        return EBADF;
     }
 
     /* check that the type argument is valid */
     if (type != _IOFBF && type != _IOLBF && type != _IONBF) {
         /* ERROR: invalid type argument */
-        return UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     /* check that size is valid */
     if (size <= 0) {
         /* ERROR: invalid size argument */
-        return UNIFYFS_ERROR_INVAL;
+        return EINVAL;
     }
 
     /* associate buffer with stream */
@@ -443,7 +443,7 @@ static int unifyfs_setvbuf(
         s->buf = malloc(size);
         if (s->buf == NULL) {
             /* ERROR: no memory */
-            return UNIFYFS_ERROR_NOMEM;
+            return ENOMEM;
         }
         /* remember that we need to free the buffer at the end */
         s->buffree = 1;
@@ -476,11 +476,37 @@ static int unifyfs_stream_flush(FILE* stream)
 
     /* if buffer is dirty, write data to file */
     if (s->buf != NULL && s->bufdirty) {
-        int write_rc = unifyfs_fd_write(s->fd, s->bufpos, s->buf, s->buflen);
+        size_t nwritten = 0;
+        int write_rc = unifyfs_fd_write(s->fd, s->bufpos, s->buf, s->buflen,
+            &nwritten);
         if (write_rc != UNIFYFS_SUCCESS) {
+            /* ERROR: set stream error indicator and errno */
             s->err = 1;
-            errno = unifyfs_err_map_to_errno(write_rc);
+            errno = unifyfs_rc_errno(write_rc);
             return write_rc;
+        }
+
+        /* TODO: treat short writes as error? */
+
+        /* note there is no need to update the file descriptor position here
+         * since we wrote to a specific offset independent of the file
+         * descriptor position */
+
+        /* lookup file id from file descriptor attached to stream */
+        int fid = unifyfs_get_fid_from_fd(s->fd);
+        if (fid < 0) {
+            s->err = 1;
+            errno = EBADF;
+            return EBADF;
+        }
+
+        /* invoke fsync rpc to register index metadata with server */
+        int ret = unifyfs_fid_sync(fid);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* sync failed for some reason, set errno and return error */
+            s->err = 1;
+            errno = unifyfs_rc_errno(ret);
+            return ret;
         }
 
         /* indicate that buffer is now flushed */
@@ -493,7 +519,7 @@ static int unifyfs_stream_flush(FILE* stream)
 /* reads count bytes from stream into buf, sets stream EOF and error
  * indicators as appropriate, sets errno if error, updates file
  * position, returns number of bytes read in retcount, returns UNIFYFS
- * error codes*/
+ * error codes */
 static int unifyfs_stream_read(
     FILE* stream,
     void* buf,
@@ -513,14 +539,17 @@ static int unifyfs_stream_read(
         /* ERROR: invalid file descriptor */
         s->err = 1;
         errno = EBADF;
-        return UNIFYFS_ERROR_BADF;
+        LOGDBG("Invalid file descriptor");
+        return EBADF;
     }
 
     /* bail with error if stream not open for reading */
     if (!filedesc->read) {
         s->err = 1;
         errno = EBADF;
-        return UNIFYFS_ERROR_BADF;
+        LOGDBG("Stream not open for reading");
+
+        return EBADF;
     }
 
     /* associate buffer with stream if we need to */
@@ -530,13 +559,15 @@ static int unifyfs_stream_read(
         if (setvbuf_rc != UNIFYFS_SUCCESS) {
             /* ERROR: failed to associate buffer */
             s->err = 1;
-            errno = unifyfs_err_map_to_errno(setvbuf_rc);
+            errno = unifyfs_rc_errno(setvbuf_rc);
+            LOGDBG("Couldn't setvbuf");
             return setvbuf_rc;
         }
     }
 
     /* don't attempt read if end-of-file indicator is set */
     if (s->eof) {
+        LOGDBG("Stop read, at EOF");
         return UNIFYFS_FAILURE;
     }
 
@@ -549,7 +580,7 @@ static int unifyfs_stream_read(
     if (unifyfs_would_overflow_offt(current, (off_t) count)) {
         s->err = 1;
         errno = EOVERFLOW;
-        return UNIFYFS_ERROR_OVERFLOW;
+        return EOVERFLOW;
     }
 
     /* take bytes from push back buffer if they exist */
@@ -593,21 +624,22 @@ static int unifyfs_stream_read(
             }
 
             /* read data from file into buffer */
-            size_t bufcount;
-            int read_rc = unifyfs_fd_read(s->fd, current, s->buf, s->bufsize, &bufcount);
+            size_t nread = 0;
+            int read_rc = unifyfs_fd_read(s->fd, current, s->buf,
+                s->bufsize, &nread);
             if (read_rc != UNIFYFS_SUCCESS) {
-                /* ERROR: read error, set error indicator and errno */
+                /* ERROR: set error indicator and errno */
                 s->err = 1;
-                errno = unifyfs_err_map_to_errno(read_rc);
-                return read_rc;
+                errno = unifyfs_rc_errno(read_rc);
+                return EIO;
             }
 
             /* record new buffer range within file */
-            s->bufpos  = current;
-            s->buflen  = bufcount;
+            s->bufpos = current;
+            s->buflen = nread;
 
             /* set end-of-file flag if our read was short */
-            if (bufcount < s->bufsize) {
+            if (s->buflen < s->bufsize) {
                 eof = 1;
             }
         }
@@ -637,7 +669,7 @@ static int unifyfs_stream_read(
     *retcount = (count - remaining);
 
     /* update file position */
-    filedesc->pos += (off_t) * retcount;
+    filedesc->pos += (off_t) *retcount;
 
     /* set end of file indicator if we hit the end */
     if (*retcount < count) {
@@ -669,16 +701,18 @@ static int unifyfs_stream_write(
     unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(s->fd);
     if (filedesc == NULL) {
         /* ERROR: invalid file descriptor */
+        LOGDBG("Bad file descriptor");
         s->err = 1;
         errno = EBADF;
-        return UNIFYFS_ERROR_BADF;
+        return EBADF;
     }
 
     /* bail with error if stream not open for writing */
     if (!filedesc->write) {
+        LOGDBG("Stream not open for writing");
         s->err = 1;
         errno = EBADF;
-        return UNIFYFS_ERROR_BADF;
+        return EBADF;
     }
 
     /* TODO: Don't know what to do with push back bytes if write
@@ -692,9 +726,9 @@ static int unifyfs_stream_write(
         if (fid < 0) {
             s->err = 1;
             errno = EBADF;
-            return UNIFYFS_ERROR_BADF;
+            return EBADF;
         }
-        current = unifyfs_fid_size(fid);
+        current = unifyfs_fid_logical_size(fid);
 
         /* like a seek, we discard push back bytes */
         s->ubuflen = 0;
@@ -716,7 +750,7 @@ static int unifyfs_stream_write(
     if (unifyfs_would_overflow_offt(current, (off_t) count)) {
         s->err = 1;
         errno = EFBIG;
-        return UNIFYFS_ERROR_FBIG;
+        return EFBIG;
     }
 
     /* associate buffer with stream if we need to */
@@ -726,7 +760,7 @@ static int unifyfs_stream_write(
         if (setvbuf_rc != UNIFYFS_SUCCESS) {
             /* ERROR: failed to associate buffer */
             s->err = 1;
-            errno = unifyfs_err_map_to_errno(setvbuf_rc);
+            errno = unifyfs_rc_errno(setvbuf_rc);
             return setvbuf_rc;
         }
     }
@@ -734,16 +768,19 @@ static int unifyfs_stream_write(
     /* if unbuffered, write data directly to file */
     if (s->buftype == _IONBF) {
         /* write data directly to file */
-        int write_rc = unifyfs_fd_write(s->fd, current, buf, count);
+        size_t nwritten = 0;
+        int write_rc = unifyfs_fd_write(s->fd, current, buf, count, &nwritten);
         if (write_rc != UNIFYFS_SUCCESS) {
-            /* ERROR: write error, set error indicator and errno */
+            /* ERROR: set stream error indicator and errno */
             s->err = 1;
-            errno = unifyfs_err_map_to_errno(write_rc);
+            errno = unifyfs_rc_errno(write_rc);
             return write_rc;
         }
 
+        /* TODO: treat short writes as error? */
+
         /* update file position */
-        filedesc->pos = current + (off_t) count;
+        filedesc->pos = current + (off_t) nwritten;
 
         return UNIFYFS_SUCCESS;
     }
@@ -788,7 +825,7 @@ static int unifyfs_stream_write(
                 /* ERROR: write error, set error indicator and errno */
                 s->err = 1;
                 errno = ENOMEM;
-                return UNIFYFS_ERROR_NOMEM;
+                return ENOMEM;
             }
         } else {
             /* fully buffered, write until we hit the buffer limit */
@@ -882,6 +919,11 @@ static int unifyfs_fseek(FILE* stream, off_t offset, int whence)
     switch (whence) {
     case SEEK_SET:
         /* seek to offset */
+        if (offset < 0) {
+            /* negative offset is invalid */
+            errno = EINVAL;
+            return -1;
+        }
         current_pos = offset;
         break;
     case SEEK_CUR:
@@ -891,14 +933,24 @@ static int unifyfs_fseek(FILE* stream, off_t offset, int whence)
             errno  = EOVERFLOW;
             return -1;
         }
+        if (current_pos + offset < 0) {
+            /* offset is negative and will result in a negative position */
+            errno = EINVAL;
+            return -1;
+        }
         current_pos += offset;
         break;
     case SEEK_END:
         /* seek to EOF + offset */
-        filesize = unifyfs_fid_size(fid);
+        filesize = unifyfs_fid_logical_size(fid);
         if (unifyfs_would_overflow_offt(filesize, offset)) {
             s->err = 1;
             errno  = EOVERFLOW;
+            return -1;
+        }
+        if (filesize + offset < 0) {
+            /* offset is negative and will result in negative position */
+            errno = EINVAL;
             return -1;
         }
         current_pos = filesize + offset;
@@ -928,11 +980,12 @@ static int unifyfs_fseek(FILE* stream, off_t offset, int whence)
 FILE* UNIFYFS_WRAP(fopen)(const char* path, const char* mode)
 {
     /* check whether we should intercept this path */
-    if (unifyfs_intercept_path(path)) {
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
         FILE* stream;
-        int rc = unifyfs_fopen(path, mode, &stream);
+        int rc = unifyfs_fopen(upath, mode, &stream);
         if (rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(rc);
+            errno = unifyfs_rc_errno(rc);
             return NULL;
         }
         return stream;
@@ -969,7 +1022,7 @@ int UNIFYFS_WRAP(setvbuf)(FILE* stream, char* buf, int type, size_t size)
     if (unifyfs_intercept_stream(stream)) {
         int rc = unifyfs_setvbuf(stream, buf, type, size);
         if (rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(rc);
+            errno = unifyfs_rc_errno(rc);
             return 1;
         }
         return 0;
@@ -1548,13 +1601,17 @@ void UNIFYFS_WRAP(rewind)(FILE* stream)
         /* lookup stream */
         unifyfs_stream_t* s = (unifyfs_stream_t*) stream;
 
-        /* TODO: check that stream is active */
+        /* check that stream is active */
+        if (s->fd < 0) {
+            errno = EBADF;
+            return;
+        }
 
         /* seek to front of file */
         int rc = unifyfs_fseek(stream, (off_t) 0L, SEEK_SET);
 
         /* set errno */
-        errno = unifyfs_err_map_to_errno(rc);
+        errno = unifyfs_rc_errno(rc);
 
         /* clear error indicator if seek successful */
         if (rc == 0) {
@@ -1689,7 +1746,6 @@ int UNIFYFS_WRAP(fflush)(FILE* stream)
         /* TODO: check that stream is active */
         /* flush output on stream */
         int rc = unifyfs_stream_flush(stream);
-
         if (rc != UNIFYFS_SUCCESS) {
             /* ERROR: flush sets error indicator and errno */
             return EOF;
@@ -1825,7 +1881,7 @@ int UNIFYFS_WRAP(fclose)(FILE* stream)
         /* close the file */
         int close_rc = unifyfs_fid_close(fid);
         if (close_rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_err_map_to_errno(close_rc);
+            errno = unifyfs_rc_errno(close_rc);
             return EOF;
         }
 
@@ -2229,7 +2285,7 @@ static int __srefill(unifyfs_stream_t* stream)
         if (setvbuf_rc != UNIFYFS_SUCCESS) {
             /* ERROR: failed to associate buffer */
             s->err = 1;
-            errno = unifyfs_err_map_to_errno(setvbuf_rc);
+            errno = unifyfs_rc_errno(setvbuf_rc);
             return 1;
         }
     }
@@ -2258,18 +2314,22 @@ static int __srefill(unifyfs_stream_t* stream)
         }
 
         /* read data from file into buffer */
-        size_t bufcount;
-        int read_rc = unifyfs_fd_read(s->fd, current, s->buf, s->bufsize, &bufcount);
+        size_t nread = 0;
+        int read_rc = unifyfs_fd_read(s->fd, current, s->buf, s->bufsize,
+            &nread);
         if (read_rc != UNIFYFS_SUCCESS) {
-            /* ERROR: read error, set error indicator and errno */
+            /* ERROR: set error indicator and errno */
             s->err = 1;
-            errno = unifyfs_err_map_to_errno(read_rc);
+            errno = unifyfs_rc_errno(read_rc);
             return 1;
         }
 
+        /* update file descriptor position to account for bytes we just read */
+        filedesc->pos = current + nread;
+
         /* record new buffer range within file */
         s->bufpos = current;
-        s->buflen = bufcount;
+        s->buflen = nread;
     }
 
     /* determine number of bytes to copy from stream buffer */
@@ -2573,6 +2633,7 @@ __svfscanf(unifyfs_stream_t* fp, const char* fmt0, va_list ap)
     char ccltab[256];   /* character class table for %[...] */
     char buf[BUF];      /* buffer for numeric conversions */
 
+    base = 0;
     nassigned = 0;
     nconversions = 0;
     nread = 0;
