@@ -18,7 +18,7 @@ repos=(	https://xgitlab.cels.anl.gov/sds/bmi.git
 	https://xgitlab.cels.anl.gov/sds/margo.git
 )
 
-if [ $1 = "--with-leveldb" ]; then
+if [ "$1" = "--with-leveldb" ] ; then
     repos+=(https://github.com/google/leveldb.git)
 fi
 
@@ -43,7 +43,7 @@ cd bmi
 make -j $(nproc) && make install
 cd ..
 
-if [ $1 = "--with-leveldb" ]; then
+if [ "$1" = "--with-leveldb" ] ; then
     echo "### building leveldb ###"
     cd leveldb
     git checkout 1.22
