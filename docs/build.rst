@@ -1,8 +1,13 @@
 ========================
-Build & I/O Interception
+Build UnifyFS
 ========================
 
-In this section, we describe how to build UnifyFS with I/O interception.
+This section describes how to build UnifyFS and its dependencies.
+There are three options:
+
+* build both UnifyFS and its dependencies with Spack,
+* build the dependencies with Spack, but build UnifyFS with autotools
+* build the dependencies with a bootstrap script, and build UnifyFS with autotools
 
 ---------------------------
 
@@ -13,7 +18,7 @@ UnifyFS Build Configuration Options
 Fortran
 *******
 
-To enable UnifyFS use with Fortran applications, pass the ``--enable-fortran``
+To use UnifyFS in Fortran applications, pass the ``--enable-fortran``
 option to configure. Note that only GCC Fortran (i.e., gfortran) is known to
 work with UnifyFS. There is an open
 `ifort_issue <https://github.com/LLNL/UnifyFS/issues/300>`_ with the Intel
@@ -28,7 +33,7 @@ GOTCHA is the preferred method for I/O interception with UnifyFS, but it is not
 available on all platforms. If GOTCHA is not available on your target system,
 you can omit it during UnifyFS configuration by using the ``--without-gotcha``
 configure option. Without GOTCHA, static linker wrapping is required for I/O
-interception.
+interception, see :doc:`link`.
 
 HDF5
 ****
@@ -75,8 +80,8 @@ Full Build
 
 To install all dependencies and set up your build environment, we recommend
 using the `Spack package manager <https://github.com/spack/spack>`_. If you
-already have Spack, make sure you have the latest release or if using a clone
-of their develop branch, ensure you have pulled the latest changes.
+already have Spack, make sure you have the latest release.
+If you are using a clone of the Spack develop branch, ensure you have pulled the latest changes.
 
 .. _build-label:
 
@@ -143,9 +148,9 @@ build is desired. Type ``spack info unifyfs`` for more info.
 Manual Build
 ************
 
-Optionally, you can install the dependencies with Spack and still build UnifyFS
-manually. This is useful if wanting to be able to edit the UnifyFS source code
-between builds, but still letting Spack take care of the dependencies.  Take
+Optionally, you can install the UnifyFS dependencies with Spack and build UnifyFS
+manually. This is useful if one needs to modify the UnifyFS source code
+between builds.  Take
 advantage of
 `Spack Environments <https://spack.readthedocs.io/en/latest/environments.html>`_
 to streamline this process.
@@ -165,8 +170,8 @@ UnifyFS dependencies can then be installed.
 
 .. tip::
 
-    You can use ``spack install --only=dependencies unifyfs`` to install all of
-    UnifyFS's dependencies without installing UnifyFS.
+    You can use ``spack install --only=dependencies unifyfs`` to install all
+    UnifyFS dependencies without installing UnifyFS.
 
     Keep in mind this will also install all the build dependencies and
     dependencies of dependencies if you haven't already installed them through
@@ -225,9 +230,8 @@ easier. Simply run the script in the top level directory of the source code.
 Build UnifyFS
 *************
 
-After bootstrap.sh is finished building the dependencies, it will print out the
-commands you need to run to build UnifyFS.  The commands look something like
-this:
+After bootstrap.sh is finished building the dependencies, it prints the
+commands needed to build UnifyFS.  As an example, the commands look something like:
 
 .. code-block:: Bash
 
@@ -239,51 +243,3 @@ this:
 
 To see all available build configuration options, run ``./configure --help``
 after ``./autogen.sh`` has been run.
-
----------------------------
-
----------------------------
-I/O Interception
----------------------------
-
-POSIX calls can be intercepted via the methods described below.
-
-Statically
-**************
-
-Steps for static linking using --wrap:
-
-To intercept I/O calls using a static link, you must add flags to your link
-line. UnifyFS installs a unifyfs-config script that returns those flags, e.g.,
-
-.. code-block:: Bash
-
-    $ mpicc -o test_write \
-          `<unifyfs>/bin/unifyfs-config --pre-ld-flags` \
-          test_write.c \
-          `<unifyfs>/bin/unifyfs-config --post-ld-flags`
-
-Dynamically
-**************
-
-Steps for dynamic linking using gotcha:
-
-To intercept I/O calls using gotcha, use the following syntax to link an
-application.
-
-C
-^^^^^^^^^^^^^^
-
-.. code-block:: Bash
-
-    $ mpicc -o test_write test_write.c \
-        -I<unifyfs>/include -L<unifycy>/lib -lunifyfs_gotcha \
-        -L<gotcha>/lib64 -lgotcha
-
-Fortran
-^^^^^^^^^^^^^^
-
-.. code-block:: Bash
-
-    $ mpif90 -o test_write test_write.F \
-        -I<unifyfs>/include -L<unifycy>/lib -lunifyfsf -lunifyfs_gotcha

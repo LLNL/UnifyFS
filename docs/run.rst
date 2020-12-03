@@ -1,11 +1,11 @@
 ================================
-  Starting & Stopping in a Job
+Run UnifyFS
 ================================
 
-In this section, we describe the mechanisms for starting and stopping UnifyFS in
-a user's job allocation.
+This section describes the mechanisms to start and stop the UnifyFS
+server processes within a job allocation.
 
-Overall, the steps taken to run an application with UnifyFS include:
+Overall, the steps to run an application with UnifyFS include:
 
     1. Allocate nodes using the system resource manager (i.e., start a job)
 
@@ -21,19 +21,19 @@ Overall, the steps taken to run an application with UnifyFS include:
   Starting UnifyFS
 --------------------
 
-First, we need to start the UnifyFS server daemon (``unifyfsd``) on the nodes in
+First, one must start the UnifyFS server process (``unifyfsd``) on the nodes in
 the job allocation. UnifyFS provides the ``unifyfs`` command line utility to
 simplify this action on systems with supported resource managers. The easiest
 way to determine if you are using a supported system is to run
 ``unifyfs start`` within an interactive job allocation. If no compatible
-resource management system is detected, the utility will report an error message
+resource management system is detected, the utility reports an error message
 to that effect.
 
 In ``start`` mode, the ``unifyfs`` utility automatically detects the allocated
 nodes and launches a server on each node. For example, the following script
 could be used to launch the ``unifyfsd`` servers with a customized
 configuration. On systems with resource managers that propagate environment
-settings to compute nodes, the environment variables will override any
+settings to compute nodes, the environment variables override any
 settings in ``/etc/unifyfs/unifyfs.conf``. See :doc:`configuration`
 for further details on customizing the UnifyFS runtime configuration.
 
@@ -89,7 +89,7 @@ The full usage for ``unifyfs`` is as follows:
 After UnifyFS servers have been successfully started, you may run your
 UnifyFS-enabled applications as you normally would (e.g., using mpirun).
 Only applications that explicitly call ``unifyfs_mount()`` and access files
-with the specified mountpoint prefix will utilize UnifyFS for their I/O. All
+under the specified mountpoint prefix will utilize UnifyFS for their I/O. All
 other applications will operate unchanged.
 
 --------------------
@@ -124,7 +124,7 @@ Support for the SLURM resource manager is under development.
 
 The manifest file contains one or more file copy requests.
 Each line in the manifest corresponds to one file copy request,
-and contains both the source and destination file paths. Currently,
+and it contains both the source and destination file paths. Currently,
 directory copies are not supported.
 
 Each line is formatted as <source filename><whitespace><destination filename>.
