@@ -1,8 +1,8 @@
-=================
-Mounting UnifyFS
-=================
+=========================
+Integrate the UnifyFS API
+=========================
 
-In this section, we describe how to use the UnifyFS API in an application.
+This section describes how to use the UnifyFS API in an application.
 
 .. Attention:: **Fortran Compatibility**
 
@@ -16,7 +16,7 @@ In this section, we describe how to use the UnifyFS API in an application.
    ``--enable-fortran`` option if building manually.
 
 ---------------------------
-Mounting 
+Include the UnifyFS header
 ---------------------------
 
 In C or C++ applications, include ``unifyfs.h``. See writeread.c_ for a full
@@ -35,30 +35,42 @@ full example.
 
     include 'unifyfsf.h'
 
-To use the UnifyFS filesystem a user will have to provide a path prefix. All
-file operations under the path prefix will be intercepted by the UnifyFS
-filesystem. For instance, to use UnifyFS on all path prefixes that begin with
-/tmp this would require a:
+---------------------------
+Mounting
+---------------------------
+
+UnifyFS implements a file system in user space, which the system has no knowledge about.
+The UnifyFS library intecepts and handles I/O calls whose path matches a prefix that is defined by the user.
+Calls corresponding to matching paths are handled by UnifyFS and all other calls are forwarded to the original I/O routine.
+
+To use UnifyFS, the application must register the path that the UnifyFS library should intercept
+by making a call to ``unifyfs_mount``.
+This must be done once on each client process,
+and it must be done before the client process attempts to access any UnifyFS files.
+
+For instance, to use UnifyFS on all path prefixes that begin with
+``/unifyfs`` this would require a:
 
 .. code-block:: C
     :caption: C
 
-    unifyfs_mount('/tmp', rank, rank_num, 0);
+    unifyfs_mount('/unifyfs', rank, rank_num, 0);
 
 .. code-block:: Fortran
     :caption: Fortran
 
-    call UNIFYFS_MOUNT('/tmp', rank, size, 0, ierr);
+    call UNIFYFS_MOUNT('/unifyfs', rank, size, 0, ierr);
 
-Where ``/tmp`` is the path prefix you want UnifyFS to intercept. The rank and rank
-number is the rank you are currently on, and the number of tasks you have
-running in your job. Lastly, the zero corresponds to the app id.
+Here, ``/unifyfs`` is the path prefix for UnifyFS to intercept.
+The ``rank`` parameter specifies the MPI rank of the calling process.
+The ``size`` parameter specifies the number of MPI ranks in the user job.
+Lastly, the zero corresponds to the app id.
 
 ---------------------------
-Unmounting 
+Unmounting
 ---------------------------
 
-When you are finished using UnifyFS in your application, you should unmount.
+When the application is done using UnifyFS, it should call ``unifyfs_unmount``.
 
 .. code-block:: C
     :caption: C

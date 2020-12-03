@@ -36,7 +36,7 @@ Installed with Autotools
 
 The autotools installation of UnifyFS will place the example programs in the
 *libexec/* directory of the path provided to ``--prefix=/path/to/install`` during
-the configure step of :doc:`building and installing <build-intercept>`.
+the configure step of :doc:`building and installing <build>`.
 
 Build Location
 --------------
@@ -83,7 +83,7 @@ Running the Examples
 
 In order to run any of the example programs you first need to start the UnifyFS
 server daemon on the nodes in the job allocation. To do this, see
-:doc:`start-stop`.
+:doc:`run`.
 
 Each example takes multiple arguments and so each has its own ``--help`` option
 to aid in this process.

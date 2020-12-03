@@ -12,7 +12,7 @@ Getting Started
 Get UnifyFS
 -----------
 
-You can build and run UnifyFS by following :doc:`these instructions <build-intercept>`.
+You can build and run UnifyFS by following :doc:`these instructions <build>`.
 
 Getting Help
 ------------
