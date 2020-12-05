@@ -9,14 +9,9 @@ In the examples below, replace <unifyfs> with the path to your UnifyFS install.
 
 ---------------------------
 
----------------------------
-I/O Interception
----------------------------
-
-POSIX I/O calls can be intercepted via the methods described below.
-
+-----------
 Static link
-**************
+-----------
 
 For a static link, UnifyFS utilizes the ``--wrap`` feature of the ``ld`` command.
 One must specify a ``--wrap`` option for every I/O call that is wrapped,
@@ -30,14 +25,15 @@ To make this easier, UnifyFS installs a unifyfs-config script that one should in
           test_write.c \
           `<unifyfs>/bin/unifyfs-config --post-ld-flags`
 
+------------
 Dynamic link
-**************
+------------
 
 To intercept I/O calls using gotcha, use the following syntax to link an
 application:
 
 C
-^^^^^^^^^^^^^^
+**************
 
 .. code-block:: Bash
 
@@ -46,7 +42,7 @@ C
         -L<gotcha>/lib64 -lgotcha
 
 Fortran
-^^^^^^^^^^^^^^
+**************
 
 .. code-block:: Bash
 
