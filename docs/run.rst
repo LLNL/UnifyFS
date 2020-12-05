@@ -18,7 +18,7 @@ Overall, the steps to run an application with UnifyFS include:
     5. Terminate the UnifyFS servers using ``unifyfs``
 
 --------------------
-  Starting UnifyFS
+  Start UnifyFS
 --------------------
 
 First, one must start the UnifyFS server process (``unifyfsd``) on the nodes in
@@ -93,7 +93,7 @@ under the specified mountpoint prefix will utilize UnifyFS for their I/O. All
 other applications will operate unchanged.
 
 --------------------
-  Stopping UnifyFS
+  Stop UnifyFS
 --------------------
 
 After all UnifyFS-enabled applications have completed running, you should

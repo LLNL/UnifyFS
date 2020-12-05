@@ -41,7 +41,7 @@ as its primary mechanism to intercept I/O calls.
 The user application is linked with the UnifyFS client library
 and perhaps a high-level I/O library, like HDF5, ADIOS, or PnetCDF.
 
-Each UnifyFS server runs as a process on a compute node in
+A UnifyFS server process runs on each compute node in
 the job allocation. The UnifyFS server handles the I/O
 requests from the UnifyFS library.
 The UnifyFS server uses ECP `Mochi <https://mochi.readthedocs.io/en/latest>`_
