@@ -58,7 +58,8 @@
 /* avoid duplicate mounts (for now) */
 static int unifyfs_mounted = -1;
 
-static int unifyfs_fpos_enabled   = 1;  /* whether we can use fgetpos/fsetpos */
+/* whether we can use fgetpos/fsetpos */
+static int unifyfs_fpos_enabled = 1;
 
 unifyfs_cfg_t client_cfg;
 
@@ -66,8 +67,8 @@ unifyfs_index_buf_t unifyfs_indices;
 static size_t unifyfs_index_buf_size;    /* size of metadata log */
 unsigned long unifyfs_max_index_entries; /* max metadata log entries */
 
-int global_rank_cnt;  /* count of world ranks */
-int client_rank;      /* client-provided rank (for debugging) */
+int global_rank_cnt; /* count of world ranks */
+int client_rank;     /* client-provided rank (for debugging) */
 
 /* shared memory buffer to transfer read replies
  * from server to client */
@@ -289,10 +290,12 @@ static void unifyfs_normalize_path(const char* path, char* normalized)
 #endif /* HAVE_SPATH */
 }
 
-/* sets flag if the path is a special path */
+/* Given a path, which may relative or absoluate,
+ * return 1 if we should intercept the path, 0 otherwise.
+ * If path is to be intercepted, returned a normalized version in upath. */
 inline int unifyfs_intercept_path(const char* path, char* upath)
 {
-    /* don't intecept anything until we're initialized */
+    /* don't intercept anything until we're initialized */
     if (!unifyfs_initialized) {
         return 0;
     }
@@ -329,7 +332,7 @@ inline int unifyfs_intercept_fd(int* fd)
 {
     int oldfd = *fd;
 
-    /* don't intecept anything until we're initialized */
+    /* don't intercept anything until we're initialized */
     if (!unifyfs_initialized) {
         return 0;
     }
@@ -350,11 +353,11 @@ inline int unifyfs_intercept_fd(int* fd)
     }
 }
 
-/* given an fd, return 1 if we should intercept this file, 0 otherwise,
- * convert fd to new fd value if needed */
+/* given a file stream, return 1 if we should intercept this file,
+ * 0 otherwise */
 inline int unifyfs_intercept_stream(FILE* stream)
 {
-    /* don't intecept anything until we're initialized */
+    /* don't intercept anything until we're initialized */
     if (!unifyfs_initialized) {
         return 0;
     }
@@ -372,10 +375,10 @@ inline int unifyfs_intercept_stream(FILE* stream)
 }
 
 /* given an directory stream, return 1 if we should intercept this
- * fdirecotry, 0 otherwise */
+ * direcotry, 0 otherwise */
 inline int unifyfs_intercept_dirstream(DIR* dirp)
 {
-    /* don't intecept anything until we're initialized */
+    /* don't intercept anything until we're initialized */
     if (!unifyfs_initialized) {
         return 0;
     }
@@ -395,6 +398,8 @@ inline int unifyfs_intercept_dirstream(DIR* dirp)
 /* given a path, return the file id */
 inline int unifyfs_get_fid_from_path(const char* path)
 {
+    /* scan through active entries in filelist array looking
+     * for a match of path */
     int i = 0;
     while (i < unifyfs_max_files) {
         if (unifyfs_filelist[i].in_use &&
@@ -500,6 +505,7 @@ unifyfs_filemeta_t* unifyfs_get_meta_from_fid(int fid)
     return NULL;
 }
 
+/* given a file id, return 1 if file is laminated, 0 otherwise */
 int unifyfs_fid_is_laminated(int fid)
 {
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
@@ -509,10 +515,13 @@ int unifyfs_fid_is_laminated(int fid)
     return 0;
 }
 
+/* given a file descriptor, return 1 if file is laminated,
+ * and 0 otherwise */
 int unifyfs_fd_is_laminated(int fd)
 {
     int fid = unifyfs_get_fid_from_fd(fd);
-    return unifyfs_fid_is_laminated(fid);
+    int laminated = unifyfs_fid_is_laminated(fid);
+    return laminated;
 }
 
 /* ---------------------------------------
@@ -525,13 +534,10 @@ static int fid_store_alloc(int fid)
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     if ((meta != NULL) && (meta->fid == fid)) {
-        /* indicate that we're using LOGIO to store data for this file */
-        meta->storage = FILE_STORAGE_LOGIO;
-
         /* Initialize our segment tree that will record our writes */
         int rc = seg_tree_init(&meta->extents_sync);
         if (rc != 0) {
-            return rc;
+            return UNIFYFS_FAILURE;
         }
 
         /* Initialize our segment tree to track extents for all writes
@@ -539,14 +545,20 @@ static int fid_store_alloc(int fid)
         if (unifyfs_local_extents) {
             rc = seg_tree_init(&meta->extents);
             if (rc != 0) {
-                return rc;
+                /* free off extents_sync tree we initialized */
+                seg_tree_destroy(&meta->extents_sync);
+                return UNIFYFS_FAILURE;
             }
         }
+
+        /* indicate that we're using LOGIO to store data for this file */
+        meta->storage = FILE_STORAGE_LOGIO;
 
         return UNIFYFS_SUCCESS;
     } else {
         LOGERR("failed to get filemeta for fid=%d", fid);
     }
+
     return UNIFYFS_FAILURE;
 }
 
@@ -556,19 +568,22 @@ static int fid_store_free(int fid)
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     if ((meta != NULL) && (meta->fid == fid)) {
+        if (meta->storage == FILE_STORAGE_LOGIO) {
+            /* Free our write seg_tree */
+            seg_tree_destroy(&meta->extents_sync);
+
+            /* Free our extent seg_tree */
+            if (unifyfs_local_extents) {
+                seg_tree_destroy(&meta->extents);
+            }
+        }
+
         /* set storage type back to NULL */
         meta->storage = FILE_STORAGE_NULL;
 
-        /* Free our write seg_tree */
-        seg_tree_destroy(&meta->extents_sync);
-
-        /* Free our extent seg_tree */
-        if (unifyfs_local_extents) {
-            seg_tree_destroy(&meta->extents);
-        }
-
         return UNIFYFS_SUCCESS;
     }
+
     return UNIFYFS_FAILURE;
 }
 
@@ -1305,7 +1320,7 @@ const char* unifyfs_path_from_fid(int fid)
 {
     unifyfs_filename_t* fname = &unifyfs_filelist[fid];
     if (fname->in_use) {
-            return fname->filename;
+        return fname->filename;
     }
     return NULL;
 }
@@ -1362,7 +1377,8 @@ off_t unifyfs_fid_logical_size(int fid)
 {
     /* get meta data for this file */
     if (unifyfs_fid_is_laminated(fid)) {
-        return unifyfs_fid_global_size(fid);
+        off_t size = unifyfs_fid_global_size(fid);
+        return size;
     } else {
         /* invoke an rpc to ask the server what the file size is */
 
@@ -1408,7 +1424,9 @@ off_t unifyfs_gfid_filesize(int gfid)
     return filesize;
 }
 
-/* Update local metadata for file from global metadata */
+/* Update local metadata for file from global metadata.
+ * Currently, this updates the is_laminated flag, and if
+ * the file is laminated, it also updates the global_size value */
 int unifyfs_fid_update_file_meta(int fid, unifyfs_file_attr_t* gfattr)
 {
     if (NULL == gfattr) {
@@ -1421,13 +1439,15 @@ int unifyfs_fid_update_file_meta(int fid, unifyfs_file_attr_t* gfattr)
         /* update lamination state */
         meta->is_laminated = gfattr->is_laminated;
         if (meta->is_laminated) {
-            /* update file size */
+            /* file has been laminated, record its size
+             * for local lookup since it won't change */
             meta->global_size = (off_t)gfattr->size;
             LOGDBG("laminated file size is %zu bytes",
                    (size_t)meta->global_size);
         }
         return UNIFYFS_SUCCESS;
     }
+
     /* else, bad fid */
     return UNIFYFS_FAILURE;
 }
@@ -1445,9 +1465,10 @@ int unifyfs_fid_update_file_meta(int fid, unifyfs_file_attr_t* gfattr)
  *
  * gfattr: The metadata values to store.
  */
-int unifyfs_set_global_file_meta(int gfid,
-                                 unifyfs_file_attr_op_e attr_op,
-                                 unifyfs_file_attr_t* gfattr)
+int unifyfs_set_global_file_meta(
+    int gfid,
+    unifyfs_file_attr_op_e attr_op,
+    unifyfs_file_attr_t* gfattr)
 {
     /* check that we have an input buffer */
     if (NULL == gfattr) {
@@ -1586,13 +1607,15 @@ int unifyfs_fid_create_file(const char* path)
     unifyfs_filelist[fid].in_use = 1;
 
     /* copy file name into slot */
-    strcpy((void*)&unifyfs_filelist[fid].filename, path);
+    strncpy((void*)&unifyfs_filelist[fid].filename, path, UNIFYFS_MAX_FILENAME);
     LOGDBG("Filename %s got unifyfs fid %d",
            unifyfs_filelist[fid].filename, fid);
 
-    /* initialize meta data */
+    /* get metadata for this file id */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     assert(meta != NULL);
+
+    /* initialize meta data */
     meta->global_size  = 0;
     meta->flock_status = UNLOCKED;
     meta->storage      = FILE_STORAGE_NULL;
@@ -1678,6 +1701,32 @@ int unifyfs_fid_create_directory(const char* path)
     return UNIFYFS_SUCCESS;
 }
 
+/* delete a file id, free its local storage resources and return
+ * the file id to free stack */
+static int unifyfs_fid_delete(int fid)
+{
+    /* finalize the storage we're using for this file */
+    int rc = fid_store_free(fid);
+    if (rc != UNIFYFS_SUCCESS) {
+        /* failed to release structures tracking storage,
+         * bail out to keep its file id active */
+        return rc;
+    }
+
+    /* set this file id as not in use */
+    unifyfs_filelist[fid].in_use = 0;
+
+    /* add this id back to the free stack */
+    rc = unifyfs_fid_free(fid);
+    if (rc != UNIFYFS_SUCCESS) {
+        /* storage for the file was released, but we hit
+         * an error while freeing the file id */
+        return rc;
+    }
+
+    return UNIFYFS_SUCCESS;
+}
+
 /* Write count bytes from buf into file starting at offset pos.
  *
  * Returns UNIFYFS_SUCCESS, or an error code
@@ -1715,7 +1764,7 @@ int unifyfs_fid_write(
             /* optionally sync after every write */
             if (unifyfs_write_sync) {
                 int ret = unifyfs_sync(fid);
-                if (ret) {
+                if (ret != UNIFYFS_SUCCESS) {
                     LOGERR("client sync after write failed");
                     rc = ret;
                 }
@@ -1738,6 +1787,7 @@ int unifyfs_fid_truncate(int fid, off_t length)
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     assert(meta != NULL);
+
     if (meta->is_laminated) {
         /* Can't truncate a laminated file */
         return EINVAL;
@@ -1780,11 +1830,12 @@ int unifyfs_fid_sync(int fid)
     /* assume we'll succeed */
     int ret = UNIFYFS_SUCCESS;
 
-    /* sync any writes to disk */
+    /* get metadata for the file id */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     assert(meta != NULL);
+
+    /* sync data with server */
     if (meta->needs_sync) {
-        /* sync data with server */
         ret = unifyfs_sync(fid);
     }
 
@@ -1795,8 +1846,12 @@ int unifyfs_fid_sync(int fid)
  * fills outfid with file id and outpos with position for current file pointer,
  * returns UNIFYFS error code
  */
-int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
-                     off_t* outpos)
+int unifyfs_fid_open(
+    const char* path, /* path of file to be opened */
+    int flags,        /* flags bits as from open(2) */
+    mode_t mode,      /* mode bits as from open(2) */
+    int* outfid,      /* allocated local file id if open is successful */
+    off_t* outpos)    /* initial file position if open is successful */
 {
     int ret;
 
@@ -1809,7 +1864,6 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         return ENAMETOOLONG;
     }
 
-    /* check whether this file already exists */
     /*
      * TODO: The test of file existence involves both local and global checks.
      * However, the testing below does not seem to cover all cases. For
@@ -1817,20 +1871,174 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
      * the broadcast for cache invalidation has not been implemented, yet.
      */
 
-    /* get local and global file ids */
+    /* look for local and global file ids */
     int fid  = unifyfs_get_fid_from_path(path);
     int gfid = unifyfs_generate_gfid(path);
-
     LOGDBG("unifyfs_get_fid_from_path() gave %d (gfid = %d)", fid, gfid);
 
     /* test whether we have info for file in our local file list */
     int found_local = (fid >= 0);
 
-    /* test whether we have metadata for file in global key/value store */
-    int found_global = 0;
+    /* determine whether any write flags are specified */
+    int open_for_write = flags & (O_RDWR | O_WRONLY);
+
+    /* struct to hold global metadata for file */
     unifyfs_file_attr_t gfattr = { 0, };
-    if (unifyfs_get_global_file_meta(gfid, &gfattr) == UNIFYFS_SUCCESS) {
-        found_global = 1;
+
+    /* if O_CREAT,
+     *   if not local, allocate fid and storage
+     *   create from local fid meta
+     *   attempt to create global inode
+     *   if EEXIST and O_EXCL, error and release fid/storage
+     *   lookup global meta
+     *   check that local and global info are consistent
+     *   if O_TRUNC and not laminated, truncate
+     * else
+     *   lookup global meta
+     *     if not found, error
+     *   check that local and global info are consistent
+     * if O_APPEND, set pos to file size
+     */
+
+    /* determine whether we are creating a new file
+     * or opening an existing one */
+    if (flags & O_CREAT) {
+        /* user wants to create a new file,
+         * allocate a local file id structure if needed */
+        if (!found_local) {
+            /* initialize local metadata for this file */
+            fid = unifyfs_fid_create_file(path);
+            if (fid < 0) {
+                LOGERR("failed to create a new file %s", path);
+                return -fid;
+            }
+
+            /* initialize local storage for this file */
+            ret = fid_store_alloc(fid);
+            if (ret != UNIFYFS_SUCCESS) {
+                LOGERR("failed to allocate storage space for file %s (fid=%d)",
+                    path, fid);
+                unifyfs_fid_delete(fid);
+                return ret;
+            }
+
+            /* TODO: set meta->mode bits to mode variable */
+        }
+
+        /* insert file attribute for file in key-value store */
+        unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_CREATE;
+        ret = unifyfs_set_global_file_meta_from_fid(fid, op);
+        if (ret == EEXIST && !(flags & O_EXCL)) {
+            /* File didn't exist before, but now it does.
+             * Another process beat us to the punch in creating it.
+             * Read its metadata to update our cache. */
+            ret = unifyfs_get_global_file_meta(gfid, &gfattr);
+            if (ret == UNIFYFS_SUCCESS) {
+                if (found_local) {
+                    /* TODO: check that global metadata is consistent with
+                     * our existing local entry */
+                }
+
+                /* Successful in fetching metadata for existing file.
+                 * Update our local cache using that metadata. */
+                unifyfs_fid_update_file_meta(fid, &gfattr);
+            } else {
+                /* Failed to get metadata for a file that should exist.
+                 * Perhaps it was since deleted.  We could try to create
+                 * it again and loop through these steps, but for now
+                 * consider this situation to be an error. */
+                LOGERR("Failed to get metadata on existing file %s (fid:%d)",
+                    path, fid);
+            }
+        }
+        if (ret != UNIFYFS_SUCCESS) {
+            LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
+                path, fid);
+            if (!found_local) {
+                /* free fid we just allocated above,
+                 * but don't do that by calling fid_unlink */
+                unifyfs_fid_delete(fid);
+            }
+            return ret;
+        }
+
+        /* successfully opened the file with O_CREAT, truncate if needed
+         * and file is not laminated */
+        if ((flags & O_TRUNC) && open_for_write && !gfattr.is_laminated) {
+            ret = unifyfs_fid_truncate(fid, 0);
+        }
+    } else {
+        /* trying to open without creating, file must already exist,
+         * lookup global metadata for file */
+        ret = unifyfs_get_global_file_meta(gfid, &gfattr);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* bail out if we failed to find global file */
+            if (found_local && ret == ENOENT) {
+                /* Have a local entry, but there is no global entry.
+                 * Perhaps global file was unlinked?
+                 * Invalidate our local entry. */
+                LOGDBG("file found locally, but seems to be deleted globally. "
+                       "invalidating the local cache.");
+                unifyfs_fid_delete(fid);
+            }
+
+            return ret;
+        }
+
+        /* succeeded in global lookup for file,
+         * allocate a local file id structure if needed */
+        if (!found_local) {
+            /* initialize local metadata for this file */
+            fid = unifyfs_fid_create_file(path);
+            if (fid < 0) {
+                LOGERR("failed to create a new file %s", path);
+                return -fid;
+            }
+
+            /* initialize local storage for this file */
+            ret = fid_store_alloc(fid);
+            if (ret != UNIFYFS_SUCCESS) {
+                LOGERR("failed to allocate storage space for file %s (fid=%d)",
+                       path, fid);
+                /* free fid we just allocated above,
+                 * but don't do that by calling fid_unlink */
+                unifyfs_fid_delete(fid);
+                return ret;
+            }
+        } else {
+            /* TODO: already have a local entry for this path and found
+             * a global entry, check that they are consistent */
+        }
+
+        /* Successful in fetching metadata for existing file.
+         * Update our local cache using that metadata. */
+        unifyfs_fid_update_file_meta(fid, &gfattr);
+    }
+
+    /* if given O_DIRECTORY, the named file must be a directory */
+    if ((flags & O_DIRECTORY) && !unifyfs_fid_is_dir(fid)) {
+        if (!found_local) {
+            /* free fid we just allocated above,
+             * but don't do that by calling fid_unlink */
+            unifyfs_fid_delete(fid);
+        }
+        return ENOTDIR;
+    }
+
+    /* TODO: does O_DIRECTORY really have to be given to open a directory? */
+    if (!(flags & O_DIRECTORY) && unifyfs_fid_is_dir(fid)) {
+        if (!found_local) {
+            /* free fid we just allocated above,
+             * but don't do that by calling fid_unlink */
+            unifyfs_fid_delete(fid);
+        }
+        return EISDIR;
+    }
+
+    /* do we normally update position to EOF with O_APPEND? */
+    if ((flags & O_APPEND) && open_for_write) {
+        /* We only support O_APPEND on non-laminated files */
+        pos = unifyfs_fid_logical_size(fid);
     }
 
     /*
@@ -1841,112 +2049,20 @@ int unifyfs_fid_open(const char* path, int flags, mode_t mode, int* outfid,
         ((flags & (O_CREAT | O_TRUNC | O_APPEND | O_WRONLY)) ||
          ((mode & 0222) && (flags != O_RDONLY)))) {
             LOGDBG("Can't open laminated file %s with a writable flag.", path);
+            /* TODO: free fid we just allocated above,
+             * but don't do that by calling fid_unlink */
+            if (!found_local) {
+                /* free fid we just allocated above,
+                 * but don't do that by calling fid_unlink */
+                unifyfs_fid_delete(fid);
+            }
             return EROFS;
     }
-
-    /* possibly, the file still exists in our local cache but globally
-     * unlinked. Invalidate the entry
-     *
-     * FIXME: unifyfs_fid_unlink() always returns success.
-     */
-    if (found_local && !found_global) {
-        LOGDBG("file found locally, but seems to be deleted globally. "
-               "invalidating the local cache.");
-        unifyfs_fid_unlink(fid);
-        return ENOENT;
-    }
-
-    /* for all other three cases below, we need to open the file and allocate a
-     * file descriptor for the client.
-     */
-    if (!found_local && found_global) {
-        /* file has possibly been created by another process.  We need to
-         * create a local meta cache and also initialize the local storage
-         * space.
-         */
-
-        /* initialize local metadata for this file */
-        fid = unifyfs_fid_create_file(path);
-        if (fid < 0) {
-            LOGERR("failed to create a new file %s", path);
-            return -fid;
-        }
-
-        /* initialize local storage for this file */
-        ret = fid_store_alloc(fid);
-        if (ret != UNIFYFS_SUCCESS) {
-            LOGERR("failed to allocate storage space for file %s (fid=%d)",
-                   path, fid);
-            return ret;
-        }
-
-        /* initialize global size of file from global metadata */
-        unifyfs_fid_update_file_meta(fid, &gfattr);
-    } else if (found_local && found_global) {
-        /* file exists and is valid.  */
-        if ((flags & O_CREAT) && (flags & O_EXCL)) {
-            return EEXIST;
-        }
-
-        if ((flags & O_DIRECTORY) && !unifyfs_fid_is_dir(fid)) {
-            return ENOTDIR;
-        }
-
-        if (!(flags & O_DIRECTORY) && unifyfs_fid_is_dir(fid)) {
-            return EISDIR;
-        }
-
-        /* update local metadata from global metadata */
-        unifyfs_fid_update_file_meta(fid, &gfattr);
-
-        if ((flags & O_TRUNC) && (flags & (O_RDWR | O_WRONLY))) {
-            unifyfs_fid_truncate(fid, 0);
-        }
-
-        if (flags & O_APPEND) {
-            /* We only support O_APPEND on non-laminated files */
-            pos = unifyfs_fid_logical_size(fid);
-        }
-    } else {
-        /* !found_local && !found_global
-         * If we reach here, we need to create a brand new file.
-         */
-        if (!(flags & O_CREAT)) {
-            LOGERR("%s does not exist (O_CREAT not given).", path);
-            return ENOENT;
-        }
-        LOGDBG("Creating a new entry for %s", path);
-
-        /* allocate a file id slot for this new file */
-        fid = unifyfs_fid_create_file(path);
-        if (fid < 0) {
-            LOGERR("Failed to create new file %s", path);
-            return -fid;
-        }
-
-        /* initialize the storage for the file */
-        int store_rc = fid_store_alloc(fid);
-        if (store_rc != UNIFYFS_SUCCESS) {
-            LOGERR("Failed to create storage for file %s", path);
-            return store_rc;
-        }
-
-        /* insert file attribute for file in key-value store */
-        unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_CREATE;
-        ret = unifyfs_set_global_file_meta_from_fid(fid, op);
-        if (ret != UNIFYFS_SUCCESS) {
-            LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
-                   path, fid);
-            return ret;
-        }
-    }
-
-    /* TODO: allocate a free file descriptor and associate it with fid set
-     * in_use flag and file pointer */
 
     /* return local file id and starting file position */
     *outfid = fid;
     *outpos = pos;
+
     return UNIFYFS_SUCCESS;
 }
 
@@ -1973,26 +2089,11 @@ int unifyfs_fid_unlink(int fid)
     }
 
     /* finalize the storage we're using for this file */
-    rc = fid_store_free(fid);
+    rc = unifyfs_fid_delete(fid);
     if (rc != UNIFYFS_SUCCESS) {
         /* released strorage for file, but failed to release
          * structures tracking storage, again bail out to keep
          * its file id active */
-        return rc;
-    }
-
-    /* at this point, we have released all storage for the file,
-     * and data structures that track its storage, so we can
-     * release the file id itself */
-
-    /* set this file id as not in use */
-    unifyfs_filelist[fid].in_use = 0;
-
-    /* add this id back to the free stack */
-    rc = unifyfs_fid_free(fid);
-    if (rc != UNIFYFS_SUCCESS) {
-        /* storage for the file was released, but we hit
-         * an error while freeing the file id */
         return rc;
     }
 
@@ -2508,12 +2609,12 @@ void fill_client_attach_info(unifyfs_attach_in_t* in)
     size_t meta_size   = unifyfs_max_index_entries
                          * sizeof(unifyfs_index_t);
 
-    in->app_id            = unifyfs_app_id;
-    in->client_id         = unifyfs_client_id;
-    in->shmem_data_size   = shm_recv_ctx->size;
-    in->shmem_super_size  = shm_super_ctx->size;
-    in->meta_offset       = meta_offset;
-    in->meta_size         = meta_size;
+    in->app_id           = unifyfs_app_id;
+    in->client_id        = unifyfs_client_id;
+    in->shmem_data_size  = shm_recv_ctx->size;
+    in->shmem_super_size = shm_super_ctx->size;
+    in->meta_offset      = meta_offset;
+    in->meta_size        = meta_size;
 
     if (NULL != logio_ctx->shmem) {
         in->logio_mem_size = logio_ctx->shmem->size;
@@ -2538,8 +2639,11 @@ void fill_client_attach_info(unifyfs_attach_in_t* in)
  * @param l_app_id: application ID
  * @return success/error code
  */
-int unifyfs_mount(const char prefix[], int rank, size_t size,
-                  int l_app_id)
+int unifyfs_mount(
+    const char prefix[],
+    int rank,
+    size_t size,
+    int l_app_id)
 {
     int rc;
     int kv_rank, kv_nranks;
@@ -2671,7 +2775,6 @@ int unifyfs_mount(const char prefix[], int rank, size_t size,
  */
 int unifyfs_unmount(void)
 {
-    int rc;
     int ret = UNIFYFS_SUCCESS;
 
     if (-1 == unifyfs_mounted) {
@@ -2680,8 +2783,8 @@ int unifyfs_unmount(void)
 
     /* sync any outstanding writes */
     LOGDBG("syncing data");
-    rc = unifyfs_sync(-1);
-    if (rc) {
+    int rc = unifyfs_sync(-1);
+    if (rc != UNIFYFS_SUCCESS) {
         LOGERR("client sync failed");
         ret = UNIFYFS_FAILURE;
     }
@@ -2693,7 +2796,7 @@ int unifyfs_unmount(void)
     /* invoke unmount rpc to tell server we're disconnecting */
     LOGDBG("calling unmount");
     rc = invoke_client_unmount_rpc();
-    if (rc) {
+    if (rc != UNIFYFS_SUCCESS) {
         LOGERR("client unmount rpc failed");
         ret = UNIFYFS_FAILURE;
     }
@@ -2728,7 +2831,7 @@ int unifyfs_unmount(void)
 
     /* clean up configuration */
     rc = unifyfs_config_fini(&client_cfg);
-    if (rc) {
+    if (rc != 0) {
         LOGERR("unifyfs_config_fini() failed");
         ret = UNIFYFS_FAILURE;
     }
