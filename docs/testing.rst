@@ -410,7 +410,7 @@ To run any of these examples manually, refer to the :doc:`examples`
 documentation.
 
 The UnifyFS examples_ are also being used as integration tests with
-continuation integration tools such as Bamboo_ or GitLab_.
+continuous integration tools such as Bamboo_ or GitLab_.
 
 ------------
 
@@ -601,11 +601,11 @@ Misc
 """"
 
 ``KB``
-    :math:`2^10`.
+    :math:`2^{10}`.
 ``MB``
-    :math:`2^20`.
+    :math:`2^{20}`.
 ``GB``
-    :math:`2^30`.
+    :math:`2^{30}`.
 
 ------------
 
