@@ -51,6 +51,7 @@ libexec_PROGRAMS = \
 	std/stdio-static.t \
 	sys/sysio-gotcha.t \
 	sys/sysio-static.t \
+	multi/stdio-static.t \
 	unifyfs_unmount.t
 
 
@@ -152,6 +153,12 @@ std_stdio_static_t_SOURCES = std/stdio_suite.h \
 std_stdio_static_t_CPPFLAGS = $(test_cppflags)
 std_stdio_static_t_LDADD = $(test_static_ldadd)
 std_stdio_static_t_LDFLAGS = $(test_static_ldflags)
+
+multi_stdio_static_t_SOURCES = multi/open_multi.c
+
+multi_stdio_static_t_CPPFLAGS = $(test_cppflags)
+multi_stdio_static_t_LDADD = $(test_static_ldadd)
+multi_stdio_static_t_LDFLAGS = $(test_static_ldflags)
 
 unifyfs_unmount_t_SOURCES = unifyfs_unmount.c
 unifyfs_unmount_t_CPPFLAGS = $(test_cppflags)
