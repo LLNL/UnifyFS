@@ -37,14 +37,22 @@ static const char* PROTOCOL_MARGO_SHM   = "na+sm://";
 #error Required Mercury NA shared memory plugin not found (please enable 'SM')
 #endif
 
-#if defined(NA_HAS_BMI)
-static const char* PROTOCOL_MARGO_TCP = "bmi+tcp://";
-static const char* PROTOCOL_MARGO_RMA = "bmi+tcp://";
-#elif defined(NA_HAS_OFI)
-static const char* PROTOCOL_MARGO_TCP = "ofi+tcp://";
-static const char* PROTOCOL_MARGO_RMA = "ofi+verbs://";
-#else
+#if !defined(NA_HAS_BMI) && !defined(NA_HAS_OFI)
 #error No supported Mercury NA plugin found (please use one of: 'BMI', 'OFI')
+#endif
+
+#if defined(NA_HAS_BMI)
+static const char* PROTOCOL_MARGO_BMI_TCP = "bmi+tcp://";
+#else
+static const char* PROTOCOL_MARGO_BMI_TCP;
+#endif
+
+#if defined(NA_HAS_OFI)
+static const char* PROTOCOL_MARGO_OFI_TCP = "ofi+tcp://";
+static const char* PROTOCOL_MARGO_OFI_RMA = "ofi+verbs://";
+#else
+static const char* PROTOCOL_MARGO_OFI_TCP;
+static const char* PROTOCOL_MARGO_OFI_RMA;
 #endif
 
 /* setup_remote_target - Initializes the server-server margo target */
@@ -58,10 +66,14 @@ static margo_instance_id setup_remote_target(void)
     margo_instance_id mid;
     const char* margo_protocol;
 
-    if (margo_use_tcp) {
-        margo_protocol = PROTOCOL_MARGO_TCP;
-    } else {
-        margo_protocol = PROTOCOL_MARGO_RMA;
+    /* by default we try to use ofi */
+    margo_protocol = margo_use_tcp ?
+                     PROTOCOL_MARGO_OFI_TCP : PROTOCOL_MARGO_OFI_RMA;
+
+    /* when ofi is not available, fallback to using bmi */
+    if (!margo_protocol) {
+        LOGWARN("OFI is not available, using BMI for margo rpc");
+        margo_protocol = PROTOCOL_MARGO_BMI_TCP;
     }
 
     mid = margo_init(margo_protocol, MARGO_SERVER_MODE,

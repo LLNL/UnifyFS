@@ -142,6 +142,15 @@ files.
    init_timeout  INT     timeout in seconds to wait for servers to be ready for clients (default: 120)
    ============  ======  =============================================================================
 
+.. table:: ``[margo]`` section - margo server NA settings
+   :widths: auto
+
+   ===  ====  ====================================================================================
+   Key  Type  Description
+   ===  ====  ====================================================================================
+   tcp  BOOL  Use TCP for server to server margo rpcs (default: on, set this off to use ofi+verbs)
+   ===  ====  ====================================================================================
+
 .. table:: ``[sharedfs]`` section - server shared files settings
    :widths: auto
 
