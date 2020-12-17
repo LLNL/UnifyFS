@@ -464,18 +464,32 @@ static void laminate_bcast_rpc(hg_handle_t handle)
                     }
                 }
 
+                /* update inode file attributes. first check to make sure inode
+                 * for the gfid exists. if it doesn't, create it with given
+                 * attrs. otherwise, just do a metadata update. */
+                unifyfs_file_attr_t existing_fattr;
+                ret = unifyfs_inode_metaget(gfid, &existing_fattr);
+                if (ret == ENOENT) {
+                    /* create with is_laminated=0 so extents can be added */
+                    fattr->is_laminated = 0;
+                    ret = unifyfs_inode_create(gfid, fattr);
+                    if (ret != UNIFYFS_SUCCESS) {
+                        LOGERR("inode create failed (ret=%d)", ret);
+                    }
+                    fattr->is_laminated = 1;
+                }
+
                 /* add the final set of extents */
                 ret = unifyfs_inode_add_extents(gfid, num_extents, extents);
                 if (ret != UNIFYFS_SUCCESS) {
                     LOGERR("laminate extents update failed (ret=%d)", ret);
-                }
-
-                /* update attributes only after final extents added */
-                ret = unifyfs_inode_metaset(gfid,
-                                            UNIFYFS_FILE_ATTR_OP_LAMINATE,
-                                            fattr);
-                if (ret != UNIFYFS_SUCCESS) {
-                    LOGERR("laminate attrs update failed (ret=%d)", ret);
+                } else {
+                    ret = unifyfs_inode_metaset(gfid,
+                                                UNIFYFS_FILE_ATTR_OP_LAMINATE,
+                                                fattr);
+                    if (ret != UNIFYFS_SUCCESS) {
+                        LOGERR("laminate attrs update failed (ret=%d)", ret);
+                    }
                 }
 
                 if (NULL != requests) {
