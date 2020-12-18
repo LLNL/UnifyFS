@@ -140,16 +140,12 @@ int unifyfs_inode_update_attr(int gfid, int attr_op,
         ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
         if (!ino) {
             ret = ENOENT;
-            goto out_unlock_tree;
-        }
-
-        unifyfs_inode_wrlock(ino);
-        {
+        } else {
+            unifyfs_inode_wrlock(ino);
             unifyfs_file_attr_update(attr_op, &ino->attr, attr);
+            unifyfs_inode_unlock(ino);
         }
-        unifyfs_inode_unlock(ino);
     }
-out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);
 
     return ret;
@@ -203,12 +199,10 @@ int unifyfs_inode_unlink(int gfid)
     }
     unifyfs_inode_tree_unlock(global_inode_tree);
 
-    if (ret) {
-        goto out;
+    if (ret == UNIFYFS_SUCCESS) {
+        ret = unifyfs_inode_destroy(ino);
     }
 
-    ret = unifyfs_inode_destroy(ino);
-out:
     return ret;
 }
 
@@ -222,50 +216,25 @@ int unifyfs_inode_truncate(int gfid, unsigned long size)
         ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
         if (!ino) {
             ret = ENOENT;
-            goto out_unlock_tree;
-        }
-
-        unifyfs_inode_rdlock(ino);
-        {
-            if (ino->attr.is_laminated) {
-                LOGERR("cannot truncate a laminated file (gfid=%d)", gfid);
-                ret = EINVAL;
-                goto unlock_inode;
+        } else {
+            unifyfs_inode_wrlock(ino);
+            {
+                if (ino->attr.is_laminated) {
+                    LOGERR("cannot truncate a laminated file (gfid=%d)", gfid);
+                    ret = EINVAL;
+                } else {
+                    ino->attr.size = size;
+                    if (NULL != ino->extents) {
+                        ret = extent_tree_truncate(ino->extents, size);
+                    }
+                }
             }
-            ino->attr.size = size;
-
-            if (NULL != ino->extents) {
-                ret = extent_tree_truncate(ino->extents, size);
-            }
+            unifyfs_inode_unlock(ino);
         }
-unlock_inode:
-        unifyfs_inode_unlock(ino);
     }
-out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);
 
     return ret;
-}
-
-static struct extent_tree* inode_get_extent_tree(struct unifyfs_inode* ino)
-{
-    struct extent_tree* tree = ino->extents;
-
-    /* create one if it doesn't exist yet */
-    if (!tree) {
-        tree = calloc(1, sizeof(*tree));
-
-        if (!tree) {
-            LOGERR("failed to allocate memory for extent tree");
-            return NULL;
-        }
-
-        extent_tree_init(tree);
-
-        ino->extents = tree;
-    }
-
-    return tree;
 }
 
 int unifyfs_inode_add_extents(int gfid, int num_extents,
@@ -291,43 +260,57 @@ int unifyfs_inode_add_extents(int gfid, int num_extents,
             goto out_unlock_tree;
         }
 
-        tree = inode_get_extent_tree(ino);
-        if (!tree) { /* failed to create one */
-            ret = ENOMEM;
-            goto out_unlock_tree;
-        }
+        ABT_mutex_lock(ino->abt_sync);
 
-        for (i = 0; i < num_extents; i++) {
-            struct extent_tree_node* current = &nodes[i];
+        unifyfs_inode_wrlock(ino);
+        {
+            tree = ino->extents;
 
-            /* the output becomes too noisy with this:
-             * LOGDBG("new extent[%4d]: (%lu, %lu)",
-             *        i, current->start, current->end);
-             */
+            /* create extent_tree if it doesn't exist yet */
+            if (NULL == tree) {
+                tree = (struct extent_tree*) calloc(1, sizeof(*tree));
+                if (NULL == tree) {
+                    LOGERR("failed to allocate memory for extent tree");
+                    goto out_unlock_inode;
+                } else {
+                    extent_tree_init(tree);
+                    ino->extents = tree;
+                }
+            }
 
-            ABT_mutex_lock(ino->abt_sync);
-            ret = extent_tree_add(tree, current->start, current->end,
-                                  current->svr_rank, current->app_id,
-                                  current->cli_id, current->pos);
-            ABT_mutex_unlock(ino->abt_sync);
-            if (ret) {
-                LOGERR("failed to add extents");
-                goto out_unlock_tree;
+            for (i = 0; i < num_extents; i++) {
+                struct extent_tree_node* current = &nodes[i];
+
+                /* the output becomes too noisy with this:
+                 * LOGDBG("new extent[%4d]: (%lu, %lu)",
+                 *        i, current->start, current->end);
+                 */
+
+                ret = extent_tree_add(tree, current->start, current->end,
+                                      current->svr_rank, current->app_id,
+                                      current->cli_id, current->pos);
+                if (ret) {
+                    LOGERR("failed to add extent [%lu, %lu] to gfid=%d",
+                           current->start, current->end, gfid);
+                    goto out_unlock_inode;
+                }
+            }
+
+            /* if the extent tree max offset is greater than the size we
+             * we currently have in the inode attributes, then update the
+             * inode size */
+            unsigned long extent_sz = extent_tree_max_offset(ino->extents) + 1;
+            if ((uint64_t)extent_sz > ino->attr.size) {
+                ino->attr.size = extent_sz;
             }
         }
-
-        /* if the extent tree max offset is greater than the size we
-         * we currently have in the inode attributes, then update the
-         * inode size */
-        unsigned long extent_sz = extent_tree_max_offset(ino->extents) + 1;
-        if ((uint64_t)extent_sz > ino->attr.size) {
-            unifyfs_inode_wrlock(ino);
-            ino->attr.size = extent_sz;
-            unifyfs_inode_unlock(ino);
-        }
+out_unlock_inode:
+        unifyfs_inode_unlock(ino);
 
         LOGINFO("added %d extents to inode (gfid=%d, filesize=%" PRIu64 ")",
                num_extents, gfid, ino->attr.size);
+
+        ABT_mutex_unlock(ino->abt_sync);
     }
 out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);
@@ -346,22 +329,19 @@ int unifyfs_inode_get_filesize(int gfid, size_t* offset)
         ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
         if (!ino) {
             ret = ENOENT;
-            goto out_unlock_tree;
+        } else {
+            unifyfs_inode_rdlock(ino);
+            {
+                /* the size is updated each time we add extents or truncate,
+                 * so no need to recalculate */
+                filesize = ino->attr.size;
+            }
+            unifyfs_inode_unlock(ino);
+
+            *offset = filesize;
+            LOGDBG("local file size (gfid=%d): %lu", gfid, filesize);
         }
-
-        unifyfs_inode_rdlock(ino);
-        {
-            /* the size is updated each time we add extents or truncate,
-             * so no need to recalculate */
-            filesize = ino->attr.size;
-        }
-        unifyfs_inode_unlock(ino);
-
-        *offset = filesize;
-
-        LOGDBG("local file size (gfid=%d): %lu", gfid, filesize);
     }
-out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);
 
     return ret;
@@ -377,18 +357,14 @@ int unifyfs_inode_laminate(int gfid)
         ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
         if (!ino) {
             ret = ENOENT;
-            goto out_unlock_tree;
-        }
-
-        unifyfs_inode_wrlock(ino);
-        {
+        } else {
+            unifyfs_inode_wrlock(ino);
             ino->attr.is_laminated = 1;
-        }
-        unifyfs_inode_unlock(ino);
+            unifyfs_inode_unlock(ino);
 
-        LOGDBG("file laminated (gfid=%d)", gfid);
+            LOGDBG("file laminated (gfid=%d)", gfid);
+        }
     }
-out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);
 
     return ret;
@@ -409,34 +385,31 @@ int unifyfs_inode_get_extents(int gfid, size_t* n,
         ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
         if (!ino) {
             ret = ENOENT;
-            goto out_unlock_tree;
-        }
+        } else {
+            unifyfs_inode_rdlock(ino);
+            {
+                int i = 0;
+                struct extent_tree* tree = ino->extents;
+                size_t n_nodes = tree->count;
+                struct extent_tree_node* _nodes = calloc(n_nodes,
+                                                         sizeof(*_nodes));
+                struct extent_tree_node* curr = NULL;
 
-        unifyfs_inode_rdlock(ino);
-        {
-            int i = 0;
-            struct extent_tree* tree = ino->extents;
-            size_t n_nodes = tree->count;
-            struct extent_tree_node* _nodes = calloc(n_nodes, sizeof(*_nodes));
-            struct extent_tree_node* current = NULL;
+                if (!_nodes) {
+                    ret = ENOMEM;
+                } else {
+                    while (NULL != (curr = extent_tree_iter(tree, curr))) {
+                        _nodes[i] = *curr;
+                        i++;
+                    }
 
-            if (!_nodes) {
-                ret = ENOMEM;
-                goto out_unlock_inode;
+                    *n = n_nodes;
+                    *nodes = _nodes;
+                }
             }
-
-            while (NULL != (current = extent_tree_iter(tree, current))) {
-                _nodes[i] = *current;
-                i++;
-            }
-
-            *n = n_nodes;
-            *nodes = _nodes;
+            unifyfs_inode_unlock(ino);
         }
-out_unlock_inode:
-        unifyfs_inode_unlock(ino);
     }
-out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);
 
     return ret;
@@ -455,25 +428,23 @@ int unifyfs_inode_get_extent_chunks(unifyfs_inode_extent_t* extent,
         ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
         if (!ino) {
             ret = ENOENT;
-            goto out_unlock_tree;
-        }
-
-        unifyfs_inode_rdlock(ino);
-        {
-            if (NULL != ino->extents) {
-                unsigned long offset = extent->offset;
-                unsigned long len = extent->length;
-                ret = extent_tree_get_chunk_list(ino->extents, offset, len,
-                                                 n_chunks, chunks);
-                if (ret) {
-                    LOGERR("failed to get chunks for gfid:%d, ret=%d",
-                            gfid, ret);
+        } else {
+            unifyfs_inode_rdlock(ino);
+            {
+                if (NULL != ino->extents) {
+                    unsigned long offset = extent->offset;
+                    unsigned long len = extent->length;
+                    ret = extent_tree_get_chunk_list(ino->extents, offset, len,
+                                                     n_chunks, chunks);
+                    if (ret) {
+                        LOGERR("failed to get chunks for gfid:%d, ret=%d",
+                               gfid, ret);
+                    }
                 }
             }
+            unifyfs_inode_unlock(ino);
         }
-        unifyfs_inode_unlock(ino);
     }
-out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);
 
     if (ret == UNIFYFS_SUCCESS) {
@@ -614,21 +585,20 @@ int unifyfs_inode_span_extents(
         ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
         if (!ino) {
             ret = ENOENT;
-            goto out_unlock_tree;
+        } else {
+            unifyfs_inode_rdlock(ino);
+            {
+                ret = extent_tree_span(ino->extents, gfid, start, end,
+                                       max, keys, vals, outnum);
+                if (ret) {
+                    LOGERR("extent_tree_span failed (gfid=%d, ret=%d)",
+                           gfid, ret);
+                }
+            }
+            unifyfs_inode_unlock(ino);
         }
 
-        unifyfs_inode_rdlock(ino);
-        {
-            ret = extent_tree_span(ino->extents, gfid, start, end,
-                                   max, keys, vals, outnum);
-            if (ret) {
-                LOGERR("extent_tree_span failed (gfid=%d, ret=%d)",
-                        gfid, ret);
-            }
-        }
-        unifyfs_inode_unlock(ino);
     }
-out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);
 
     return ret;
@@ -644,20 +614,18 @@ int unifyfs_inode_dump(int gfid)
         ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
         if (!ino) {
             ret = ENOENT;
-            goto out_unlock_tree;
-        }
-
-        unifyfs_inode_rdlock(ino);
-        {
-            LOGDBG("== inode (gfid=%d) ==\n", ino->gfid);
-            if (NULL != ino->extents) {
-                LOGDBG("extents:");
-                extent_tree_dump(ino->extents);
+        } else {
+            unifyfs_inode_rdlock(ino);
+            {
+                LOGDBG("== inode (gfid=%d) ==\n", ino->gfid);
+                if (NULL != ino->extents) {
+                    LOGDBG("extents:");
+                    extent_tree_dump(ino->extents);
+                }
             }
+            unifyfs_inode_unlock(ino);
         }
-        unifyfs_inode_unlock(ino);
     }
-out_unlock_tree:
     unifyfs_inode_tree_unlock(global_inode_tree);
 
     return ret;
