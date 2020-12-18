@@ -682,10 +682,17 @@ int truncate_bcast_forward(const unifyfs_tree_t* broadcast_tree,
 
     /* apply truncation to local file state */
     ret = unifyfs_inode_truncate(gfid, (unsigned long)fsize);
-    if (ret) {
-        LOGERR("unifyfs_inode_truncate(gfid=%d, size=%zu) failed - ret=%d",
-                gfid, fsize, ret);
-        goto out;
+    if (ret != UNIFYFS_SUCCESS) {
+        /* owner is root of broadcast tree */
+        int is_owner = ((int)(in->root) == glb_pmi_rank);
+        if ((ret == ENOENT) && !is_owner) {
+            /* it's ok if inode doesn't exist at non-owners */
+            ret = UNIFYFS_SUCCESS;
+        } else {
+            LOGERR("unifyfs_inode_truncate(gfid=%d, size=%zu) failed - ret=%d",
+                   gfid, fsize, ret);
+            goto out;
+        }
     }
 
     /* get info for tree */
