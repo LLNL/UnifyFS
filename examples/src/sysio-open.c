@@ -165,7 +165,8 @@ int main(int argc, char** argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (rank == open_rank) {
+    /* create the file from the create_rank */
+    if (rank == create_rank) {
         fd = open(targetfile, O_CREAT|O_RDWR|O_TRUNC, 0600);
         if (fd < 0) {
             test_print(rank, "open failed (%d: %s)\n",
@@ -180,7 +181,8 @@ int main(int argc, char** argv)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (rank == open_rank) {
+    /* open from all ranks (open_rank == 0) or a specific open_rank */
+    if (!open_rank || rank == open_rank) {
         fd = open(targetfile, O_RDWR);
         if (fd < 0) {
             test_print(rank, "open failed (%d: %s)\n",
