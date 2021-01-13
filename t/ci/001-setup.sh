@@ -234,7 +234,7 @@ if [[ -d $UNIFYFS_MP ]]; then
 fi
 echo "$infomsg UNIFYFS_MOUNTPOINT established: $UNIFYFS_MP"
 
-export UNIFYFS_CI_TEST_POSIX=${UNIFYFS_CI_TEST_POSIX:-yes}
+export UNIFYFS_CI_TEST_POSIX=${UNIFYFS_CI_TEST_POSIX:-no}
 # Set up a real mountpoint for posix tests to write files to and allow tests to
 # check that those files exist
 if [[ ! $UNIFYFS_CI_TEST_POSIX =~ ^(no|NO)$ ]]; then

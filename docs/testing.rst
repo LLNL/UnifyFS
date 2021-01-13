@@ -519,13 +519,12 @@ USAGE: ``UNIFYFS_CI_TEST_POSIX=yes|YES|no|NO``
 Determines whether any ``<example-name>-posix`` tests should be run since they
 require a real mountpoint to exist.
 
-This envar defaults to ``yes``. However, when ``$UNIFYFS_MOUNTPOINT`` is set to a
-real directory, this envar is switched to ``no``. The idea behind this is that
-the tests can be run a first time with a fake mountpoint (which will also run
-the posix tests), and then the tests can be run again with a real mountpoint and
-the posix tests won't be run twice. This behavior can be overridden by setting
-``UNIFYFS_CI_TEST_POSIX=yes|YES`` before running the integration tests when
-``$UNIFYFS_MOUNTPOINT`` is set to an existing directory.
+This envar defaults to ``no``. Setting this to ``yes`` will run the posix
+version of tests along with the regular tests. When ``$UNIFYFS_MOUNTPOINT`` is
+set to a existing directory, this option is set to ``no``. This is to allow
+running the tests a first time with a fake mountpoint while the posix tests use
+an existing mountpoint. Then the regular tests can be run again using an
+existing mountpoint and the posix tests won't be run twice.
 
 An example of testing a posix example can be see :ref:`below <posix-ex-label>`.
 
