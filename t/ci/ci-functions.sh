@@ -377,8 +377,10 @@ unify_run_test()
         return 1
     fi
 
-    # Skip this test if posix test and UNIFYFS_CI_TEST_POSIX=no|NO
+    # If we somehow made it here with a posix test but don't have the POSIX
+    # prereq set, then return a non-zero code
     if ! test_have_prereq POSIX && [[ $l_runmode = "posix" ]]; then
+        echo >&2 "$errmsg posix test run withough POSIX prereq set"
         return 42
     fi
 
