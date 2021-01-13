@@ -103,6 +103,9 @@ echo "Setup time -- $(elapsed_time start_time setup_time)"
 # writeread example tests
 source $UNIFYFS_CI_DIR/100-writeread-tests.sh
 
+# writeread example with I/O shuffle tests
+source $UNIFYFS_CI_DIR/100-writeread-tests.sh --shuffle
+
 # write example tests
 source $UNIFYFS_CI_DIR/110-write-tests.sh
 
