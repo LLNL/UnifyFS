@@ -6,7 +6,7 @@
 # in the ci-functions.sh script that can make adding new tests easier. See the
 # full UnifyFS documentatation for more info.
 #
-# There are multiple ways to to run an example using `unify_run_test()`
+# There are multiple ways to run an example using `unify_run_test()`
 #     1. unify_run_test $app_name "$app_args" app_output
 #     2. app_output=$(unify_run_test $app_name "app_args")
 #
@@ -32,22 +32,40 @@
 #         test $lcount = 8
 #     '
 #
-# For these tests, always include -b -c -n and -p in the app_args
-
 
 test_description="Writeread Tests"
 
-while [[ $# -gt 0 ]]
+WRITEREAD_USAGE="$(cat <<EOF
+usage ./100-writeread-tests.sh [options]
+
+  options:
+    -h, --help        print this (along with overall) help message
+    -x, --shuffle     read different data than written
+
+Run a series of tests on the UnifyFS writeread example application. By default,
+a series of different file sizes are tested using posixio on both a shared file
+and a file per process. They are run multiple times for each mode the app was
+built with (static, gotcha, and optionally posix).
+
+Providing available options can change the default I/O behavior and/or I/O type
+used.
+EOF
+)"
+
+for arg in "$@"
 do
-    case $1 in
+    case $arg in
         -h|--help)
-            echo "usage ./100-writeread-tests.sh -h|--help"
+            echo "$WRITEREAD_USAGE"
             ci_dir=$(dirname "$(readlink -fm $BASH_SOURCE)")
             $ci_dir/001-setup.sh -h
             exit
             ;;
+        -x|--shuffle)
+            writeread_shuffle=yes
+            ;;
         *)
-            echo "usage ./100-writeread-tests.sh -h|--help"
+            echo "$WRITEREAD_USAGE"
             exit 1
             ;;
     esac
@@ -89,6 +107,7 @@ unify_test_writeread() {
 }
 
 ### Run the writeread tests ###
+# For these tests, always include -b, -c, -n, and -p in the app_args
 
 # Array to determine the different file sizes that are created and tested. Each
 # item contains the number of blocks, chunk size, and block size to use when
@@ -102,6 +121,12 @@ io_sizes=("-n 32 -c $((64 * $KB)) -b $MB"
 # Includes shared file (-p n1) and file-per-process (-p nn)
 io_patterns=("-p n1" "-p nn")
 
+# Read different data than written
+if [ -n "$writeread_shuffle" ]; then
+    io_shuffle="-x"
+    unset writeread_shuffle # prevent option being picked up by subsequent runs
+fi
+
 # Mode of each test, whether static, gotcha, or posix (if desired)
 modes=(static gotcha)
 
@@ -114,7 +139,7 @@ fi
 # mode
 for io_size in "${io_sizes[@]}"; do
     for io_pattern in "${io_patterns[@]}"; do
-        app_args="$io_pattern $io_size"
+        app_args="$io_pattern $io_size $io_shuffle"
         for mode in "${modes[@]}"; do
             unify_test_writeread $mode "$app_args"
         done
