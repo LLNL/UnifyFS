@@ -40,15 +40,17 @@ usage ./100-writeread-tests.sh [options]
 
   options:
     -h, --help        print this (along with overall) help message
+    -M, --mpiio       use MPI-IO instead of POSIX I/O
     -x, --shuffle     read different data than written
 
 Run a series of tests on the UnifyFS writeread example application. By default,
-a series of different file sizes are tested using posixio on both a shared file
-and a file per process. They are run multiple times for each mode the app was
-built with (static, gotcha, and optionally posix).
+a series of different file sizes are tested using POSIX-I/O on both a shared
+file and a file per process. They are run multiple times for each mode the app
+was built with (static, gotcha, and optionally posix).
 
 Providing available options can change the default I/O behavior and/or I/O type
-used.
+used. The varying I/O types are mutually exclusive options and thus only one
+should be provided at a time.
 EOF
 )"
 
@@ -60,6 +62,12 @@ do
             ci_dir=$(dirname "$(readlink -fm $BASH_SOURCE)")
             $ci_dir/001-setup.sh -h
             exit
+            ;;
+        -M|--mpiio)
+            [ -n "$writeread_io_type" ] &&
+                { echo "ERROR: mutually exclusive options provided"; \
+                  echo "$WRITEREAD_USAGE"; exit 2; } ||
+                writeread_io_type="-M"
             ;;
         -x|--shuffle)
             writeread_shuffle=yes
@@ -121,25 +129,39 @@ io_sizes=("-n 32 -c $((64 * $KB)) -b $MB"
 # Includes shared file (-p n1) and file-per-process (-p nn)
 io_patterns=("-p n1" "-p nn")
 
-# Read different data than written
-if [ -n "$writeread_shuffle" ]; then
-    io_shuffle="-x"
-    unset writeread_shuffle # prevent option being picked up by subsequent runs
-fi
-
 # Mode of each test, whether static, gotcha, or posix (if desired)
-modes=(static gotcha)
+modes=(gotcha)
+
+# static linker wrapping will not see the syscalls in the MPI-IO libraries
+if [ "$writeread_io_type" != "-M" ]; then
+    modes+=(static)
+fi
 
 # To run posix tests, set UNIFYFS_CI_TEST_POSIX=yes
 if test_have_prereq POSIX; then
     modes+=(posix)
 fi
 
+# Reset additional behavior to default
+behavior=""
+
+# Set I/O type
+if [ -n "$writeread_io_type" ]; then
+    behavior="$behavior $writeread_io_type"
+    unset writeread_io_type # prevent option being picked up by subsequent runs
+fi
+
+# Read different data than written
+if [ -n "$writeread_shuffle" ]; then
+    behavior="$behavior -x"
+    unset writeread_shuffle # prevent option being picked up by subsequent runs
+fi
+
 # For each io_size, test with each io_pattern and for each io_pattern, test each
 # mode
 for io_size in "${io_sizes[@]}"; do
     for io_pattern in "${io_patterns[@]}"; do
-        app_args="$io_pattern $io_size $io_shuffle"
+        app_args="$io_pattern $io_size $behavior"
         for mode in "${modes[@]}"; do
             unify_test_writeread $mode "$app_args"
         done
