@@ -6,7 +6,7 @@
 # in the ci-functions.sh script that can make adding new tests easier. See the
 # full UnifyFS documentatation for more info.
 #
-# There are multiple ways to to run an example using `unify_run_test()`
+# There are multiple ways to run an example using `unify_run_test()`
 #     1. unify_run_test $app_name "$app_args" app_output
 #     2. app_output=$(unify_run_test $app_name "app_args")
 #
@@ -32,22 +32,49 @@
 #         test $lcount = 8
 #     '
 #
-# For these tests, always include -b -c -n and -p in the app_args
+# For these tests, always include -b, -c, -n, and -p in the app_args
 
 
 test_description="Read Tests"
 
-while [[ $# -gt 0 ]]
+READ_USAGE="$(cat <<EOF
+usage ./120-read-tests.sh [options]
+
+  options:
+    -h, --help        print this (along with overall) help message
+    -M, --mpiio       use MPI-IO instead of POSIX I/O
+
+The write tests (110-write-tests.sh) need to be run first with the same options
+in order for this suite to have the corresponding files available to read.
+
+Run a series of tests on the UnifyFS read example application. By default, a
+series of different file sizes are tested using POSIX-I/O on both a shared
+file and a file per process. They are run multiple times for each mode the app
+was built with (static, gotcha, and optionally posix).
+
+Providing available options can change the default I/O behavior and/or I/O type
+used. The varying I/O types are mutually exclusive options and thus only one
+should be provided at a time.
+EOF
+)"
+
+for arg in "$@"
 do
-    case $1 in
+    case $arg in
         -h|--help)
-            echo "usage ./120-read-tests.sh -h|--help"
+            echo "$READ_USAGE"
             ci_dir=$(dirname "$(readlink -fm $BASH_SOURCE)")
             $ci_dir/001-setup.sh -h
             exit
             ;;
+        -M|--mpiio)
+            [ -n "$read_io_type" ] &&
+                { echo "ERROR: mutually exclusive options provided"; \
+                  echo "$READ_USAGE"; exit 2; } ||
+                read_io_type="-M"
+            ;;
         *)
-            echo "usage ./120-read-tests.sh -h|--help"
+            echo "$READ_USAGE"
             exit 1
             ;;
     esac
@@ -87,18 +114,32 @@ io_sizes=("-n 32 -c $((64 * $KB)) -b $MB"
 io_patterns=("-p n1" "-p nn")
 
 # Mode of each test, whether static, gotcha, or posix (if desired)
-modes=(static gotcha)
+modes=(gotcha)
+
+# static linker wrapping will not see the syscalls in the MPI-IO libraries
+if [ "$read_io_type" != "-M" ]; then
+    modes+=(static)
+fi
 
 # To run posix tests, set UNIFYFS_CI_TEST_POSIX=yes
 if test_have_prereq POSIX; then
     modes+=(posix)
 fi
 
+# Reset additional behavior to default
+behavior=""
+
+# Set I/O type
+if [ -n "$read_io_type" ]; then
+    behavior="$behavior $read_io_type"
+    unset read_io_type # prevent option being picked up by subsequent runs
+fi
+
 # For each io_size, test with each io_pattern and for each io_pattern, test each
 # mode
 for io_size in "${io_sizes[@]}"; do
     for io_pattern in "${io_patterns[@]}"; do
-        app_args="$io_pattern $io_size"
+        app_args="$io_pattern $io_size $behavior"
         for mode in "${modes[@]}"; do
             unify_test_read $mode "$app_args"
         done
