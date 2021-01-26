@@ -655,8 +655,8 @@ static int unifyfs_get_meta_with_size(int gfid, unifyfs_file_attr_t* pfattr)
 
     /* if file is laminated, we assume the file size in the meta
      * data is already accurate, if not, look up the current file
-     * size with an rpc */
-    if (!pfattr->is_laminated) {
+     * size with an rpc. we only track size for regular files. */
+    if (S_ISREG(pfattr->mode) && !pfattr->is_laminated) {
         /* lookup current global file size */
         size_t filesize;
         ret = invoke_client_filesize_rpc(gfid, &filesize);
