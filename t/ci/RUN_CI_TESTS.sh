@@ -116,10 +116,10 @@ source $UNIFYFS_CI_DIR/120-read-tests.sh
 source $UNIFYFS_CI_DIR/100-writeread-tests.sh --mpiio
 
 # MPI-IO write example tests
-#source $UNIFYFS_CI_DIR/110-write-tests.sh --mpiio
+source $UNIFYFS_CI_DIR/110-write-tests.sh --mpiio
 
 # MPI-IO read example tests
-#source $UNIFYFS_CI_DIR/120-read-tests.sh --mpiio
+source $UNIFYFS_CI_DIR/120-read-tests.sh --mpiio
 
 ### Producer-Consumer workload tests
 
@@ -127,7 +127,7 @@ source $UNIFYFS_CI_DIR/100-writeread-tests.sh --mpiio
 source $UNIFYFS_CI_DIR/300-producer-consumer-tests.sh
 
 # MPI-IO producer-consumer tests
-#source $UNIFYFS_CI_DIR/300-producer-consumer-tests.sh --mpiio
+source $UNIFYFS_CI_DIR/300-producer-consumer-tests.sh --mpiio
 
 ##############################################################################
 # DO NOT add additional tests after this point

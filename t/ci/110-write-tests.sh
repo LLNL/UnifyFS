@@ -97,7 +97,7 @@ unify_test_write() {
 
         test_expect_success "$app_name $2: (line_count=${lcount}, rc=$rc)" '
             test $rc = 0 &&
-            test $lcount = 18 &&
+            test $lcount = 17 &&
             if [[ $io_pattern =~ (n1)$ ]]; then
                 test_path_is_file ${UNIFYFS_CI_POSIX_MP}/$filename
             else
@@ -107,7 +107,7 @@ unify_test_write() {
     else
         test_expect_success "$app_name $2: (line_count=${lcount}, rc=$rc)" '
             test $rc = 0 &&
-            test $lcount = 18
+            test $lcount = 17
         '
     fi
 }

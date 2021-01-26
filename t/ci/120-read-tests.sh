@@ -95,7 +95,7 @@ unify_test_read() {
     # Test the return code and resulting line count to determine pass/fail.
     test_expect_success "$app_name $2: (line_count=${lcount}, rc=$rc)" '
         test $rc = 0 &&
-        test $lcount = 14
+        test $lcount = 13
     '
 }
 

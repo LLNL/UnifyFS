@@ -118,13 +118,11 @@ int main(int argc, char* argv[])
     test_timer time_open;
     test_timer time_rd;
     test_timer time_check;
-    test_timer time_close;
 
     timer_init(&time_stat, "stat");
     timer_init(&time_open, "open");
     timer_init(&time_rd, "read");
     timer_init(&time_check, "check");
-    timer_init(&time_close, "close");
 
     rc = test_init(argc, argv, cfg);
     if (rc) {
@@ -219,15 +217,6 @@ int main(int argc, char* argv[])
     free(reqs);
     reqs = NULL;
 
-    // close file
-    timer_start_barrier(cfg, &time_close);
-    rc = test_close_file(cfg);
-    if (rc) {
-        test_abort(cfg, rc);
-    }
-    timer_stop_barrier(cfg, &time_close);
-    test_print_verbose_once(cfg, "DEBUG: finished close");
-
     // calculate achieved bandwidth rates
     double max_read_time, max_check_time;
     double read_bw, aggr_read_bw, eff_read_bw;
@@ -239,34 +228,35 @@ int main(int argc, char* argv[])
     aggr_read_bw = test_reduce_double_sum(cfg, read_bw);
     eff_read_bw = bandwidth_mib(total_bytes, max_read_time);
 
-    test_print_once(cfg,
-                    "\n"
-                    "I/O pattern:               %s\n"
-                    "I/O block size:            %.2lf KiB\n"
-                    "I/O request size:          %.2lf KiB\n"
-                    "Number of processes:       %d\n"
-                    "Each process wrote:        %.2lf MiB\n"
-                    "Total data written:        %.2lf MiB\n"
-                    "File stat time:            %.6lf sec\n"
-                    "File open time:            %.6lf sec\n"
-                    "Maximum read time:         %.6lf sec\n"
-                    "Maximum check time:        %.6lf sec\n"
-                    "File close time:           %.6lf sec\n"
-                    "Aggregate read bandwidth:  %.3lf MiB/s\n"
-                    "Effective read bandwidth:  %.3lf MiB/s\n",
-                    io_pattern_str(test_config.io_pattern),
-                    bytes_to_kib(test_config.block_sz),
-                    bytes_to_kib(test_config.chunk_sz),
-                    test_config.n_ranks,
-                    bytes_to_mib(rank_bytes),
-                    bytes_to_mib(total_bytes),
-                    time_stat.elapsed_sec_all,
-                    time_open.elapsed_sec_all,
-                    max_read_time,
-                    max_check_time,
-                    time_close.elapsed_sec_all,
-                    aggr_read_bw,
-                    eff_read_bw);
+    if (test_config.rank == 0) {
+        errno = 0; /* just in case there was an earlier error */
+        test_print_once(cfg,
+                        "\n"
+                        "I/O pattern:               %s\n"
+                        "I/O block size:            %.2lf KiB\n"
+                        "I/O request size:          %.2lf KiB\n"
+                        "Number of processes:       %d\n"
+                        "Each process wrote:        %.2lf MiB\n"
+                        "Total data written:        %.2lf MiB\n"
+                        "File stat time:            %.6lf sec\n"
+                        "File open time:            %.6lf sec\n"
+                        "Maximum read time:         %.6lf sec\n"
+                        "Maximum check time:        %.6lf sec\n"
+                        "Aggregate read bandwidth:  %.3lf MiB/s\n"
+                        "Effective read bandwidth:  %.3lf MiB/s\n",
+                        io_pattern_str(test_config.io_pattern),
+                        bytes_to_kib(test_config.block_sz),
+                        bytes_to_kib(test_config.chunk_sz),
+                        test_config.n_ranks,
+                        bytes_to_mib(rank_bytes),
+                        bytes_to_mib(total_bytes),
+                        time_stat.elapsed_sec_all,
+                        time_open.elapsed_sec_all,
+                        max_read_time,
+                        max_check_time,
+                        aggr_read_bw,
+                        eff_read_bw);
+    }
 
     // cleanup
     free(target_file);
@@ -275,7 +265,6 @@ int main(int argc, char* argv[])
     timer_fini(&time_open);
     timer_fini(&time_rd);
     timer_fini(&time_check);
-    timer_fini(&time_close);
 
     test_fini(cfg);
 

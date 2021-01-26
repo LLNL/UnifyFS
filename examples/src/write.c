@@ -131,7 +131,6 @@ int main(int argc, char* argv[])
     test_timer time_create;
     test_timer time_wr;
     test_timer time_sync;
-    test_timer time_close;
     test_timer time_laminate;
     test_timer time_stat;
 
@@ -139,7 +138,6 @@ int main(int argc, char* argv[])
     timer_init(&time_create, "create");
     timer_init(&time_wr, "write");
     timer_init(&time_sync, "sync");
-    timer_init(&time_close, "close");
     timer_init(&time_laminate, "laminate");
     timer_init(&time_stat, "stat");
 
@@ -212,15 +210,6 @@ int main(int argc, char* argv[])
     free(reqs);
     reqs = NULL;
 
-    // close file
-    timer_start_barrier(cfg, &time_close);
-    rc = test_close_file(cfg);
-    if (rc) {
-        test_abort(cfg, rc);
-    }
-    timer_stop_barrier(cfg, &time_close);
-    test_print_verbose_once(cfg, "DEBUG: finished close");
-
     // laminate
     timer_start_barrier(cfg, &time_laminate);
     rc = write_laminate(cfg, target_file);
@@ -269,42 +258,43 @@ int main(int argc, char* argv[])
     aggr_write_bw = test_reduce_double_sum(cfg, write_bw);
     eff_write_bw = bandwidth_mib(total_bytes, max_write_time);
 
-    test_print_once(cfg,
-                    "\n"
-                    "I/O pattern:               %s\n"
-                    "I/O block size:            %.2lf KiB\n"
-                    "I/O request size:          %.2lf KiB\n"
-                    "Number of processes:       %d\n"
-                    "Each process wrote:        %.2lf MiB\n"
-                    "Total data written:        %.2lf MiB\n"
-                    "File create time:          %.6lf sec\n"
-                    "Maximum write time:        %.6lf sec\n"
-                    "Global write time:         %.6lf sec\n"
-                    "Maximum sync time:         %.6lf sec\n"
-                    "Global sync time:          %.6lf sec\n"
-                    "File close time:           %.6lf sec\n"
-                    "File laminate time:        %.6lf sec\n"
-                    "Full write time:           %.6lf sec\n"
-                    "File stat time:            %.6lf sec\n"
-                    "Aggregate write bandwidth: %.3lf MiB/s\n"
-                    "Effective write bandwidth: %.3lf MiB/s\n",
-                    io_pattern_str(test_config.io_pattern),
-                    bytes_to_kib(test_config.block_sz),
-                    bytes_to_kib(test_config.chunk_sz),
-                    test_config.n_ranks,
-                    bytes_to_mib(rank_bytes),
-                    bytes_to_mib(total_bytes),
-                    time_create.elapsed_sec_all,
-                    max_write_time,
-                    time_wr.elapsed_sec_all,
-                    max_sync_time,
-                    time_sync.elapsed_sec_all,
-                    time_close.elapsed_sec_all,
-                    time_laminate.elapsed_sec_all,
-                    time_create2laminate.elapsed_sec_all,
-                    time_stat.elapsed_sec_all,
-                    aggr_write_bw,
-                    eff_write_bw);
+    if (test_config.rank == 0) {
+        errno = 0; /* just in case there was an earlier error */
+        test_print_once(cfg,
+                        "\n"
+                        "I/O pattern:               %s\n"
+                        "I/O block size:            %.2lf KiB\n"
+                        "I/O request size:          %.2lf KiB\n"
+                        "Number of processes:       %d\n"
+                        "Each process wrote:        %.2lf MiB\n"
+                        "Total data written:        %.2lf MiB\n"
+                        "File create time:          %.6lf sec\n"
+                        "Maximum write time:        %.6lf sec\n"
+                        "Global write time:         %.6lf sec\n"
+                        "Maximum sync time:         %.6lf sec\n"
+                        "Global sync time:          %.6lf sec\n"
+                        "File laminate time:        %.6lf sec\n"
+                        "Full write time:           %.6lf sec\n"
+                        "File stat time:            %.6lf sec\n"
+                        "Aggregate write bandwidth: %.3lf MiB/s\n"
+                        "Effective write bandwidth: %.3lf MiB/s\n",
+                        io_pattern_str(test_config.io_pattern),
+                        bytes_to_kib(test_config.block_sz),
+                        bytes_to_kib(test_config.chunk_sz),
+                        test_config.n_ranks,
+                        bytes_to_mib(rank_bytes),
+                        bytes_to_mib(total_bytes),
+                        time_create.elapsed_sec_all,
+                        max_write_time,
+                        time_wr.elapsed_sec_all,
+                        max_sync_time,
+                        time_sync.elapsed_sec_all,
+                        time_laminate.elapsed_sec_all,
+                        time_create2laminate.elapsed_sec_all,
+                        time_stat.elapsed_sec_all,
+                        aggr_write_bw,
+                        eff_write_bw);
+    }
 
     // cleanup
     free(target_file);
@@ -313,7 +303,6 @@ int main(int argc, char* argv[])
     timer_fini(&time_create);
     timer_fini(&time_wr);
     timer_fini(&time_sync);
-    timer_fini(&time_close);
     timer_fini(&time_laminate);
     timer_fini(&time_stat);
 
