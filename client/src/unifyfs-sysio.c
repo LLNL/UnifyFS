@@ -548,6 +548,9 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
             }
         } else {
             /* invoke truncate rpc */
+            /* TODO: here, we don't correctly set EISDIR for directories.
+             * we could fetch file attribute w/ metaget and check for such
+             * invalid requests to avoid extra rpcs. */
             int gfid = unifyfs_generate_gfid(upath);
             int rc = invoke_client_truncate_rpc(gfid, length);
             if (rc != UNIFYFS_SUCCESS) {
