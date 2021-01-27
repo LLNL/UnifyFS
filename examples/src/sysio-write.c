@@ -58,7 +58,6 @@ static int rank;
 static int total_ranks;
 
 static int debug;           /* pause for attaching debugger */
-static int unmount;         /* unmount unifyfs after running the test */
 static char* buf;           /* I/O buffer */
 static char* mountpoint = "/unifyfs";   /* unifyfs mountpoint */
 static char* filename = "testfile"; /* testfile name under mountpoint */
@@ -172,11 +171,10 @@ static struct option const long_opts[] = {
     { "pwrite", 0, 0, 'P' },
     { "synchronous", 0, 0, 'S' },
     { "standard", 0, 0, 's' },
-    { "unmount", 0, 0, 'u' },
     { 0, 0, 0, 0},
 };
 
-static char* short_opts = "b:n:c:df:hlm:p:PSsu";
+static char* short_opts = "b:n:c:df:hlm:p:PSs";
 
 static const char* usage_str =
     "\n"
@@ -202,7 +200,6 @@ static const char* usage_str =
     "                                  (default: n1)\n"
     " -S, --synchronous                sync metadata on each write\n"
     " -s, --standard                   do not use unifyfs but run standard I/O\n"
-    " -u, --unmount                    unmount the filesystem after test\n"
     "\n";
 
 static char* program;
@@ -270,10 +267,6 @@ int main(int argc, char** argv)
 
         case 's':
             standard = 1;
-            break;
-
-        case 'u':
-            unmount = 1;
             break;
 
         case 'h':
@@ -387,7 +380,7 @@ int main(int argc, char** argv)
         }
     }
 
-    if (!standard && unmount) {
+    if (!standard) {
         unifyfs_unmount();
     }
 

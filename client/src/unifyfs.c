@@ -1105,6 +1105,11 @@ int unifyfs_fid_truncate(int fid, off_t length)
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
     assert(meta != NULL);
 
+    /* truncate is not valid for directories */
+    if (S_ISDIR(meta->mode)) {
+        return EISDIR;
+    }
+
     if (meta->is_laminated) {
         /* Can't truncate a laminated file */
         return EINVAL;
@@ -1217,6 +1222,9 @@ int unifyfs_fid_open(
      * if O_APPEND, set pos to file size
      */
 
+    /* flag indicating whether file should be truncated */
+    int need_truncate = 0;
+
     /* determine whether we are creating a new file
      * or opening an existing one */
     if (flags & O_CREAT) {
@@ -1267,6 +1275,11 @@ int unifyfs_fid_open(
                 LOGERR("Failed to get metadata on existing file %s (fid:%d)",
                     path, fid);
             }
+
+            /* check for truncate if the file exists already */
+            if ((flags & O_TRUNC) && open_for_write && !gfattr.is_laminated) {
+                need_truncate = 1;
+            }
         }
         if (ret != UNIFYFS_SUCCESS) {
             LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
@@ -1277,12 +1290,6 @@ int unifyfs_fid_open(
                 unifyfs_fid_delete(fid);
             }
             return ret;
-        }
-
-        /* successfully opened the file with O_CREAT, truncate if needed
-         * and file is not laminated */
-        if ((flags & O_TRUNC) && open_for_write && !gfattr.is_laminated) {
-            ret = unifyfs_fid_truncate(fid, 0);
         }
     } else {
         /* trying to open without creating, file must already exist,
@@ -1330,6 +1337,11 @@ int unifyfs_fid_open(
         /* Successful in fetching metadata for existing file.
          * Update our local cache using that metadata. */
         unifyfs_fid_update_file_meta(fid, &gfattr);
+
+        /* check if we need to truncate the existing file */
+        if ((flags & O_TRUNC) && open_for_write && !gfattr.is_laminated) {
+            need_truncate = 1;
+        }
     }
 
     /* if given O_DIRECTORY, the named file must be a directory */
@@ -1352,12 +1364,6 @@ int unifyfs_fid_open(
         return EISDIR;
     }
 
-    /* do we normally update position to EOF with O_APPEND? */
-    if ((flags & O_APPEND) && open_for_write) {
-        /* We only support O_APPEND on non-laminated files */
-        pos = unifyfs_fid_logical_size(fid);
-    }
-
     /*
      * Catch any case where we could potentially want to write to a laminated
      * file.
@@ -1374,6 +1380,21 @@ int unifyfs_fid_open(
                 unifyfs_fid_delete(fid);
             }
             return EROFS;
+    }
+
+    /* truncate the file, if we have to */
+    if (need_truncate) {
+        ret = unifyfs_fid_truncate(fid, 0);
+        if (ret != UNIFYFS_SUCCESS) {
+            LOGERR("Failed to truncate the file %s", path);
+            return ret;
+        }
+    }
+
+    /* do we normally update position to EOF with O_APPEND? */
+    if ((flags & O_APPEND) && open_for_write) {
+        /* We only support O_APPEND on non-laminated files */
+        pos = unifyfs_fid_logical_size(fid);
     }
 
     /* return local file id and starting file position */
