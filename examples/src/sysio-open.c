@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <time.h>
 #include <getopt.h>
 #include <mpi.h>
 #include <unifyfs.h>
@@ -39,44 +40,50 @@ static int total_ranks;
 
 static int create_rank;
 static int open_rank;
+static int do_stat;         /* perform stat after closing the file */
 static int debug;           /* pause for attaching debugger */
-static int unmount;         /* unmount unifyfs after running the test */
+static int exclusive;
+static int trunc;
 static char* mountpoint = "/unifyfs";   /* unifyfs mountpoint */
-static char* filename = "testfile"; /* testfile name under mountpoint */
-static char targetfile[NAME_MAX];   /* target file name */
+static char* filename = "testfile";     /* testfile name under mountpoint */
+static char targetfile[NAME_MAX];       /* target file name */
 
 static struct option long_opts[] = {
     { "create", 1, 0, 'c' },
     { "debug", 0, 0, 'd' },
+    { "exclusive", 0, 0, 'e' },
     { "filename", 1, 0, 'f' },
     { "help", 0, 0, 'h' },
     { "mount", 1, 0, 'm' },
     { "open", 1, 0, 'o' },
     { "standard", 0, 0, 's' },
-    { "unmount", 0, 0, 'u' },
+    { "stat", 0, 0, 'S' },
+    { "truncate", 0, 0, 't' },
     { 0, 0, 0, 0},
 };
 
-static char* short_opts = "c:df:hm:o:su";
+static char* short_opts = "c:def:hm:o:sSt";
 
 static const char* usage_str =
     "\n"
     "Usage: %s [options...]\n"
     "\n"
     "Available options:\n"
-    " -c, --create=<RANK>              create the file from <RANK>\n"
-    "                                  (default: 0)\n"
-    " -d, --debug                      pause before running test\n"
-    "                                  (handy for attaching in debugger)\n"
-    " -f, --filename=<filename>        target file name under mountpoint\n"
-    "                                  (default: testfile)\n"
-    " -h, --help                       help message\n"
-    " -m, --mount=<mountpoint>         use <mountpoint> for unifyfs\n"
-    "                                  (default: /unifyfs)\n"
-    " -o, --open=<RANK>                open file from <RANK> after create\n"
-    "                                  (default: 0)\n"
-    " -s, --standard                   do not use unifyfs but run standard I/O\n"
-    " -u, --unmount                    unmount the filesystem after test\n"
+    " -c, --create=<RANK>        create the file from <RANK>\n"
+    "                            (default: 0)\n"
+    " -d, --debug                pause before running test\n"
+    "                            (handy for attaching in debugger)\n"
+    " -e, --exclusive            pass O_EXCL to fail when the file exists\n"
+    " -f, --filename=<filename>  target file name under mountpoint\n"
+    "                            (default: testfile)\n"
+    " -h, --help                 help message\n"
+    " -m, --mount=<mountpoint>   use <mountpoint> for unifyfs\n"
+    "                            (default: /unifyfs)\n"
+    " -o, --open=<RANK>          open file from <RANK> after create\n"
+    "                            (default: 0)\n"
+    " -s, --standard             do not use unifyfs but run standard I/O\n"
+    " -S, --stat                 perform stat after closing\n"
+    " -t, --truncate             truncate file if exists\n"
     "\n";
 
 static char* program;
@@ -106,12 +113,16 @@ int main(int argc, char** argv)
             create_rank = atoi(optarg);
             break;
 
-        case 'f':
-            filename = strdup(optarg);
-            break;
-
         case 'd':
             debug = 1;
+            break;
+
+        case 'e':
+            exclusive = 1;
+            break;
+
+        case 'f':
+            filename = strdup(optarg);
             break;
 
         case 'm':
@@ -126,8 +137,12 @@ int main(int argc, char** argv)
             standard = 1;
             break;
 
-        case 'u':
-            unmount = 1;
+        case 'S':
+            do_stat = 1;
+            break;
+
+        case 't':
+            trunc = 1;
             break;
 
         case 'h':
@@ -149,6 +164,11 @@ int main(int argc, char** argv)
         test_pause(rank, "Attempting to mount");
     }
 
+    if (exclusive && trunc) {
+        test_print_once(rank, "-e and -t cannot be used together.");
+        exit(-1);
+    }
+
     if (!standard) {
         ret = unifyfs_mount(mountpoint, rank, total_ranks, 0);
         if (ret) {
@@ -167,35 +187,52 @@ int main(int argc, char** argv)
 
     /* create the file from the create_rank */
     if (rank == create_rank) {
-        fd = open(targetfile, O_CREAT|O_RDWR|O_TRUNC, 0600);
-        if (fd < 0) {
-            test_print(rank, "open failed (%d: %s)\n",
-                       errno, strerror(errno));
-            exit(-1);
+        int flags = O_CREAT|O_RDWR;
+
+        if (exclusive) {
+            flags |= O_EXCL;
+        } else if (trunc) {
+            flags |= O_TRUNC;
         }
 
-        test_print(rank, "created file %s successfully\n", targetfile);
-
-        close(fd);
+        fd = open(targetfile, flags, 0600);
+        if (fd < 0) {
+            test_print(rank, "open failed (%d: %s)\n", errno, strerror(errno));
+        } else {
+            test_print(rank, "created file %s successfully\n", targetfile);
+            close(fd);
+        }
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
+
+    errno = 0;
 
     /* open from all ranks (open_rank == 0) or a specific open_rank */
     if (!open_rank || rank == open_rank) {
         fd = open(targetfile, O_RDWR);
         if (fd < 0) {
-            test_print(rank, "open failed (%d: %s)\n",
-                       errno, strerror(errno));
-            exit(-1);
+            test_print(rank, "open failed (%d: %s)\n", errno, strerror(errno));
+        } else {
+            test_print(rank, "opened file %s successfully\n", targetfile);
+            close(fd);
         }
 
-        test_print(rank, "opened file %s successfully\n", targetfile);
+        if (do_stat) {
+            struct stat sb = { 0, };
 
-        close(fd);
+            errno = 0;
+            ret = stat(targetfile, &sb);
+            if (ret < 0) {
+                test_print(rank, "stat failed (%d: %s)\n",
+                           errno, strerror(errno));
+            } else {
+                dump_stat(rank, &sb, targetfile);
+            }
+        }
     }
 
-    if (!standard && unmount) {
+    if (!standard) {
         unifyfs_unmount();
     }
 
