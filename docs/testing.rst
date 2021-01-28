@@ -688,15 +688,32 @@ last to stop the server and clean up.
     $ . $UNIFYFS_CI_DIR/100-writeread-tests.sh
     $ . $UNIFYFS_CI_DIR/990-stop-server.sh
 
+The various CI test suites can be run multiple times with different behaviors.
+These behaviors are continually being extended. The `-h|--help` option for each
+script can show what alternate behaviors are currently implemented along with
+additional information for that particular suite.
+
+.. code-block:: BASH
+
+    [prompt]$ ./100-writeread-tests.sh --help
+    Usage: 100-writeread-tests.sh [options...]
+
+      options:
+        -h, --help        print help message
+        -M, --mpiio       use MPI-IO instead of POSIX I/O
+        -x, --shuffle     read different data than written
+
 ------------
 
 Adding New Tests
 ****************
 
-In order to add additional tests, create a script after the fashion of
-`t/ci/100-writeread-tests.sh`_ where the prefixed number indicates the desired
-order for running the tests. Then source that script in `t/ci/RUN_CI_TESTS.sh`_
-in the desired order.
+In order to add additional tests for different workflows, create a script after
+the fashion of `t/ci/100-writeread-tests.sh`_ where the prefixed number
+indicates the desired order for running the tests. Then source that script in
+`t/ci/RUN_CI_TESTS.sh`_ in the desired order. The different test suite scripts
+themselves can also be edited to add/change the number, types, and various
+behaviors each suite will execute.
 
 Just like the helpers functions found in sharness.d_, there are continuous
 integration helper functions (see :ref:`below <helper-label>` for more details)
