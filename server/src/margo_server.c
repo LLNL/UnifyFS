@@ -32,7 +32,7 @@ int  margo_server_server_pool_sz = 4;
 int  margo_use_progress_thread = 1;
 
 #if defined(NA_HAS_SM)
-static const char* PROTOCOL_MARGO_SHM   = "na+sm://";
+static const char* PROTOCOL_MARGO_SHM = "na+sm";
 #else
 #error Required Mercury NA shared memory plugin not found (please enable 'SM')
 #endif
@@ -42,15 +42,17 @@ static const char* PROTOCOL_MARGO_SHM   = "na+sm://";
 #endif
 
 #if defined(NA_HAS_BMI)
-static const char* PROTOCOL_MARGO_BMI_TCP = "bmi+tcp://";
+static const char* PROTOCOL_MARGO_BMI_TCP = "bmi+tcp";
 #else
 static const char* PROTOCOL_MARGO_BMI_TCP;
 #endif
 
 #if defined(NA_HAS_OFI)
-static const char* PROTOCOL_MARGO_OFI_TCP = "ofi+tcp://";
-static const char* PROTOCOL_MARGO_OFI_RMA = "ofi+verbs://";
+static const char* PROTOCOL_MARGO_OFI_SOCKETS = "ofi+sockets";
+static const char* PROTOCOL_MARGO_OFI_TCP = "ofi+tcp";
+static const char* PROTOCOL_MARGO_OFI_RMA = "ofi+verbs";
 #else
+static const char* PROTOCOL_MARGO_OFI_SOCKETS;
 static const char* PROTOCOL_MARGO_OFI_TCP;
 static const char* PROTOCOL_MARGO_OFI_RMA;
 #endif
@@ -77,16 +79,31 @@ static margo_instance_id setup_remote_target(void)
     }
 
     mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
-                     margo_use_progress_thread, margo_server_server_pool_sz);
+                     margo_use_progress_thread,
+                     margo_server_server_pool_sz);
     if (mid == MARGO_INSTANCE_NULL) {
-        LOGERR("margo_init(%s)", margo_protocol);
-        return mid;
+        LOGERR("margo_init(%s, SERVER_MODE, %d, %d) failed",
+               margo_protocol, margo_use_progress_thread,
+               margo_server_server_pool_sz);
+        if (margo_protocol == PROTOCOL_MARGO_OFI_TCP) {
+            /* try "ofi+sockets" instead */
+            margo_protocol = PROTOCOL_MARGO_OFI_SOCKETS;
+            mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
+                             margo_use_progress_thread,
+                             margo_server_server_pool_sz);
+            if (mid == MARGO_INSTANCE_NULL) {
+                LOGERR("margo_init(%s, SERVER_MODE, %d, %d) failed",
+                       margo_protocol, margo_use_progress_thread,
+                       margo_server_server_pool_sz);
+                return mid;
+            }
+        }
     }
 
     /* figure out what address this server is listening on */
     hret = margo_addr_self(mid, &addr_self);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_self()");
+        LOGERR("margo_addr_self() failed");
         margo_finalize(mid);
         return MARGO_INSTANCE_NULL;
     }
@@ -94,12 +111,12 @@ static margo_instance_id setup_remote_target(void)
                                 self_string, &self_string_sz,
                                 addr_self);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_to_string()");
+        LOGERR("margo_addr_to_string() failed");
         margo_addr_free(mid, addr_self);
         margo_finalize(mid);
         return MARGO_INSTANCE_NULL;
     }
-    LOGDBG("margo RPC server: %s", self_string);
+    LOGINFO("margo RPC server: %s", self_string);
     margo_addr_free(mid, addr_self);
 
     /* publish rpc address of server for remote servers */
@@ -191,23 +208,24 @@ static void register_server_server_rpcs(margo_instance_id mid)
 static margo_instance_id setup_local_target(void)
 {
     /* initialize margo */
+    const char* margo_protocol = PROTOCOL_MARGO_SHM;
     hg_return_t hret;
     hg_addr_t addr_self;
     char self_string[128];
     hg_size_t self_string_sz = sizeof(self_string);
     margo_instance_id mid;
-
-    mid = margo_init(PROTOCOL_MARGO_SHM, MARGO_SERVER_MODE,
+    mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
                      margo_use_progress_thread, margo_client_server_pool_sz);
     if (mid == MARGO_INSTANCE_NULL) {
-        LOGERR("margo_init(%s)", PROTOCOL_MARGO_SHM);
+        LOGERR("margo_init(%s, SERVER_MODE, %d, %d) failed", margo_protocol,
+               margo_use_progress_thread, margo_client_server_pool_sz);
         return mid;
     }
 
     /* figure out what address this server is listening on */
     hret = margo_addr_self(mid, &addr_self);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_self()");
+        LOGERR("margo_addr_self() failed");
         margo_finalize(mid);
         return MARGO_INSTANCE_NULL;
     }
@@ -215,12 +233,12 @@ static margo_instance_id setup_local_target(void)
                                 self_string, &self_string_sz,
                                 addr_self);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_to_string()");
+        LOGERR("margo_addr_to_string() failed");
         margo_addr_free(mid, addr_self);
         margo_finalize(mid);
         return MARGO_INSTANCE_NULL;
     }
-    LOGDBG("shared-memory margo RPC server: %s", self_string);
+    LOGINFO("shared-memory margo RPC server: %s", self_string);
     margo_addr_free(mid, addr_self);
 
     /* publish rpc address of server for local clients */
