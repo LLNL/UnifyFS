@@ -3,10 +3,10 @@ exec_prefix=@exec_prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: unifyfs
-Description: client library for unifyfs userspace checkpoint file system
+Name: UnifyFS
+Description: client library for UnifyFS unified burst buffer file system
 Version: @LIBUNIFYFS_API_VERSION@
 Requires:
-Libs: -L${libdir} -lunifyfs
+Libs: -L${libdir} -lunifyfs_gotcha
 Cflags: -I${includedir} -D__FILE_OFFSET_BITS=64
 

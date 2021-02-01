@@ -12,7 +12,7 @@ UNIFYFS_LIB_PATH="@unifyfs_lib_path@"
 UNIFYFS_LD_FLAGS="@LDFLAGS@"
 
 PRE_LD_FLAGS="-L$UNIFYFS_LIB_PATH $UNIFYFS_LD_FLAGS $CP_WRAPPERS"
-POST_LD_FLAGS="$UNIFYFS_LIB_PATH/libunifyfs.a $UNIFYFS_LIB_PATH/libunifyfs_common.a -lcrypto -lm -lrt -lpthread -lz"
+POST_LD_FLAGS="$UNIFYFS_LIB_PATH/libunifyfs.a -lcrypto -lm -lrt -lpthread -lz"
 
 
 usage="\
