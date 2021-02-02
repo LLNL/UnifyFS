@@ -66,7 +66,7 @@ before_install:
 install:
   - . $HOME/spack/share/spack/setup-env.sh
   - spack install gotcha@1.0.3 && spack load gotcha@1.0.3
-  - spack install margo^mercury@1.0.1+bmi~ofi~boostsys && spack load argobots && spack load mercury && spack load margo
+  - spack install margo@0.4.3^mercury@1.0.1+bmi~ofi~boostsys && spack load argobots && spack load mercury && spack load margo
   - spack install spath && spack load spath
   # prepare build environment
   - eval $(./scripts/git_log_test_env.sh)
