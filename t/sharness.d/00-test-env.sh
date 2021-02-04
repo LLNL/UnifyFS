@@ -28,6 +28,12 @@ elif test -n "$(which srun 2>/dev/null)"; then
     JOB_RUN_COMMAND="srun -n1 -N1"
 elif test -n "$(which mpirun 2>/dev/null)"; then
     JOB_RUN_COMMAND="mpirun -np 1"
+    if [ $UID -eq 0 ]; then
+        mpirun --version |& fgrep 'Open MPI' >/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            JOB_RUN_COMMAND="mpirun -np 1 --allow-run-as-root"
+        fi
+    fi
 fi
 if test -z "$JOB_RUN_COMMAND"; then
     echo >&2 "Failed to find a suitable parallel job launcher"
@@ -49,7 +55,12 @@ export UNIFYFSD=$UNIFYFS_BUILD_DIR/server/src/unifyfsd
 if [ -f /proc/sys/kernel/yama/ptrace_scope ]; then
     scope_val=`cat /proc/sys/kernel/yama/ptrace_scope`
     if [ $scope_val -ne 0 ]; then
-        sudo echo 0 > /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || \
-          echo >&2 "Failed to enable cross-memory attach for Mercury shmem NA"
+        if [ $UID -eq 0 ]; then
+            echo 0 > /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || \
+              echo >&2 "Failed to enable cross-memory attach for Mercury shmem"
+        else
+            sudo echo 0 > /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || \
+              echo >&2 "Failed to enable cross-memory attach for Mercury shmem"
+        fi
     fi
 fi
