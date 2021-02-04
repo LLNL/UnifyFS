@@ -104,10 +104,6 @@ int unifyfs_client_rpc_init(void)
     ctx->mid = margo_init(proto, MARGO_SERVER_MODE, 1, 1);
     assert(ctx->mid);
 
-    /* TODO: want to keep this enabled all the time */
-    /* what's this do? */
-    margo_diag_start(ctx->mid);
-
     /* get server margo address */
     ctx->svr_addr = HG_ADDR_NULL;
     margo_addr_lookup(ctx->mid, svr_addr_string, &(ctx->svr_addr));
