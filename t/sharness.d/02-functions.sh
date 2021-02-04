@@ -141,8 +141,8 @@ unifyfsd_start_daemon()
     fi
     export UNIFYFS_SERVER_HOSTFILE=$srvr_hosts
 
-    # run server daemon
-    $UNIFYFSD
+    # run server daemon as background process
+    $UNIFYFSD >$UNIFYFS_TEST_TMPDIR/unifyfsd.stdlog 2>&1 &
 }
 
 # Kill UnifyFS daemon.

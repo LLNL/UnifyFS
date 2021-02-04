@@ -21,3 +21,10 @@ export UNIFYFS_SHAREDFS_DIR=${UNIFYFS_TEST_SHARE}
 # Client settings
 export UNIFYFS_LOGIO_SPILL_SIZE=$((5 * (2 ** 30)))
 export UNIFYFS_LOGIO_SPILL_DIR=${UNIFYFS_TEST_SPILL}
+
+# In mercury 2.0.0, daemonize breaks our use of na+sm. More info
+# available at https://github.com/mercury-hpc/mercury/issues/428.
+# Once https://github.com/mercury-hpc/mercury/pull/430 is merged,
+# and we are using a version of mercury that includes the fix,
+# we can remove this setting.
+export UNIFYFS_DAEMONIZE=off
