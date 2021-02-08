@@ -40,6 +40,7 @@
  * Please also read this file LICENSE.CRUISE
  */
 
+#include "unifyfs.h"
 #include "unifyfs-internal.h"
 #include "unifyfs-sysio.h"
 #include "margo_client.h"
@@ -843,7 +844,16 @@ static int unifyfs_statfs(struct statfs* fsbuf)
     if (NULL != fsbuf) {
         memset(fsbuf, 0, sizeof(*fsbuf));
 
-        fsbuf->f_type = TMPFS_MAGIC; /* File system type */
+        /* set file system type */
+        if (unifyfs_super_magic) {
+            /* return a magic value that is specific to UnifyFS */
+            fsbuf->f_type = UNIFYFS_SUPER_MAGIC;
+        } else {
+            /* option to fallback to a well-known magic value for clients
+             * that don't handle a UnifyFS magic value */
+            fsbuf->f_type = TMPFS_MAGIC;
+        }
+
         fsbuf->f_bsize = UNIFYFS_LOGIO_CHUNK_SIZE; /* Optimal block size */
         //fsbuf->f_blocks = ??;  /* Total data blocks in filesystem */
         //fsbuf->f_bfree = ??;   /* Free blocks in filesystem */
