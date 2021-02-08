@@ -355,6 +355,9 @@ extern logio_context* logio_ctx;
 extern int unifyfs_app_id;
 extern int unifyfs_client_id;
 
+/* whether to return UNIFYFS (true) or TMPFS (false) magic value from statfs */
+extern bool unifyfs_super_magic;
+
 /* keep track of what we've initialized */
 extern int unifyfs_initialized;
 
