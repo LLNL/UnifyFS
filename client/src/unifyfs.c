@@ -88,6 +88,9 @@ static off_t unifyfs_min_long;
 int    unifyfs_max_files;  /* maximum number of files to store */
 bool   unifyfs_local_extents;  /* track data extents in client to read local */
 
+/* whether to return UNIFYFS (true) or TMPFS (false) magic value from statfs */
+bool unifyfs_super_magic;
+
 /* log-based I/O context */
 logio_context* logio_ctx;
 
@@ -1746,6 +1749,17 @@ static int unifyfs_init(void)
             rc = configurator_bool_val(cfgval, &b);
             if (rc == 0) {
                 unifyfs_write_sync = (bool)b;
+            }
+        }
+
+        /* Determine SUPER MAGIC value to return from statfs.
+         * Use UNIFYFS_SUPER_MAGIC if true, TMPFS_SUPER_MAGIC otherwise. */
+        unifyfs_super_magic = true;
+        cfgval = client_cfg.client_super_magic;
+        if (cfgval != NULL) {
+            rc = configurator_bool_val(cfgval, &b);
+            if (rc == 0) {
+                unifyfs_super_magic = (bool)b;
             }
         }
 
