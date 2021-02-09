@@ -71,6 +71,8 @@ int main(int argc, char* argv[])
      * break as that is likely to cause subsequent failures to start passing.
      */
 
+    statfs_test(unifyfs_root, 1);
+
     creat_close_test(unifyfs_root);
 
     creat64_test(unifyfs_root);

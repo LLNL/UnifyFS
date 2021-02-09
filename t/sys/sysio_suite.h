@@ -30,6 +30,9 @@
 #ifndef SYSIO_SUITE_H
 #define SYSIO_SUITE_H
 
+/* Tests for UNIFYFS_WRAP(statfs) */
+int statfs_test(char* unifyfs_root, int expect_unifyfs_magic);
+
 /* Tests for UNIFYFS_WRAP(creat) and UNIFYFS_WRAP(close) */
 int creat_close_test(char* unifyfs_root);
 
