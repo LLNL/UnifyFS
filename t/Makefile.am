@@ -114,6 +114,7 @@ test_cppflags = \
 sys_sysio_gotcha_t_SOURCES = \
   sys/sysio_suite.h \
   sys/sysio_suite.c \
+  sys/statfs.c \
   sys/creat-close.c \
   sys/creat64.c \
   sys/mkdir-rmdir.c \
@@ -133,6 +134,7 @@ sys_sysio_gotcha_t_LDFLAGS = $(test_gotcha_ldflags)
 sys_sysio_static_t_SOURCES = \
   sys/sysio_suite.h \
   sys/sysio_suite.c \
+  sys/statfs.c \
   sys/creat-close.c \
   sys/creat64.c \
   sys/mkdir-rmdir.c \
