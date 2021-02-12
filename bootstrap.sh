@@ -36,6 +36,79 @@ for i in "${repos[@]}" ; do
 	fi
 done
 
+
+# Assuming automake version starts with 1.#, collect value after initial "1."
+automake_sub_version=$(automake --version | head -n1 |
+                   sed 's/[^.]*\.\([0-9]\+\).*/\1/')
+
+# If automake decimal version is < 1.15, install needed versions of autotools
+if [ "$automake_sub_version" -lt "15" ]; then
+    echo "### detected automake version is older than 1.15 ###"
+    echo "### building required autotools ###"
+
+    # Get system name from current automake to avoid using outdated config.guess
+    sys_name=$(find /usr/share/automake* -name "config.guess" -exec {} \;)
+
+    # Add autotools install to PATH
+    export PATH=${INSTALL_DIR}/bin:$PATH
+
+    autotools_repos=(http://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz
+        http://ftp.gnu.org/gnu/automake/automake-1.15.tar.gz
+        http://mirror.team-cymru.org/gnu/libtool/libtool-2.4.2.tar.gz
+        https://pkg-config.freedesktop.org/releases/pkg-config-0.27.1.tar.gz
+)
+
+    # wget and untar autotools
+    for j in "${autotools_repos[@]}" ; do
+        # Get tarball name and project-version name
+        tar_name=$(basename $j)
+        name=$(echo $tar_name | sed 's/\.tar.gz//g')
+        if [ -f $tar_name ] ; then
+            echo "$tar_name already exists, skipping wget"
+        else
+            wget $j
+        fi
+        rm -rf $name
+        tar -zxf $tar_name
+    done
+
+    # build autoconf
+    echo "### building autoconf ###"
+    pushd autoconf-2.69
+        ./configure --build=$sys_name --prefix=$INSTALL_DIR
+        make
+        make install
+    popd
+
+    # build automake
+    echo "### building automake v1.15 ###"
+    pushd automake-1.15
+        ./configure --prefix=$INSTALL_DIR
+        make
+        make install
+    popd
+
+    # build libtool
+    echo "### building libtool ###"
+    pushd libtool-2.4.2
+        ./configure --build=$sys_name --prefix=$INSTALL_DIR
+        make
+        make install
+    popd
+
+    # build pkg-config
+    echo "### building pkg-config ###"
+    pushd pkg-config-0.27.1
+        ./configure --build=$sys_name --prefix=$INSTALL_DIR
+        make
+        make install
+    popd
+else
+    echo "### detected automake version is greater than or equal to 1.15 ###"
+    echo "### skipping autotools build ###"
+fi
+
+
 echo "### building bmi ###"
 cd bmi
 ./prepare && ./configure --enable-shared --enable-bmi-only \
@@ -95,7 +168,7 @@ cd ..
 echo "### building margo ###"
 cd margo
 git checkout v0.4.3
-export PKG_CONFIG_PATH="$INSTALL_DIR/lib/pkgconfig"
+export PKG_CONFIG_PATH="$INSTALL_DIR/lib/pkgconfig:$PKG_CONFIG_PATH"
 ./prepare.sh
 ./configure --prefix="$INSTALL_DIR" --enable-shared
 make -j $(nproc) && make install
@@ -106,8 +179,16 @@ cd "$ROOT"
 echo "*************************************************************************"
 echo "Dependencies are all built.  You can now build UnifyFS with:"
 echo ""
-echo -n "  export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig && "
-echo "export LEVELDB_ROOT=$INSTALL_DIR"
+if [ "$automake_sub_version" -lt "15" ] ; then
+    echo -n "  export PKG_CONFIG_PATH=/usr/share/pkgconfig:"
+    echo "/usr/lib64/pkgconfig:$INSTALL_DIR/lib/pkgconfig:\$PKG_CONFIG_PATH"
+    echo "  export PATH=$INSTALL_DIR/bin:\$PATH"
+else
+    echo " export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig:\$PKG_CONFIG_PATH"
+fi
+if [ "$1" = "--with-leveldb" ] ; then
+    echo "export LEVELDB_ROOT=$INSTALL_DIR"
+fi
 echo -n "  ./autogen.sh && ./configure --with-gotcha=$INSTALL_DIR"
 echo " --prefix=$INSTALL_DIR"
 echo "  make"
