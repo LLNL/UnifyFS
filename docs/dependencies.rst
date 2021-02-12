@@ -6,6 +6,8 @@ UnifyFS Dependencies
 Required
 --------
 
+- `Automake <https://ftp.gnu.org/gnu/automake/>`_ version 1.15 or later
+
 - `GOTCHA <https://github.com/LLNL/GOTCHA/releases>`_ version 1.0.3
 
 - `Margo <https://xgitlab.cels.anl.gov/sds/margo>`_ version 0.4.3 and its dependencies:
