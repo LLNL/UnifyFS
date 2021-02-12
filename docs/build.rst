@@ -164,6 +164,14 @@ Simply run the script in the top level directory of the source code.
 
     $ ./bootstrap.sh
 
+.. note::
+
+    UnifyFS requires automake version 1.15 or newer in order to build.
+
+    Before building the UnifyFS dependencies, the bootstrap.sh script will check
+    the system's current version of automake and attempt to build the autotools
+    suite if an older version is detected.
+
 Build UnifyFS
 *************
 
