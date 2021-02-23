@@ -37,9 +37,11 @@
 #include "unifyfs_service_manager.h"
 
 // margo rpcs
-#include "unifyfs_group_rpc.h"
-#include "unifyfs_server_rpcs.h"
 #include "margo_server.h"
+#include "unifyfs_group_rpc.h"
+#include "unifyfs_p2p_rpc.h"
+
+#include "unifyfs_server_rpcs.h"
 
 
 #define RM_LOCK(rm) \
@@ -243,44 +245,28 @@ int rm_release_read_req(reqmgr_thrd_t* thrd_ctrl,
 
 static void signal_new_requests(reqmgr_thrd_t* reqmgr)
 {
-    RM_LOCK(reqmgr);
     pid_t this_thread = unifyfs_gettid();
     if (this_thread != reqmgr->tid) {
-        /* wake up the request manager thread for the requesting client */
-        if (!reqmgr->waiting_for_work) {
-            /* reqmgr thread is not waiting, but we are in critical
-             * section, we just added requests so we must wait for reqmgr
-             * to signal us that it's reached the critical section before
-             * we escape so we don't overwrite these requests before it
-             * has had a chance to process them */
-            reqmgr->has_waiting_dispatcher = 1;
-            pthread_cond_wait(&reqmgr->thrd_cond, &reqmgr->thrd_lock);
-
-            /* reqmgr thread has signaled us that it's now waiting */
-            reqmgr->has_waiting_dispatcher = 0;
-        }
-        /* have a reqmgr thread waiting on condition variable,
-         * signal it to begin processing the requests we just added */
+        /* signal reqmgr to begin processing the requests we just added */
         LOGDBG("signaling new requests");
         pthread_cond_signal(&reqmgr->thrd_cond);
     }
-    RM_UNLOCK(reqmgr);
 }
 
 static void signal_new_responses(reqmgr_thrd_t* reqmgr)
 {
-    RM_LOCK(reqmgr);
     pid_t this_thread = unifyfs_gettid();
     if (this_thread != reqmgr->tid) {
         /* wake up the request manager thread */
+        RM_LOCK(reqmgr);
         if (reqmgr->waiting_for_work) {
             /* have a reqmgr thread waiting on condition variable,
              * signal it to begin processing the responses we just added */
             LOGDBG("signaling new responses");
             pthread_cond_signal(&reqmgr->thrd_cond);
         }
+        RM_UNLOCK(reqmgr);
     }
-    RM_UNLOCK(reqmgr);
 }
 
 /* issue remote chunk read requests for extent chunks
@@ -493,51 +479,6 @@ int rm_request_exit(reqmgr_thrd_t* thrd_ctrl)
  * These functions define the logic of the request manager thread
  ***********************/
 
-/* pack the chunk read requests for a single remote server.
- *
- * @param req_msg_buf: request buffer used for packing
- * @param req_num: number of read requests
- * @return size of packed buffer (or error code)
- */
-static size_t rm_pack_chunk_requests(char* req_msg_buf,
-                                     server_chunk_reads_t* remote_reads)
-{
-    /* send format:
-     *   (int)    cmd      - specifies type of message (SVC_CMD_RDREQ_CHK)
-     *   (int)    req_cnt  - number of requests in message
-     *   (size_t) total_sz - total number of bytes requested
-     *   {sequence of chunk_read_req_t} */
-    int req_cnt = remote_reads->num_chunks;
-    size_t reqs_sz = req_cnt * sizeof(chunk_read_req_t);
-    size_t packed_size = (2 * sizeof(int)) + sizeof(size_t) + reqs_sz;
-
-    assert(req_cnt <= MAX_META_PER_SEND);
-
-    /* get pointer to start of send buffer */
-    char* ptr = req_msg_buf;
-    memset(ptr, 0, packed_size);
-
-    /* pack command */
-    int cmd = (int)SVC_CMD_RDREQ_CHK;
-    *((int*)ptr) = cmd;
-    ptr += sizeof(int);
-
-    /* pack request count */
-    *((int*)ptr) = req_cnt;
-    ptr += sizeof(int);
-
-    /* pack total requested data size */
-    *((size_t*)ptr) = remote_reads->total_sz;
-    ptr += sizeof(size_t);
-
-    /* copy requests into buffer */
-    memcpy(ptr, remote_reads->reqs, reqs_sz);
-    ptr += reqs_sz;
-
-    /* return number of bytes used to pack requests */
-    return packed_size;
-}
-
 /* send the chunk read requests to remote servers
  *
  * @param thrd_ctrl : reqmgr thread control structure
@@ -548,13 +489,13 @@ static int rm_request_remote_chunks(reqmgr_thrd_t* thrd_ctrl)
     int i, j, rc;
     int ret = (int)UNIFYFS_SUCCESS;
 
-    /* get pointer to send buffer */
-    char* sendbuf = thrd_ctrl->del_req_msg_buf;
-
     /* iterate over each active read request */
     RM_REQ_LOCK(thrd_ctrl);
     for (i = 0; i < RM_MAX_SERVER_READS; i++) {
         server_read_req_t* req = thrd_ctrl->read_reqs + i;
+        if (!req->in_use) {
+            continue;
+        }
         if (req->num_server_reads > 0) {
             LOGDBG("read req %d is active", i);
             debug_print_read_req(req);
@@ -562,28 +503,21 @@ static int rm_request_remote_chunks(reqmgr_thrd_t* thrd_ctrl)
                 req->status = READREQ_STARTED;
                 /* iterate over each server we need to send requests to */
                 server_chunk_reads_t* remote_reads;
-                size_t packed_sz;
                 for (j = 0; j < req->num_server_reads; j++) {
                     remote_reads = req->remote_reads + j;
                     remote_reads->status = READREQ_STARTED;
 
-                    /* pack requests into send buffer, get packed size */
-                    packed_sz = rm_pack_chunk_requests(sendbuf, remote_reads);
-
-                    /* get rank of target server */
-                    int del_rank = remote_reads->rank;
-
                     /* send requests */
-                    LOGDBG("[%d of %d] sending %d chunk requests to server %d",
+                    int remote_rank = remote_reads->rank;
+                    LOGDBG("[%d of %d] sending %d chunk requests to server[%d]",
                            j, req->num_server_reads,
-                           remote_reads->num_chunks, del_rank);
-                    rc = invoke_chunk_read_request_rpc(del_rank, req,
-                                                       remote_reads->num_chunks,
-                                                       sendbuf, packed_sz);
-                    if (rc != (int)UNIFYFS_SUCCESS) {
+                           remote_reads->num_chunks, remote_rank);
+                    rc = invoke_chunk_read_request_rpc(remote_rank, req,
+                                                       remote_reads);
+                    if (rc != UNIFYFS_SUCCESS) {
                         ret = rc;
                         LOGERR("server request rpc to %d failed - %s",
-                               del_rank,
+                               remote_rank,
                                unifyfs_rc_enum_str((unifyfs_rc)rc));
                     }
                 }
@@ -617,6 +551,9 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
     /* iterate over each active read request */
     for (i = 0; i < RM_MAX_SERVER_READS; i++) {
         server_read_req_t* req = thrd_ctrl->read_reqs + i;
+        if (!req->in_use) {
+            continue;
+        }
         if (req->status == READREQ_STARTED) {
             if (req->num_server_reads > 0) {
                 /* iterate over each server we sent requests to */
@@ -858,8 +795,8 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
                                                       mread_id, read_ndx,
                                                       errcode);
             if (rc != UNIFYFS_SUCCESS) {
-                LOGERR("mread[%d] request %d completion rpc failed",
-                       mread_id, read_ndx);
+                LOGERR("mread[%d] request %d completion rpc failed (rc=%d)",
+                       mread_id, read_ndx, rc);
                 ret = rc;
             }
         }
@@ -1103,7 +1040,9 @@ static int process_metaset_rpc(reqmgr_thrd_t* reqmgr,
     if (NULL != in->attr.filename) {
         fattr.filename = strdup(in->attr.filename);
     }
-    margo_free_input(req->handle, in);
+    if (HG_HANDLE_NULL != req->handle) {
+        margo_free_input(req->handle, in);
+    }
     free(in);
 
     LOGDBG("setting metadata for gfid=%d", gfid);
@@ -1121,17 +1060,18 @@ static int process_metaset_rpc(reqmgr_thrd_t* reqmgr,
         free(fattr.filename);
     }
 
-    /* send rpc response */
-    unifyfs_metaset_out_t out;
-    out.ret = (int32_t) ret;
-    hg_return_t hret = margo_respond(req->handle, &out);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_respond() failed");
+    if (HG_HANDLE_NULL != req->handle) {
+        /* send rpc response */
+        unifyfs_metaset_out_t out;
+        out.ret = (int32_t) ret;
+        hg_return_t hret = margo_respond(req->handle, &out);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_respond() failed");
+        }
+
+        /* cleanup req */
+        margo_destroy(req->handle);
     }
-
-    /* cleanup req */
-    margo_destroy(req->handle);
-
     return ret;
 }
 
@@ -1158,6 +1098,7 @@ static int process_read_rpc(reqmgr_thrd_t* reqmgr,
     if (ret != UNIFYFS_SUCCESS) {
         LOGERR("unifyfs_fops_read() failed");
     }
+    free(req->bulk_buf);
 
     /* send rpc response */
     unifyfs_mread_out_t out;
@@ -1342,9 +1283,11 @@ void* request_manager_thread(void* arg)
 {
     /* get pointer to our thread control structure */
     reqmgr_thrd_t* thrd_ctrl = (reqmgr_thrd_t*) arg;
+    int appid = thrd_ctrl->app_id;
+    int clid  = thrd_ctrl->client_id;
 
     thrd_ctrl->tid = unifyfs_gettid();
-    LOGDBG("I am request manager thread!");
+    LOGINFO("I am request manager [app=%d:client=%d] thread!", appid, clid);
 
     /* loop forever to handle read requests from the client,
      * new requests are added to a list on a shared data structure
@@ -1376,18 +1319,8 @@ void* request_manager_thread(void* arg)
          * inside the critical section */
         thrd_ctrl->waiting_for_work = 1;
 
-        /* if dispatcher is waiting on us, signal it to go ahead,
-         * this coordination ensures that we'll be the next thread
-         * to grab the lock after the dispatcher has assigned us
-         * some work (rather than the dispatcher grabbing the lock
-         * and assigning yet more work) */
-        if (thrd_ctrl->has_waiting_dispatcher == 1) {
-            pthread_cond_signal(&thrd_ctrl->thrd_cond);
-        }
-
         /* release lock and wait to be signaled by dispatcher */
-        LOGDBG("RM[%d:%d] waiting for work",
-               thrd_ctrl->app_id, thrd_ctrl->client_id);
+        //LOGDBG("RM[%d:%d] waiting for work", appid, clid);
         struct timespec timeout;
         clock_gettime(CLOCK_REALTIME, &timeout);
         timeout.tv_nsec += 10000000; /* 10 ms */
@@ -1399,11 +1332,10 @@ void* request_manager_thread(void* arg)
                                              &thrd_ctrl->thrd_lock,
                                              &timeout);
         if (0 == wait_rc) {
-            LOGDBG("RM[%d:%d] got work",
-                   thrd_ctrl->app_id, thrd_ctrl->client_id);
+            LOGDBG("RM[%d:%d] got work", appid, clid);
         } else if (ETIMEDOUT != wait_rc) {
             LOGERR("RM[%d:%d] work condition wait failed (rc=%d)",
-                   thrd_ctrl->app_id, thrd_ctrl->client_id, wait_rc);
+                   appid, clid, wait_rc);
         }
 
         /* set flag to indicate we're no longer waiting */
@@ -1416,219 +1348,8 @@ void* request_manager_thread(void* arg)
         }
     }
 
-    LOGDBG("request manager thread exiting");
+    LOGDBG("RM[%d:%d] thread exiting", appid, clid);
 
     return NULL;
 }
 
-/* BEGIN MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
-
-/* invokes the server_request rpc */
-int invoke_chunk_read_request_rpc(int dst_srvr_rank,
-                                  server_read_req_t* rdreq,
-                                  int num_chunks,
-                                  void* data_buf, size_t buf_sz)
-{
-    if (dst_srvr_rank == glb_pmi_rank) {
-        // short-circuit for local requests
-        return sm_issue_chunk_reads(glb_pmi_rank,
-                                    rdreq->app_id,
-                                    rdreq->client_id,
-                                    rdreq->req_ndx,
-                                    num_chunks,
-                                    (char*)data_buf);
-    }
-
-    int ret = UNIFYFS_SUCCESS;
-    hg_handle_t handle;
-    chunk_read_request_in_t in;
-    chunk_read_request_out_t out;
-    hg_return_t hret;
-    hg_addr_t dst_srvr_addr;
-    hg_size_t bulk_sz = buf_sz;
-
-    assert(dst_srvr_rank < (int)glb_num_servers);
-    dst_srvr_addr = glb_servers[dst_srvr_rank].margo_svr_addr;
-
-    hret = margo_create(unifyfsd_rpc_context->svr_mid, dst_srvr_addr,
-                        unifyfsd_rpc_context->rpcs.chunk_read_request_id,
-                        &handle);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_create() failed");
-        return UNIFYFS_ERROR_MARGO;
-    }
-
-    /* fill in input struct */
-    in.src_rank = (int32_t)glb_pmi_rank;
-    in.app_id = (int32_t)rdreq->app_id;
-    in.client_id = (int32_t)rdreq->client_id;
-    in.req_id = (int32_t)rdreq->req_ndx;
-    in.num_chks = (int32_t)num_chunks;
-    in.bulk_size = bulk_sz;
-
-    /* register request buffer for bulk remote access */
-    hret = margo_bulk_create(unifyfsd_rpc_context->svr_mid, 1,
-                             &data_buf, &bulk_sz,
-                             HG_BULK_READ_ONLY, &in.bulk_handle);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_bulk_create() failed");
-        ret = UNIFYFS_ERROR_MARGO;
-    } else {
-        LOGDBG("invoking the chunk-read-request rpc function");
-        hret = margo_forward(handle, &in);
-        if (hret != HG_SUCCESS) {
-            LOGERR("margo_forward() failed");
-            ret = UNIFYFS_ERROR_MARGO;
-        } else {
-            /* decode response */
-            hret = margo_get_output(handle, &out);
-            if (hret == HG_SUCCESS) {
-                ret = (int)out.ret;
-                LOGDBG("Got request rpc response from %d - ret=%d",
-                    dst_srvr_rank, ret);
-                margo_free_output(handle, &out);
-            } else {
-                LOGERR("margo_get_output() failed");
-                ret = UNIFYFS_ERROR_MARGO;
-            }
-        }
-
-        margo_bulk_free(in.bulk_handle);
-    }
-    margo_destroy(handle);
-
-    return ret;
-}
-
-
-/* BEGIN MARGO SERVER-SERVER RPC HANDLER FUNCTIONS */
-
-/* handler for remote read request response */
-static void chunk_read_response_rpc(hg_handle_t handle)
-{
-    int32_t ret;
-    chunk_read_response_out_t out;
-
-    /* get input params */
-    chunk_read_response_in_t in;
-    hg_return_t hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_input() failed");
-        ret = (int32_t) UNIFYFS_ERROR_MARGO;
-    } else {
-        /* extract params from input struct */
-        int src_rank   = (int)in.src_rank;
-        int app_id     = (int)in.app_id;
-        int client_id  = (int)in.client_id;
-        int req_id     = (int)in.req_id;
-        int num_chks   = (int)in.num_chks;
-        size_t bulk_sz = (size_t)in.bulk_size;
-
-        LOGDBG("received chunk read response from server %d (%d chunks)",
-            src_rank, num_chks);
-
-        /* The input parameters specify the info for a bulk transfer
-         * buffer on the sending process.  We use that info to pull data
-         * from the sender into a local buffer.  This buffer contains
-         * the read reply headers and associated read data for requests
-         * we had sent earlier. */
-
-        /* pull the remote data via bulk transfer */
-        if (0 == bulk_sz) {
-            /* sender is trying to send an empty buffer,
-             * don't think that should happen unless maybe
-             * we had sent a read request list that was empty? */
-            LOGERR("empty response buffer");
-            ret = (int32_t)EINVAL;
-        } else {
-            /* allocate a buffer to hold the incoming data */
-            char* resp_buf = (char*) malloc(bulk_sz);
-            if (NULL == resp_buf) {
-                /* allocation failed, that's bad */
-                LOGERR("failed to allocate chunk read responses buffer");
-                ret = (int32_t)ENOMEM;
-            } else {
-                /* got a buffer, now pull response data */
-                ret = (int32_t)UNIFYFS_SUCCESS;
-
-                /* get margo info */
-                const struct hg_info* hgi = margo_get_info(handle);
-                assert(NULL != hgi);
-
-                margo_instance_id mid = margo_hg_info_get_instance(hgi);
-                assert(mid != MARGO_INSTANCE_NULL);
-
-                /* pass along address of buffer we want to transfer
-                 * data into to prepare it for a bulk write,
-                 * get resulting margo handle */
-                hg_bulk_t bulk_handle;
-                hret = margo_bulk_create(mid, 1,
-                                         (void**)&resp_buf, &in.bulk_size,
-                                         HG_BULK_WRITE_ONLY, &bulk_handle);
-                if (hret != HG_SUCCESS) {
-                    LOGERR("margo_bulk_create() failed");
-                    ret = UNIFYFS_ERROR_MARGO;
-                    goto out_respond;
-                }
-
-                /* execute the transfer to pull data from remote side
-                 * into our local bulk transfer buffer.
-                 * NOTE: mercury/margo bulk transfer does not check the maximum
-                 * transfer size that the underlying transport supports, and a
-                 * large bulk transfer may result in failure. */
-                int i = 0;
-                hg_size_t remain = in.bulk_size;
-                do {
-                    hg_size_t offset = i * MAX_BULK_TX_SIZE;
-                    hg_size_t len = remain < MAX_BULK_TX_SIZE
-                                    ? remain : MAX_BULK_TX_SIZE;
-
-                    hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
-                                               in.bulk_handle, offset,
-                                               bulk_handle, offset, len);
-                    if (hret != HG_SUCCESS) {
-                        LOGERR("margo_bulk_transfer(off=%zu, sz=%zu) failed",
-                               (size_t)offset, (size_t)len);
-                        ret = UNIFYFS_ERROR_MARGO;
-                        break;
-                    }
-
-                    remain -= len;
-                    i++;
-                } while (remain > 0);
-
-                if (hret == HG_SUCCESS) {
-                    LOGDBG("successful bulk transfer (%zu bytes)", bulk_sz);
-
-                    /* process read replies we just received */
-                    int rc = rm_post_chunk_read_responses(app_id, client_id,
-                                                          src_rank, req_id,
-                                                          num_chks, bulk_sz,
-                                                          resp_buf);
-                    if (rc != UNIFYFS_SUCCESS) {
-                        LOGERR("failed to handle chunk read responses");
-                        ret = rc;
-                    }
-                } else {
-                    LOGERR("failed to perform bulk transfer");
-                }
-
-                /* deregister our bulk transfer buffer */
-                margo_bulk_free(bulk_handle);
-            }
-        }
-        margo_free_input(handle, &in);
-    }
-
-out_respond:
-    /* return to caller */
-    out.ret = ret;
-    hret = margo_respond(handle, &out);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_respond() failed");
-    }
-
-    /* free margo resources */
-    margo_destroy(handle);
-}
-DEFINE_MARGO_RPC_HANDLER(chunk_read_response_rpc)

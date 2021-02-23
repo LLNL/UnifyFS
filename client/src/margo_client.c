@@ -793,29 +793,51 @@ static void unifyfs_mread_req_data_rpc(hg_handle_t handle)
                     assert(mid != MARGO_INSTANCE_NULL);
 
                     /* register user buffer for bulk access */
-                    hg_bulk_t bulk_handle;
+                    hg_bulk_t bulk_local;
                     hret = margo_bulk_create(mid, 1, &user_buf, &data_size,
-                                            HG_BULK_WRITE_ONLY, &bulk_handle);
+                                             HG_BULK_WRITE_ONLY, &bulk_local);
                     if (hret != HG_SUCCESS) {
                         LOGERR("margo_bulk_create() failed");
                         ret = UNIFYFS_ERROR_MARGO;
                     } else {
-                        /* do bulk transfer */
-                        hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
-                                                   in.bulk_data, 0,
-                                                   bulk_handle, 0, data_size);
-                        if (hret != HG_SUCCESS) {
-                            LOGERR("margo_bulk_transfer() failed");
-                            ret = UNIFYFS_ERROR_MARGO;
-                        } else {
+                        /* execute the transfer to pull data from remote side
+                         * into our local buffer.
+                         *
+                         * NOTE: mercury/margo bulk transfer does not check the
+                         * maximum transfer size that the underlying transport
+                         * supports, and a large bulk transfer may result in
+                         * failure. */
+                        int i = 0;
+                        hg_size_t remain = in.bulk_size;
+                        do {
+                            hg_size_t offset = i * MAX_BULK_TX_SIZE;
+                            hg_size_t len = remain < MAX_BULK_TX_SIZE ?
+                                            remain : MAX_BULK_TX_SIZE;
+                            hret = margo_bulk_transfer(mid, HG_BULK_PULL,
+                                                       hgi->addr,
+                                                       in.bulk_data, offset,
+                                                       bulk_local, offset,
+                                                       len);
+                            if (hret != HG_SUCCESS) {
+                                LOGERR("margo_bulk_transfer(buf_offset=%zu, "
+                                       "len=%zu) failed",
+                                       (size_t)offset, (size_t)len);
+                                ret = UNIFYFS_ERROR_MARGO;
+                                break;
+                            }
+                            remain -= len;
+                            i++;
+                        } while (remain > 0);
+
+                        if (hret == HG_SUCCESS) {
                             ABT_mutex_lock(mread->sync);
                             update_read_req_coverage(rdreq, data_offset,
                                                      data_size);
                             ABT_mutex_unlock(mread->sync);
-                            LOGDBG("updated coverage for mread[%d] request %d",
+                            LOGINFO("updated coverage for mread[%d] request %d",
                                    client_mread, read_index);
                         }
-                        margo_bulk_free(bulk_handle);
+                        margo_bulk_free(bulk_local);
                     }
                 }
             }

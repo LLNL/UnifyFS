@@ -83,6 +83,7 @@
     UNIFYFS_CFG(logio, shmem_size, INT, UNIFYFS_LOGIO_SHMEM_SIZE, "log-based I/O shared memory region size", NULL) \
     UNIFYFS_CFG(logio, spill_size, INT, UNIFYFS_LOGIO_SPILL_SIZE, "log-based I/O spillover file size", NULL) \
     UNIFYFS_CFG(logio, spill_dir, STRING, NULLSTRING, "spillover directory", configurator_directory_check) \
+    UNIFYFS_CFG(margo, lazy_connect, BOOL, off, "wait until first communication with server to resolve its connection address", NULL) \
     UNIFYFS_CFG(margo, tcp, BOOL, on, "use TCP for server-to-server margo RPCs", NULL) \
     UNIFYFS_CFG(meta, db_name, STRING, META_DEFAULT_DB_NAME, "metadata database name", NULL) \
     UNIFYFS_CFG(meta, db_path, STRING, RUNDIR, "metadata database path", configurator_directory_check) \

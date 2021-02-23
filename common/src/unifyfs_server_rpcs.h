@@ -31,6 +31,24 @@
 extern "C" {
 #endif
 
+typedef enum {
+    UNIFYFS_SERVER_RPC_INVALID = 0,
+    UNIFYFS_SERVER_RPC_CHUNK_READ,
+    UNIFYFS_SERVER_RPC_EXTENTS_ADD,
+    UNIFYFS_SERVER_RPC_EXTENTS_FIND,
+    UNIFYFS_SERVER_RPC_FILESIZE,
+    UNIFYFS_SERVER_RPC_LAMINATE,
+    UNIFYFS_SERVER_RPC_METAGET,
+    UNIFYFS_SERVER_RPC_METASET,
+    UNIFYFS_SERVER_RPC_PID_REPORT,
+    UNIFYFS_SERVER_RPC_TRUNCATE,
+    UNIFYFS_SERVER_BCAST_RPC_EXTENTS,
+    UNIFYFS_SERVER_BCAST_RPC_FILEATTR,
+    UNIFYFS_SERVER_BCAST_RPC_LAMINATE,
+    UNIFYFS_SERVER_BCAST_RPC_TRUNCATE,
+    UNIFYFS_SERVER_BCAST_RPC_UNLINK
+} server_rpc_e;
+
 /*---- Server Point-to-Point (p2p) RPCs ----*/
 
 /* Report server pid to rank 0 */
@@ -48,6 +66,7 @@ MERCURY_GEN_PROC(chunk_read_request_in_t,
                  ((int32_t)(client_id))
                  ((int32_t)(req_id))
                  ((int32_t)(num_chks))
+                 ((hg_size_t)(total_data_size))
                  ((hg_size_t)(bulk_size))
                  ((hg_bulk_t)(bulk_handle)))
 MERCURY_GEN_PROC(chunk_read_request_out_t,
@@ -130,6 +149,13 @@ MERCURY_GEN_PROC(truncate_out_t,
 DECLARE_MARGO_RPC_HANDLER(truncate_rpc)
 
 /*---- Collective RPCs ----*/
+
+/* Finish an ongoing broadcast rpc */
+MERCURY_GEN_PROC(bcast_progress_in_t,
+                 ((hg_ptr_t)(coll_req)))
+MERCURY_GEN_PROC(bcast_progress_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(bcast_progress_rpc)
 
 /* Broadcast file extents to all servers */
 MERCURY_GEN_PROC(extent_bcast_in_t,

@@ -28,13 +28,23 @@ static inline
 struct unifyfs_inode* unifyfs_inode_alloc(int gfid, unifyfs_file_attr_t* attr)
 {
     struct unifyfs_inode* ino = calloc(1, sizeof(*ino));
-
-    if (ino) {
+    if (NULL != ino) {
+        struct extent_tree* tree = calloc(1, sizeof(*tree));
+        if (NULL == tree) {
+            LOGERR("failed to allocate memory for inode extent tree");
+            free(ino);
+            return NULL;
+        }
+        extent_tree_init(tree);
+        ino->extents = tree;
         ino->gfid = gfid;
         ino->attr = *attr;
         ino->attr.filename = strdup(attr->filename);
-        pthread_rwlock_init(&ino->rwlock, NULL);
+
+        pthread_rwlock_init(&(ino->rwlock), NULL);
         ABT_mutex_create(&(ino->abt_sync));
+    } else {
+        LOGERR("failed to allocate memory for inode");
     }
 
     return ino;
@@ -55,7 +65,9 @@ int unifyfs_inode_destroy(struct unifyfs_inode* ino)
             free(ino->extents);
         }
 
-        pthread_rwlock_destroy(&ino->rwlock);
+        pthread_rwlock_destroy(&(ino->rwlock));
+        ABT_mutex_free(&(ino->abt_sync));
+
         free(ino);
     } else {
         ret = EINVAL;
@@ -103,23 +115,24 @@ void unifyfs_inode_unlock(struct unifyfs_inode* ino)
 
 int unifyfs_inode_create(int gfid, unifyfs_file_attr_t* attr)
 {
-    int ret = UNIFYFS_SUCCESS;
-    struct unifyfs_inode* ino = NULL;
-
-    if (!attr) {
+    if (NULL == attr) {
         return EINVAL;
     }
 
-    ino = unifyfs_inode_alloc(gfid, attr);
+    struct unifyfs_inode* ino = unifyfs_inode_alloc(gfid, attr);
+    if (NULL == ino) {
+        return ENOMEM;
+    }
 
+    int ret = UNIFYFS_SUCCESS;
     unifyfs_inode_tree_wrlock(global_inode_tree);
     {
         ret = unifyfs_inode_tree_insert(global_inode_tree, ino);
     }
     unifyfs_inode_tree_unlock(global_inode_tree);
 
-    if (ret) {
-        free(ino);
+    if (ret != UNIFYFS_SUCCESS) {
+        unifyfs_inode_destroy(ino);
     }
 
     return ret;
@@ -128,17 +141,17 @@ int unifyfs_inode_create(int gfid, unifyfs_file_attr_t* attr)
 int unifyfs_inode_update_attr(int gfid, int attr_op,
                               unifyfs_file_attr_t* attr)
 {
-    int ret = UNIFYFS_SUCCESS;
-    struct unifyfs_inode* ino = NULL;
-
-    if (!attr) {
+    if (NULL == attr) {
         return EINVAL;
     }
+
+    int ret = UNIFYFS_SUCCESS;
+    struct unifyfs_inode* ino = NULL;
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
     {
         ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
-        if (!ino) {
+        if (NULL == ino) {
             ret = ENOENT;
         } else {
             unifyfs_inode_wrlock(ino);
@@ -170,14 +183,14 @@ int unifyfs_inode_metaget(int gfid, unifyfs_file_attr_t* attr)
     int ret = UNIFYFS_SUCCESS;
     struct unifyfs_inode* ino = NULL;
 
-    if (!global_inode_tree || !attr) {
+    if ((NULL == global_inode_tree) || (NULL == attr)) {
         return EINVAL;
     }
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
     {
         ino = unifyfs_inode_tree_search(global_inode_tree, gfid);
-        if (ino) {
+        if (NULL != ino) {
             *attr = ino->attr;
         } else {
             ret = ENOENT;
@@ -265,27 +278,19 @@ int unifyfs_inode_add_extents(int gfid, int num_extents,
         unifyfs_inode_wrlock(ino);
         {
             tree = ino->extents;
-
-            /* create extent_tree if it doesn't exist yet */
             if (NULL == tree) {
-                tree = (struct extent_tree*) calloc(1, sizeof(*tree));
-                if (NULL == tree) {
-                    LOGERR("failed to allocate memory for extent tree");
-                    goto out_unlock_inode;
-                } else {
-                    extent_tree_init(tree);
-                    ino->extents = tree;
-                }
+                LOGERR("inode extent tree is missing");
+                goto out_unlock_inode;
             }
 
             for (i = 0; i < num_extents; i++) {
                 struct extent_tree_node* current = &nodes[i];
 
-                /* the output becomes too noisy with this:
-                 * LOGDBG("new extent[%4d]: (%lu, %lu)",
-                 *        i, current->start, current->end);
+                /* debug output becomes too noisy with this:
+                 * LOGDBG("extent[%4d]: [%lu, %lu] @ server[%d] log(%d:%d:%lu)",
+                 *        i, current->start, current->end, current->svr_rank,
+                 *        current->app_id, current->cli_id, current->pos);
                  */
-
                 ret = extent_tree_add(tree, current->start, current->end,
                                       current->svr_rank, current->app_id,
                                       current->cli_id, current->pos);
@@ -318,7 +323,7 @@ out_unlock_tree:
     return ret;
 }
 
-int unifyfs_inode_get_filesize(int gfid, size_t* offset)
+int unifyfs_inode_get_filesize(int gfid, size_t* outsize)
 {
     int ret = UNIFYFS_SUCCESS;
     size_t filesize = 0;
@@ -338,7 +343,7 @@ int unifyfs_inode_get_filesize(int gfid, size_t* offset)
             }
             unifyfs_inode_unlock(ino);
 
-            *offset = filesize;
+            *outsize = filesize;
             LOGDBG("local file size (gfid=%d): %lu", gfid, filesize);
         }
     }
@@ -471,6 +476,11 @@ int compare_chunk_read_reqs(const void* _c1, const void* _c2)
     } else if (c1->rank < c2->rank) {
         return -1;
     } else {
+        if (c1->offset > c2->offset) {
+            return 1;
+        } else if (c1->offset < c2->offset) {
+            return -1;
+        }
         return 0;
     }
 }
@@ -503,14 +513,14 @@ int unifyfs_inode_resolve_extent_chunks(unsigned int n_extents,
     for (i = 0; i < n_extents; i++) {
         unifyfs_inode_extent_t* current = &extents[i];
 
-        LOGDBG("resolving chunk request (gfid=%d, offset=%lu, length=%lu)",
+        LOGDBG("resolving extent request [gfid=%d, offset=%lu, length=%lu]",
                current->gfid, current->offset, current->length);
 
         ret = unifyfs_inode_get_extent_chunks(current,
                                               &n_resolved[i], &resolved[i]);
         if (ret) {
-            LOGERR("failed to resolve the chunk request for chunk "
-                   "[gfid=%d, offset=%lu, length=%zu] (ret=%d)",
+            LOGERR("failed to resolve extent request "
+                   "[gfid=%d, offset=%lu, length=%lu] (ret=%d)",
                    current->gfid, current->offset, current->length, ret);
             goto out_fail;
         }
@@ -530,8 +540,10 @@ int unifyfs_inode_resolve_extent_chunks(unsigned int n_extents,
 
         chunk_read_req_t* pos = chunks;
         for (i = 0; i < n_extents; i++) {
+            chunk_read_req_t* ext_chunks = resolved[i];
             for (j = 0; j < n_resolved[i]; j++) {
-                *pos = resolved[i][j];
+                /* debug_print_chunk_read_req(ext_chunks + j); */
+                *pos = ext_chunks[j];
                 pos++;
             }
             if (resolved[i]) {
@@ -539,14 +551,13 @@ int unifyfs_inode_resolve_extent_chunks(unsigned int n_extents,
             }
         }
 
-        /* sort the requests based on server rank */
-        qsort(chunks, n_chunks, sizeof(*chunks), compare_chunk_read_reqs);
-
+        if (n_chunks > 1) {
+            /* sort the requests based on server rank */
+            qsort(chunks, n_chunks, sizeof(*chunks), compare_chunk_read_reqs);
+        }
         chunk_read_req_t* chk = chunks;
         for (i = 0; i < n_chunks; i++, chk++) {
-            LOGDBG(" [%d] (offset=%lu, nbytes=%lu) @ (%d log(%d:%d:%lu))",
-                   i, chk->offset, chk->nbytes, chk->rank,
-                   chk->log_client_id, chk->log_app_id, chk->log_offset);
+            debug_print_chunk_read_req(chk);
         }
     }
 

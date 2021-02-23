@@ -32,6 +32,10 @@
 extern "C" {
 #endif
 
+#ifndef UNIFYFS_METADATA_CACHE_SECONDS
+# define UNIFYFS_METADATA_CACHE_SECONDS 5
+#endif
+
 
 /* extent slice size used for metadata */
 extern size_t meta_slice_sz;
@@ -68,6 +72,9 @@ typedef struct {
     /* Set when the file is laminated */
     int is_laminated;
 
+    /* Set when file is shared between clients */
+    int is_shared;
+
     /* essential stat fields */
     uint32_t mode;   /* st_mode bits */
     uint32_t uid;
@@ -86,22 +93,17 @@ enum {
 };
 
 static inline
-int unifyfs_file_attr_set_invalid(unifyfs_file_attr_t* attr)
+void unifyfs_file_attr_set_invalid(unifyfs_file_attr_t* attr)
 {
-    if (!attr) {
-        return EINVAL;
-    }
-
     memset(attr, 0, sizeof(*attr));
-    attr->filename = NULL;
-    attr->gfid = -1;
+    attr->filename     = NULL;
+    attr->gfid         = -1;
     attr->is_laminated = -1;
-    attr->mode = -1;
-    attr->uid = -1;
-    attr->gid = -1;
-    attr->size = (uint64_t) -1;
-
-    return 0;
+    attr->is_shared    = -1;
+    attr->mode         = (uint32_t) -1;
+    attr->uid          = (uint32_t) -1;
+    attr->gid          = (uint32_t) -1;
+    attr->size         = (uint64_t) -1;
 }
 
 static inline
@@ -110,10 +112,12 @@ void debug_print_file_attr(unifyfs_file_attr_t* attr)
     if (!attr) {
         return;
     }
-    LOGDBG("fileattr(%p) - gfid=%d filename=%s laminated=%d",
-           attr, attr->gfid, attr->filename, attr->is_laminated);
+    LOGDBG("fileattr(%p) - gfid=%d filename=%s",
+           attr, attr->gfid, attr->filename);
     LOGDBG("             - sz=%zu mode=%o uid=%d gid=%d",
            (size_t)attr->size, attr->mode, attr->uid, attr->gid);
+    LOGDBG("             - shared=%d laminated=%d",
+           attr->is_shared, attr->is_laminated);
     LOGDBG("             - atime=%ld.%09ld ctime=%ld.%09ld mtime=%ld.%09ld",
            attr->atime.tv_sec, attr->atime.tv_nsec,
            attr->ctime.tv_sec, attr->ctime.tv_nsec,
@@ -151,7 +155,7 @@ int unifyfs_file_attr_update(int attr_op,
     /* Update fields only with valid values and associated operation.
      * invalid values are set by unifyfs_file_attr_set_invalid() above */
 
-    if ((src->mode != -1) &&
+    if ((src->mode != (uint32_t)-1) &&
         ((attr_op == UNIFYFS_FILE_ATTR_OP_CHMOD) ||
          (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) ||
          (attr_op == UNIFYFS_FILE_ATTR_OP_LAMINATE))) {
@@ -159,13 +163,13 @@ int unifyfs_file_attr_update(int attr_op,
         dst->mode = src->mode;
     }
 
-    if ((src->uid != -1) &&
+    if ((src->uid != (uint32_t)-1) &&
         ((attr_op == UNIFYFS_FILE_ATTR_OP_CHOWN) ||
          (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE))) {
         dst->uid = src->uid;
     }
 
-    if ((src->gid != -1) &&
+    if ((src->gid != (uint32_t)-1) &&
         ((attr_op == UNIFYFS_FILE_ATTR_OP_CHGRP) ||
          (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE))) {
         dst->gid = src->gid;
@@ -214,6 +218,12 @@ int unifyfs_file_attr_update(int attr_op,
          (attr_op == UNIFYFS_FILE_ATTR_OP_LAMINATE))) {
         LOGDBG("setting attr.is_laminated to %d", src->is_laminated);
         dst->is_laminated = src->is_laminated;
+    }
+
+    if ((src->is_shared != -1) &&
+        (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE)) {
+        LOGDBG("setting attr.is_shared to %d", src->is_shared);
+        dst->is_shared = src->is_shared;
     }
 
     if (src->filename && !dst->filename) {

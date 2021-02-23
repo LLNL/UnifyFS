@@ -133,7 +133,7 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
             return NULL;
         }
     } else {
-        fid = unifyfs_fid_create_file(upath);
+        fid = unifyfs_fid_create_file(upath, 0);
         if (fid < 0) {
             errno = unifyfs_rc_errno(-fid);
             return NULL;

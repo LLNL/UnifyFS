@@ -90,9 +90,6 @@ typedef struct reqmgr_thrd {
     /* list of client rpc requests */
     arraylist_t* client_reqs;
 
-    /* buffer to build read request messages */
-    char del_req_msg_buf[REQ_BUF_LEN];
-
     /* flag set to indicate request manager thread should exit */
     int exit_flag;
 
@@ -158,19 +155,12 @@ int rm_submit_read_request(server_read_req_t* req);
 /**
  * @brief submit a client rpc request to the request manager thread.
  *
- * @param client    application client context
- * @param req       pointer to client rpc request struct
+ * @param ctx   application client context
+ * @param req   pointer to client rpc request struct
  *
  * @return UNIFYFS_SUCCESS, or error code
  */
 int rm_submit_client_rpc_request(unifyfs_fops_ctx_t* ctx,
                                  client_rpc_req_t* req);
-
-/* MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
-
-int invoke_chunk_read_request_rpc(int dst_srvr_rank,
-                                  server_read_req_t* rdreq,
-                                  int num_chunks,
-                                  void* data_buf, size_t buf_sz);
 
 #endif
