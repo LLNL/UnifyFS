@@ -1124,6 +1124,9 @@ int test_create_file(test_cfg* cfg, const char* filepath, int access)
             }
             cfg->fp = fp;
         } else {
+            if (cfg->io_pattern == IO_PATTERN_NN) {
+                create_flags |= O_EXCL;
+            }
             fd = open(filepath, access | create_flags, create_mode);
             if (-1 == fd) {
                 test_print(cfg, "ERROR: open(%s, CREAT) failed", filepath);

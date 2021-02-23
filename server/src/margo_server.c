@@ -129,10 +129,10 @@ static margo_instance_id setup_remote_target(void)
 /* register server-server RPCs */
 static void register_server_server_rpcs(margo_instance_id mid)
 {
-    unifyfsd_rpc_context->rpcs.server_pid_id =
-        MARGO_REGISTER(mid, "server_pid_rpc",
-                       server_pid_in_t, server_pid_out_t,
-                       server_pid_rpc);
+    unifyfsd_rpc_context->rpcs.bcast_progress_id =
+        MARGO_REGISTER(mid, "bcast_progress_rpc",
+                       bcast_progress_in_t, bcast_progress_out_t,
+                       bcast_progress_rpc);
 
     unifyfsd_rpc_context->rpcs.chunk_read_request_id =
         MARGO_REGISTER(mid, "chunk_read_request_rpc",
@@ -188,6 +188,11 @@ static void register_server_server_rpcs(margo_instance_id mid)
         MARGO_REGISTER(mid, "metaset_rpc",
                        metaset_in_t, metaset_out_t,
                        metaset_rpc);
+
+    unifyfsd_rpc_context->rpcs.server_pid_id =
+        MARGO_REGISTER(mid, "server_pid_rpc",
+                       server_pid_in_t, server_pid_out_t,
+                       server_pid_rpc);
 
     unifyfsd_rpc_context->rpcs.truncate_id =
         MARGO_REGISTER(mid, "truncate_rpc",
@@ -405,8 +410,10 @@ int margo_server_rpc_finalize(void)
         }
 
         /* shut down margo */
+        LOGDBG("finalizing server-server margo");
         margo_finalize(ctx->svr_mid);
         /* NOTE: 2nd call to margo_finalize() sometimes crashes - Margo bug? */
+        LOGDBG("finalizing client-server margo");
         margo_finalize(ctx->shm_mid);
 
         /* free memory allocated for context structure */
@@ -414,6 +421,32 @@ int margo_server_rpc_finalize(void)
     }
 
     return rc;
+}
+
+int margo_connect_server(int rank)
+{
+    assert(rank < glb_num_servers);
+
+    int ret = UNIFYFS_SUCCESS;
+    char* margo_addr_str = rpc_lookup_remote_server_addr(rank);
+    if (NULL == margo_addr_str) {
+        LOGERR("server index=%d - margo server lookup failed", rank);
+        ret = UNIFYFS_ERROR_KEYVAL;
+        return ret;
+    }
+    glb_servers[rank].margo_svr_addr_str = margo_addr_str;
+    LOGDBG("server rank=%d, margo_addr=%s", rank, margo_addr_str);
+
+    hg_return_t hret = margo_addr_lookup(unifyfsd_rpc_context->svr_mid,
+                                         glb_servers[rank].margo_svr_addr_str,
+                                         &(glb_servers[rank].margo_svr_addr));
+    if (hret != HG_SUCCESS) {
+        LOGERR("server index=%zu - margo_addr_lookup(%s) failed",
+               rank, margo_addr_str);
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+
+    return ret;
 }
 
 /* margo_connect_servers
@@ -424,60 +457,121 @@ int margo_server_rpc_finalize(void)
 int margo_connect_servers(void)
 {
     int rc;
-    int ret = (int)UNIFYFS_SUCCESS;
-    size_t i;
-    hg_return_t hret;
+    int ret = UNIFYFS_SUCCESS;
+    int i;
 
     // block until a margo_svr key pair published by all servers
     rc = unifyfs_keyval_fence_remote();
     if ((int)UNIFYFS_SUCCESS != rc) {
         LOGERR("keyval fence on margo_svr key failed");
-        ret = (int)UNIFYFS_FAILURE;
+        ret = UNIFYFS_ERROR_KEYVAL;
         return ret;
     }
 
-    for (i = 0; i < glb_num_servers; i++) {
-        int remote_pmi_rank = -1;
-        char* pmi_rank_str = NULL;
-        char* margo_addr_str = NULL;
-
-        rc = unifyfs_keyval_lookup_remote(i, key_unifyfsd_pmi_rank,
-                                          &pmi_rank_str);
-        if ((int)UNIFYFS_SUCCESS != rc) {
-            LOGERR("server index=%zu - pmi rank lookup failed", i);
-            ret = (int)UNIFYFS_FAILURE;
-            return ret;
-        }
-        if (NULL != pmi_rank_str) {
-            remote_pmi_rank = atoi(pmi_rank_str);
-            free(pmi_rank_str);
-        }
-        glb_servers[i].pmi_rank = remote_pmi_rank;
-
-        margo_addr_str = rpc_lookup_remote_server_addr(i);
-        if (NULL == margo_addr_str) {
-            LOGERR("server index=%zu - margo server lookup failed", i);
-            ret = (int)UNIFYFS_FAILURE;
-            return ret;
-        }
+    for (i = 0; i < (int)glb_num_servers; i++) {
+        glb_servers[i].pmi_rank = i;
         glb_servers[i].margo_svr_addr = HG_ADDR_NULL;
-        glb_servers[i].margo_svr_addr_str = margo_addr_str;
-        LOGDBG("server index=%zu, pmi_rank=%d, margo_addr=%s",
-               i, remote_pmi_rank, margo_addr_str);
+        glb_servers[i].margo_svr_addr_str = NULL;
         if (!margo_lazy_connect) {
-            hret = margo_addr_lookup(unifyfsd_rpc_context->svr_mid,
-                                     glb_servers[i].margo_svr_addr_str,
-                                     &(glb_servers[i].margo_svr_addr));
-            if (hret != HG_SUCCESS) {
-                LOGERR("server index=%zu - margo_addr_lookup(%s) failed",
-                       i, margo_addr_str);
-                ret = (int)UNIFYFS_FAILURE;
+            rc = margo_connect_server(i);
+            if (rc != UNIFYFS_SUCCESS) {
+                ret = rc;
             }
         }
     }
 
     return ret;
 }
+
+hg_addr_t get_margo_server_address(int rank)
+{
+    assert(rank < glb_num_servers);
+    hg_addr_t addr = glb_servers[rank].margo_svr_addr;
+    if ((HG_ADDR_NULL == addr) && margo_lazy_connect) {
+        int rc = margo_connect_server(rank);
+        if (rc == UNIFYFS_SUCCESS) {
+            addr = glb_servers[rank].margo_svr_addr;
+        }
+    }
+    return addr;
+}
+
+/* Use passed bulk handle to pull data into a newly allocated buffer.
+ * If local_bulk is not NULL, will set to local bulk handle on success.
+ * Returns bulk buffer, or NULL on failure. */
+void* pull_margo_bulk_buffer(hg_handle_t rpc_hdl,
+                             hg_bulk_t bulk_remote,
+                             hg_size_t bulk_sz,
+                             hg_bulk_t* local_bulk)
+{
+    if (0 == bulk_sz) {
+        return NULL;
+    }
+
+    size_t sz = (size_t) bulk_sz;
+    void* buffer = malloc(sz);
+    if (NULL == buffer) {
+        LOGERR("failed to allocate buffer(sz=%zu) for bulk transfer", sz);
+        return NULL;
+    }
+
+    /* get mercury info to set up bulk transfer */
+    const struct hg_info* hgi = margo_get_info(rpc_hdl);
+    assert(hgi);
+    margo_instance_id mid = margo_hg_info_get_instance(hgi);
+    assert(mid != MARGO_INSTANCE_NULL);
+
+    /* register local target buffer for bulk access */
+    hg_bulk_t bulk_local;
+    hg_return_t hret = margo_bulk_create(mid, 1, &buffer, &bulk_sz,
+                                         HG_BULK_READWRITE, &bulk_local);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_bulk_create() failed");
+        free(buffer);
+        return NULL;
+    }
+
+    /* execute the transfer to pull data from remote side
+     * into our local buffer.
+     *
+     * NOTE: mercury/margo bulk transfer does not check the maximum
+     * transfer size that the underlying transport supports, and a
+     * large bulk transfer may result in failure. */
+    int i = 0;
+    hg_size_t remain = bulk_sz;
+    do {
+        hg_size_t offset = i * MAX_BULK_TX_SIZE;
+        hg_size_t len = remain < MAX_BULK_TX_SIZE ? remain : MAX_BULK_TX_SIZE;
+        hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
+                                   bulk_remote, offset,
+                                   bulk_local, offset, len);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_bulk_transfer(buf_offset=%zu, len=%zu) failed",
+                   (size_t)offset, (size_t)len);
+            break;
+        }
+        remain -= len;
+        i++;
+    } while (remain > 0);
+
+    if (hret == HG_SUCCESS) {
+        LOGDBG("successful bulk transfer (%zu bytes)", bulk_sz);
+        if (local_bulk != NULL) {
+            *local_bulk = bulk_local;
+        } else {
+            /* deregister our bulk transfer buffer */
+            margo_bulk_free(bulk_local);
+        }
+        return buffer;
+    } else {
+        LOGERR("failed bulk transfer - transferred %zu of %zu bytes",
+               (bulk_sz - remain), bulk_sz);
+        free(buffer);
+        return NULL;
+    }
+}
+
+/* MARGO CLIENT-SERVER RPC INVOCATION FUNCTIONS */
 
 /* create and return a margo handle for given rpc id and app-client */
 static hg_handle_t create_client_handle(hg_id_t id,

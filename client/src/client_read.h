@@ -28,17 +28,12 @@
 typedef struct {
     unsigned int id;         /* unique id for this set of read requests */
     unsigned int n_reads;    /* number of read requests */
-    unsigned int n_complete; /* number of completed requests */
-    unsigned int n_error;    /* number of requests that encountered errors */
     read_req_t* reqs;        /* array of read requests */
 
-    /* the following is for synchronizing access/updates to above state */
+    /* the following is for synchronizing access/updates to below state */
     ABT_mutex sync;
-
-    /* pthread mutex and condition used to signal the client thread that
-     * issued the mread that the full set of requests has been processed */
-    pthread_mutex_t mutex;
-    pthread_cond_t completed;
+    volatile unsigned int n_complete; /* number of completed requests */
+    volatile unsigned int n_error;    /* number of requests that had errors */
 } client_mread_status;
 
 /* an arraylist to maintain the active mread requests for the client */

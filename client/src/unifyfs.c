@@ -288,7 +288,7 @@ static void unifyfs_normalize_path(const char* path, char* normalized)
 #endif /* USE_SPATH */
 }
 
-/* Given a path, which may relative or absoluate,
+/* Given a path, which may relative or absolute,
  * return 1 if we should intercept the path, 0 otherwise.
  * If path is to be intercepted, returned a normalized version in upath. */
 inline int unifyfs_intercept_path(const char* path, char* upath)
@@ -394,7 +394,7 @@ inline int unifyfs_intercept_dirstream(DIR* dirp)
     return 0;
 }
 
-/* given a path, return the file id */
+/* given a path, return the local file id, or -1 if not found */
 inline int unifyfs_get_fid_from_path(const char* path)
 {
     /* scan through active entries in filelist array looking
@@ -874,7 +874,8 @@ int unifyfs_fid_free(int fid)
 
 /* add a new file and initialize metadata
  * returns the new fid, or negative value on error */
-int unifyfs_fid_create_file(const char* path)
+int unifyfs_fid_create_file(const char* path,
+                            int exclusive)
 {
     /* check that pathname is within bounds */
     size_t pathlen = strlen(path) + 1;
@@ -906,6 +907,7 @@ int unifyfs_fid_create_file(const char* path)
     meta->attrs.size = 0;
     meta->attrs.mode = UNIFYFS_STAT_DEFAULT_FILE_MODE;
     meta->attrs.is_laminated = 0;
+    meta->attrs.is_shared = !exclusive;
     meta->attrs.filename = (char*)&(unifyfs_filelist[fid].filename);
 
     /* use client user/group */
@@ -931,12 +933,13 @@ int unifyfs_fid_create_file(const char* path)
     return fid;
 }
 
+/* create directory state for given path. returns success|error */
 int unifyfs_fid_create_directory(const char* path)
 {
     /* check that pathname is within bounds */
     size_t pathlen = strlen(path) + 1;
     if (pathlen > UNIFYFS_MAX_FILENAME) {
-        return (int) ENAMETOOLONG;
+        return ENAMETOOLONG;
     }
 
     /* get local and global file ids */
@@ -944,16 +947,17 @@ int unifyfs_fid_create_directory(const char* path)
     int gfid = unifyfs_generate_gfid(path);
 
     /* test whether we have info for file in our local file list */
-    int found_local = (fid >= 0);
+    int found_local = (fid != -1);
 
     /* test whether we have metadata for file in global key/value store */
-    unifyfs_file_attr_t gfattr = { 0, };
-    if (unifyfs_get_global_file_meta(gfid, &gfattr) == UNIFYFS_SUCCESS) {
-        /* can't create if it already exists */
-        return EEXIST;
+    int found_global = 0;
+    unifyfs_file_attr_t gfattr = { 0 };
+    int rc = unifyfs_get_global_file_meta(gfid, &gfattr);
+    if (UNIFYFS_SUCCESS == rc) {
+        found_global = 1;
     }
 
-    if (found_local) {
+    if (found_local && !found_global) {
         /* exists locally, but not globally
          *
          * FIXME: so, we have detected the cache inconsistency here.
@@ -967,7 +971,7 @@ int unifyfs_fid_create_directory(const char* path)
          *   deletes the global entry without checking any local used entries
          *   in other processes.
          *
-         * we currently return EEXIS, and this needs to be addressed according
+         * we currently return EEXIST, and this needs to be addressed according
          * to a consistency model this fs intance assumes.
          */
         return EEXIST;
@@ -975,21 +979,31 @@ int unifyfs_fid_create_directory(const char* path)
 
     /* now, we need to create a new directory. we reuse the file creation
      * method and then update the mode to indicate it's a directory */
-    fid = unifyfs_fid_create_file(path);
-    if (fid < 0) {
-        return -fid;
-    }
-    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
-    assert(meta != NULL);
-    meta->attrs.mode = (meta->attrs.mode & ~S_IFREG) | S_IFDIR;
+    if (!found_local) {
+        /* create a new file */
+        fid = unifyfs_fid_create_file(path, 0);
+        if (fid < 0) {
+            /* convert negative error code to positive */
+            return -fid;
+        }
 
-    /* insert global meta data for directory */
-    unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_CREATE;
-    int ret = unifyfs_set_global_file_meta_from_fid(fid, op);
-    if (ret != UNIFYFS_SUCCESS) {
-        LOGERR("Failed to populate the global meta entry for %s (fid:%d)",
-               path, fid);
-        return ret;
+        /* mark it as a directory */
+        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+        assert(meta != NULL);
+        meta->attrs.mode = (meta->attrs.mode & ~S_IFREG) | S_IFDIR;
+
+        if (!found_global) {
+            /* insert global meta data for directory */
+            unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_CREATE;
+            rc = unifyfs_set_global_file_meta_from_fid(fid, op);
+            if (rc != UNIFYFS_SUCCESS) {
+                if (rc != EEXIST) {
+                    LOGERR("Failed to add global metadata for dir %s (rc=%d)",
+                           path, rc);
+                    return rc;
+                } /* else, someone else created global metadata first */
+            }
+        }
     }
 
     return UNIFYFS_SUCCESS;
@@ -1186,6 +1200,8 @@ int unifyfs_fid_open(
     /* determine whether any write flags are specified */
     int open_for_write = flags & (O_RDWR | O_WRONLY);
 
+    int exclusive = flags & O_EXCL;
+
     /* struct to hold global metadata for file */
     unifyfs_file_attr_t gfattr = { 0, };
 
@@ -1214,7 +1230,7 @@ int unifyfs_fid_open(
          * allocate a local file id structure if needed */
         if (!found_local) {
             /* initialize local metadata for this file */
-            fid = unifyfs_fid_create_file(path);
+            fid = unifyfs_fid_create_file(path, exclusive);
             if (fid < 0) {
                 LOGERR("failed to create a new file %s", path);
                 return -fid;
@@ -1235,7 +1251,7 @@ int unifyfs_fid_open(
         /* insert file attribute for file in key-value store */
         unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_CREATE;
         ret = unifyfs_set_global_file_meta_from_fid(fid, op);
-        if (ret == EEXIST && !(flags & O_EXCL)) {
+        if (ret == EEXIST && !exclusive) {
             /* File didn't exist before, but now it does.
              * Another process beat us to the punch in creating it.
              * Read its metadata to update our cache. */
@@ -1295,7 +1311,7 @@ int unifyfs_fid_open(
          * allocate a local file id structure if needed */
         if (!found_local) {
             /* initialize local metadata for this file */
-            fid = unifyfs_fid_create_file(path);
+            fid = unifyfs_fid_create_file(path, 0);
             if (fid < 0) {
                 LOGERR("failed to create a new file %s", path);
                 return -fid;
@@ -2038,15 +2054,15 @@ int unifyfs_mount(
     }
 
     /* add mount point as a new directory in the file list */
-    if (unifyfs_get_fid_from_path(prefix) < 0) {
+    int fid = unifyfs_get_fid_from_path(prefix);
+    if (fid < 0) {
         /* no entry exists for mount point, so create one */
-        int fid = unifyfs_fid_create_directory(prefix);
-        if (fid < 0) {
-            /* if there was an error, return it */
-            LOGERR("failed to create directory entry for mount point: `%s'",
-                   prefix);
+        rc = unifyfs_fid_create_directory(prefix);
+        if ((rc != UNIFYFS_SUCCESS) && (rc != EEXIST)) {
+            /* if there was an error other than EEXIST, return it */
+            LOGERR("failed to create directory for mount point: %s", prefix);
             unifyfs_fini();
-            return UNIFYFS_FAILURE;
+            return rc;
         }
     }
 

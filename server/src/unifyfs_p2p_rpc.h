@@ -17,15 +17,56 @@
 
 #include "unifyfs_global.h"
 #include "extent_tree.h"
+#include "margo_server.h"
 #include "unifyfs_inode.h"
-
-
-/* Point-to-point Server RPCs */
+#include "unifyfs_request_manager.h"
+#include "unifyfs_service_manager.h"
 
 
 /* determine server responsible for maintaining target file's metadata */
 int hash_gfid_to_server(int gfid);
 
+/* server peer-to-peer (p2p) margo request structure */
+typedef struct {
+    margo_request request;
+    hg_addr_t     peer;
+    hg_handle_t   handle;
+} p2p_request;
+
+/* helper method to initialize peer request rpc handle */
+int get_p2p_request_handle(hg_id_t request_hgid,
+                           int peer_rank,
+                           p2p_request* req);
+
+/* helper method to forward peer rpc request */
+int forward_p2p_request(void* input_ptr,
+                        p2p_request* req);
+
+/* helper method to wait for peer rpc request completion */
+int wait_for_p2p_request(p2p_request* req);
+
+/*** Point-to-point Server RPCs ***/
+
+/**
+ * @brief Request chunk reads from remote server
+ *
+ * @param dst_srvr_rank  remote server rank
+ * @param rdreq          read request structure
+ * @param remote_reads   server chunk reads
+ *
+ * @return success|failure
+ */
+int invoke_chunk_read_request_rpc(int dst_srvr_rank,
+                                  server_read_req_t* rdreq,
+                                  server_chunk_reads_t* remote_reads);
+/**
+ * @brief Respond to chunk read request
+ *
+ * @param scr  server chunk reads structure
+ *
+ * @return success|failure
+ */
+int invoke_chunk_read_response_rpc(server_chunk_reads_t* scr);
 
 /**
  * @brief Add new extents to target file
@@ -112,5 +153,11 @@ int unifyfs_invoke_metaset_rpc(int gfid, int attr_op,
  */
 int unifyfs_invoke_truncate_rpc(int gfid, size_t filesize);
 
+/**
+ * @brief Report pid of local server to rank 0 server
+ *
+ * @return success|failure
+ */
+int unifyfs_invoke_server_pid_rpc(void);
 
 #endif // UNIFYFS_P2P_RPC_H
