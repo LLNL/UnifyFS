@@ -785,6 +785,7 @@ static int unifyfs_fskv_publish_remote(const char* key,
     return (int)UNIFYFS_SUCCESS;
 }
 
+#if (!defined(USE_PMI2)) && (!defined(USE_PMIX))
 static int unifyfs_fskv_fence(void)
 {
     if (!have_sharedfs_kvstore) {
@@ -800,6 +801,7 @@ static int unifyfs_fskv_fence(void)
 
     return (int)UNIFYFS_SUCCESS;
 }
+#endif
 
 //--------------------- K-V Store API ---------------------
 

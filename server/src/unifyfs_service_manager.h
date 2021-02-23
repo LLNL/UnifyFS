@@ -32,6 +32,15 @@
 
 #include "unifyfs_global.h"
 
+typedef struct {
+    server_rpc_e req_type;
+    hg_handle_t handle;
+    void* coll;
+    void* input;
+    void* bulk_buf;
+    size_t bulk_sz;
+} server_rpc_req_t;
+
 /* service manager pthread routine */
 void* service_manager_thread(void* ctx);
 
@@ -41,15 +50,46 @@ int svcmgr_init(void);
 /* join service manager thread and cleanup its state */
 int svcmgr_fini(void);
 
+/**
+ * @brief submit a server rpc request to the service manager thread.
+ *
+ * @param req   pointer to server rpc request struct
+ *
+ * @return UNIFYFS_SUCCESS, or error code
+ */
+int sm_submit_service_request(server_rpc_req_t* req);
+
 /* decode and issue chunk reads contained in message buffer */
 int sm_issue_chunk_reads(int src_rank,
                          int src_app_id,
                          int src_client_id,
                          int src_req_id,
                          int num_chks,
+                         size_t total_data_sz,
                          char* msg_buf);
 
-/* MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
-int invoke_chunk_read_response_rpc(server_chunk_reads_t* scr);
+/* File service operations */
+
+int sm_laminate(int gfid);
+
+int sm_get_fileattr(int gfid,
+                    unifyfs_file_attr_t* attrs);
+
+int sm_set_fileattr(int gfid,
+                    int file_op,
+                    unifyfs_file_attr_t* attrs);
+
+int sm_add_extents(int gfid,
+                   size_t num_extents,
+                   struct extent_tree_node* extents);
+
+int sm_find_extents(int gfid,
+                    size_t num_extents,
+                    unifyfs_inode_extent_t* extents,
+                    unsigned int* out_num_chunks,
+                    chunk_read_req_t** out_chunks);
+
+int sm_truncate(int gfid,
+                size_t filesize);
 
 #endif // UNIFYFS_SERVICE_MANAGER_H

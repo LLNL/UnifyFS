@@ -31,6 +31,7 @@
 
 typedef struct ServerRpcIds {
     /* server-server rpcs */
+    hg_id_t bcast_progress_id;
     hg_id_t chunk_read_request_id;
     hg_id_t chunk_read_response_id;
     hg_id_t extent_add_id;
@@ -66,7 +67,17 @@ extern bool margo_lazy_connect;
 int margo_server_rpc_init(void);
 int margo_server_rpc_finalize(void);
 
+int margo_connect_server(int rank);
 int margo_connect_servers(void);
+
+hg_addr_t get_margo_server_address(int rank);
+
+/* use passed bulk handle to pull data into a newly allocated buffer.
+ * returns buffer, or NULL on failure. */
+void* pull_margo_bulk_buffer(hg_handle_t rpc_hdl,
+                            hg_bulk_t bulk_in,
+                            hg_size_t bulk_sz,
+                            hg_bulk_t* local_bulk);
 
 /* invokes the client mread request data response rpc function */
 int invoke_client_mread_req_data_rpc(int app_id,

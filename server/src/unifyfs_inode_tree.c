@@ -50,24 +50,22 @@ RB_GENERATE(
 int unifyfs_inode_tree_init(
     struct unifyfs_inode_tree* tree)
 {
-    int ret = 0;
-
-    if (!tree) {
+    if (NULL == tree) {
         return EINVAL;
     }
 
     memset(tree, 0, sizeof(*tree));
-    ret = pthread_rwlock_init(&tree->rwlock, NULL);
+    pthread_rwlock_init(&tree->rwlock, NULL);
     RB_INIT(&tree->head);
 
-    return ret;
+    return UNIFYFS_SUCCESS;
 }
 
 /* Remove and free all nodes in the unifyfs_inode_tree. */
 void unifyfs_inode_tree_destroy(
     struct unifyfs_inode_tree* tree)
 {
-    if (tree) {
+    if (NULL != tree) {
         unifyfs_inode_tree_clear(tree);
         pthread_rwlock_destroy(&tree->rwlock);
     }
@@ -77,10 +75,9 @@ int unifyfs_inode_tree_insert(
     struct unifyfs_inode_tree* tree, /* tree on which to add new entry */
     struct unifyfs_inode* ino)       /* initial file attribute */
 {
-    int ret = 0;
     struct unifyfs_inode* existing = NULL;
 
-    if (!ino || (ino->gfid != ino->attr.gfid)) {
+    if ((NULL == ino) || (ino->gfid != ino->attr.gfid)) {
         return EINVAL;
     }
 
@@ -92,7 +89,7 @@ int unifyfs_inode_tree_insert(
 
     RB_INSERT(rb_inode_tree, &tree->head, ino);
 
-    return ret;
+    return UNIFYFS_SUCCESS;
 }
 
 /* Search for and return entry for given gfid on specified tree.
@@ -111,11 +108,8 @@ int unifyfs_inode_tree_remove(
     int gfid,
     struct unifyfs_inode** removed)
 {
-    int ret = 0;
-    struct unifyfs_inode* ino = NULL;
-
-    ino = unifyfs_inode_tree_search(tree, gfid);
-    if (!ino) {
+    struct unifyfs_inode* ino = unifyfs_inode_tree_search(tree, gfid);
+    if (NULL == ino) {
         return ENOENT;
     }
 
@@ -123,7 +117,7 @@ int unifyfs_inode_tree_remove(
 
     *removed = ino;
 
-    return ret;
+    return UNIFYFS_SUCCESS;
 }
 
 /*

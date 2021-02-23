@@ -84,19 +84,6 @@ client_mread_status* client_create_mread_request(int n_reads,
     mread->n_reads = (unsigned int) n_reads;
     ABT_mutex_create(&(mread->sync));
 
-    rc = pthread_mutex_init(&(mread->mutex), NULL);
-    if (rc != 0) {
-        LOGERR("client mread status pthread mutex init failed");
-        free(mread);
-        return NULL;
-    }
-    rc = pthread_cond_init(&(mread->completed), NULL);
-    if (rc != 0) {
-        LOGERR("client mread status pthread condition init failed");
-        free(mread);
-        return NULL;
-    }
-
     return mread;
 }
 
@@ -116,8 +103,6 @@ int client_remove_mread_request(client_mread_status* mread)
     void* list_item = arraylist_remove(active_mreads, list_index);
     if (list_item == (void*)mread) {
         ABT_mutex_free(&(mread->sync));
-        pthread_cond_destroy(&(mread->completed));
-        pthread_mutex_destroy(&(mread->mutex));
         free(mread);
         return UNIFYFS_SUCCESS;
     } else {
@@ -166,8 +151,6 @@ int client_update_mread_request(client_mread_status* mread,
 
     ABT_mutex_lock(mread->sync);
     if (req_index < mread->n_reads) {
-        LOGDBG("updating mread[%u] status for request %u",
-               mread->id, req_index);
         read_req_t* rdreq = mread->reqs + req_index;
         if (req_complete) {
             mread->n_complete++;
@@ -178,6 +161,10 @@ int client_update_mread_request(client_mread_status* mread,
             } else {
                 rdreq->nread = rdreq->cover_end_offset + 1;
             }
+            LOGINFO("updating mread[%u] status for request %u of %u "
+                    "(n_complete=%u, n_error=%u)",
+                    mread->id, req_index, mread->n_reads,
+                    mread->n_complete, mread->n_error);
         }
     } else {
         LOGERR("invalid read request index %u (mread[%u] has %u reqs)",
@@ -189,10 +176,8 @@ int client_update_mread_request(client_mread_status* mread,
     ABT_mutex_unlock(mread->sync);
 
     if (complete) {
-        /* Signal client thread waiting on mread completion */
-        LOGDBG("mread[%u] signaling completion of %u requests",
+        LOGDBG("mread[%u] completed %u requests",
                mread->id, mread->n_reads);
-        pthread_cond_signal(&(mread->completed));
     }
 
     return ret;
@@ -603,33 +588,28 @@ int process_gfid_reads(read_req_t* in_reqs, int in_count)
         /* wait for all requests to finish by blocking on mread
          * completion condition (with a reasonable timeout) */
         LOGDBG("waiting for completion of mread[%u]", mread->id);
-        pthread_mutex_lock(&(mread->mutex));
 
-        /* this loop is a workaround for having a single timed condition wait
-         * that occasionally fails to receive the condition signal */
-        int wait_rc = 0;
-        int wait_interval = UNIFYFS_CLIENT_READ_TIMEOUT_SECONDS / 10;
-        int wait_time = 0;
-        while ((mread->n_complete < mread->n_reads) &&
-               (wait_time < UNIFYFS_CLIENT_READ_TIMEOUT_SECONDS)) {
-            struct timespec timeout;
-            clock_gettime(CLOCK_REALTIME, &timeout);
-            timeout.tv_sec += wait_interval;
-            wait_rc = pthread_cond_timedwait(&(mread->completed),
-                                             &(mread->mutex), &timeout);
-            if (wait_rc) {
-                if (ETIMEDOUT == wait_rc) {
-                    wait_time += wait_interval;
-                } else {
-                    LOGERR("mread[%u] condition wait failed (err=%d)",
-                           mread->id, wait_rc);
-                    ret = wait_rc;
-                    break;
-                }
+        /* this loop uses usleep() instead of pthread_cond_timedwait()
+         * because that method caused unexplained read timeouts */
+        int wait_time_ms = 0;
+        int complete = 0;
+        while (1) {
+            ABT_mutex_lock(mread->sync);
+            complete = (mread->n_complete == mread->n_reads);
+            ABT_mutex_unlock(mread->sync);
+            if (complete) {
+                break;
             }
+
+            if ((wait_time_ms / 1000) >= UNIFYFS_CLIENT_READ_TIMEOUT_SECONDS) {
+                LOGERR("mread[%u] timed out", mread->id);
+                break;
+            }
+
+            usleep(50000); /* sleep 50 ms */
+            wait_time_ms += 50;
         }
-        if (wait_time >= UNIFYFS_CLIENT_READ_TIMEOUT_SECONDS) {
-            LOGERR("mread[%u] timed out", mread->id);
+        if (!complete) {
             for (i = 0; i < server_count; i++) {
                 if (EINPROGRESS == server_reqs[i].errcode) {
                     server_reqs[i].errcode = ETIMEDOUT;
@@ -637,9 +617,8 @@ int process_gfid_reads(read_req_t* in_reqs, int in_count)
                 }
             }
         }
-        LOGDBG("mread[%u] wait completed (rc=%d) - %u requests, %u errors",
-               mread->id, wait_rc, mread->n_reads, mread->n_error);
-        pthread_mutex_unlock(&(mread->mutex));
+        LOGDBG("mread[%u] wait completed - %u requests, %u errors",
+               mread->id, mread->n_reads, mread->n_error);
     }
 
     /* got all of the data we'll get from the server, check for short reads

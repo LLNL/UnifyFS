@@ -220,15 +220,17 @@ int main(int argc, char* argv[])
 
     // create file
     target_file = test_target_filename(cfg);
-    test_print_verbose_once(cfg, "DEBUG: creating target file %s",
-                            target_file);
+    test_print_verbose_once(cfg,
+        "DEBUG: creating target file %s", target_file);
     timer_start_barrier(cfg, &time_create);
     rc = test_create_file(cfg, target_file, O_RDWR);
     if (rc) {
         test_abort(cfg, rc);
     }
     timer_stop_barrier(cfg, &time_create);
-    test_print_verbose_once(cfg, "DEBUG: finished create");
+    test_print_verbose_once(cfg,
+        "DEBUG: finished create (elapsed=%.6lf sec)",
+        time_create.elapsed_sec_all);
 
     if (cfg->pre_wr_trunc) {
         write_truncate(cfg);
@@ -257,7 +259,9 @@ int main(int argc, char* argv[])
         test_abort(cfg, rc);
     }
     timer_stop_barrier(cfg, &time_wr);
-    test_print_verbose_once(cfg, "DEBUG: finished write requests");
+    test_print_verbose_once(cfg,
+        "DEBUG: finished write requests (elapsed=%.6lf sec)",
+        time_wr.elapsed_sec_all);
 
     // sync
     timer_start_barrier(cfg, &time_sync);
@@ -266,13 +270,17 @@ int main(int argc, char* argv[])
         test_abort(cfg, rc);
     }
     timer_stop_barrier(cfg, &time_sync);
-    test_print_verbose_once(cfg, "DEBUG: finished sync");
+    test_print_verbose_once(cfg,
+        "DEBUG: finished sync (elapsed=%.6lf sec)",
+        time_sync.elapsed_sec_all);
 
     // stat file pre-laminate
     timer_start_barrier(cfg, &time_stat_pre);
     stat_file(cfg, target_file);
     timer_stop_barrier(cfg, &time_stat_pre);
-    test_print_verbose_once(cfg, "DEBUG: finished stat pre-laminate");
+    test_print_verbose_once(cfg,
+        "DEBUG: finished stat pre-laminate (elapsed=%.6lf sec)",
+        time_stat_pre.elapsed_sec_all);
 
     if (cfg->post_wr_trunc) {
         write_truncate(cfg);
@@ -281,7 +289,9 @@ int main(int argc, char* argv[])
         timer_start_barrier(cfg, &time_stat_pre2);
         stat_file(cfg, target_file);
         timer_stop_barrier(cfg, &time_stat_pre2);
-        test_print_verbose_once(cfg, "DEBUG: finished stat pre2 (post trunc)");
+        test_print_verbose_once(cfg,
+            "DEBUG: finished stat pre2 (post trunc, elapsed=%.6lf sec)",
+            time_stat_pre2.elapsed_sec_all);
     }
 
     // laminate
@@ -291,13 +301,17 @@ int main(int argc, char* argv[])
         test_abort(cfg, rc);
     }
     timer_stop_barrier(cfg, &time_laminate);
-    test_print_verbose_once(cfg, "DEBUG: finished laminate");
+    test_print_verbose_once(cfg,
+        "DEBUG: finished laminate (elapsed=%.6lf sec)",
+        time_laminate.elapsed_sec_all);
 
     // stat file post-laminate
     timer_start_barrier(cfg, &time_stat_post);
     stat_cmd(cfg, target_file);
     timer_stop_barrier(cfg, &time_stat_post);
-    test_print_verbose_once(cfg, "DEBUG: finished stat post-laminate");
+    test_print_verbose_once(cfg,
+        "DEBUG: finished stat post-laminate (elapsed=%.6lf sec)",
+        time_stat_post.elapsed_sec_all);
 
     // post-write cleanup
     free(wr_buf);
@@ -327,7 +341,9 @@ int main(int argc, char* argv[])
         test_abort(cfg, rc);
     }
     timer_stop_barrier(cfg, &time_rd);
-    test_print_verbose_once(cfg, "DEBUG: finished read requests");
+    test_print_verbose_once(cfg,
+        "DEBUG: finished read requests (elapsed=%.6lf sec)",
+        time_rd.elapsed_sec_all);
 
     if (test_config.io_check) {
         test_print_verbose_once(cfg, "DEBUG: verifying data");
@@ -404,7 +420,7 @@ int main(int argc, char* argv[])
         test_print_once(cfg, "Stat Time Pre-Laminate is %.6lf s",
                         time_stat_pre.elapsed_sec_all);
         test_print_once(cfg, "Stat Time Pre-Laminate2 is %.6lf s",
-                        time_stat_pre.elapsed_sec_all);
+                        time_stat_pre2.elapsed_sec_all);
         test_print_once(cfg, "File Laminate Time is %.6lf s",
                         time_laminate.elapsed_sec_all);
         test_print_once(cfg, "Stat Time Post-Laminate is %.6lf s",
