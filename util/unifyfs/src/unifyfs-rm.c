@@ -1019,22 +1019,24 @@ static int srun_launch(unifyfs_resource_t* resource,
     size_t argc, srun_argc, server_argc;
     char** argv = NULL;
     char n_nodes[16];
+    char n_cores[8];
+
+    snprintf(n_cores, sizeof(n_cores), "-c%d", resource->n_cores_per_server);
+    snprintf(n_nodes, sizeof(n_nodes), "-N%zu", resource->n_nodes);
 
     // full command: srun <srun args> <server args>
-
-    srun_argc = 5;
-    snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
-
+    srun_argc = 6;
     server_argc = construct_server_argv(args, NULL);
 
     // setup full command argv
     argc = 1 + srun_argc + server_argc;
     argv = calloc(argc, sizeof(char*));
     argv[0] = strdup("srun");
-    argv[1] = strdup("-N");
-    argv[2] = strdup(n_nodes);
-    argv[3] = strdup("--ntasks-per-node");
-    argv[4] = strdup("1");
+    argv[1] = strdup("--exact");
+    argv[2] = strdup("--overcommit");
+    argv[3] = strdup(n_nodes);
+    argv[4] = strdup("--ntasks-per-node=1");
+    argv[5] = strdup(n_cores);
     construct_server_argv(args, argv + srun_argc);
 
     execvp(argv[0], argv);
@@ -1057,18 +1059,17 @@ static int srun_terminate(unifyfs_resource_t* resource,
     char** argv = NULL;
     char n_nodes[16];
 
+    snprintf(n_nodes, sizeof(n_nodes), "-N%zu", resource->n_nodes);
+
     // full command: srun <srun args> pkill -n unifyfsd
     srun_argc = 8;
-    snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
-
-    // setup full command argv
     argc = 1 + srun_argc;
     argv = calloc(argc, sizeof(char*));
     argv[0] = strdup("srun");
-    argv[1] = strdup("-N");
-    argv[2] = strdup(n_nodes);
-    argv[3] = strdup("-n");
-    argv[4] = strdup(n_nodes);
+    argv[1] = strdup("--exact");
+    argv[2] = strdup("--overcommit");
+    argv[3] = strdup(n_nodes);
+    argv[4] = strdup("--ntasks-per-node=1");
     argv[5] = strdup("pkill");
     argv[6] = strdup("-n");
     argv[7] = strdup("unifyfsd");
@@ -1089,11 +1090,11 @@ static int srun_terminate(unifyfs_resource_t* resource,
 static int srun_stage(unifyfs_resource_t* resource,
                       unifyfs_args_t* args)
 {
-    size_t srun_argc = 5;
+    size_t srun_argc = 3;
     char cmd[200];
 
     // full command: srun <srun args> <server args>
-    snprintf(cmd, sizeof(cmd), "srun -N %zu --ntasks-per-node 1",
+    snprintf(cmd, sizeof(cmd), "srun -N%zu --ntasks-per-node=1",
              resource->n_nodes);
 
     generic_stage(cmd, srun_argc, args);

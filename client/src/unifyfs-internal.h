@@ -316,8 +316,8 @@ typedef struct {
      * If cover_begin_offset != 0, there is a gap at the beginning
      * of the read extent that should be zero-filled.
      * If cover_end_offset != (length - 1), it was a short read. */
-    size_t cover_begin_offset;
-    size_t cover_end_offset;
+    volatile size_t cover_begin_offset;
+    volatile size_t cover_end_offset;
 
     /* nread is the user-visible number of bytes read. Since this includes
      * any gaps, nread should be set to (cover_end_offset + 1) when the
@@ -522,7 +522,8 @@ int unifyfs_fid_free(int fid);
 
 /* add a new file and initialize metadata
  * returns the new fid, or negative value on error */
-int unifyfs_fid_create_file(const char* path);
+int unifyfs_fid_create_file(const char* path,
+                            int exclusive);
 
 /* add a new directory and initialize metadata
  * returns the new fid, or a negative value on error */

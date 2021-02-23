@@ -106,7 +106,7 @@ int rpc_fsync(unifyfs_fops_ctx_t* ctx,
     unifyfs_index_t* meta_payload = (unifyfs_index_t*)(ptr_extents);
 
     struct extent_tree_node* extents = calloc(num_extents, sizeof(*extents));
-    if (!extents) {
+    if (NULL == extents) {
         LOGERR("failed to allocate memory for local_extents");
         return ENOMEM;
     }
@@ -139,6 +139,8 @@ int rpc_fsync(unifyfs_fops_ctx_t* ctx,
         LOGERR("failed to add extents (gfid=%d, ret=%d)", gfid, ret);
     }
 
+    free(extents);
+
     return ret;
 }
 
@@ -169,6 +171,10 @@ static
 int rpc_unlink(unifyfs_fops_ctx_t* ctx,
                int gfid)
 {
+    int ret = unifyfs_inode_unlink(gfid);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("unlink(gfid=%d) failed", gfid);
+    }
     return unifyfs_invoke_broadcast_unlink(gfid);
 }
 
@@ -244,7 +250,7 @@ int submit_read_request(unifyfs_fops_ctx_t* ctx,
         return EINVAL;
     }
 
-    LOGDBG("handling read request (%u chunk requests)", count);
+    LOGDBG("handling read request (%u extents)", count);
 
     /* see if we have a valid app information */
     int app_id = ctx->app_id;
@@ -317,13 +323,12 @@ int rpc_read(unifyfs_fops_ctx_t* ctx,
              off_t offset,
              size_t length)
 {
-    unifyfs_inode_extent_t chunk = { 0, };
+    unifyfs_inode_extent_t extent = { 0 };
+    extent.gfid = gfid;
+    extent.offset = (unsigned long) offset;
+    extent.length = (unsigned long) length;
 
-    chunk.gfid = gfid;
-    chunk.offset = offset;
-    chunk.length = length;
-
-    return submit_read_request(ctx, 1, &chunk);
+    return submit_read_request(ctx, 1, &extent);
 }
 
 static
@@ -333,31 +338,27 @@ int rpc_mread(unifyfs_fops_ctx_t* ctx,
 {
     int ret = UNIFYFS_SUCCESS;
     unsigned int i = 0;
-    unsigned int count = (unsigned int)n_req;
-    unifyfs_inode_extent_t* chunks = NULL;
+    unsigned int count = (unsigned int) n_req;
+    unifyfs_inode_extent_t* extents = NULL;
     unifyfs_extent_t* reqs = (unifyfs_extent_t*) read_reqs;
 
-    chunks = calloc(n_req, sizeof(*chunks));
-    if (!chunks) {
+    extents = calloc(n_req, sizeof(*extents));
+    if (NULL == extents) {
         LOGERR("failed to allocate the chunk request");
         return ENOMEM;
     }
 
     for (i = 0; i < count; i++) {
-        unifyfs_inode_extent_t* ch = chunks + i;
+        unifyfs_inode_extent_t* ext = extents + i;
         unifyfs_extent_t* req = reqs + i;
-        ch->gfid = req->gfid;
-        ch->offset = req->offset;
-        ch->length = req->length;
+        ext->gfid = req->gfid;
+        ext->offset = (unsigned long) req->offset;
+        ext->length = (unsigned long) req->length;
     }
 
-    ret = submit_read_request(ctx, count, chunks);
+    ret = submit_read_request(ctx, count, extents);
 
-    if (chunks) {
-        free(chunks);
-        chunks = NULL;
-    }
-
+    free(extents);
     return ret;
 }
 

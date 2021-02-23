@@ -14,7 +14,7 @@ unifyfsd_SOURCES = \
   extent_tree.h \
   margo_server.c \
   margo_server.h \
-  unifyfs_cmd_handler.c \
+  unifyfs_client_rpc.c \
   unifyfs_fops.h \
   unifyfs_global.h \
   unifyfs_group_rpc.h \

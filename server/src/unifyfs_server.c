@@ -62,13 +62,6 @@ static ABT_mutex app_configs_abt_sync;
 static app_config* app_configs[MAX_NUM_APPS]; /* list of apps */
 static size_t clients_per_app = MAX_APP_CLIENTS;
 
-/**
- * @brief create a ready status file to notify that all servers are ready for
- * accepting client requests.
- *
- * @return 0 on success, error otherwise
- */
-int unifyfs_publish_server_pids(void);
 
 static int unifyfs_exit(void);
 
@@ -348,12 +341,12 @@ int main(int argc, char* argv[])
         exit(1);
     }
     if (glb_pmi_rank != kv_rank) {
-        LOGDBG("mismatch on pmi (%d) vs kvstore (%d) rank",
+        LOGWARN("mismatch on pmi (%d) vs kvstore (%d) rank",
                glb_pmi_rank, kv_rank);
         glb_pmi_rank = kv_rank;
     }
     if (glb_pmi_size != kv_nranks) {
-        LOGDBG("mismatch on pmi (%d) vs kvstore (%d) num ranks",
+        LOGWARN("mismatch on pmi (%d) vs kvstore (%d) num ranks",
                glb_pmi_size, kv_nranks);
         glb_pmi_size = kv_nranks;
     }
@@ -372,21 +365,17 @@ int main(int argc, char* argv[])
     LOGDBG("initializing rpc service");
     ABT_init(argc, argv);
     ABT_mutex_create(&app_configs_abt_sync);
-    rc = configurator_bool_val(server_cfg.margo_tcp, &margo_use_tcp);
+    rc = configurator_bool_val(server_cfg.margo_lazy_connect,
+                               &margo_lazy_connect);
+    rc = configurator_bool_val(server_cfg.margo_tcp,
+                               &margo_use_tcp);
     rc = margo_server_rpc_init();
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("%s", unifyfs_rc_enum_description(rc));
         exit(1);
     }
 
-    LOGDBG("connecting rpc servers");
-    rc = margo_connect_servers();
-    if (rc != UNIFYFS_SUCCESS) {
-        LOGERR("%s", unifyfs_rc_enum_description(rc));
-        exit(1);
-    }
-
-    /* launch the service manager */
+    /* launch the service manager (note: must happen after ABT_init) */
     LOGDBG("launching service manager thread");
     rc = svcmgr_init();
     if (rc != (int)UNIFYFS_SUCCESS) {
@@ -397,6 +386,13 @@ int main(int argc, char* argv[])
     LOGDBG("initializing file operations");
     rc = unifyfs_fops_init(&server_cfg);
     if (rc != 0) {
+        LOGERR("%s", unifyfs_rc_enum_description(rc));
+        exit(1);
+    }
+
+    LOGDBG("connecting rpc servers");
+    rc = margo_connect_servers();
+    if (rc != UNIFYFS_SUCCESS) {
         LOGERR("%s", unifyfs_rc_enum_description(rc));
         exit(1);
     }
@@ -596,6 +592,7 @@ static int unifyfs_exit(void)
     int ret = UNIFYFS_SUCCESS;
 
     /* iterate over each active application and free resources */
+    LOGDBG("cleaning application state");
     ABT_mutex_lock(app_configs_abt_sync);
     for (int i = 0; i < MAX_NUM_APPS; i++) {
         /* get pointer to app config for this app_id */
@@ -654,8 +651,13 @@ app_config* get_application(int app_id)
 }
 
 /* insert a new app config in app_configs[] */
-app_config* new_application(int app_id)
+app_config* new_application(int app_id,
+                            int* created)
 {
+    if (NULL != created) {
+        *created = 0;
+    }
+
     ABT_mutex_lock(app_configs_abt_sync);
 
     /* don't have an app_config for this app_id,
@@ -683,6 +685,9 @@ app_config* new_application(int app_id)
             new_app->clients_sz = clients_per_app;
             app_configs[i] = new_app;
             ABT_mutex_unlock(app_configs_abt_sync);
+            if (NULL != created) {
+                *created = 1;
+            }
             return new_app;
         } else if (existing->app_id == app_id) {
             /* someone beat us to it, use existing */

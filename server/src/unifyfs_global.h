@@ -78,12 +78,6 @@ extern size_t glb_num_servers; /* number of entries in glb_servers array */
 
 extern struct unifyfs_inode_tree* global_inode_tree; /* global inode tree */
 
-/* defines commands for messages sent to service manager threads */
-typedef enum {
-    SVC_CMD_INVALID = 0,
-    SVC_CMD_RDREQ_CHK,     /* read requests (chunk_read_req_t) */
-} service_cmd_e;
-
 // NEW READ REQUEST STRUCTURES
 typedef enum {
     READREQ_NULL = 0,          /* request not initialized */
@@ -101,6 +95,15 @@ typedef struct {
     int log_client_id;  /* remote log client id */
     int rank;           /* remote server rank who holds data */
 } chunk_read_req_t;
+
+#define debug_print_chunk_read_req(reqptr) \
+do { \
+    chunk_read_req_t* _req = (reqptr); \
+    LOGDBG("chunk_read_req(%p) - gfid=%d, offset=%zu, nbytes=%zu @ " \
+           "server[%d] log(app=%d, client=%d, offset=%zu)", \
+           _req, _req->gfid, _req->offset, _req->nbytes, _req->rank, \
+           _req->log_app_id, _req->log_client_id, _req->log_offset); \
+} while (0)
 
 typedef struct {
     int gfid;         /* gfid */
@@ -166,7 +169,8 @@ typedef struct app_config {
 
 app_config* get_application(int app_id);
 
-app_config* new_application(int app_id);
+app_config* new_application(int app_id,
+                            int* created);
 
 unifyfs_rc cleanup_application(app_config* app);
 
@@ -188,5 +192,12 @@ unifyfs_rc attach_app_client(app_client* client,
 unifyfs_rc disconnect_app_client(app_client* clnt);
 
 unifyfs_rc cleanup_app_client(app_config* app, app_client* clnt);
+
+
+/* publish the pids of all servers to a shared file */
+int unifyfs_publish_server_pids(void);
+
+/* report the pid for a server with given rank */
+int unifyfs_report_server_pid(int rank, int pid);
 
 #endif // UNIFYFS_GLOBAL_H

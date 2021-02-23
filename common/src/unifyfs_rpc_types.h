@@ -32,6 +32,7 @@ MERCURY_GEN_STRUCT_PROC(sys_timespec_t,
 MERCURY_GEN_STRUCT_PROC(unifyfs_file_attr_t,
     ((int32_t)(gfid))
     ((int32_t)(is_laminated))
+    ((int32_t)(is_shared))
     ((uint32_t)(mode))
     ((uint32_t)(uid))
     ((uint32_t)(gid))

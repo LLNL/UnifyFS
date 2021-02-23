@@ -415,7 +415,7 @@ int unifyfs_logio_init_client(const int app_id,
             char* spill = (char*) spill_mapping;
             rc = init_log_header(spill, spill_size, chunk_size);
             if (rc != UNIFYFS_SUCCESS) {
-                LOGERR("Failed to initialize shmem logio header");
+                LOGERR("Failed to initialize spill logio header");
                 return rc;
             }
         }
