@@ -14,7 +14,7 @@ AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
-AM_INIT_AUTOMAKE([foreign tar-pax])
+AM_INIT_AUTOMAKE([foreign tar-pax 1.15])
 AM_SILENT_RULES([yes])
 
 AM_MAINTAINER_MODE([disable])
@@ -165,6 +165,12 @@ AS_IF([test "$have_C_mpi" != "yes"],
 # look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
 UNIFYFS_AC_GOTCHA
 
+# error out if fortran was enabled but GOTCHA wasn't found
+AM_COND_IF([HAVE_FORTRAN],[
+    AM_COND_IF([HAVE_GOTCHA],[],[
+        AC_MSG_ERROR([gotcha required when fortran is enabled])
+])],[])
+
 # look for spath library, sets SPATH_CFLAGS, SPATH_LDFLAGS, SPATH_LIBS
 UNIFYFS_AC_SPATH
 
@@ -198,7 +204,7 @@ AC_TRY_COMPILE(
 AC_MSG_CHECKING(if linker supports -wrap)
 OLD_LDFLAGS=$LDFLAGS
 LDFLAGS=$LDFLAGS
-LDFLAGS+="-Wl,-wrap,malloc"
+LDFLAGS+=" -Wl,-wrap,malloc"
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>]],[[void* __wrap_malloc(size_t size);]],[[int *test = malloc(sizeof(int));]])],
 [
     AC_MSG_RESULT([yes])

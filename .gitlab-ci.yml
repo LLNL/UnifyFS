@@ -69,9 +69,13 @@ stages:
 .build-template:
   stage: build
   script:
+    - CC_PATH=$($CC_COMMAND)
+    - FC_PATH=$($FC_COMMAND)
+    - GOTCHA_INSTALL=$(spack location -i gotcha %$SPACK_COMPILER arch=$SPACK_ARCH)
+    - SPATH_INSTALL=$(spack location -i spath %$SPACK_COMPILER arch=$SPACK_ARCH)
     - ./autogen.sh
     - mkdir -p unifyfs-build unifyfs-install && cd unifyfs-build
-    - ../configure CC=$CC_PATH FC=$FC_PATH --prefix=${WORKING_DIR}/unifyfs-install --enable-fortran --disable-silent-rules
+    - ../configure CC=$CC_PATH FC=$FC_PATH --prefix=${WORKING_DIR}/unifyfs-install --with-gotcha=$GOTCHA_INSTALL --with-spath=$SPATH_INSTALL --enable-fortran --disable-silent-rules
     - make V=1
     - make V=1 install
   needs: []
@@ -96,7 +100,7 @@ stages:
 .integ-test-template:
   stage: test-integ
   script:
-    - cd t/ci && prove -v RUN_CI_TESTS.sh
+    - cd t/ci && unbuffer prove -v RUN_CI_TESTS.sh
 
 ##### Jobs #####
 
@@ -119,14 +123,13 @@ before_script:
   - which spack || ((cd $HOME/spack && git describe) && . $HOME/spack/share/spack/setup-env.sh)
   - if [[ -d $WORKING_DIR ]]; then cd ${WORKING_DIR}; else export WORKING_DIR=${CI_PROJECT_DIR}; fi
   - module load $COMPILER
-  - CC_PATH=$($CC_COMMAND)
-  - FC_PATH=$($FC_COMMAND)
   - SPACK_COMPILER=${COMPILER//\//@}
   - SPACK_ARCH="$(spack arch -p)-$(spack arch -o)-$(uname -m)"
+  - spack load automake@1.15 %$SPACK_COMPILER arch=$SPACK_ARCH
   - spack load gotcha %$SPACK_COMPILER arch=$SPACK_ARCH
   - spack load argobots %$SPACK_COMPILER arch=$SPACK_ARCH
   - spack load mercury %$SPACK_COMPILER arch=$SPACK_ARCH
-  - spack load margo %$SPACK_COMPILER arch=$SPACK_ARCH
+  - spack load mochi-margo %$SPACK_COMPILER arch=$SPACK_ARCH
   - spack load spath %$SPACK_COMPILER arch=$SPACK_ARCH
 
 # System specific jobs

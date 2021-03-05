@@ -246,7 +246,7 @@ static char* _getcwd_impl(char* path, size_t size)
          * that is big enough */
         buf = (char*) malloc(len);
         if (buf != NULL) {
-            strncpy(buf, unifyfs_cwd, len);
+            strlcpy(buf, unifyfs_cwd, len);
         } else {
             errno = ENOMEM;
         }

@@ -924,7 +924,7 @@ int unifyfs_fid_create_file(const char* path)
     unifyfs_filelist[fid].in_use = 1;
 
     /* copy file name into slot */
-    strncpy((void*)&unifyfs_filelist[fid].filename, path, UNIFYFS_MAX_FILENAME);
+    strlcpy((void*)&unifyfs_filelist[fid].filename, path, UNIFYFS_MAX_FILENAME);
     LOGDBG("Filename %s got unifyfs fid %d",
            unifyfs_filelist[fid].filename, fid);
 

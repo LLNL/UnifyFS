@@ -57,18 +57,18 @@ if HAVE_GOTCHA
     chmod-gotcha \
     multi-write-gotcha \
     read-data-gotcha
-endif
+
+if HAVE_HDF5
+  libexec_PROGRAMS += \
+    app-hdf5-create-gotcha \
+    app-hdf5-writeread-gotcha
+endif #HAVE_HDF5
 
 if HAVE_FORTRAN
 libexec_PROGRAMS += \
   writeread-ftn
-endif
-
-if HAVE_HDF5
-libexec_PROGRAMS += \
-  app-hdf5-create-gotcha \
-  app-hdf5-writeread-gotcha
-endif
+endif #HAVE_FORTRAN
+endif #HAVE_GOTCHA
 
 CLEANFILES = $(libexec_PROGRAMS)
 
