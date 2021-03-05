@@ -410,7 +410,7 @@ To run any of these examples manually, refer to the :doc:`examples`
 documentation.
 
 The UnifyFS examples_ are also being used as integration tests with
-continuous integration tools such as Bamboo_ or GitLab_.
+continuous integration tools such as Bamboo_ or `GitLab CI`_.
 
 ------------
 
@@ -419,7 +419,7 @@ Integration Tests
 -----------------
 
 The UnifyFS examples_ are being used as integration tests with continuation
-integration tools such as Bamboo_ or GitLab_.
+integration tools such as Bamboo_ or `GitLab CI`_.
 
 To run any of these examples manually, refer to the :doc:`examples`
 documentation.
@@ -1002,7 +1002,7 @@ comments in `t/ci/ci-functions.sh`_.
 .. explicit external hyperlink targets
 
 .. _Bamboo: https://www.atlassian.com/software/bamboo
-.. _GitLab: https://about.gitlab.com
+.. _GitLab CI: https://about.gitlab.com
 .. _examples: https://github.com/LLNL/UnifyFS/tree/dev/examples/src
 .. _libtap library: https://github.com/zorgnax/libtap
 .. _libtap README: https://github.com/zorgnax/libtap/blob/master/README.md

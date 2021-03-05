@@ -4,24 +4,81 @@ os: linux
 
 addons:
   apt:
-    update: true
-    packages:
-      - autoconf
-      - autoconf-archive
-      - automake
-      - build-essential
-      - cmake
-      - gfortran
-      - libhdf5-openmpi-dev
-      - libopenmpi-dev
-      - libtool-bin
-      - m4
-      - openmpi-bin
+    packages: &native_deps
+    - autoconf
+    - autoconf-archive
+    - automake
+    - build-essential
+    - cmake
+    - gfortran
+    - libhdf5-openmpi-dev
+    - libopenmpi-dev
+    - libtool-bin
+    - m4
+    - openmpi-bin
+    - pkg-config
+
+jobs:
+  include:
+  - name: "Checkpatch"
+    before_install: skip
+    install: skip
+    before_script:
+      - eval $(./scripts/git_log_test_env.sh)
+      - export TEST_CHECKPATCH_SKIP_FILES
+    script: ./scripts/checkpatch.sh || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
+
+  - name: "GCC 4.9"
+    dist: xenial
+    addons:
+      apt:
+        update: true
+        sources:
+        - ubuntu-toolchain-r-test
+        packages:
+        - *native_deps
+        - g++-4.9
+    env:
+      - MATRIX_EVAL="CC=gcc-4.9 && CXX=g++-4.9"
+
+  - name: "GCC 7.5"
+    addons:
+      apt:
+        update: true
+        sources:
+        - ubuntu-toolchain-r-test
+        packages:
+        - *native_deps
+        - g++-7
+    env:
+      - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+
+  - name: "GCC 9.3"
+    addons:
+      apt:
+        update: true
+        sources:
+        - ubuntu-toolchain-r-test
+        packages:
+        - *native_deps
+        - g++-9
+    env:
+      - MATRIX_EVAL="CC=gcc-9 && CXX=g++-9"
+
+  - name: "GCC 10.1"
+    addons:
+      apt:
+        update: true
+        sources:
+        - ubuntu-toolchain-r-test
+        packages:
+        - *native_deps
+        - g++-10
+    env:
+      - MATRIX_EVAL="CC=gcc-10 && CXX=g++-10"
 
 before_install:
-  # The default environment variable $CC is known to interfere with
-  # MPI projects.
-  - test -n $CC && unset CC
+  - eval "${MATRIX_EVAL}"
   - echo kernel.yama.ptrace_scope=0 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p
   - (cd $HOME/spack; git describe) || git clone https://github.com/spack/spack $HOME/spack
   # Create packages.yaml to prevent building dependencies that time out
@@ -62,16 +119,27 @@ before_install:
         externals:
         - spec: "openmpi@2.1.1"
           prefix: /usr
+      pkg-config:
+        buildable: False
+        externals:
+        - spec: "pkg-config@0.29.1"
+          prefix: /usr
     EOF
 
 install:
   - . $HOME/spack/share/spack/setup-env.sh
   - spack install gotcha@1.0.3 && spack load gotcha@1.0.3
-  - spack install mochi-margo ^libfabric fabrics=rxm,sockets,tcp && spack load argobots && spack load mercury && spack load mochi-margo
-  - spack install spath && spack load spath
+  - spack install mochi-margo ^mercury~boostsys ^libfabric fabrics=rxm,sockets,tcp && spack load argobots && spack load mercury && spack load mochi-margo
+  - spack install spath~mpi && spack load spath
   # prepare build environment
-  - eval $(./scripts/git_log_test_env.sh)
-  - export TEST_CHECKPATCH_SKIP_FILES
+  - GOTCHA_INSTALL=$(spack location -i gotcha)
+  - SPATH_INSTALL=$(spack location -i spath)
+
+script:
+  - export DISTCHECK_CONFIGURE_FLAGS="CC=$CC --with-gotcha=$GOTCHA_INSTALL --with-spath=$SPATH_INSTALL --enable-fortran"
+  - ./autogen.sh
+  - ./configure $DISTCHECK_CONFIGURE_FLAGS
+  - make distcheck V=1
 
 cache:
   directories:
@@ -81,14 +149,6 @@ cache:
 before_cache:
   - rm -f $HOME/spack/opt/spack/.spack-db/prefix_lock
 
-script:
-  # Force git to update the shallow clone and include tags so git-describe works
-  - git fetch --unshallow --tags
-  - export DISTCHECK_CONFIGURE_FLAGS="--enable-fortran"
-  - ./autogen.sh
-  - ./configure $DISTCHECK_CONFIGURE_FLAGS || cat config.log
-  - make distcheck V=1
-  - ./scripts/checkpatch.sh || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
-
 after_failure:
+  - find . -type f -name "config.log" -execdir cat {} \;
   - find . -type f -name "test-suite.log" -execdir cat {} \;

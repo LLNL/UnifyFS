@@ -10,12 +10,14 @@ Required
 
 - `GOTCHA <https://github.com/LLNL/GOTCHA/releases>`_ version 1.0.3
 
-- `Margo <https://xgitlab.cels.anl.gov/sds/margo>`_ version 0.4.3 and its dependencies:
+- `Margo <https://github.com/mochi-hpc/mochi-margo/releases>`_ version 0.9.1 and its dependencies:
 
-  - `Argobots <https://github.com/pmodels/argobots/releases/tag/v1.0>`_ version 1.0
-  - `Mercury <https://github.com/mercury-hpc/mercury/releases/tag/v1.0.1>`_ version 1.0.1
+  - `Argobots <https://github.com/pmodels/argobots/releases/tag/v1.0.1>`_ version 1.0.1
+  - `Mercury <https://github.com/mercury-hpc/mercury/releases/tag/v2.0.0>`_ version 2.0.0
 
-    - `bmi <https://xgitlab.cels.anl.gov/sds/bmi.git>`_
+    - `libfabric <https://github.com/ofiwg/libfabric>`_ and/or `bmi <https://github.com/radix-io/bmi/>`_
+
+  - `JSON-C <https://github.com/json-c/json-c>`_
 
 - `OpenSSL <https://www.openssl.org/source/>`_
 
@@ -30,8 +32,5 @@ Required
 --------
 Optional
 --------
-
-- `leveldb <https://github.com/google/leveldb/releases/tag/1.22>`_ version 1.22
-  needed when building with ``--enable-mdhim`` configure option
 
 - `spath <https://github.com/ecp-veloc/spath>`_ for normalizing relative paths

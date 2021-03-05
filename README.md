@@ -25,7 +25,7 @@ see [Build UnifyFS](http://unifyfs.readthedocs.io/en/dev/build.html).
 ## Build Status
 Status of UnifyFS development branch (dev):
 
-[![Build Status](https://api.travis-ci.org/LLNL/UnifyFS.png?branch=dev)](https://travis-ci.org/LLNL/UnifyFS)
+[![Build Status](https://api.travis-ci.com/LLNL/UnifyFS.png?branch=dev)](https://travis-ci.com/LLNL/UnifyFS)
 [![Read the Docs](https://readthedocs.org/projects/unifyfs/badge/?version=dev)](https://unifyfs.readthedocs.io)
 
 ## Contribute and Develop
