@@ -6,19 +6,21 @@ libunifyfsdir = $(includedir)
 if HAVE_GOTCHA
 lib_LTLIBRARIES += libunifyfs_gotcha.la
 libunifyfs_gotchadir = $(includedir)
-endif
 
 if HAVE_FORTRAN
 lib_LTLIBRARIES += libunifyfsf.la
-endif
+endif #HAVE_FORTRAN
+endif #HAVE_GOTCHA
 
 AM_CFLAGS = -Wall -Wno-strict-aliasing -Werror
 
 include_HEADERS = unifyfs.h $(UNIFYFS_COMMON_INSTALL_HDRS)
 
+if HAVE_GOTCHA
 if HAVE_FORTRAN
 include_HEADERS += unifyfsf.h
-endif
+endif #HAVE_FORTRAN
+endif #HAVE_GOTCHA
 
 CLIENT_COMMON_CPPFLAGS = \
   -I$(top_builddir)/client \

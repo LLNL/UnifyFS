@@ -20,7 +20,7 @@ cd deps
 repos=(https://github.com/LLNL/GOTCHA.git
     https://github.com/pmodels/argobots.git
     https://github.com/mercury-hpc/mercury.git
-    https://xgitlab.cels.anl.gov/sds/margo.git
+    https://github.com/mochi-hpc/mochi-margo.git
     https://github.com/pmodels/openpa.git
     https://github.com/ecp-veloc/spath.git
 )
@@ -50,7 +50,7 @@ else
     argobots_version="v1.0.1"
     libfabric_version="v1.11.1"
     mercury_version="v2.0.0"
-    margo_version="v0.9"
+    margo_version="v0.9.1"
     repos+=(https://github.com/json-c/json-c.git)
 fi
 
@@ -61,7 +61,7 @@ if [ $use_bmi -eq 0 ]; then
 else
     mercury_bmi="ON"
     mercury_ofi="OFF"
-    repos+=(https://xgitlab.cels.anl.gov/sds/bmi.git)
+    repos+=(https://github.com/radix-io/bmi.git)
 fi
 
 for i in "${repos[@]}" ; do
@@ -150,7 +150,6 @@ fi
 
 echo "### building GOTCHA ###"
 cd GOTCHA
-# Unify won't build against latest GOTCHA, so use a known compatible version.
 git checkout 1.0.3
 mkdir -p build && cd build
 cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" ..
@@ -158,6 +157,7 @@ make -j $make_nproc && make install
 cd ..
 cd ..
 
+# Only needed for Mercury if using gcc@4.8.x or older
 echo "### building openpa ###"
 cd openpa
 git clean -fdx
@@ -207,10 +207,8 @@ git checkout $mercury_version
 git submodule update --init
 mkdir -p build && cd build
 cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-      -DMERCURY_USE_SELF_FORWARD=ON \
       -DMERCURY_USE_BOOST_PP=ON \
       -DMERCURY_USE_CHECKSUMS=ON \
-      -DMERCURY_USE_EAGER_BULK=ON \
       -DMERCURY_USE_SYSTEM_MCHECKSUM=OFF \
       -DNA_USE_BMI=$mercury_bmi \
       -DNA_USE_OFI=$mercury_ofi \
@@ -231,11 +229,17 @@ else
     echo "### skipping json-c build ###"
 fi
 
-echo "### building margo ###"
-cd margo
+echo "### building mochi-margo ###"
+cd mochi-margo
 git checkout $margo_version
 ./prepare.sh
-./configure --prefix="$INSTALL_DIR" --enable-shared
+# Prevent build error on gcc 4.x
+if [ "$(gcc --version | head -n1 | sed 's/[^.]* \([0-9]\+\).*/\1/')" -lt "5" ]
+then
+    ./configure --prefix="$INSTALL_DIR" CFLAGS="-std=gnu99" --enable-shared
+else
+    ./configure --prefix="$INSTALL_DIR" --enable-shared
+fi
 make -j $make_nproc && make install
 cd ..
 
@@ -253,17 +257,20 @@ echo "*************************************************************************"
 echo "Dependencies are all built.  You can now build UnifyFS with:"
 echo ""
 if [ "$automake_sub_version" -lt "15" ] ; then
-    echo -n "  export PKG_CONFIG_PATH=/usr/share/pkgconfig:/usr/lib64/pkgconfig:"
-    echo "$INSTALL_DIR/lib/pkgconfig:\$PKG_CONFIG_PATH"
     echo "  export PATH=$INSTALL_DIR/bin:\$PATH"
+    echo -n "  export PKG_CONFIG_PATH=/usr/share/pkgconfig:"
+    echo -n "/usr/lib64/pkgconfig:$INSTALL_DIR/lib/pkgconfig:"
+    echo "$INSTALL_DIR/lib64/pkgconfig:\$PKG_CONFIG_PATH"
 else
     echo -n "  export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig:"
     echo "$INSTALL_DIR/lib64/pkgconfig:\$PKG_CONFIG_PATH"
 fi
-echo "  export LD_LIBRARY_PATH=$INSTALL_DIR/lib:\$LD_LIBRARY_PATH"
+echo -n "  export LD_LIBRARY_PATH=$INSTALL_DIR/lib:$INSTALL_DIR/lib64:"
+echo "\$LD_LIBRARY_PATH"
 
-echo -n "  ./autogen.sh && ./configure --prefix=$INSTALL_DIR "
-echo "CPPFLAGS=-I$INSTALL_DIR/include LDFLAGS=-L$INSTALL_DIR/lib"
+echo "  ./autogen.sh"
+echo -n "  ./configure --prefix=$INSTALL_DIR CPPFLAGS=-I$INSTALL_DIR/include"
+echo "LDFLAGS=\"-L$INSTALL_DIR/lib -L$INSTALL_DIR/lib64\""
 echo "  make && make install"
 echo ""
 echo "*************************************************************************"
