@@ -10,11 +10,13 @@ TESTS = \
 if HAVE_GOTCHA
   TESTS += \
     0100-sysio-gotcha.t \
+    0110-statfs-gotcha.t \
     0200-stdio-gotcha.t
 endif
 
 TESTS += \
   0500-sysio-static.t \
+  0510-statfs-static.t \
   0600-stdio-static.t \
   0700-unifyfs-stage-full.t \
   9005-unifyfs-unmount.t \
@@ -28,6 +30,7 @@ TESTS += \
 check_SCRIPTS = \
   0001-setup.t \
   0500-sysio-static.t \
+  0510-statfs-static.t \
   0600-stdio-static.t \
   0700-unifyfs-stage-full.t \
   9005-unifyfs-unmount.t \
@@ -41,6 +44,7 @@ check_SCRIPTS = \
 if HAVE_GOTCHA
   check_SCRIPTS += \
     0100-sysio-gotcha.t \
+    0110-statfs-gotcha.t \
     0200-stdio-gotcha.t
 endif
 
@@ -59,12 +63,14 @@ libexec_PROGRAMS = \
   common/seg_tree_test.t \
   common/slotmap_test.t \
   std/stdio-static.t \
+  sys/statfs-static.t \
   sys/sysio-static.t \
   unifyfs_unmount.t
 
 if HAVE_GOTCHA
   libexec_PROGRAMS += \
     std/stdio-gotcha.t \
+    sys/statfs-gotcha.t \
     sys/sysio-gotcha.t
 endif
 
@@ -150,6 +156,24 @@ sys_sysio_static_t_SOURCES = \
 sys_sysio_static_t_CPPFLAGS = $(test_cppflags)
 sys_sysio_static_t_LDADD = $(test_wrap_ldadd)
 sys_sysio_static_t_LDFLAGS = $(test_wrap_ldflags)
+
+sys_statfs_gotcha_t_SOURCES = \
+  sys/statfs_suite.h \
+  sys/statfs_suite.c \
+  sys/statfs.c
+
+sys_statfs_gotcha_t_CPPFLAGS = $(test_cppflags)
+sys_statfs_gotcha_t_LDADD = $(test_gotcha_ldadd)
+sys_statfs_gotcha_t_LDFLAGS = $(test_gotcha_ldflags)
+
+sys_statfs_static_t_SOURCES = \
+  sys/statfs_suite.h \
+  sys/statfs_suite.c \
+  sys/statfs.c
+
+sys_statfs_static_t_CPPFLAGS = $(test_cppflags)
+sys_statfs_static_t_LDADD = $(test_wrap_ldadd)
+sys_statfs_static_t_LDFLAGS = $(test_wrap_ldflags)
 
 std_stdio_gotcha_t_SOURCES = \
   std/stdio_suite.h \
