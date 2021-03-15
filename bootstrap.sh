@@ -93,7 +93,7 @@ if [ "$automake_sub_version" -lt "15" ]; then
 
     autotools_repos=(http://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz
         http://ftp.gnu.org/gnu/automake/automake-1.15.tar.gz
-        http://mirror.team-cymru.org/gnu/libtool/libtool-2.4.2.tar.gz
+        http://mirror.team-cymru.org/gnu/libtool/libtool-2.4.6.tar.gz
         https://pkg-config.freedesktop.org/releases/pkg-config-0.27.1.tar.gz
     )
 
@@ -129,7 +129,7 @@ if [ "$automake_sub_version" -lt "15" ]; then
 
     # build libtool
     echo "### building libtool ###"
-    pushd libtool-2.4.2
+    pushd libtool-2.4.6
         ./configure --build=$sys_name --prefix=$INSTALL_DIR
         make
         make install
@@ -138,7 +138,7 @@ if [ "$automake_sub_version" -lt "15" ]; then
     # build pkg-config
     echo "### building pkg-config ###"
     pushd pkg-config-0.27.1
-        ./configure --build=$sys_name --prefix=$INSTALL_DIR
+        ./configure --build=$sys_name --prefix=$INSTALL_DIR --with-internal-glib
         make
         make install
     popd
@@ -146,7 +146,6 @@ else
     echo "### detected automake version is greater than or equal to 1.15 ###"
     echo "### skipping autotools build ###"
 fi
-
 
 echo "### building GOTCHA ###"
 cd GOTCHA
