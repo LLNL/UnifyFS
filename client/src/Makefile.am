@@ -1,46 +1,48 @@
+include $(top_srcdir)/common/src/Makefile.mk
+
 lib_LTLIBRARIES = libunifyfs.la
 libunifyfsdir = $(includedir)
 
 if HAVE_GOTCHA
 lib_LTLIBRARIES += libunifyfs_gotcha.la
 libunifyfs_gotchadir = $(includedir)
-endif
 
 if HAVE_FORTRAN
 lib_LTLIBRARIES += libunifyfsf.la
-endif
+endif #HAVE_FORTRAN
+endif #HAVE_GOTCHA
 
 AM_CFLAGS = -Wall -Wno-strict-aliasing -Werror
 
-include_HEADERS = unifyfs.h
+include_HEADERS = unifyfs.h $(UNIFYFS_COMMON_INSTALL_HDRS)
 
+if HAVE_GOTCHA
 if HAVE_FORTRAN
 include_HEADERS += unifyfsf.h
-endif
+endif #HAVE_FORTRAN
+endif #HAVE_GOTCHA
 
 CLIENT_COMMON_CPPFLAGS = \
-  -Wall -Werror \
   -I$(top_builddir)/client \
   -I$(top_srcdir)/common/src
 
 CLIENT_COMMON_CFLAGS = \
-  -Wall -Werror \
-  $(MPI_CFLAGS) \
-  $(MERCURY_CFLAGS) \
-  $(ARGOBOTS_CFLAGS) \
-  $(MARGO_CFLAGS)
+  $(AM_CFLAGS) \
+  $(UNIFYFS_COMMON_FLAGS) \
+  $(MPI_CFLAGS)
 
 CLIENT_COMMON_LDFLAGS = \
   -version-info $(LIBUNIFYFS_LT_VERSION) \
-  $(MPI_CLDFLAGS) \
-  $(MARGO_LDFLAGS)
+  $(MPI_CLDFLAGS)
 
 CLIENT_COMMON_LIBADD = \
-  $(top_builddir)/common/src/libunifyfs_common.la \
-  $(MARGO_LIBS) \
-  -lrt -lpthread
+  $(UNIFYFS_COMMON_LIBS) \
+  -lm -lrt -lcrypto -lpthread
 
 CLIENT_COMMON_SOURCES = \
+  $(UNIFYFS_COMMON_SRCS) \
+  client_read.c \
+  client_read.h \
   margo_client.c \
   margo_client.h \
   unifyfs.c \
@@ -83,7 +85,7 @@ if HAVE_FORTRAN
 
 libunifyfsf_la_SOURCES  = unifyfsf.c
 libunifyfsf_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS)
-libunifyfsf_la_CFLAGS   = $(AM_CFLAGS) $(CLIENT_COMMON_CFLAGS)
+libunifyfsf_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS)
 libunifyfsf_la_LIBADD   = libunifyfs_gotcha.la
 
 endif

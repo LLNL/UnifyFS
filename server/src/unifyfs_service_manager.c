@@ -146,8 +146,8 @@ int sm_issue_chunk_reads(int src_rank,
     scr->total_sz   = buf_sz;
     scr->resp       = resp;
 
-    LOGDBG("issuing %d requests, total data size = %zu",
-           num_chks, total_data_sz);
+    LOGDBG("issuing %d requests for req=%d, total data size = %zu",
+           num_chks, src_req_id, total_data_sz);
 
     /* points to offset in read reply buffer to place
      * data for next read */
@@ -247,7 +247,7 @@ int svcmgr_init(void)
     }
 
     /* allocate a list to track chunk read requests */
-    sm->chunk_reads = arraylist_create();
+    sm->chunk_reads = arraylist_create(0);
     if (sm->chunk_reads == NULL) {
         LOGERR("failed to allocate service manager chunk_reads!");
         svcmgr_fini();
@@ -316,7 +316,7 @@ static int send_chunk_read_responses(void)
          * it with an empty list */
         LOGDBG("processing %d chunk read responses", num_chunk_reads);
         chunk_reads = sm->chunk_reads;
-        sm->chunk_reads = arraylist_create();
+        sm->chunk_reads = arraylist_create(0);
     }
 
     /* release lock on service manager object */
@@ -365,7 +365,7 @@ void* service_manager_thread(void* arg)
         }
 
         /* wait an interval */
-        usleep(MIN_SLEEP_INTERVAL);
+        usleep(MIN_USLEEP_INTERVAL);
     }
 
     LOGDBG("service manager thread exiting");

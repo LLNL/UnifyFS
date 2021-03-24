@@ -30,6 +30,9 @@
 #ifndef SYSIO_SUITE_H
 #define SYSIO_SUITE_H
 
+/* Tests for UNIFYFS_WRAP(statfs) */
+int statfs_test(char* unifyfs_root, int expect_unifyfs_magic);
+
 /* Tests for UNIFYFS_WRAP(creat) and UNIFYFS_WRAP(close) */
 int creat_close_test(char* unifyfs_root);
 
@@ -49,7 +52,7 @@ int open64_test(char* unifyfs_root);
 int lseek_test(char* unifyfs_root);
 
 int write_read_test(char* unifyfs_root);
-
+int write_max_read_test(char* unifyfs_root);
 int write_pre_existing_file_test(char* unifyfs_root);
 
 /* test reading from file with holes */

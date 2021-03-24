@@ -69,6 +69,8 @@
 #include <libgen.h>
 #include <limits.h>
 #include <poll.h>
+#include <pthread.h>
+#include <sched.h>
 #include <search.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -89,14 +91,12 @@
 #include <wchar.h>
 #include <dirent.h>
 
-#include <pthread.h>
-#include <sched.h>
-
 #ifdef HAVE_SYS_STATFS_H
 #include <sys/statfs.h>
 #endif
 
 // common headers
+#include "arraylist.h"
 #include "unifyfs_configurator.h"
 #include "unifyfs_const.h"
 #include "unifyfs_keyval.h"
@@ -107,7 +107,6 @@
 #include "seg_tree.h"
 
 // client headers
-#include "unifyfs.h"
 #include "unifyfs-stack.h"
 #include "utlist.h"
 #include "uthash.h"
@@ -212,6 +211,10 @@ int setup_gotcha_wrappers(void);
 
 #endif
 
+/* ----------------------------------------
+ * Structure and enumeration declarations
+ * ---------------------------------------- */
+
 /* structure to represent file descriptors */
 typedef struct {
     int   fid;   /* local file id associated with fd */
@@ -266,8 +269,10 @@ enum flock_enum {
     SH_LOCKED
 };
 
-enum {FILE_STORAGE_NULL = 0, FILE_STORAGE_LOGIO};
-
+enum unifyfs_file_storage {
+    FILE_STORAGE_NULL = 0,
+    FILE_STORAGE_LOGIO
+};
 
 typedef struct {
     off_t global_size;            /* Global size of the file */
@@ -300,25 +305,35 @@ typedef struct {
     const char filename[UNIFYFS_MAX_FILENAME];
 } unifyfs_filename_t;
 
-/*unifyfs structures*/
-
-/* This structure defines a client read request for a file.
- * It is initialized by the client describing the global file id,
- * offset, and length to be read and provides a pointer to
- * the user buffer where the data should be placed.  The
- * server sets the errcode field to UNIFYFS_SUCCESS if the read
- * succeeds and otherwise records an error code pertaining to
- * why the read failed.  The server records the number of bytes
- * read in the nread field, which the client can use to detect
- * short read operations. */
+/* This structure defines a client read request for one file corresponding to
+ * the global file id (gfid). It describes a contiguous read extent starting
+ * at offset with given length. */
 typedef struct {
-    int gfid;      /* global file id to be read */
-    int errcode;   /* error code for read operation if any */
-    size_t offset; /* logical offset in file to read from */
-    size_t length; /* number of bytes to read */
-    size_t nread;  /* number of bytes actually read */
-    char* buf;     /* pointer to user buffer to place data */
-    struct aiocb* aiocbp; /* the original request from application */
+    /* The read request parameters */
+    int gfid;             /* global id of file to be read */
+    size_t offset;        /* logical file offset */
+    size_t length;        /* requested number of bytes */
+    char* buf;            /* user buffer to place data */
+    struct aiocb* aiocbp; /* user aiocb* from aio or listio */
+
+    /* These two variables define the byte offset range of the extent for
+     * which we filled valid data.
+     * If cover_begin_offset != 0, there is a gap at the beginning
+     * of the read extent that should be zero-filled.
+     * If cover_end_offset != (length - 1), it was a short read. */
+    size_t cover_begin_offset;
+    size_t cover_end_offset;
+
+    /* nread is the user-visible number of bytes read. Since this includes
+     * any gaps, nread should be set to (cover_end_offset + 1) when the
+     * read request has been fully serviced. */
+    size_t nread;
+
+    /* errcode holds any error code encountered during the read.
+     * The error may be an internal error value (unifyfs_rc_e) or a
+     * normal POSIX error code. It will be converted to a valid errno value
+     * for use in returning from the syscall. */
+    int errcode;
 } read_req_t;
 
 typedef struct {
@@ -326,11 +341,13 @@ typedef struct {
     unifyfs_index_t* index_entry;
 } unifyfs_index_buf_t;
 
+
+/* -------------------------------
+ * Global variable declarations
+ * ------------------------------- */
+
 extern unifyfs_index_buf_t unifyfs_indices;
 extern unsigned long unifyfs_max_index_entries;
-
-/* shmem context for read-request replies data region */
-extern shm_context* shm_recv_ctx;
 
 /* log-based I/O context */
 extern logio_context* logio_ctx;
@@ -338,17 +355,8 @@ extern logio_context* logio_ctx;
 extern int unifyfs_app_id;
 extern int unifyfs_client_id;
 
-/* -------------------------------
- * Global varaible declarations
- * ------------------------------- */
-
-/*definition for unifyfs*/
-#define UNIFYFS_CLI_TIME_OUT 5000
-
-typedef enum {
-    ACK_SUCCESS,
-    ACK_FAIL,
-} ack_status_t;
+/* whether to return UNIFYFS (true) or TMPFS (false) magic value from statfs */
+extern bool unifyfs_super_magic;
 
 /* keep track of what we've initialized */
 extern int unifyfs_initialized;
@@ -367,14 +375,14 @@ extern size_t unifyfs_mount_prefixlen;
 extern char* unifyfs_cwd;
 
 /* array of file descriptors */
-extern unifyfs_fd_t unifyfs_fds[UNIFYFS_MAX_FILEDESCS];
+extern unifyfs_fd_t unifyfs_fds[UNIFYFS_CLIENT_MAX_FILEDESCS];
 extern rlim_t unifyfs_fd_limit;
 
 /* array of file streams */
-extern unifyfs_stream_t unifyfs_streams[UNIFYFS_MAX_FILEDESCS];
+extern unifyfs_stream_t unifyfs_streams[UNIFYFS_CLIENT_MAX_FILEDESCS];
 
 /* array of directory streams */
-extern unifyfs_dirstream_t unifyfs_dirstreams[UNIFYFS_MAX_FILEDESCS];
+extern unifyfs_dirstream_t unifyfs_dirstreams[UNIFYFS_CLIENT_MAX_FILEDESCS];
 
 /* stack of free file descriptor values,
  * each is an index into unifyfs_fds array */
@@ -545,10 +553,7 @@ int unifyfs_fid_close(int fid);
 int unifyfs_fid_unlink(int fid);
 
 
-/* functions used in UnifyFS */
-
-/* issue a set of read requests */
-int unifyfs_gfid_read_reqs(read_req_t* in_reqs, int in_count);
+/* global metadata functions */
 
 int unifyfs_set_global_file_meta_from_fid(int fid,
                                           unifyfs_file_attr_op_e op);

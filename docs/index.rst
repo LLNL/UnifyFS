@@ -14,10 +14,11 @@ UnifyFS: A file system for burst buffers
    overview
    definitions
    assumptions
-   build-intercept
-   api-mount
+   build
+   api
+   link
    configuration
-   start-stop
+   run
    examples
 
 .. toctree::

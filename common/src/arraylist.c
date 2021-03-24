@@ -32,14 +32,18 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-arraylist_t* arraylist_create(void)
+arraylist_t* arraylist_create(int capacity)
 {
     arraylist_t* arr = (arraylist_t*) malloc(sizeof(arraylist_t));
     if (NULL == arr) {
         return NULL;
     }
 
-    arr->cap = DEF_ARR_CAP;
+    if (capacity) {
+        arr->cap = capacity;
+    } else {
+        arr->cap = ARRAYLIST_CAPACITY;
+    }
     arr->size = 0;
     arr->elems = (void**) calloc(arr->cap, sizeof(void*));
 
@@ -74,6 +78,27 @@ void* arraylist_get(arraylist_t* arr, int pos)
     return arr->elems[pos];
 }
 
+void* arraylist_remove(arraylist_t* arr, int pos)
+{
+    void* item = arraylist_get(arr, pos);
+    if (NULL != item) {
+        arr->elems[pos] = NULL;
+        /* reduce size if pos was last occupied index */
+        if ((pos + 1) == arr->size) {
+            arr->size -= 1;
+            /* keep reducing size for preceding consecutive NULL entries */
+            for (int i = pos - 1; i >= 0; i--) {
+                if (NULL == arr->elems[i]) {
+                    arr->size -= 1;
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+    return item;
+}
+
 int arraylist_insert(arraylist_t* arr, int pos, void* elem)
 {
     if (NULL == arr) {
@@ -101,7 +126,7 @@ int arraylist_insert(arraylist_t* arr, int pos, void* elem)
     }
     arr->elems[pos] = elem;
 
-    if (pos + 1 > arr->size) {
+    if ((pos + 1) > arr->size) {
         arr->size = pos + 1;
     }
 

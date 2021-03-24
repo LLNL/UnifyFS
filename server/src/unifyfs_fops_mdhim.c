@@ -186,7 +186,7 @@ static int mdhim_fsync(unifyfs_fops_ctx_t* ctx, int gfid)
     int ret = (int)UNIFYFS_SUCCESS;
 
     /* get memory page size on this machine */
-    int page_sz = getpagesize();
+    int page_sz = (int) get_page_size();
 
     /* get application client */
     app_client* client = get_app_client(ctx->app_id, ctx->client_id);

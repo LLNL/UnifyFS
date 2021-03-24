@@ -15,11 +15,8 @@
 #ifndef __UNIFYFS_INODE_H
 #define __UNIFYFS_INODE_H
 
-#include <pthread.h>
-#include "tree.h"
-#include "extent_tree.h"
-#include "unifyfs_meta.h"
 #include "unifyfs_global.h"
+#include "extent_tree.h"
 
 /**
  * @brief file extent descriptor

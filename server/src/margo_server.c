@@ -22,6 +22,7 @@
 #include "unifyfs_global.h"
 #include "margo_server.h"
 #include "na_config.h" // from mercury include lib
+#include "mercury_log.h"
 
 // global variables
 ServerRpcContext_t* unifyfsd_rpc_context;
@@ -32,19 +33,29 @@ int  margo_server_server_pool_sz = 4;
 int  margo_use_progress_thread = 1;
 
 #if defined(NA_HAS_SM)
-static const char* PROTOCOL_MARGO_SHM   = "na+sm://";
+static const char* PROTOCOL_MARGO_SHM = "na+sm";
 #else
 #error Required Mercury NA shared memory plugin not found (please enable 'SM')
 #endif
 
-#if defined(NA_HAS_BMI)
-static const char* PROTOCOL_MARGO_TCP = "bmi+tcp://";
-static const char* PROTOCOL_MARGO_RMA = "bmi+tcp://";
-#elif defined(NA_HAS_OFI)
-static const char* PROTOCOL_MARGO_TCP = "ofi+tcp://";
-static const char* PROTOCOL_MARGO_RMA = "ofi+verbs://";
-#else
+#if !defined(NA_HAS_BMI) && !defined(NA_HAS_OFI)
 #error No supported Mercury NA plugin found (please use one of: 'BMI', 'OFI')
+#endif
+
+#if defined(NA_HAS_BMI)
+static const char* PROTOCOL_MARGO_BMI_TCP = "bmi+tcp";
+#else
+static const char* PROTOCOL_MARGO_BMI_TCP;
+#endif
+
+#if defined(NA_HAS_OFI)
+static const char* PROTOCOL_MARGO_OFI_SOCKETS = "ofi+sockets";
+static const char* PROTOCOL_MARGO_OFI_TCP = "ofi+tcp";
+static const char* PROTOCOL_MARGO_OFI_RMA = "ofi+verbs";
+#else
+static const char* PROTOCOL_MARGO_OFI_SOCKETS;
+static const char* PROTOCOL_MARGO_OFI_TCP;
+static const char* PROTOCOL_MARGO_OFI_RMA;
 #endif
 
 /* setup_remote_target - Initializes the server-server margo target */
@@ -58,23 +69,42 @@ static margo_instance_id setup_remote_target(void)
     margo_instance_id mid;
     const char* margo_protocol;
 
-    if (margo_use_tcp) {
-        margo_protocol = PROTOCOL_MARGO_TCP;
-    } else {
-        margo_protocol = PROTOCOL_MARGO_RMA;
+    /* by default we try to use ofi */
+    margo_protocol = margo_use_tcp ?
+                     PROTOCOL_MARGO_OFI_TCP : PROTOCOL_MARGO_OFI_RMA;
+
+    /* when ofi is not available, fallback to using bmi */
+    if (!margo_protocol) {
+        LOGWARN("OFI is not available, using BMI for margo rpc");
+        margo_protocol = PROTOCOL_MARGO_BMI_TCP;
     }
 
     mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
-                     margo_use_progress_thread, margo_server_server_pool_sz);
+                     margo_use_progress_thread,
+                     margo_server_server_pool_sz);
     if (mid == MARGO_INSTANCE_NULL) {
-        LOGERR("margo_init(%s)", margo_protocol);
-        return mid;
+        LOGERR("margo_init(%s, SERVER_MODE, %d, %d) failed",
+               margo_protocol, margo_use_progress_thread,
+               margo_server_server_pool_sz);
+        if (margo_protocol == PROTOCOL_MARGO_OFI_TCP) {
+            /* try "ofi+sockets" instead */
+            margo_protocol = PROTOCOL_MARGO_OFI_SOCKETS;
+            mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
+                             margo_use_progress_thread,
+                             margo_server_server_pool_sz);
+            if (mid == MARGO_INSTANCE_NULL) {
+                LOGERR("margo_init(%s, SERVER_MODE, %d, %d) failed",
+                       margo_protocol, margo_use_progress_thread,
+                       margo_server_server_pool_sz);
+                return mid;
+            }
+        }
     }
 
     /* figure out what address this server is listening on */
     hret = margo_addr_self(mid, &addr_self);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_self()");
+        LOGERR("margo_addr_self() failed");
         margo_finalize(mid);
         return MARGO_INSTANCE_NULL;
     }
@@ -82,12 +112,12 @@ static margo_instance_id setup_remote_target(void)
                                 self_string, &self_string_sz,
                                 addr_self);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_to_string()");
+        LOGERR("margo_addr_to_string() failed");
         margo_addr_free(mid, addr_self);
         margo_finalize(mid);
         return MARGO_INSTANCE_NULL;
     }
-    LOGDBG("margo RPC server: %s", self_string);
+    LOGINFO("margo RPC server: %s", self_string);
     margo_addr_free(mid, addr_self);
 
     /* publish rpc address of server for remote servers */
@@ -179,23 +209,24 @@ static void register_server_server_rpcs(margo_instance_id mid)
 static margo_instance_id setup_local_target(void)
 {
     /* initialize margo */
+    const char* margo_protocol = PROTOCOL_MARGO_SHM;
     hg_return_t hret;
     hg_addr_t addr_self;
     char self_string[128];
     hg_size_t self_string_sz = sizeof(self_string);
     margo_instance_id mid;
-
-    mid = margo_init(PROTOCOL_MARGO_SHM, MARGO_SERVER_MODE,
+    mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
                      margo_use_progress_thread, margo_client_server_pool_sz);
     if (mid == MARGO_INSTANCE_NULL) {
-        LOGERR("margo_init(%s)", PROTOCOL_MARGO_SHM);
+        LOGERR("margo_init(%s, SERVER_MODE, %d, %d) failed", margo_protocol,
+               margo_use_progress_thread, margo_client_server_pool_sz);
         return mid;
     }
 
     /* figure out what address this server is listening on */
     hret = margo_addr_self(mid, &addr_self);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_self()");
+        LOGERR("margo_addr_self() failed");
         margo_finalize(mid);
         return MARGO_INSTANCE_NULL;
     }
@@ -203,12 +234,12 @@ static margo_instance_id setup_local_target(void)
                                 self_string, &self_string_sz,
                                 addr_self);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_to_string()");
+        LOGERR("margo_addr_to_string() failed");
         margo_addr_free(mid, addr_self);
         margo_finalize(mid);
         return MARGO_INSTANCE_NULL;
     }
-    LOGDBG("shared-memory margo RPC server: %s", self_string);
+    LOGINFO("shared-memory margo RPC server: %s", self_string);
     margo_addr_free(mid, addr_self);
 
     /* publish rpc address of server for local clients */
@@ -220,6 +251,7 @@ static margo_instance_id setup_local_target(void)
 /* register client-server RPCs */
 static void register_client_server_rpcs(margo_instance_id mid)
 {
+    /* register the RPC handler functions */
     MARGO_REGISTER(mid, "unifyfs_attach_rpc",
                    unifyfs_attach_in_t, unifyfs_attach_out_t,
                    unifyfs_attach_rpc);
@@ -260,13 +292,22 @@ static void register_client_server_rpcs(margo_instance_id mid)
                    unifyfs_laminate_in_t, unifyfs_laminate_out_t,
                    unifyfs_laminate_rpc);
 
-    MARGO_REGISTER(mid, "unifyfs_read_rpc",
-                   unifyfs_read_in_t, unifyfs_read_out_t,
-                   unifyfs_read_rpc)
-
     MARGO_REGISTER(mid, "unifyfs_mread_rpc",
                    unifyfs_mread_in_t, unifyfs_mread_out_t,
                    unifyfs_mread_rpc);
+
+    /* register the RPCs we call (and capture assigned hg_id_t) */
+    unifyfsd_rpc_context->rpcs.client_mread_data_id =
+        MARGO_REGISTER(mid, "unifyfs_mread_req_data_rpc",
+                       unifyfs_mread_req_data_in_t,
+                       unifyfs_mread_req_data_out_t,
+                       NULL);
+
+    unifyfsd_rpc_context->rpcs.client_mread_complete_id =
+        MARGO_REGISTER(mid, "unifyfs_mread_req_complete_rpc",
+                       unifyfs_mread_req_complete_in_t,
+                       unifyfs_mread_req_complete_out_t,
+                       NULL);
 }
 
 /* margo_server_rpc_init
@@ -286,6 +327,33 @@ int margo_server_rpc_init(void)
             return ENOMEM;
         }
     }
+
+#if defined(HG_VERSION_MAJOR) && (HG_VERSION_MAJOR > 1)
+    /* redirect mercury log to ours, using current log level */
+    const char* mercury_log_level = NULL;
+    switch (unifyfs_log_level) {
+    case LOG_DBG:
+        mercury_log_level = "debug";
+        break;
+    case LOG_ERR:
+        mercury_log_level = "error";
+        break;
+    case LOG_WARN:
+        mercury_log_level = "warning";
+        break;
+    default:
+        break;
+    }
+    if (NULL != mercury_log_level) {
+        HG_Set_log_level(mercury_log_level);
+        NA_Set_log_level(mercury_log_level);
+    }
+    if (NULL != unifyfs_log_stream) {
+        hg_log_set_stream_debug(unifyfs_log_stream);
+        hg_log_set_stream_error(unifyfs_log_stream);
+        hg_log_set_stream_warning(unifyfs_log_stream);
+    }
+#endif
 
     margo_instance_id mid;
     mid = setup_local_target();
@@ -407,6 +475,152 @@ int margo_connect_servers(void)
             }
         }
     }
+
+    return ret;
+}
+
+/* create and return a margo handle for given rpc id and app-client */
+static hg_handle_t create_client_handle(hg_id_t id,
+                                        int app_id,
+                                        int client_id)
+{
+    hg_handle_t handle = HG_HANDLE_NULL;
+
+    /* lookup application client */
+    app_client* client = get_app_client(app_id, client_id);
+    if (NULL != client) {
+        hg_addr_t client_addr = client->margo_addr;
+
+        /* create handle for specified rpc */
+        hg_return_t hret = margo_create(unifyfsd_rpc_context->shm_mid,
+                                        client_addr, id, &handle);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_create() failed");
+        }
+    } else {
+        LOGERR("invalid app-client [%d:%d]", app_id, client_id);
+    }
+    return handle;
+}
+
+/* invokes the client mread request data response rpc function */
+int invoke_client_mread_req_data_rpc(int app_id,
+                                     int client_id,
+                                     int mread_id,
+                                     int read_index,
+                                     size_t read_offset,
+                                     size_t extent_size,
+                                     void* extent_buffer)
+{
+    hg_return_t hret;
+
+    /* check that we have initialized margo */
+    if (NULL == unifyfsd_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* fill input struct */
+    unifyfs_mread_req_data_in_t in;
+    in.mread_id      = (int32_t) mread_id;
+    in.read_index    = (int32_t) read_index;
+    in.read_offset   = (hg_size_t) read_offset;
+    in.bulk_size     = (hg_size_t) extent_size;
+
+    if (extent_size > 0) {
+        /* initialize bulk handle for extents */
+        hret = margo_bulk_create(unifyfsd_rpc_context->shm_mid,
+                                 1, &extent_buffer, &extent_size,
+                                 HG_BULK_READ_ONLY, &in.bulk_data);
+        if (hret != HG_SUCCESS) {
+            return UNIFYFS_ERROR_MARGO;
+        }
+    }
+
+    /* get handle to rpc function */
+    hg_id_t rpc_id = unifyfsd_rpc_context->rpcs.client_mread_data_id;
+    hg_handle_t handle = create_client_handle(rpc_id, app_id, client_id);
+
+    /* call rpc function */
+    LOGDBG("invoking the mread req data rpc function in client");
+    hret = margo_forward(handle, &in);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_forward() failed");
+        margo_destroy(handle);
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    /* decode response */
+    int ret;
+    unifyfs_mread_req_data_out_t out;
+    hret = margo_get_output(handle, &out);
+    if (hret == HG_SUCCESS) {
+        LOGDBG("Got response ret=%" PRIi32, out.ret);
+        ret = (int) out.ret;
+        margo_free_output(handle, &out);
+    } else {
+        LOGERR("margo_get_output() failed");
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+
+    if (extent_size > 0) {
+        margo_bulk_free(in.bulk_data);
+    }
+
+    /* free resources */
+    margo_destroy(handle);
+
+    return ret;
+}
+
+/* invokes the client mread request completion rpc function */
+int invoke_client_mread_req_complete_rpc(int app_id,
+                                         int client_id,
+                                         int mread_id,
+                                         int read_index,
+                                         int read_error)
+{
+    hg_return_t hret;
+
+    /* check that we have initialized margo */
+    if (NULL == unifyfsd_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* fill input struct */
+    unifyfs_mread_req_complete_in_t in;
+    in.mread_id      = (int32_t) mread_id;
+    in.read_index    = (int32_t) read_index;
+    in.read_error    = (int32_t) read_error;
+
+    /* get handle to rpc function */
+    hg_id_t rpc_id = unifyfsd_rpc_context->rpcs.client_mread_complete_id;
+    hg_handle_t handle = create_client_handle(rpc_id, app_id, client_id);
+
+    /* call rpc function */
+    LOGDBG("invoking the mread[%d] complete rpc function in client",
+            mread_id);
+    hret = margo_forward(handle, &in);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_forward() failed");
+        margo_destroy(handle);
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    /* decode response */
+    int ret;
+    unifyfs_mread_req_complete_out_t out;
+    hret = margo_get_output(handle, &out);
+    if (hret == HG_SUCCESS) {
+        LOGDBG("Got response ret=%" PRIi32, out.ret);
+        ret = (int) out.ret;
+        margo_free_output(handle, &out);
+    } else {
+        LOGERR("margo_get_output() failed");
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+
+    /* free resources */
+    margo_destroy(handle);
 
     return ret;
 }

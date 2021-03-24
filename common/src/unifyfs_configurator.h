@@ -65,24 +65,25 @@
    one macro definition per setting */
 #define UNIFYFS_CONFIGS \
     UNIFYFS_CFG_CLI(unifyfs, cleanup, BOOL, off, "cleanup storage on server exit", NULL, 'C', "on|off") \
-    UNIFYFS_CFG_CLI(unifyfs, configfile, STRING, SYSCONFDIR/unifyfs/unifyfs.conf, "path to configuration file", configurator_file_check, 'f', "specify full path to config file") \
+    UNIFYFS_CFG_CLI(unifyfs, configfile, STRING, /etc/unifyfs.conf, "path to configuration file", configurator_file_check, 'f', "specify full path to config file") \
     UNIFYFS_CFG_CLI(unifyfs, consistency, STRING, LAMINATED, "consistency model", NULL, 'c', "specify consistency model (NONE | LAMINATED | POSIX)") \
     UNIFYFS_CFG_CLI(unifyfs, daemonize, BOOL, on, "enable server daemonization", NULL, 'D', "on|off") \
     UNIFYFS_CFG_CLI(unifyfs, mountpoint, STRING, /unifyfs, "mountpoint directory", NULL, 'm', "specify full path to desired mountpoint") \
-    UNIFYFS_CFG(client, max_files, INT, UNIFYFS_MAX_FILES, "client max file count", NULL) \
-    UNIFYFS_CFG(client, local_extents, BOOL, off, "track extents to service reads of local data", NULL) \
-    UNIFYFS_CFG(client, recv_data_size, INT, UNIFYFS_DATA_RECV_SIZE, "shared memory segment size in bytes for receiving data from server", NULL) \
-    UNIFYFS_CFG(client, write_index_size, INT, UNIFYFS_INDEX_BUF_SIZE, "write metadata index buffer size", NULL) \
     UNIFYFS_CFG(client, cwd, STRING, NULLSTRING, "current working directory", NULL) \
+    UNIFYFS_CFG(client, local_extents, BOOL, off, "track extents to service reads of local data", NULL) \
+    UNIFYFS_CFG(client, max_files, INT, UNIFYFS_CLIENT_MAX_FILES, "client max file count", NULL) \
+    UNIFYFS_CFG(client, write_index_size, INT, UNIFYFS_CLIENT_WRITE_INDEX_SIZE, "write metadata index buffer size", NULL) \
     UNIFYFS_CFG(client, write_sync, BOOL, off, "sync every write to server", NULL) \
+    UNIFYFS_CFG(client, super_magic, BOOL, on, "return UnifyFS super magic from statfs, TMPFS otherwise", NULL) \
     UNIFYFS_CFG_CLI(log, verbosity, INT, 0, "log verbosity level", NULL, 'v', "specify logging verbosity level") \
     UNIFYFS_CFG_CLI(log, file, STRING, unifyfsd.log, "log file name", NULL, 'l', "specify log file name") \
     UNIFYFS_CFG_CLI(log, dir, STRING, LOGDIR, "log file directory", configurator_directory_check, 'L', "specify full path to directory to contain log file") \
+    UNIFYFS_CFG(log, on_error, BOOL, off, "turn on verbose logging when an error is encountered", NULL) \
     UNIFYFS_CFG(logio, chunk_size, INT, UNIFYFS_LOGIO_CHUNK_SIZE, "log-based I/O data chunk size", NULL) \
     UNIFYFS_CFG(logio, shmem_size, INT, UNIFYFS_LOGIO_SHMEM_SIZE, "log-based I/O shared memory region size", NULL) \
     UNIFYFS_CFG(logio, spill_size, INT, UNIFYFS_LOGIO_SPILL_SIZE, "log-based I/O spillover file size", NULL) \
     UNIFYFS_CFG(logio, spill_dir, STRING, NULLSTRING, "spillover directory", configurator_directory_check) \
-    UNIFYFS_CFG(margo, tcp, BOOL, on, "use TCP for server-server margo RPCs", NULL) \
+    UNIFYFS_CFG(margo, tcp, BOOL, on, "use TCP for server-to-server margo RPCs", NULL) \
     UNIFYFS_CFG(meta, db_name, STRING, META_DEFAULT_DB_NAME, "metadata database name", NULL) \
     UNIFYFS_CFG(meta, db_path, STRING, RUNDIR, "metadata database path", configurator_directory_check) \
     UNIFYFS_CFG(meta, server_ratio, INT, META_DEFAULT_SERVER_RATIO, "metadata server ratio", NULL) \

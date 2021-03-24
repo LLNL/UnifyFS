@@ -100,14 +100,34 @@ echo "Setup time -- $(elapsed_time start_time setup_time)"
 # 990-stop-server.sh) in the desired order to run them.
 ##############################################################################
 
-# writeread example tests
+# POSIX-IO writeread example tests
 source $UNIFYFS_CI_DIR/100-writeread-tests.sh
 
-# write example tests
+# POSIX-IO writeread example with I/O shuffle tests
+source $UNIFYFS_CI_DIR/100-writeread-tests.sh --shuffle
+
+# POSIX-IO write example tests
 source $UNIFYFS_CI_DIR/110-write-tests.sh
 
-# read example tests
+# POSIX-IO read example tests
 source $UNIFYFS_CI_DIR/120-read-tests.sh
+
+# MPI-IO writeread example tests
+source $UNIFYFS_CI_DIR/100-writeread-tests.sh --mpiio
+
+# MPI-IO write example tests
+source $UNIFYFS_CI_DIR/110-write-tests.sh --mpiio
+
+# MPI-IO read example tests
+source $UNIFYFS_CI_DIR/120-read-tests.sh --mpiio
+
+### Producer-Consumer workload tests
+
+# POSIX-IO producer-consumer tests
+source $UNIFYFS_CI_DIR/300-producer-consumer-tests.sh
+
+# MPI-IO producer-consumer tests
+source $UNIFYFS_CI_DIR/300-producer-consumer-tests.sh --mpiio
 
 ##############################################################################
 # DO NOT add additional tests after this point

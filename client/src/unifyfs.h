@@ -21,6 +21,11 @@
 extern "C" {
 #endif
 
+/* "UNFY" in ASCII */
+//#define UNIFYFS_SUPER_MAGIC (0x554E4659)
+
+/* "UnifyFS!" in ASCII */
+#define UNIFYFS_SUPER_MAGIC (0x556E696679465321)
 
 int unifyfs_mount(const char prefix[], int rank, size_t size,
                   int l_app_id);

@@ -83,7 +83,7 @@ int write_read_test(char* unifyfs_root)
 
     /* Check global size on our un-laminated and un-synced file */
     testutil_get_size(path, &global);
-    ok(global == 15, "%s:%d global size before fsync is %d: %s",
+    ok(global == 15, "%s:%d global size before fsync is %zu: %s",
        __FILE__, __LINE__, global, strerror(err));
 
     errno = 0;
@@ -94,7 +94,7 @@ int write_read_test(char* unifyfs_root)
 
     /* Check global size on our un-laminated file */
     testutil_get_size(path, &global);
-    ok(global == 15, "%s:%d global size after fsync is %d: %s",
+    ok(global == 15, "%s:%d global size after fsync is %zu: %s",
        __FILE__, __LINE__, global, strerror(err));
 
     /* read from file open as write-only should fail with errno=EBADF */
@@ -122,7 +122,7 @@ int write_read_test(char* unifyfs_root)
 
     /* Test O_APPEND */
     errno = 0;
-    fd = open(path, O_WRONLY | O_APPEND, 0222);
+    fd = open(path, O_WRONLY | O_APPEND, 0);
     err = errno;
     ok(fd != -1 && err == 0, "%s:%d open(%s, O_APPEND) (fd=%d): %s",
        __FILE__, __LINE__, path, fd, strerror(err));
@@ -153,7 +153,7 @@ int write_read_test(char* unifyfs_root)
 
     /* Check global size on our un-laminated file */
     testutil_get_size(path, &global);
-    ok(global == 21, "%s:%d global size before laminate is %d: %s",
+    ok(global == 21, "%s:%d global size before laminate is %zu: %s",
        __FILE__, __LINE__, global, strerror(err));
 
     /* Laminate */
@@ -165,7 +165,7 @@ int write_read_test(char* unifyfs_root)
 
     /* Verify we're getting the correct file size */
     testutil_get_size(path, &global);
-    ok(global == 21, "%s:%d global size after laminate is %d: %s",
+    ok(global == 21, "%s:%d global size after laminate is %zu: %s",
        __FILE__, __LINE__, global, strerror(err));
 
     /* open laminated file for write should fail with errno=EROFS */
@@ -178,7 +178,7 @@ int write_read_test(char* unifyfs_root)
 
     /* read() tests */
     errno = 0;
-    fd = open(path, O_RDONLY, 0444);
+    fd = open(path, O_RDONLY, 0);
     err = errno;
     ok(fd != -1 && err == 0,
        "%s:%d open(%s, O_RDONLY) for read (fd=%d): %s",
@@ -254,7 +254,103 @@ int write_read_test(char* unifyfs_root)
        "%s:%d read() from bad file descriptor fails (errno=%d): %s",
        __FILE__, __LINE__, err, strerror(err));
 
+    errno = 0;
+    rc = unlink(path);
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d unlink(%s) worked: %s",
+       __FILE__, __LINE__, path, strerror(err));
+
     diag("Finished UNIFYFS_WRAP(write/read) tests");
+
+    return 0;
+}
+
+int write_max_read_test(char* unifyfs_root)
+{
+    diag("Starting write/max-read tests");
+
+    char path[64];
+    char* buf;
+    int fd = -1;
+    int err, rc;
+    size_t bufsz, global;
+    ssize_t szrc;
+
+    bufsz = 1024 * 1024;
+
+    errno = 0;
+    buf = calloc(1, bufsz);
+    err = errno;
+    ok(NULL != buf,
+       "%s:%d calloc(%zu) write buffer succeeds (errno=%d): %s",
+       __FILE__, __LINE__, bufsz, err, strerror(err));
+    memset(buf, 1, bufsz/2); /* write '1' bytes into first half of buffer */
+
+    testutil_rand_path(path, sizeof(path), unifyfs_root);
+
+    /* Open test file */
+    errno = 0;
+    fd = open(path, O_RDWR | O_CREAT, 0);
+    err = errno;
+    ok(fd != -1 && err == 0, "%s:%d open(%s) fd=%d: %s",
+       __FILE__, __LINE__, path, fd, strerror(err));
+
+    /* Write 64 MiB to the file */
+    for (int i = 0; i < 64; i++) {
+        errno = 0;
+        szrc = write(fd, buf, bufsz);
+        err = errno;
+        ok(szrc == bufsz && err == 0,
+           "%s:%d write(fd=%d, sz=%zu) rc=%zd: %s",
+           __FILE__, __LINE__, fd, bufsz, szrc, strerror(err));
+    }
+    if (NULL != buf) {
+        free(buf);
+    }
+
+    errno = 0;
+    rc = fsync(fd);
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d fsync() rc=%d: %s",
+       __FILE__, __LINE__, rc, strerror(err));
+
+    /* Check global size on our un-laminated file */
+    testutil_get_size(path, &global);
+    ok(global == (64 * bufsz), "%s:%d global size after fsync is %zu: %s",
+       __FILE__, __LINE__, global, strerror(err));
+
+    /* Read data from file, starting at size 1 KiB, up to full file size */
+    errno = 0;
+    buf = malloc(global);
+    err = errno;
+    ok(NULL != buf,
+       "%s:%d malloc(%zu) read buffer succeeds (errno=%d): %s",
+       __FILE__, __LINE__, global, err, strerror(err));
+    if (NULL != buf) {
+        for (size_t sz = 1024; sz <= global; sz *= 2) {
+            errno = 0;
+            szrc = pread(fd, buf, sz, 0);
+            err = errno;
+            ok(szrc == sz && err == 0,
+               "%s:%d pread(fd=%d, sz=%zu) rc=%zd: %s",
+                __FILE__, __LINE__, fd, sz, szrc, strerror(err));
+        }
+        free(buf);
+    }
+
+    errno = 0;
+    rc = close(fd);
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d close() worked: %s",
+       __FILE__, __LINE__, strerror(err));
+
+    errno = 0;
+    rc = unlink(path);
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d unlink(%s) worked: %s",
+       __FILE__, __LINE__, path, strerror(err));
+
+    diag("Finished write/max-read tests");
 
     return 0;
 }
@@ -294,7 +390,7 @@ int write_pre_existing_file_test(char* unifyfs_root)
 
     /* Check global size is 300 */
     testutil_get_size(path, &global);
-    ok(global == 300, "%s:%d global size of 300 byte file is %d: %s",
+    ok(global == 300, "%s:%d global size of 300 byte file is %zu: %s",
        __FILE__, __LINE__, global, strerror(err));
 
     /* Reopen the same file */
@@ -320,8 +416,14 @@ int write_pre_existing_file_test(char* unifyfs_root)
 
     /* Check global size is 300 */
     testutil_get_size(path, &global);
-    ok(global == 300, "%s:%d global size of 300 byte file is %d: %s",
+    ok(global == 300, "%s:%d global size of 300 byte file is %zu: %s",
        __FILE__, __LINE__, global, strerror(err));
+
+    errno = 0;
+    rc = unlink(path);
+    err = errno;
+    ok(rc == 0 && err == 0, "%s:%d unlink(%s) worked: %s",
+       __FILE__, __LINE__, path, strerror(err));
 
     diag("Finished write-to-pre-existing-file tests");
 

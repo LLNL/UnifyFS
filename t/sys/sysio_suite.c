@@ -54,7 +54,7 @@ int main(int argc, char* argv[])
 
     /* Verify unifyfs_mount succeeds. */
     rc = unifyfs_mount(unifyfs_root, rank, rank_num, 0);
-    ok(rc == 0, "unifyfs_mount at %s (rc=%d)", unifyfs_root, rc);
+    ok(rc == 0, "unifyfs_mount(%s) (rc=%d)", unifyfs_root, rc);
 
     /* If the mount fails, bailout, as there is no point in running the tests */
     if (rc != 0) {
@@ -71,6 +71,8 @@ int main(int argc, char* argv[])
      * break as that is likely to cause subsequent failures to start passing.
      */
 
+    statfs_test(unifyfs_root, 1);
+
     creat_close_test(unifyfs_root);
 
     creat64_test(unifyfs_root);
@@ -84,6 +86,7 @@ int main(int argc, char* argv[])
     lseek_test(unifyfs_root);
 
     write_read_test(unifyfs_root);
+    write_max_read_test(unifyfs_root);
     write_pre_existing_file_test(unifyfs_root);
 
     write_read_hole_test(unifyfs_root);
@@ -102,6 +105,9 @@ int main(int argc, char* argv[])
     unlink_test(unifyfs_root);
 
     chdir_test(unifyfs_root);
+
+    rc = unifyfs_unmount();
+    ok(rc == 0, "unifyfs_unmount(%s) (rc=%d)", unifyfs_root, rc);
 
     MPI_Finalize();
 

@@ -506,7 +506,7 @@ static int unifyfs_fskv_init(unifyfs_cfg_t* cfg)
         return (int)UNIFYFS_ERROR_BADCONFIG;
     }
     snprintf(localfs_kvdir, sizeof(localfs_kvdir), "%s/kvstore",
-                cfg->runstate_dir);
+             cfg->runstate_dir);
     memset(&s, 0, sizeof(struct stat));
     rc = stat(localfs_kvdir, &s);
     if (rc != 0) {

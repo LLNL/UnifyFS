@@ -788,11 +788,13 @@ static int jsrun_launch(unifyfs_resource_t* resource,
     size_t argc, jsrun_argc, server_argc;
     char** argv = NULL;
     char n_nodes[16];
+    char n_cores[8];
+
+    snprintf(n_cores, sizeof(n_cores), "-c%d", resource->n_cores_per_server);
+    snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
 
     // full command: jsrun <jsrun args> <server args>
     jsrun_argc = 13;
-    snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
-
     server_argc = construct_server_argv(args, NULL);
 
     // setup full command argv
@@ -808,8 +810,8 @@ static int jsrun_launch(unifyfs_resource_t* resource,
     argv[7] = strdup("unifyfsd.out.%h.%p");
     argv[8] = strdup("--nrs");
     argv[9] = strdup(n_nodes);
-    argv[10] = strdup("-r1");
-    argv[11] = strdup("-c1");
+    argv[10] = strdup("-r1"); /* one resource set per node */
+    argv[11] = strdup(n_cores);
     argv[12] = strdup("-a1");
     construct_server_argv(args, argv + jsrun_argc);
 
@@ -1259,6 +1261,20 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
         return -EINVAL;
     }
 
+    /* check environment for number of cores per server */
+    resource->n_cores_per_server = 1;
+    char* server_cores = getenv("UNIFYFS_SERVER_CORES");
+    if (NULL != server_cores) {
+        errno = 0;
+        long l = strtol(server_cores, NULL, 0);
+        if (0 == errno) {
+            resource->n_cores_per_server = (int)l;
+        } else {
+            fprintf(stderr, "Invalid UNIFYFS_SERVER_CORES value '%s'\n",
+                    server_cores);
+        }
+    }
+
     rc = write_hostfile(resource, args);
     if (rc) {
         fprintf(stderr, "Failed to write shared server hostfile!\n");
@@ -1298,7 +1314,7 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
 
         pid = fork();
         if (pid < 0) {
-            fprintf(stderr, "failed to create stage-in launch process (%s)\n",
+            fprintf(stderr, "Failed to create stage-in launch process (%s)\n",
                     strerror(errno));
             return -errno;
         } else if (pid == 0) {
@@ -1307,7 +1323,7 @@ int unifyfs_start_servers(unifyfs_resource_t* resource,
 
         rc = wait_stage(resource, args);
         if (rc) {
-            fprintf(stderr, "failed to detect the stage in status (rc=%d)\n",
+            fprintf(stderr, "Failed to detect the stage-in status (rc=%d)\n",
                     rc);
         }
     }
@@ -1334,7 +1350,7 @@ int unifyfs_stop_servers(unifyfs_resource_t* resource,
 
         pid = fork();
         if (pid < 0) {
-            fprintf(stderr, "failed to create stage-out launch process (%s)\n",
+            fprintf(stderr, "Failed to create stage-out launch process (%s)\n",
                     strerror(errno));
             return -errno;
         } else if (pid == 0) {
@@ -1343,7 +1359,7 @@ int unifyfs_stop_servers(unifyfs_resource_t* resource,
 
         rc = wait_stage(resource, args);
         if (rc) {
-            fprintf(stderr, "failed to detect the data out status (rc=%d)\n",
+            fprintf(stderr, "Failed to detect the stage-out status (rc=%d)\n",
                     rc);
         }
     }

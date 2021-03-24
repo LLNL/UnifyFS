@@ -3,7 +3,6 @@
 export KB=$((2**10))
 export MB=$((2**20))
 export GB=$((2**30))
-app_id=0
 
 ### Project-local sharness code for UnifyFS's integration tests ###
 
@@ -268,9 +267,17 @@ get_filename()
 # Builds the test command that will be executed. Automatically sets any options
 # that are always wanted (-vkfo and the appropriate -m if posix test or not).
 #
-# Automatically builds the filename for -f based on the input app_name and
-# app_args and has .app appended to the end. This filename then also has .err
-# appended and is used for the stderr output file with JOB_RUN_COMMAND.
+# Automatically builds the base filename for -f and -o based on the input
+# app_name and app_args. Then .app and .out are appended to the end of each
+# respectively.
+# This base filename also has .err appended and is used for the stderr output
+# file with JOB_RUN_COMMAND.
+#
+# Adjustments for unique behavior is accounted for here as well. This includes
+# using the write/producer .app filename when reading/consuming, using the write
+# or read executables when the producer or consumer app name is passed in, and
+# using a different JOB_RUN_COMMAND that excludes hosts when running the
+# producer-consumer workflow.
 #
 # Args that can be passed in are ([-pncbx][-A|-M|-N|-P|-S|-V]). All other args
 # are set automatically.
@@ -278,7 +285,7 @@ get_filename()
 # $1 - Name of the example application to be tested (basetest-runmode)
 # $2 - Args for $1 consisting of ([-pncbx][-A|-M|-N|-P|-S|-V]). Encase in
 # quotes.
-# $3 - The runmode of test, used to determine if posix and set correct args
+# $3 - The runmode of the test (static, gotcha, posix)
 #
 # Returns the full test command ready to be executed.
 build_test_command()
@@ -292,30 +299,56 @@ build_test_command()
         return 1
     fi
 
-    # Autogenerate and format the filename based on app_name and app_args
+    # Autogenerate and format the base filename based on app_name and app_args
     local l_filename="$(get_filename $1 "$2")"
 
-    # Add stderr output file to finish building JOB_RUN_COMMAND
+    # Set stderr output file name
+    # app_err is defined in resource manager setup script
     local l_err_filename="$app_err ${UNIFYFS_LOG_DIR}/${l_filename}.err"
-    local l_job_run_command="$JOB_RUN_COMMAND $l_err_filename"
 
-    # Build example_command with options that are always wanted. Might need to
-    # adjust for other tests (i.e., app-mpiio), or write new functions
-    local l_app_id="-a $app_id"
+    # Set defaults for example executable name, application filename internal to
+    # UnifyFS, and JOB_RUN_COMMAND (defined in resource manager setup script)
+    local l_example_name="$1"
+    local l_app_filename="-f ${l_filename}.app"
+    local l_launch_command="$JOB_RUN_COMMAND"
+
     #local l_verbose="-v" # Sends DEBUG and test configuration info to stdout
 
-    # Filename needs to be the write file if testing the read example
+    # TODO: Refactor app_name checks to unify_run_test and call different
+    # functions depending on workflow being tested.
+    # Get base example executable name for adjusting jobs with unique behavior
     local l_app_name=$(echo $1 | sed -r 's/(\w)-.*/\1/')
     if [[ $l_app_name = "read" ]]; then
-        local l_app_filename="-f $(get_filename write-$3 "$2").app"
-    else
-        local l_app_filename="-f ${l_filename}.app"
+        # Filename needs to be the write file when testing the read example
+        local l_app_filename="-f $(get_filename write-$3 "$2" ".app")"
+    fi
+
+    # Producer in producer-consumer workflow
+    if [[ $l_app_name = "producer" ]]; then
+        # Use write executable
+        local l_example_name="write-$3"
+        # Exclude hosts used for consumer
+        local l_exclude_hosts="$exclude_option $(get_latter_hosts)"
+        # Change run command to use initial half of allocated hosts
+        local l_launch_command="$JOB_RUN_HALF_NODES $l_exclude_hosts"
+    fi
+
+    # Consumer in producer-consumer workflow
+    if [[ $l_app_name = "consumer" ]]; then
+        # Use read executable
+        local l_example_name="read-$3"
+        # Filename needs to be the producer file when running consumer test
+        local l_app_filename="-f $(get_filename producer-$3 "$2" ".app")"
+        # Exclude hosts used for producer
+        local l_exclude_hosts="$exclude_option $(get_initial_hosts)"
+        # Change run command to use latter half of allocated hosts
+        local l_launch_command="$JOB_RUN_HALF_NODES $l_exclude_hosts"
     fi
 
     # Set mountpoint to an existing dir & disable UnifyFS if running posix test
     if [[ $3 = "posix" ]]; then
         local l_mount="-U -m $UNIFYFS_CI_POSIX_MP"
-    else
+    else # Use UNIFYFS_MOUNTPOINT and enable data check
         local l_mount="-m $UNIFYFS_MP"
         local l_check="-k" # read.c tests fail on posix files
     fi
@@ -323,12 +356,17 @@ build_test_command()
     # Add outfile option for checking line count after test completes
     local l_outfile="-o ${UNIFYFS_LOG_DIR}/${l_filename}.out"
 
-    # Assemble full example_command
-    local l_app_args="$2 $l_app_id $l_check $l_verbose $l_mount $l_outfile \
+    # Assemble full list of args for application command
+    local l_app_args="$2 $l_check $l_verbose $l_mount $l_outfile \
                       $l_app_filename"
-    local l_full_app_name="${UNIFYFS_EXAMPLES}/${1} $l_app_args"
 
-    # Assemble full test_command
+    # Assemble full application command
+    local l_full_app_name="${UNIFYFS_EXAMPLES}/$l_example_name $l_app_args"
+
+    # Assemble full JOB_RUN_COMMAND
+    local l_job_run_command="$l_launch_command $l_err_filename"
+
+    # Assemble full test command
     local l_test_command="$l_job_run_command $l_full_app_name"
     echo $l_test_command
 }
@@ -377,12 +415,14 @@ unify_run_test()
         return 1
     fi
 
-    # Skip this test if posix test and UNIFYFS_CI_TEST_POSIX=no|NO
+    # If we somehow made it here with a posix test but don't have the POSIX
+    # prereq set, then return a non-zero code
     if ! test_have_prereq POSIX && [[ $l_runmode = "posix" ]]; then
+        echo >&2 "$errmsg posix test run withough POSIX prereq set"
         return 42
     fi
 
-    # Fail if user passed in filename, check,  mountpoint, outfile, verbose or
+    # Fail if user passed in filename, check, mountpoint, outfile, verbose or
     # disable UnifyFS since these are added automatically
     local opt="(-f|--file|-k|--check|-m|--mount|-o|--outfile|-v|--verbose|-U|\
                 --disable-unifyfs)"
@@ -396,9 +436,6 @@ unify_run_test()
     # Finally build and run the test
     local l_test_command=$(build_test_command $1 "$2" $l_runmode)
     say "Results for unifyfs_run_test: $l_test_command:"
-
-    # Uncomment to change app_id (-a) for each test. Comment to leave as 0.
-    #app_id=$(echo $(($app_id + 1)))
 
     # Get resulting output and rc of running the test
     local l_app_output; l_app_output="$($l_test_command)"

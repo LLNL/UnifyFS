@@ -268,16 +268,6 @@ int write_laminate(test_cfg* cfg, const char* filepath)
     }
     if (cfg->io_pattern == IO_PATTERN_N1) {
         test_barrier(cfg);
-        if (cfg->rank != 0) {
-            /* call stat() to update global metadata */
-            struct stat st;
-            int stat_rc = stat(filepath, &st);
-            if (-1 == stat_rc) {
-                /* lamination failed */
-                test_print(cfg, "stat() update during lamination failed");
-                rc = -1;
-            }
-        }
     }
     return rc;
 }
@@ -370,7 +360,8 @@ int issue_read_req(test_cfg* cfg, struct aiocb* req)
                 if ((EINTR == err) || (EAGAIN == err)) {
                     continue;
                 }
-                test_print(cfg, "read() failed");
+                test_print(cfg, "read(offset=%zu, count=%zu) failed",
+                           (size_t)(req->aio_offset + nread), remaining);
                 return -1;
             } else if (0 == ss) {
                 test_print(cfg, "read() EOF");

@@ -5,7 +5,7 @@ UnifyFS Configuration
 Here, we explain how users can customize the runtime behavior of UnifyFS. In
 particular, UnifyFS provides the following ways to configure:
 
-- System-wide configuration file: ``/etc/unifyfs/unifyfs.conf``
+- Configuration file: ``$INSTALL_PREFIX/etc/unifyfs/unifyfs.conf``
 - Environment variables
 - Command line options to ``unifyfsd``
 
@@ -56,7 +56,7 @@ a given section and key.
    cleanup        BOOL    cleanup storage on server exit (default: off)
    configfile     STRING  path to custom configuration file
    consistency    STRING  consistency model [ LAMINATED | POSIX | NONE ]
-   daemonize      BOOL    enable server daemonization (default: off)
+   daemonize      BOOL    enable server daemonization (default: on)
    mountpoint     STRING  mountpoint path prefix (default: /unifyfs)
    =============  ======  ===============================================
 
@@ -69,7 +69,7 @@ a given section and key.
    cwd               STRING  effective starting current working directory
    max_files         INT     maximum number of open files per client process (default: 128)
    local_extents     BOOL    service reads from local data if possible (default: off)
-   recv_data_size    INT     maximum size (B) of memory buffer for receiving data from server
+   super_magic       BOOL    whether to return UNIFYFS (on) or TMPFS (off) statfs magic (default: on)
    write_index_size  INT     maximum size (B) of memory buffer for storing write log metadata
    write_sync        BOOL    sync data to server after every write (default: off)
    ================  ======  =================================================================
@@ -78,26 +78,27 @@ The ``cwd`` setting is used to emulate the behavior one
 expects when changing into a working directory before starting a job
 and then using relative file names within the application.
 If set, the application changes its working directory to
-the value specified in ``cwd`` when ``unifyfs_mount`` is called.
+the value specified in ``cwd`` when ``unifyfs_mount()`` is called.
 The value specified in ``cwd`` must be within the directory space
 of the UnifyFS mount point.
 
 Enabling the ``local_extents`` optimization may significantly improve read
-performance.  However, it should not be used by applications
-in which different processes write to a given byte offset within
-the file, nor should it be used with applications that truncate
+performance for extents written by the same process.  However, it should not
+be used by applications in which different processes write to the same byte
+offset within a file, nor should it be used with applications that truncate
 files.
 
 .. table:: ``[log]`` section - logging settings
    :widths: auto
 
-   ==========  ======  ==================================================
+   ==========  ======  ================================================================
    Key         Type    Description
-   ==========  ======  ==================================================
+   ==========  ======  ================================================================
    dir         STRING  path to directory to contain server log file
    file        STRING  log file base name (rank will be appended)
+   on_error    BOOL    increase log verbosity upon encountering an error (default: off)
    verbosity   INT     logging verbosity level [0-5] (default: 0)
-   ==========  ======  ==================================================
+   ==========  ======  ================================================================
 
 .. table:: ``[logio]`` section - log-based write data storage settings
    :widths: auto
@@ -110,18 +111,6 @@ files.
    spill_size   INT     maximum size (B) of data in spillover file (default: 1 GiB)
    spill_dir    STRING  path to spillover data directory
    ===========  ======  ============================================================
-
-.. table:: ``[meta]`` section - MDHIM metadata settings
-   :widths: auto
-
-   =============  ======  =====================================================
-   Key            Type    Description
-   =============  ======  =====================================================
-   db_name        STRING  metadata database file name
-   db_path        STRING  path to directory to contain metadata database
-   range_size     INT     metadata range size (B) (default: 1 MiB)
-   server_ratio   INT     # of UnifyFS servers per metadata server (default: 1)
-   =============  ======  =====================================================
 
 .. table:: ``[runstate]`` section - server runstate settings
    :widths: auto
@@ -141,6 +130,15 @@ files.
    hostfile      STRING  path to server hostfile
    init_timeout  INT     timeout in seconds to wait for servers to be ready for clients (default: 120)
    ============  ======  =============================================================================
+
+.. table:: ``[margo]`` section - margo server NA settings
+   :widths: auto
+
+   ===  ====  =================================================================================
+   Key  Type  Description
+   ===  ====  =================================================================================
+   tcp  BOOL  Use TCP for server-to-server rpcs (default: on, turn off to enable libfabric RMA)
+   ===  ====  =================================================================================
 
 .. table:: ``[sharedfs]`` section - server shared files settings
    :widths: auto

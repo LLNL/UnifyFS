@@ -410,7 +410,7 @@ To run any of these examples manually, refer to the :doc:`examples`
 documentation.
 
 The UnifyFS examples_ are also being used as integration tests with
-continuation integration tools such as Bamboo_ or GitLab_.
+continuous integration tools such as Bamboo_ or `GitLab CI`_.
 
 ------------
 
@@ -419,7 +419,7 @@ Integration Tests
 -----------------
 
 The UnifyFS examples_ are being used as integration tests with continuation
-integration tools such as Bamboo_ or GitLab_.
+integration tools such as Bamboo_ or `GitLab CI`_.
 
 To run any of these examples manually, refer to the :doc:`examples`
 documentation.
@@ -519,13 +519,12 @@ USAGE: ``UNIFYFS_CI_TEST_POSIX=yes|YES|no|NO``
 Determines whether any ``<example-name>-posix`` tests should be run since they
 require a real mountpoint to exist.
 
-This envar defaults to ``yes``. However, when ``$UNIFYFS_MOUNTPOINT`` is set to a
-real directory, this envar is switched to ``no``. The idea behind this is that
-the tests can be run a first time with a fake mountpoint (which will also run
-the posix tests), and then the tests can be run again with a real mountpoint and
-the posix tests won't be run twice. This behavior can be overridden by setting
-``UNIFYFS_CI_TEST_POSIX=yes|YES`` before running the integration tests when
-``$UNIFYFS_MOUNTPOINT`` is set to an existing directory.
+This envar defaults to ``no``. Setting this to ``yes`` will run the posix
+version of tests along with the regular tests. When ``$UNIFYFS_MOUNTPOINT`` is
+set to a existing directory, this option is set to ``no``. This is to allow
+running the tests a first time with a fake mountpoint while the posix tests use
+an existing mountpoint. Then the regular tests can be run again using an
+existing mountpoint and the posix tests won't be run twice.
 
 An example of testing a posix example can be see :ref:`below <posix-ex-label>`.
 
@@ -601,11 +600,11 @@ Misc
 """"
 
 ``KB``
-    :math:`2^10`.
+    :math:`2^{10}`.
 ``MB``
-    :math:`2^20`.
+    :math:`2^{20}`.
 ``GB``
-    :math:`2^30`.
+    :math:`2^{30}`.
 
 ------------
 
@@ -689,15 +688,32 @@ last to stop the server and clean up.
     $ . $UNIFYFS_CI_DIR/100-writeread-tests.sh
     $ . $UNIFYFS_CI_DIR/990-stop-server.sh
 
+The various CI test suites can be run multiple times with different behaviors.
+These behaviors are continually being extended. The `-h|--help` option for each
+script can show what alternate behaviors are currently implemented along with
+additional information for that particular suite.
+
+.. code-block:: BASH
+
+    [prompt]$ ./100-writeread-tests.sh --help
+    Usage: 100-writeread-tests.sh [options...]
+
+      options:
+        -h, --help        print help message
+        -M, --mpiio       use MPI-IO instead of POSIX I/O
+        -x, --shuffle     read different data than written
+
 ------------
 
 Adding New Tests
 ****************
 
-In order to add additional tests, create a script after the fashion of
-`t/ci/100-writeread-tests.sh`_ where the prefixed number indicates the desired
-order for running the tests. Then source that script in `t/ci/RUN_CI_TESTS.sh`_
-in the desired order.
+In order to add additional tests for different workflows, create a script after
+the fashion of `t/ci/100-writeread-tests.sh`_ where the prefixed number
+indicates the desired order for running the tests. Then source that script in
+`t/ci/RUN_CI_TESTS.sh`_ in the desired order. The different test suite scripts
+themselves can also be edited to add/change the number, types, and various
+behaviors each suite will execute.
 
 Just like the helpers functions found in sharness.d_, there are continuous
 integration helper functions (see :ref:`below <helper-label>` for more details)
@@ -986,7 +1002,7 @@ comments in `t/ci/ci-functions.sh`_.
 .. explicit external hyperlink targets
 
 .. _Bamboo: https://www.atlassian.com/software/bamboo
-.. _GitLab: https://about.gitlab.com
+.. _GitLab CI: https://about.gitlab.com
 .. _examples: https://github.com/LLNL/UnifyFS/tree/dev/examples/src
 .. _libtap library: https://github.com/zorgnax/libtap
 .. _libtap README: https://github.com/zorgnax/libtap/blob/master/README.md

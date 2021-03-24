@@ -31,6 +31,8 @@
 #define UNIFYFS_REQUEST_MANAGER_H
 
 #include "unifyfs_global.h"
+#include "unifyfs_inode.h"
+#include "unifyfs_fops.h"
 #include "unifyfs_metadata_mdhim.h"
 
 typedef struct {
@@ -47,9 +49,12 @@ typedef struct {
     int req_ndx;               /* index in reqmgr read_reqs array */
     int app_id;                /* app id of requesting client process */
     int client_id;             /* client id of requesting client process */
+    int client_mread;          /* client mread id */
+    int client_read_ndx;       /* client mread request index */
     int num_server_reads;      /* size of remote_reads array */
     chunk_read_req_t* chunks;  /* array of chunk-reads */
     server_chunk_reads_t* remote_reads; /* per-server remote reads array */
+    unifyfs_inode_extent_t extent; /* the requested extent */
 } server_read_req_t;
 
 /* Request manager state structure - created by main thread for each request
@@ -80,7 +85,7 @@ typedef struct reqmgr_thrd {
     /* array of server read requests */
     int num_read_reqs;
     int next_rdreq_ndx;
-    server_read_req_t read_reqs[RM_MAX_ACTIVE_REQUESTS];
+    server_read_req_t read_reqs[RM_MAX_SERVER_READS];
 
     /* list of client rpc requests */
     arraylist_t* client_reqs;

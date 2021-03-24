@@ -1,4 +1,4 @@
-# UnifyFS: A Distributed Burst Buffer File System - 0.1.0
+# UnifyFS: A Distributed Burst Buffer File System
 
 Node-local burst buffers are becoming an indispensable hardware resource on
 large-scale supercomputers to buffer the bursty I/O from scientific
@@ -17,17 +17,16 @@ scalable metadata indexing, co-located I/O delegation, and server-side read
 clustering and pipelining.
 
 ## Documentation
-Full UnifyFS documentation is contained [here](https://unifyfs.readthedocs.io).
+UnifyFS documentation is at [https://unifyfs.readthedocs.io](https://unifyfs.readthedocs.io).
 
-Use [Build & I/O Interception](http://unifyfs.readthedocs.io/en/dev/build-intercept.html)
-for instructions on how to build and install UnifyFS.
+For instructions on how to build and install UnifyFS,
+see [Build UnifyFS](http://unifyfs.readthedocs.io/en/dev/build.html).
 
 ## Build Status
-The current status of the UnifyFS dev branch is:
+Status of UnifyFS development branch (dev):
 
-[![Build Status](https://api.travis-ci.org/LLNL/UnifyFS.png?branch=dev)](https://travis-ci.org/LLNL/UnifyFS)
+[![Build Status](https://api.travis-ci.com/LLNL/UnifyFS.png?branch=dev)](https://travis-ci.com/LLNL/UnifyFS)
 [![Read the Docs](https://readthedocs.org/projects/unifyfs/badge/?version=dev)](https://unifyfs.readthedocs.io)
 
 ## Contribute and Develop
-Contributing guidelines can be found in our
-[documentation](https://unifyfs.readthedocs.io/en/dev/style-guides.html).
+If you would like to help, please see our [contributing guidelines](https://unifyfs.readthedocs.io/en/dev/contribute-ways.html).
