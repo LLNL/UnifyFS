@@ -76,8 +76,7 @@ fi
 echo "stage file test: file size is $TEST_FILE_SIZE_IN_MB in MB"
 
 # empty comment so format checker doesn't complain about next line
-MY_INPUT_FILE=\
- ${MY_SOURCE_DIR}/source_200_size${TEST_FILE_SIZE_IN_MB}_${STAGE_TEST_INDEX}.file
+MY_INPUT_FILE=${MY_SOURCE_DIR}/source_200_size${TEST_FILE_SIZE_IN_MB}_${STAGE_TEST_INDEX}.file
 
 # fill initial file with random bytes
 dd if=/dev/urandom bs=1M count=${TEST_FILE_SIZE_IN_MB} of=${MY_INPUT_FILE}
@@ -97,12 +96,9 @@ test_expect_success "destination directory is empty" '
 # the final file name after copying it back out.  Then use those
 # filenames to create the two manifest files, one for copying the
 # file in, and one for copying the file out.
-FINAL_OUTPUT_FILE= \
- ${MY_DEST_DIR}/destination_200_${TEST_FILE_SIZE_IN_MB}_${STAGE_TEST_INDEX}.file
-MAN_IN= \
- ${MY_CONFIG_DIR}/stage_IN_${TEST_FILE_SIZE_IN_MB}_${STAGE_TEST_INDEX}.manifest
-MAN_OUT=\
- ${MY_CONFIG_DIR}/stage_OUT_${TEST_FILE_SIZE_IN_MB}_${STAGE_TEST_INDEX}.manifest
+FINAL_OUTPUT_FILE=${MY_DEST_DIR}/destination_200_${TEST_FILE_SIZE_IN_MB}_${STAGE_TEST_INDEX}.file
+MAN_IN=${MY_CONFIG_DIR}/stage_IN_${TEST_FILE_SIZE_IN_MB}_${STAGE_TEST_INDEX}.manifest
+MAN_OUT=${MY_CONFIG_DIR}/stage_OUT_${TEST_FILE_SIZE_IN_MB}_${STAGE_TEST_INDEX}.manifest
 echo "\"${MY_INPUT_FILE}\"                                   \
      \"${UNIFYFS_MP}/intermediate_${STAGE_TEST_INDEX}.file\""  > ${MAN_IN}
 echo "\"${UNIFYFS_MP}/intermediate_${STAGE_TEST_INDEX}.file\" \
@@ -163,7 +159,7 @@ else
       ${ELAPSED_TIME_IN} ${ELAPSED_TIME_OUT}          \
       ^${STAGE_TEST_OVERALL_CONFIG}^                  \
       @${STAGE_TEST_SPECIFIC_CONFIG}@ %GOOD%"         \
-      >> ${UNIFYFS_LOG_DIR}/timings_${JOB_ID}.dat     \
+      >> ${UNIFYFS_LOG_DIR}/timings_${JOB_ID}.dat
 fi
 
 # nothing to output or return because the results went to the
