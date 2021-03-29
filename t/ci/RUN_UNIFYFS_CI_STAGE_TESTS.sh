@@ -4,6 +4,13 @@
 # stage application to bring data into the UnifyFS file
 # space and then back out.
 
+# This script assumes that the 001-setup.sh has been run,
+# and other initialization (like setting up spack
+# environment and links).  This script runs
+# 002-start-server.sh several times, while typically
+# changing the server configuration for each block
+# of runs.
+
 # each test (generating a random file, copying into unifyfs,
 # copying it back out, and then checking against the original)
 # is done by 200-stage-tests.sh. This script sets up the
