@@ -10,10 +10,12 @@ checkpatch_cmd=$basedir/linux_kernel_checkpatch/checkpatch.pl
 
 # Directories or files to ignore for syntax checking.
 if [ $TEST_CHECKPATCH_SKIP_FILES ] ; then
-    TEST_CHECKPATCH_SKIP_FILES+=",t/ci/"
+    TEST_CHECKPATCH_SKIP_FILES+=",t/ci/200-stage-tests.sh"
 else
-    TEST_CHECKPATCH_SKIP_FILES+="t/ci/"
+    TEST_CHECKPATCH_SKIP_FILES+="t/ci/200-stage-tests.sh"
 fi
+# add other excluded files here, without needing to check
+# for presense of the variable.
 
 #
 # These are checkpatch.pl message types to ignore for cases where
