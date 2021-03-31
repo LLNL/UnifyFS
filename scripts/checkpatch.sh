@@ -8,6 +8,13 @@
 basedir=$(dirname "$0")
 checkpatch_cmd=$basedir/linux_kernel_checkpatch/checkpatch.pl
 
+# Directories or files to ignore for syntax checking.
+if [ $TEST_CHECKPATCH_SKIP_FILES ] ; then
+    TEST_CHECKPATCH_SKIP_FILES+=",t/ci/"
+else
+    TEST_CHECKPATCH_SKIP_FILES+="t/ci/"
+fi
+
 #
 # These are checkpatch.pl message types to ignore for cases where
 # UnifyFS deviates from the Linux kernel coding standards.
