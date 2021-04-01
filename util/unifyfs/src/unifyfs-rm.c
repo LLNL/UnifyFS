@@ -774,6 +774,29 @@ static int invalid_stage(unifyfs_resource_t* resource,
     return -ENOSYS;
 }
 
+static int generic_stage(char* cmd, int run_argc, unifyfs_args_t* args)
+{
+    size_t argc, stage_argc;
+    char** argv = NULL;
+
+    stage_argc = construct_stage_argv(args, NULL);
+
+    char* token = strtok(cmd, " ");
+    argc = 1 + run_argc + stage_argc;
+    argv = calloc(argc, sizeof(char*));
+
+    for (int i = 0; i < run_argc; i++) {
+        argv[i] = token;
+        token = strtok(NULL, " ");
+    }
+
+    construct_stage_argv(args, argv + run_argc);
+
+    execvp(argv[0], argv);
+
+    return -errno;
+}
+
 /**
  * @brief Launch servers using IBM jsrun
  *
@@ -871,35 +894,16 @@ static int jsrun_terminate(unifyfs_resource_t* resource,
 static int jsrun_stage(unifyfs_resource_t* resource,
                        unifyfs_args_t* args)
 {
-    size_t argc, jsrun_argc, stage_argc;
-    char** argv = NULL;
-    char n_nodes[16];
+    size_t jsrun_argc = 13;
+    char cmd[200];
 
     // full command: jsrun <jsrun args> <server args>
-    jsrun_argc = 13;
-    snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
+    snprintf(cmd, sizeof(cmd),
+             "jsrun --immediate -e -individual --stdio_stderr unifyfs-stage.err.%%h.%%p --stdio_stdout unifyfs-stage.out.%%h.%%p --nrs %zu -r1 -c1 -a1",
+             resource->n_nodes);
 
-    stage_argc = construct_stage_argv(args, NULL);
+    generic_stage(cmd, jsrun_argc, args);
 
-    // setup full command argv
-    argc = 1 + jsrun_argc + stage_argc;
-    argv = calloc(argc, sizeof(char*));
-    argv[0] = strdup("jsrun");
-    argv[1] = strdup("--immediate");
-    argv[2] = strdup("-e");
-    argv[3] = strdup("individual");
-    argv[4] = strdup("--stdio_stderr");
-    argv[5] = strdup("unifyfs-stage.err.%h.%p");
-    argv[6] = strdup("--stdio_stdout");
-    argv[7] = strdup("unifyfs-stage.out.%h.%p");
-    argv[8] = strdup("--nrs");
-    argv[9] = strdup(n_nodes);
-    argv[10] = strdup("-r1");
-    argv[11] = strdup("-c1");
-    argv[12] = strdup("-a1");
-    construct_stage_argv(args, argv + jsrun_argc);
-
-    execvp(argv[0], argv);
     perror("failed to execvp() mpirun to handle data stage");
     return -errno;
 }
@@ -988,28 +992,15 @@ static int mpirun_terminate(unifyfs_resource_t* resource,
 static int mpirun_stage(unifyfs_resource_t* resource,
                         unifyfs_args_t* args)
 {
-    size_t argc, mpirun_argc, stage_argc;
-    char** argv = NULL;
-    char n_nodes[16];
+    size_t mpirun_argc = 5;
+    char cmd[200];
 
     // full command: mpirun <mpirun args> <server args>
+    snprintf(cmd, sizeof(cmd), "mpirun --np %zu --map-by ppr:1:node",
+             resource->n_nodes);
 
-    mpirun_argc = 5;
-    snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
+    generic_stage(cmd, mpirun_argc, args);
 
-    stage_argc = construct_stage_argv(args, NULL);
-
-    // setup full command argv
-    argc = 1 + mpirun_argc + stage_argc;
-    argv = calloc(argc, sizeof(char*));
-    argv[0] = strdup("mpirun");
-    argv[1] = strdup("-np");
-    argv[2] = strdup(n_nodes);
-    argv[3] = strdup("--map-by");
-    argv[4] = strdup("ppr:1:node");
-    construct_stage_argv(args, argv + mpirun_argc);
-
-    execvp(argv[0], argv);
     perror("failed to execvp() mpirun to handle data stage");
     return -errno;
 }
@@ -1098,28 +1089,15 @@ static int srun_terminate(unifyfs_resource_t* resource,
 static int srun_stage(unifyfs_resource_t* resource,
                       unifyfs_args_t* args)
 {
-    size_t argc, srun_argc, stage_argc;
-    char** argv = NULL;
-    char n_nodes[16];
+    size_t srun_argc = 5;
+    char cmd[200];
 
     // full command: srun <srun args> <server args>
+    snprintf(cmd, sizeof(cmd), "srun -N %zu --ntasks-per-node 1",
+             resource->n_nodes);
 
-    srun_argc = 5;
-    snprintf(n_nodes, sizeof(n_nodes), "%zu", resource->n_nodes);
+    generic_stage(cmd, srun_argc, args);
 
-    stage_argc = construct_stage_argv(args, NULL);
-
-    // setup full command argv
-    argc = 1 + srun_argc + stage_argc;
-    argv = calloc(argc, sizeof(char*));
-    argv[0] = strdup("srun");
-    argv[1] = strdup("-N");
-    argv[2] = strdup(n_nodes);
-    argv[3] = strdup("--ntasks-per-node");
-    argv[4] = strdup("1");
-    construct_stage_argv(args, argv + srun_argc);
-
-    execvp(argv[0], argv);
     perror("failed to execvp() srun to launch unifyfsd");
     return -errno;
 }
