@@ -15,9 +15,9 @@ do
             $ci_dir/001-setup.sh -h
             exit
             ;;
-	--keep-job)
-	    CLEANUP_JOB_ON_EXIT="0"
-	    echo "Shut down servers but not end job"
+	--allow-restart)
+	    CLEANUP_AND_STOP_TESTING="0"
+	    echo "Stop servers but allow restart and additional testing"
 	    ;;
 	*)
             echo "usage ./990-stop-server.sh -h|--help|--keep-job"
@@ -79,4 +79,3 @@ if [ "$CLEANUP_JOB_ON_EXIT" -eq "1" ]; then
     fi
 
 fi # if [ $CLEANUP_ON_JOB_EXIT -eq "1" ]]; then
-
