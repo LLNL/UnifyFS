@@ -29,6 +29,10 @@ test_description="Overall Multiconfiguration UnifyFS Stage tests"
 
 # function for running the file size sweep
 # run once for every server configuration
+#
+# one optional argument.  If the argument is "yes"
+# then the final shut-down-servers call will
+# clean up (but shouldn't kill the job).
 function single_server_sweep {
     . $SHARNESS_TEST_DIRECTORY/002-start-server.sh
 
@@ -44,7 +48,11 @@ function single_server_sweep {
     export TEST_FILE_SIZE_IN_MB="2000"
     . $SHARNESS_TEST_DIRECTORY/200-stage-tests.sh
 
-    . $SHARNESS_TEST_DIRECTORY/990-stop-server.sh --keep-job
+    if [ $1 -eq "yes" ] ; then
+	. $SHARNESS_TEST_DIRECTORY/990-stop-server.sh
+    else
+	. $SHARNESS_TEST_DIRECTORY/990-stop-server.sh --keep-job
+    fi
 }
 
 # first configuration.  Stock server configuration;
