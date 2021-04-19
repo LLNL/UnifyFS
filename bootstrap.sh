@@ -268,7 +268,7 @@ echo -n "  export LD_LIBRARY_PATH=$INSTALL_DIR/lib:$INSTALL_DIR/lib64:"
 echo "\$LD_LIBRARY_PATH"
 
 echo "  ./autogen.sh"
-echo -n "  ./configure --prefix=$INSTALL_DIR CPPFLAGS=-I$INSTALL_DIR/include"
+echo -n "  ./configure --prefix=$INSTALL_DIR CPPFLAGS=-I$INSTALL_DIR/include "
 echo "LDFLAGS=\"-L$INSTALL_DIR/lib -L$INSTALL_DIR/lib64\""
 echo "  make && make install"
 echo ""
