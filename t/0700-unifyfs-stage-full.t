@@ -58,7 +58,7 @@ test_expect_success "input file has been staged to output" '
 '
 
 test_expect_success "final output is identical to initial input" '
-    test_might_fail test_cmp ${UNIFYFS_TEST_TMPDIR}/stage_source/source_0700.file ${UNIFYFS_TEST_TMPDIR}/stage_destination_0700/destination_0700.file
+    test_cmp ${UNIFYFS_TEST_TMPDIR}/stage_source/source_0700.file ${UNIFYFS_TEST_TMPDIR}/stage_destination_0700/destination_0700.file
 '
 
 test_done
