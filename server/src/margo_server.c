@@ -32,6 +32,10 @@ int  margo_client_server_pool_sz = 4;
 int  margo_server_server_pool_sz = 4;
 int  margo_use_progress_thread = 1;
 
+// records pmi rank, server address string, and server address
+// for each server for use in server-to-server rpcs
+static server_info_t* server_infos; // array of server_info_t
+
 #if defined(NA_HAS_SM)
 static const char* PROTOCOL_MARGO_SHM = "na+sm";
 #else
@@ -58,30 +62,51 @@ static const char* PROTOCOL_MARGO_OFI_TCP;
 static const char* PROTOCOL_MARGO_OFI_RMA;
 #endif
 
+/* Given a margo instance ID (mid), return its corresponding
+ * address as a newly allocated string to be freed by caller.
+ * Returns NULL on error. */
+static char* get_margo_addr_str(margo_instance_id mid)
+{
+    /* get margo address for given instance */
+    hg_addr_t addr_self;
+    hg_return_t hret = margo_addr_self(mid, &addr_self);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_addr_self() failed");
+        return NULL;
+    }
+
+    /* convert margo address to a string */
+    char self_string[128];
+    hg_size_t self_string_sz = sizeof(self_string);
+    hret = margo_addr_to_string(mid,
+        self_string, &self_string_sz, addr_self);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_addr_to_string() failed");
+        margo_addr_free(mid, addr_self);
+        return NULL;
+    }
+    margo_addr_free(mid, addr_self);
+
+    /* return address in newly allocated string */
+    char* addr = strdup(self_string);
+    return addr;
+}
+
 /* setup_remote_target - Initializes the server-server margo target */
 static margo_instance_id setup_remote_target(void)
 {
-    /* initialize margo */
-    hg_return_t hret;
-    hg_addr_t addr_self;
-    char self_string[128];
-    hg_size_t self_string_sz = sizeof(self_string);
-    margo_instance_id mid;
-    const char* margo_protocol;
-
     /* by default we try to use ofi */
-    margo_protocol = margo_use_tcp ?
+    const char* margo_protocol = margo_use_tcp ?
                      PROTOCOL_MARGO_OFI_TCP : PROTOCOL_MARGO_OFI_RMA;
-
-    /* when ofi is not available, fallback to using bmi */
     if (!margo_protocol) {
+        /* when ofi is not available, fallback to using bmi */
         LOGWARN("OFI is not available, using BMI for margo rpc");
         margo_protocol = PROTOCOL_MARGO_BMI_TCP;
     }
 
-    mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
-                     margo_use_progress_thread,
-                     margo_server_server_pool_sz);
+    /* initialize margo */
+    margo_instance_id mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
+        margo_use_progress_thread, margo_server_server_pool_sz);
     if (mid == MARGO_INSTANCE_NULL) {
         LOGERR("margo_init(%s, SERVER_MODE, %d, %d) failed",
                margo_protocol, margo_use_progress_thread,
@@ -101,27 +126,19 @@ static margo_instance_id setup_remote_target(void)
         }
     }
 
-    /* figure out what address this server is listening on */
-    hret = margo_addr_self(mid, &addr_self);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_self() failed");
-        margo_finalize(mid);
-        return MARGO_INSTANCE_NULL;
-    }
-    hret = margo_addr_to_string(mid,
-                                self_string, &self_string_sz,
-                                addr_self);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_to_string() failed");
-        margo_addr_free(mid, addr_self);
+    /* get our address for server-server rpcs */
+    char* self_string = get_margo_addr_str(mid);
+    if (NULL == self_string) {
+        LOGERR("invalid value to publish server-server margo rpc address");
         margo_finalize(mid);
         return MARGO_INSTANCE_NULL;
     }
     LOGINFO("margo RPC server: %s", self_string);
-    margo_addr_free(mid, addr_self);
 
     /* publish rpc address of server for remote servers */
     rpc_publish_remote_server_addr(self_string);
+
+    free(self_string);
 
     return mid;
 }
@@ -225,12 +242,7 @@ static margo_instance_id setup_local_target(void)
 {
     /* initialize margo */
     const char* margo_protocol = PROTOCOL_MARGO_SHM;
-    hg_return_t hret;
-    hg_addr_t addr_self;
-    char self_string[128];
-    hg_size_t self_string_sz = sizeof(self_string);
-    margo_instance_id mid;
-    mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
+    margo_instance_id mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
                      margo_use_progress_thread, margo_client_server_pool_sz);
     if (mid == MARGO_INSTANCE_NULL) {
         LOGERR("margo_init(%s, SERVER_MODE, %d, %d) failed", margo_protocol,
@@ -239,26 +251,18 @@ static margo_instance_id setup_local_target(void)
     }
 
     /* figure out what address this server is listening on */
-    hret = margo_addr_self(mid, &addr_self);
-    if (hret != HG_SUCCESS) {
+    char* self_string = get_margo_addr_str(mid);
+    if (NULL == self_string) {
         LOGERR("margo_addr_self() failed");
         margo_finalize(mid);
         return MARGO_INSTANCE_NULL;
     }
-    hret = margo_addr_to_string(mid,
-                                self_string, &self_string_sz,
-                                addr_self);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_addr_to_string() failed");
-        margo_addr_free(mid, addr_self);
-        margo_finalize(mid);
-        return MARGO_INSTANCE_NULL;
-    }
     LOGINFO("shared-memory margo RPC server: %s", self_string);
-    margo_addr_free(mid, addr_self);
 
     /* publish rpc address of server for local clients */
     rpc_publish_local_server_addr(self_string);
+
+    free(self_string);
 
     return mid;
 }
@@ -425,19 +429,21 @@ int margo_server_rpc_finalize(void)
 
         /* free global server addresses */
         for (int i = 0; i < glb_num_servers; i++) {
-            if (glb_servers[i].margo_svr_addr != HG_ADDR_NULL) {
-                margo_addr_free(ctx->svr_mid, glb_servers[i].margo_svr_addr);
-                glb_servers[i].margo_svr_addr = HG_ADDR_NULL;
+            server_info_t* server = &server_infos[i];
+            if (server->margo_svr_addr != HG_ADDR_NULL) {
+                margo_addr_free(ctx->svr_mid, server->margo_svr_addr);
+                server->margo_svr_addr = HG_ADDR_NULL;
             }
-            if (NULL != glb_servers[i].margo_svr_addr_str) {
-                free(glb_servers[i].margo_svr_addr_str);
-                glb_servers[i].margo_svr_addr_str = NULL;
+            if (NULL != server->margo_svr_addr_str) {
+                free(server->margo_svr_addr_str);
+                server->margo_svr_addr_str = NULL;
             }
         }
 
         /* shut down margo */
         LOGDBG("finalizing server-server margo");
         margo_finalize(ctx->svr_mid);
+
         /* NOTE: 2nd call to margo_finalize() sometimes crashes - Margo bug? */
         LOGDBG("finalizing client-server margo");
         margo_finalize(ctx->shm_mid);
@@ -454,18 +460,21 @@ int margo_connect_server(int rank)
     assert(rank < glb_num_servers);
 
     int ret = UNIFYFS_SUCCESS;
+
+    server_info_t* server = &server_infos[rank];
+
+    /* lookup rpc address for this server */
     char* margo_addr_str = rpc_lookup_remote_server_addr(rank);
     if (NULL == margo_addr_str) {
-        LOGERR("server index=%d - margo server lookup failed", rank);
-        ret = UNIFYFS_ERROR_KEYVAL;
-        return ret;
+        LOGERR("server index=%zu - margo server lookup failed", rank);
+        return (int)UNIFYFS_ERROR_KEYVAL;
     }
-    glb_servers[rank].margo_svr_addr_str = margo_addr_str;
     LOGDBG("server rank=%d, margo_addr=%s", rank, margo_addr_str);
+    server->margo_svr_addr_str = margo_addr_str;
 
     hg_return_t hret = margo_addr_lookup(unifyfsd_rpc_context->svr_mid,
-                                         glb_servers[rank].margo_svr_addr_str,
-                                         &(glb_servers[rank].margo_svr_addr));
+                                         server->margo_svr_addr_str,
+                                         &(server->margo_svr_addr));
     if (hret != HG_SUCCESS) {
         LOGERR("server index=%zu - margo_addr_lookup(%s) failed",
                rank, margo_addr_str);
@@ -477,30 +486,43 @@ int margo_connect_server(int rank)
 
 /* margo_connect_servers
  *
- * Using address strings found in glb_servers, resolve
- * each peer server's margo address.
+ * Gather pmi rank and margo address string for all servers,
+ * and optionally connect to each one.
  */
 int margo_connect_servers(void)
 {
     int rc;
-    int ret = UNIFYFS_SUCCESS;
-    int i;
 
-    // block until a margo_svr key pair published by all servers
+    int ret = (int)UNIFYFS_SUCCESS;
+
+    /* block until all servers have published their address */
     rc = unifyfs_keyval_fence_remote();
     if ((int)UNIFYFS_SUCCESS != rc) {
         LOGERR("keyval fence on margo_svr key failed");
-        ret = UNIFYFS_ERROR_KEYVAL;
-        return ret;
+        return (int)UNIFYFS_ERROR_KEYVAL;
     }
 
-    for (i = 0; i < (int)glb_num_servers; i++) {
-        glb_servers[i].pmi_rank = i;
-        glb_servers[i].margo_svr_addr = HG_ADDR_NULL;
-        glb_servers[i].margo_svr_addr_str = NULL;
+    /* allocate array of structs to record address for each server */
+    server_infos = (server_info_t*) calloc(glb_num_servers,
+        sizeof(server_info_t));
+    if (NULL == server_infos) {
+        LOGERR("failed to allocate server_info array");
+        return ENOMEM;
+    }
+
+    /* lookup address string for each server, and optionally connect */
+    size_t i;
+    for (i = 0; i < glb_num_servers; i++) {
+        /* record values on struct for this server */
+        server_info_t* server = &server_infos[i];
+        server->pmi_rank           = i;
+        server->margo_svr_addr     = HG_ADDR_NULL;
+        server->margo_svr_addr_str = NULL;
+
+        /* connect to each server now if not using lazy connect */
         if (!margo_lazy_connect) {
             rc = margo_connect_server(i);
-            if (rc != UNIFYFS_SUCCESS) {
+            if (UNIFYFS_SUCCESS != rc) {
                 ret = rc;
             }
         }
@@ -512,11 +534,12 @@ int margo_connect_servers(void)
 hg_addr_t get_margo_server_address(int rank)
 {
     assert(rank < glb_num_servers);
-    hg_addr_t addr = glb_servers[rank].margo_svr_addr;
+    server_info_t* server = &server_infos[rank];
+    hg_addr_t addr = server->margo_svr_addr;
     if ((HG_ADDR_NULL == addr) && margo_lazy_connect) {
         int rc = margo_connect_server(rank);
-        if (rc == UNIFYFS_SUCCESS) {
-            addr = glb_servers[rank].margo_svr_addr;
+        if (UNIFYFS_SUCCESS == rc) {
+            addr = server->margo_svr_addr;
         }
     }
     return addr;
