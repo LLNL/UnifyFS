@@ -72,6 +72,16 @@ else # ! USE_MDHIM
 
 endif # USE_MDHIM
 
+if USE_PMIX
+  OPT_C_FLAGS += -DUSE_PMIX
+  OPT_LIBS += -lpmix
+endif
+
+if USE_PMI2
+  OPT_C_FLAGS += -DUSE_PMI2
+  OPT_LIBS += -lpmi2
+endif
+
 unifyfsd_CFLAGS  = $(AM_CFLAGS) $(UNIFYFS_COMMON_FLAGS) $(OPT_C_FLAGS)
 unifyfsd_LDFLAGS = $(OPT_LD_FLAGS)
 unifyfsd_LDADD   = $(UNIFYFS_COMMON_LIBS) $(OPT_LIBS)
