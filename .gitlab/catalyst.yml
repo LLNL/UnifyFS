@@ -23,6 +23,7 @@
 
 ##### All Catalyst Jobs #####
 
+### gcc@4.9.3 ###
 catalyst-gcc-4_9_3-build:
   variables:
     COMPILER: gcc/4.9.3
@@ -45,3 +46,53 @@ catalyst-gcc-4_9_3-integ-test:
     FC_COMMAND: "which gfortran"
   extends: [.slurm-multi-node-template, .catalyst-batch-template, .integ-test-template]
   needs: ["catalyst-gcc-4_9_3-build"]
+
+
+### gcc@10.2.1 ###
+catalyst-gcc-10_2_1-build:
+  variables:
+    COMPILER: gcc/10.2.1
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+  extends: [.catalyst-shell-template, .build-template]
+
+catalyst-gcc-10_2_1-unit-test:
+  variables:
+    COMPILER: gcc/10.2.1
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+  extends: [.slurm-single-node-template, .catalyst-batch-template, .unit-test-template]
+  needs: ["catalyst-gcc-10_2_1-build"]
+
+catalyst-gcc-10_2_1-integ-test:
+  variables:
+    COMPILER: gcc/10.2.1
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .integ-test-template]
+  needs: ["catalyst-gcc-10_2_1-build"]
+
+
+### intel@19.0.4 ###
+#catalyst-intel-19_0_4-build:
+#  variables:
+#    COMPILER: intel/19.0.4
+#    CC_COMMAND: "which icc"
+#    FC_COMMAND: "which ifort"
+#  extends: [.catalyst-shell-template, .build-template]
+#
+#catalyst-intel-19_0_4-unit-test:
+#  variables:
+#    COMPILER: intel/19.0.4
+#    CC_COMMAND: "which icc"
+#    FC_COMMAND: "which ifort"
+#  extends: [.slurm-single-node-template, .catalyst-batch-template, .unit-test-template]
+#  needs: ["catalyst-intel-19_0_4-build"]
+#
+#catalyst-intel-19_0_4-integ-test:
+#  variables:
+#    COMPILER: intel/19.0.4
+#    CC_COMMAND: "which icc"
+#    FC_COMMAND: "which ifort"
+#  extends: [.slurm-multi-node-template, .catalyst-batch-template, .integ-test-template]
+#  needs: ["catalyst-intel-19_0_4-build"]
