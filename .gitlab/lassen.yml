@@ -23,6 +23,7 @@
 
 ##### All Lassen Jobs #####
 
+### gcc@4.9.3 ###
 lassen-gcc-4_9_3-build:
   variables:
     COMPILER: gcc/4.9.3
@@ -45,3 +46,53 @@ lassen-gcc-4_9_3-integ-test:
     FC_COMMAND: "which gfortran"
   extends: [.lsf-multi-node-template, .lassen-batch-template, .integ-test-template]
   needs: ["lassen-gcc-4_9_3-build"]
+
+
+### gcc@8.3.1 ###
+lassen-gcc-8_3_1-build:
+  variables:
+    COMPILER: gcc/8.3.1
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+  extends: [.lassen-shell-template, .build-template]
+
+lassen-gcc-8_3_1-unit-test:
+  variables:
+    COMPILER: gcc/8.3.1
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+  extends: [.lsf-single-node-template, .lassen-batch-template, .unit-test-template]
+  needs: ["lassen-gcc-8_3_1-build"]
+
+lassen-gcc-8_3_1-integ-test:
+  variables:
+    COMPILER: gcc/8.3.1
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .integ-test-template]
+  needs: ["lassen-gcc-8_3_1-build"]
+
+
+### xl@16.1 ###
+#lassen-xl-16_1-build:
+#  variables:
+#    COMPILER: xl/16.1
+#    CC_COMMAND: "which xlc"
+#    FC_COMMAND: "which xlf90"
+#  extends: [.lassen-shell-template, .build-template]
+#
+#lassen-xl-16_1-unit-test:
+#  variables:
+#    COMPILER: xl/16.1
+#    CC_COMMAND: "which xlc"
+#    FC_COMMAND: "which xlf90"
+#  extends: [.lsf-single-node-template, .lassen-batch-template, .unit-test-template]
+#  needs: ["lassen-xl-16_1-build"]
+#
+#lassen-xl-16_1-integ-test:
+#  variables:
+#    COMPILER: xlc/16.1
+#    CC_COMMAND: "which xlc"
+#    FC_COMMAND: "which xlf90"
+#  extends: [.lsf-multi-node-template, .lassen-batch-template, .integ-test-template]
+#  needs: ["lassen-xl-16_1-build"]
