@@ -65,6 +65,7 @@ AC_CHECK_HEADERS([fcntl.h inttypes.h libgen.h limits.h mntent.h strings.h syslog
 AC_CHECK_HEADERS([wchar.h wctype.h])
 AC_CHECK_HEADERS([sys/mount.h sys/socket.h sys/statfs.h sys/time.h])
 AC_CHECK_HEADERS([arpa/inet.h netdb.h netinet/in.h])
+AC_CHECK_HEADER([sys/sysmacros.h], [], AC_MSG_ERROR([cannot find required header sys/sysmacros.h]))
 
 # Checks for library functions.
 AC_FUNC_MALLOC
