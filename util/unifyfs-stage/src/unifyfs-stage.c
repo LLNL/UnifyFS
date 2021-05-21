@@ -270,6 +270,10 @@ int main(int argc, char** argv)
     ctx->mountpoint = mountpoint;
     ctx->manifest_file = manifest_file;
 
+#if defined(ENABLE_MPI_MOUNT)
+    ctx->enable_mpi_mount = 1;
+#endif
+
     if (verbose) {
         unifyfs_stage_print(ctx);
     }
@@ -278,7 +282,7 @@ int main(int argc, char** argv)
         debug_pause(rank, "About to mount unifyfs.. ");
     }
 
-    if (should_we_mount_unifyfs) {
+    if (should_we_mount_unifyfs && !ctx->enable_mpi_mount) {
         ret = unifyfs_mount(mountpoint, rank, total_ranks, 0);
         if (ret) {
             fprintf(stderr, "failed to mount unifyfs at %s (%s)",
@@ -305,7 +309,7 @@ int main(int argc, char** argv)
         }
     }
 
-    if (should_we_mount_unifyfs) {
+    if (should_we_mount_unifyfs && !ctx->enable_mpi_mount) {
         ret = unifyfs_unmount();
         if (ret) {
             fprintf(stderr, "unmounting unifyfs failed (ret=%d)\n", ret);
