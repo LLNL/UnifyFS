@@ -899,7 +899,7 @@ static int jsrun_stage(unifyfs_resource_t* resource,
 
     // full command: jsrun <jsrun args> <server args>
     snprintf(cmd, sizeof(cmd),
-             "jsrun --immediate -e -individual --stdio_stderr unifyfs-stage.err.%%h.%%p --stdio_stdout unifyfs-stage.out.%%h.%%p --nrs %zu -r1 -c1 -a1",
+             "jsrun --immediate -e individual --stdio_stderr unifyfs-stage.err.%%h.%%p --stdio_stdout unifyfs-stage.out.%%h.%%p --nrs %zu -r1 -c1 -a1",
              resource->n_nodes);
 
     generic_stage(cmd, jsrun_argc, args);

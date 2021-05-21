@@ -5,10 +5,16 @@ unifyfs_stage_SOURCES = unifyfs-stage.c \
 
 noinst_HEADERS = unifyfs-stage.h
 
-unifyfs_stage_CPPFLAGS = $(AM_CPPFLAGS) $(MPI_CFLAGS) \
-                         $(OPENSSL_CFLAGS) \
-                         -I$(top_srcdir)/client/src \
-                         -I$(top_srcdir)/common/src
+stage_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) \
+   $(OPENSSL_CFLAGS) \
+   -I$(top_srcdir)/client/src \
+   -I$(top_srcdir)/common/src
+
+if USE_PMPI_WRAPPERS
+stage_cppflags += -DENABLE_MPI_MOUNT
+endif
+
+unifyfs_stage_CPPFLAGS = $(stage_cppflags)
 
 unifyfs_stage_LDADD = $(top_builddir)/client/src/libunifyfs.la -lrt -lm
 
