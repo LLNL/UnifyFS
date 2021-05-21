@@ -23,6 +23,7 @@ struct _unifyfs_stage {
     int checksum;           /* perform checksum? 0:no, 1:yes */
     int mode;               /* transfer mode? 0:serial, 1:parallel */
     int should_we_mount_unifyfs;  /* mount? 0:no (for testing), 1: yes */
+    int enable_mpi_mount;   /* automount during MPI_Init() */
     char* mountpoint;       /* unifyfs mountpoint */
     char* manifest_file;    /* manifest file containing the transfer list */
 };
@@ -37,6 +38,7 @@ static inline void unifyfs_stage_print(unifyfs_stage_t* ctx)
            "checksum = %d\n"
            "mode = %d\n"
            "should_we_mount_unifyfs = %d\n"
+           "mpi_mount = %d\n"
            "mountpoint = %s\n"
            "manifest file = %s\n",
            ctx->rank,
@@ -44,6 +46,7 @@ static inline void unifyfs_stage_print(unifyfs_stage_t* ctx)
            ctx->checksum,
            ctx->mode,
            ctx->should_we_mount_unifyfs,
+           ctx->enable_mpi_mount,
            ctx->mountpoint,
            ctx->manifest_file);
 }
