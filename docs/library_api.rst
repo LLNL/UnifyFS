@@ -1,23 +1,28 @@
-==========================
-UnifyFS Client API Library
-==========================
+==============================
+UnifyFS API for I/O Middleware
+==============================
 
-This section describes the purpose, concepts, and usage of the UnifyFS client
-API library.
+This section describes the purpose, concepts, and usage of the UnifyFS
+library API.
 
-------------------
-Client API Purpose
-------------------
+-------------------
+Library API Purpose
+-------------------
 
-The client API library provides a direct interface for UnifyFS configuration,
+The UnifyFS library API provides a direct interface for UnifyFS configuration,
 namespace management, and batched file I/O and transfer operations. The library
 is primarily targeted for use by I/O middleware software such as HDF5 and
 VeloC, but is also useful for user applications needing programmatic control
 and interactions with UnifyFS.
 
--------------------
-Client API Concepts
--------------------
+.. note::
+    Use of the library API is *not* required for most applications, as UnifyFS
+    will transparently intercept I/O operations made by the application. See
+    :doc:`examples` for examples of typical application usage.
+
+--------------------
+Library API Concepts
+--------------------
 
 Namespace (aka Mountpoint)
 **************************
@@ -27,13 +32,13 @@ used to distinguish the UnifyFS namespace from other file systems available
 to the client application. All absolute file paths that include the mountpoint
 prefix are treated as belonging to the associated UnifyFS namespace.
 
-Using the client API, an application or I/O middleware system can operate on
+Using the library API, an application or I/O middleware system can operate on
 multiple UnifyFS namespaces concurrently.
 
 File System Handle
 ******************
 
-All client API library methods require a file system handle parameter of type
+All library API methods require a file system handle parameter of type
 ``unifyfs_handle``. Users obtain a valid handle via an API call to
 ``unifyfs_initialize()``, which specifies the mountpoint prefix and
 configuration settings associated with the handle.
@@ -55,9 +60,9 @@ such, it is valid to obtain the gfid for a file in a single process (e.g., via
 file creation), and then share the resulting gfid value among other parallel
 processes via a collective communication mechanism.
 
-----------------
-Client API Types
-----------------
+-----------------
+Library API Types
+-----------------
 
 The file system handle type is a pointer to an opaque client structure that
 records the associated mountpoint and configuration.
@@ -153,11 +158,11 @@ status and transfer operation result.
         UNIFYFS_TRANSFER_MODE_MOVE  // copy, then remove source
     } unifyfs_transfer_mode;
 
-------------------------
-Example Client API Usage
-------------------------
+-------------------------
+Example Library API Usage
+-------------------------
 
-To get started using the client API, please add the following to your client
+To get started using the library API, please add the following to your client
 source code files that will make calls to API methods. You will also need to
 modify your client application build process to link with the
 ``libunifyfs_api`` library.
@@ -167,7 +172,7 @@ modify your client application build process to link with the
 
     #include <unifyfs/unifyfs_api.h>
 
-The common pattern for using the client API is to initialize a UnifyFS file
+The common pattern for using the library API is to initialize a UnifyFS file
 system handle, perform a number of operations using that handle, and then
 release the handle. As previously mentioned, the same client process may
 initialize multiple file system handles and use them concurrently, either
@@ -247,7 +252,7 @@ When no longer required, files can be deleted using ``unifyfs_remove()``.
 Batched File I/O
 ****************
 
-File I/O operations in the client API use a batched request interface similar
+File I/O operations in the library API use a batched request interface similar
 to POSIX ``lio_listio()``. A client application dispatches an array of I/O
 operation requests, where each request identifies the target file gfid, the
 operation type (e.g., read, write, or truncate), and associated operation
@@ -302,7 +307,7 @@ immediately waits for completion of the entire batch.
 Batched File Transfers
 **********************
 
-File transfer operations in the client API also use a batched request
+File transfer operations in the library API also use a batched request
 interface. A client application dispatches an array of file transfer
 requests, where each request identifies the source and destination file
 paths and the transfer mode. Two transfer modes are currently supported:
@@ -352,7 +357,7 @@ the entire batch.
 More Examples
 *************
 
-Additional examples demonstrating use of the client API can be found in
+Additional examples demonstrating use of the library API can be found in
 the unit tests (see api-unit-tests_).
 
 .. explicit external hyperlink targets
