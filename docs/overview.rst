@@ -3,23 +3,23 @@ Overview
 ================
 
 UnifyFS is a user-level file system under active development
-that supports shared file I/O over distributed storage on HPC systems, 
+that supports shared file I/O over distributed storage on HPC systems,
 e.g., node-local burst buffers.
 With UnifyFS, applications can write to fast, scalable, node-local burst buffers as
-easily as they do to the parallel file system. 
-UnifyFS is designed to support common I/O workloads such as 
+easily as they do to the parallel file system.
+UnifyFS is designed to support common I/O workloads such as
 checkpoint/restart and other bulk-synchronous I/O workloads typically
 performed by HPC applications.
 
 Because the UnifyFS file system is implemented at user-level,  the
 file system is visible only to applications linked with the UnifyFS client library.
-A consequence of this is that 
-traditional file system tools (ls, cd, etc.) installed by system administrators 
-cannot act on files in a UnifyFS file system because they are not linked 
-against the UnifyFS client library. 
-The lifetime of a UnifyFS file system is the duration of the execution of 
-the UnifyFS server processes, which is typically for the duration of an 
-HPC job. 
+A consequence of this is that
+traditional file system tools (ls, cd, etc.) installed by system administrators
+cannot act on files in a UnifyFS file system because they are not linked
+against the UnifyFS client library.
+The lifetime of a UnifyFS file system is the duration of the execution of
+the UnifyFS server processes, which is typically for the duration of an
+HPC job.
 When the servers exit, the UnifyFS file system terminates.
 Users must copy files that need to be persisted beyond the lifetime of the
 job from UnifyFS to a permanent file system.
@@ -33,7 +33,7 @@ High Level Design
 .. image:: images/design-high-lvl.png
 
 This section provides a high
-level design of UnifyFS. 
+level design of UnifyFS.
 UnifyFS presents a shared namespace (e.g., /unifyfs as a mount point) to
 all compute nodes in a job allocation. There are two main components of
 UnifyFS: the UnifyFS library and the UnifyFS server.
@@ -50,5 +50,5 @@ and perhaps a high-level I/O library, like HDF5, ADIOS, or PnetCDF.
 A UnifyFS server process runs on each compute node in
 the job allocation. The UnifyFS server handles the I/O
 requests from the UnifyFS library.
-The UnifyFS server uses ECP `Mochi <https://mochi.readthedocs.io/en/latest>`_
+The UnifyFS server uses ECP `Mochi <https://mochi.readthedocs.io/en/latest>`
 to communicate with user application processes and server processes on other nodes.
