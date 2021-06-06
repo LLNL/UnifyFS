@@ -30,16 +30,16 @@ and read during recovery/restart (a read phase).
 Additionally, parallel writes and reads to shared files occur systematically,
 where processes access computable, regular offsets of files, e.g., in strided or
 segmented access patterns, in contrast to random, interleaved, small writes and reads.
-Note that a consequence of this assumption is that during a write phase, 
-if two procesess write concurrently to the 
-same file offset or to an overlapping region, the result is undefined and may 
-reflect the result of either processes' operation. 
+Note that a consequence of this assumption is that during a write phase,
+if two procesess write concurrently to the
+same file offset or to an overlapping region, the result is undefined and may
+reflect the result of either processes' operation.
 
 UnifyFS offers the best performance for applications that exhibit the bulk
 synchronous I/O pattern. While UnifyFS does support deviations to this pattern
 (see Section XXXX), the performance might be slower and the user may
 have to take additional steps to ensure correct execution of the application
-with UnifyFS. 
+with UnifyFS.
 For example, during a write phase, a process can read any byte in
 a file including remote data that has been written by processes in remote compute nodes.
 However, the performance will differ based on which process wrote the data:
@@ -53,15 +53,15 @@ However, the performance will differ based on which process wrote the data:
         additional synchronization operations.
       - If the bytes being read were written by a process on a different
         compute node, then the performance is slower and the application must
-        introduce synchronization operations to ensure that the most recent 
-        data is read. The synchronization can be achieved through adding 
-        explicit ''flush`` operations in the application source code, 
-        or by supplying the ''write_sync`` configuration parameter to UnifyFS
-        on startup, which will cause an implicit ''flush`` operation after 
-        every write (note: the ''write_sync`` mode can significantly slow down
+        introduce synchronization operations to ensure that the most recent
+        data is read. The synchronization can be achieved through adding
+        explicit "flush" operations in the application source code,
+        or by supplying the "write_sync" configuration parameter to UnifyFS
+        on startup, which will cause an implicit "flush" operation after
+        every write (note: the "write_sync" mode can significantly slow down
         write performance.). See Section XXXX for more information.
-In summary, reading the local data (which has been written by processes 
-executing on the same compute node) will always be faster than reading 
+In summary, reading the local data (which has been written by processes
+executing on the same compute node) will always be faster than reading
 remote data.
 
 
@@ -69,6 +69,34 @@ remote data.
 ---------------------------
 Consistency Model
 ---------------------------
+
+The UnifyFS file system does not support strict POSIX consistency semantics.
+Instead, UnifyFS supports two different models:
+*commit consistency semantics* when a file is actively
+being modified; and *lamination semantics* when the file is no longer being
+modified by the application.
+These two consistency models provide opportunities for UnifyFS to
+provide better performance for the I/O operatations of HPC applications.
+
+'''''''''''''''''''''''''''
+Commit Consistency Semantics in UnifyFS
+'''''''''''''''''''''''''''
+
+Commit consistency semantics rquire
+explicit "commit" operations to be performed before updates to a file
+are globally visible (Please see Chen et al., HPDC 2021 XXXX for more details
+on different file system consistency semantics models.)
+We chose commit consistency semantics for UnifyFS because it is sufficient
+for correct execution of typical HPC applications that perform I/O
+in a bulk synchronous pattern, and enables UnifyFS to provide better
+performance. For example, because we assume that applications using UnifyFS
+will not execute concurrent modifications to the same file offset,
+UnifyFS does not have to employ expensive locking to ensure sequential
+access to file regions.
+
+'''''''''''''''''''''''''''
+Lamination Consistency Semantics in UnifyFS
+'''''''''''''''''''''''''''
 
 One key aspect of UnifyFS is the idea of "laminating" a file.  After a file is
 laminated, it becomes "set in stone," and its data is accessible across all the
