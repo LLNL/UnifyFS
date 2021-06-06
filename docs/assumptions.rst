@@ -1,47 +1,70 @@
 ================
-Assumptions
+Assumptions and Semantics
 ================
 
 In this section, we provide assumptions we make about the behavior of
-applications that use UnifyFS, and about how UnifyFS currently functions.
+applications that use UnifyFS and about the file system semantics of UnifyFS.
 
 ---------------------------
 System Requirements
 ---------------------------
 
-UnifyFS uses node-local storage devices, e.g., RAM and SSD, for storing the
-application data. Therefore, a system should support the following requirements
-to run UnifyFS.
+The system requirements to run UnifyFS are:
 
-    - A compute node is equipped with a local storage device that UnifyFS can
+    - Compute nodes must be equipped with local storage device(s) that UnifyFS can
       use for storing file data, e.g., SSD or RAM.
 
-    - An ability for UnifyFS to launch user-level daemon processes on compute
-      nodes, which run concurrently with user application processes
+    - The system must support the ability for UnifyFS user-level daemon processes
+      to run concurrently with user application processes on compute nodes.
 
 ---------------------------
 Application Behavior
 ---------------------------
 
-UnifyFS is specifically designed to support globally synchronous checkpointing
-workloads. In such a workload, the expected application behavior is as follows.
+UnifyFS is specifically designed to support the bulk synchronous I/O patterns
+that are typical in HPC applications, e.g., checkpoint/restart or output dumps.
+In bulk synchronous I/O, I/O operations occur in separate write and read phases,
+and files are not read and written simultaneously.
+For example, files are written during checkpointing (a write phase)
+and read during recovery/restart (a read phase).
+Additionally, parallel writes and reads to shared files occur systematically,
+where processes access computable, regular offsets of files, e.g., in strided or
+segmented access patterns, in contrast to random, interleaved, small writes and reads.
+Note that a consequence of this assumption is that during a write phase, 
+if two procesess write concurrently to the 
+same file offset or to an overlapping region, the result is undefined and may 
+reflect the result of either processes' operation. 
 
-    - I/O operations occur in separate write and read phases, and thus files are
-      not read and written simultaneously. For instance, files are only written
-      during the checkpointing (a write phase) and only read during the
-      recovery/restart (a read phase).
+UnifyFS offers the best performance for applications that exhibit the bulk
+synchronous I/O pattern. While UnifyFS does support deviations to this pattern
+(see Section XXXX), the performance might be slower and the user may
+have to take additional steps to ensure correct execution of the application
+with UnifyFS. 
+For example, during a write phase, a process can read any byte in
+a file including remote data that has been written by processes in remote compute nodes.
+However, the performance will differ based on which process wrote the data:
+      - If the bytes being read were written by the same process that wrote
+        the bytes, UnifyFS offers the fastest performance and no synchronization
+        operations are needed. This kind of access is typical in some I/O
+        libraries, e.g., HDF5, where file metadata may be updated and read by
+        the same process.
+      - If the bytes being read were written by a process on the same compute
+        node, UnifyFS can offer slightly slower performance and requires no
+        additional synchronization operations.
+      - If the bytes being read were written by a process on a different
+        compute node, then the performance is slower and the application must
+        introduce synchronization operations to ensure that the most recent 
+        data is read. The synchronization can be achieved through adding 
+        explicit ''flush`` operations in the application source code, 
+        or by supplying the ''write_sync`` configuration parameter to UnifyFS
+        on startup, which will cause an implicit ''flush`` operation after 
+        every write (note: the ''write_sync`` mode can significantly slow down
+        write performance.). See Section XXXX for more information.
+In summary, reading the local data (which has been written by processes 
+executing on the same compute node) will always be faster than reading 
+remote data.
 
-    - During the read phase, a process can read any byte in a file including
-      remote data that has been written by processes in remote compute nodes.
-      However, reading the local data (which has been written by processes in
-      the same compute node) will be faster than reading the remote data.
 
-    - During the write phase, the result of concurrently writing to the same
-      file offset by multiple processes is undefined. Similarly, multiple
-      processes writing to an overlapped region also leads to an undefined
-      result. For example, if a command in the job renames a file while the
-      parallel application is writing to it, the outcome is undefined, i.e., it
-      could be a success or failure depending on timing.
 
 ---------------------------
 Consistency Model
