@@ -313,6 +313,13 @@ static void register_client_server_rpcs(margo_instance_id mid)
                        unifyfs_mread_req_complete_in_t,
                        unifyfs_mread_req_complete_out_t,
                        NULL);
+
+    unifyfsd_rpc_context->rpcs.client_heartbeat_id =
+            MARGO_REGISTER(mid, "unifyfs_heartbeat_rpc",
+                           unifyfs_heartbeat_in_t,
+                           unifyfs_heartbeat_out_t,
+                           NULL);
+
 }
 
 /* margo_server_rpc_init
@@ -703,6 +710,51 @@ int invoke_client_mread_req_complete_rpc(int app_id,
     /* decode response */
     int ret;
     unifyfs_mread_req_complete_out_t out;
+    hret = margo_get_output(handle, &out);
+    if (hret == HG_SUCCESS) {
+        LOGDBG("Got response ret=%" PRIi32, out.ret);
+        ret = (int) out.ret;
+        margo_free_output(handle, &out);
+    } else {
+        LOGERR("margo_get_output() failed");
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+
+    /* free resources */
+    margo_destroy(handle);
+
+    return ret;
+}
+
+/* invokes the heartbeat rpc function */
+int invoke_heartbeat_rpc(int app_id, int client_id)
+{
+    hg_return_t hret;
+
+    /* check that we have initialized margo */
+    if (NULL == unifyfsd_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* fill input struct */
+    unifyfs_heartbeat_in_t in;
+
+    /* get handle to rpc function */
+    hg_id_t rpc_id = unifyfsd_rpc_context->rpcs.client_heartbeat_id;
+    hg_handle_t handle = create_client_handle(rpc_id, app_id, client_id);
+
+    /* call rpc function */
+    LOGDBG("invoking the heartbeat rpc function in client");
+    hret = margo_forward(handle, &in);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_forward() failed");
+        margo_destroy(handle);
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    /* decode response */
+    int ret;
+    unifyfs_heartbeat_out_t out;
     hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);

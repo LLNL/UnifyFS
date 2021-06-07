@@ -43,7 +43,6 @@
 
 #include "unifyfs_server_rpcs.h"
 
-
 #define RM_LOCK(rm) \
 do { \
     /*LOGDBG("locking RM[%d:%d] state", rm->app_id, rm->client_id);*/ \
@@ -93,7 +92,7 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
 {
     /* allocate a new thread control structure */
     reqmgr_thrd_t* thrd_ctrl = (reqmgr_thrd_t*)
-        calloc(1, sizeof(reqmgr_thrd_t));
+                               calloc(1, sizeof(reqmgr_thrd_t));
     if (thrd_ctrl == NULL) {
         LOGERR("Failed to allocate structure for request "
                "manager thread for app_id=%d client_id=%d",
@@ -280,7 +279,7 @@ int rm_create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
 
     /* allocate read request structures */
     chunk_read_req_t* all_chunk_reads = (chunk_read_req_t*)
-        calloc((size_t)num_vals, sizeof(chunk_read_req_t));
+                                        calloc((size_t)num_vals, sizeof(chunk_read_req_t));
     if (NULL == all_chunk_reads) {
         LOGERR("failed to allocate chunk-reads array");
         return ENOMEM;
@@ -321,7 +320,7 @@ int rm_create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
     int num_dels = num_del;
     rdreq->num_server_reads = num_dels;
     rdreq->remote_reads = (server_chunk_reads_t*)
-        calloc((size_t)num_dels, sizeof(server_chunk_reads_t));
+                          calloc((size_t)num_dels, sizeof(server_chunk_reads_t));
     if (NULL == rdreq->remote_reads) {
         LOGERR("failed to allocate remote-reads array");
         return ENOMEM;
@@ -458,7 +457,7 @@ int rm_request_exit(reqmgr_thrd_t* thrd_ctrl)
     /* if reqmgr thread is not waiting in critical
      * section, let's wait on it to come back */
     if (thrd_ctrl->waiting_for_work) {
-         /* signal reqmgr thread */
+        /* signal reqmgr thread */
         pthread_cond_signal(&thrd_ctrl->thrd_cond);
     }
 
@@ -660,11 +659,11 @@ int send_data_to_client(server_read_req_t* rdreq,
 
     if (resp->read_rc < 0) {
         /* server read returned error */
-        errcode = (int) -(resp->read_rc);
+        errcode = (int) - (resp->read_rc);
         *bytes_processed = 0;
         return invoke_client_mread_req_complete_rpc(app_id, client_id,
-                                                    mread_id, read_ndx,
-                                                    errcode);
+                mread_id, read_ndx,
+                errcode);
     }
 
     size_t data_size = (size_t) resp->read_rc;
@@ -681,7 +680,7 @@ int send_data_to_client(server_read_req_t* rdreq,
     /* data can be larger than the shmem buffer size. split the data into
      * pieces and send them */
     size_t bytes_left = data_size;
-    for ( ; bytes_left > 0; bytes_left -= send_sz) {
+    for (; bytes_left > 0; bytes_left -= send_sz) {
         if (bytes_left < send_sz) {
             send_sz = bytes_left;
         }
@@ -693,8 +692,8 @@ int send_data_to_client(server_read_req_t* rdreq,
                send_sz, bytes_left);
 
         int rc = invoke_client_mread_req_data_rpc(app_id, client_id, mread_id,
-                                                  read_ndx, read_byte_offset,
-                                                  send_sz, bufpos);
+                 read_ndx, read_byte_offset,
+                 send_sz, bufpos);
         if (rc != UNIFYFS_SUCCESS) {
             ret = rc;
             LOGERR("failed data rpc for mread[%d] request %d "
@@ -792,8 +791,8 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
                 errcode = ret;
             }
             rc = invoke_client_mread_req_complete_rpc(app_id, client_id,
-                                                      mread_id, read_ndx,
-                                                      errcode);
+                    mread_id, read_ndx,
+                    errcode);
             if (rc != UNIFYFS_SUCCESS) {
                 LOGERR("mread[%d] request %d completion rpc failed (rc=%d)",
                        mread_id, read_ndx, rc);
@@ -857,7 +856,7 @@ static int process_attach_rpc(reqmgr_thrd_t* reqmgr,
         }
     } else {
         LOGERR("client not found (app_id=%d, client_id=%d)",
-            app_id, client_id);
+               app_id, client_id);
         ret = (int)UNIFYFS_FAILURE;
     }
 
@@ -1221,7 +1220,7 @@ static int rm_process_client_requests(reqmgr_thrd_t* reqmgr)
         /* process next request */
         int rret;
         client_rpc_req_t* req = (client_rpc_req_t*)
-            arraylist_get(client_reqs, i);
+                                arraylist_get(client_reqs, i);
         switch (req->req_type) {
         case UNIFYFS_CLIENT_RPC_ATTACH:
             rret = process_attach_rpc(reqmgr, req);
@@ -1273,6 +1272,19 @@ static int rm_process_client_requests(reqmgr_thrd_t* reqmgr)
     return ret;
 }
 
+/* insert failed client in cleanup_arraylist[] */
+void queue_cleanup(reqmgr_thrd_t* thrd_ctrl)
+{
+    //insert app_id and client_id in cleanup_arraylist[] via app_client
+    RM_REQ_LOCK(thrd_ctrl);
+
+    app_client = get_app_client(thrd_ctrl->app_id, thrd_ctrl->client_id);
+    arraylist_insert(cleanup_arraylist, 0, app_client);
+
+    RM_REQ_UNLOCK(thrd_ctrl);
+
+}
+
 /* Entry point for request manager thread. One thread is created
  * for each client process to retrieve remote data and notify the
  * client when data is ready.
@@ -1294,13 +1306,20 @@ void* request_manager_thread(void* arg)
      * with main thread, new items inserted by the rpc handler */
     int rc;
     while (1) {
+
+        /* invoke heartbeat rpc */
+        rc = invoke_heartbeat_rpc(thrd_ctrl->app_id, thrd_ctrl->client_id);
+        if (rc != UNIFYFS_SUCCESS) {
+            queue_cleanup(thrd_ctrl);
+        }
+
         /* process any client requests */
         rc = rm_process_client_requests(thrd_ctrl);
         if (rc != UNIFYFS_SUCCESS) {
             LOGWARN("failed to process client rpc requests");
         }
 
-         /* send chunk read requests to remote servers */
+        /* send chunk read requests to remote servers */
         rc = rm_request_remote_chunks(thrd_ctrl);
         if (rc != UNIFYFS_SUCCESS) {
             LOGWARN("failed to request remote chunks");

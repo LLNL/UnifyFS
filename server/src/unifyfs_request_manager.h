@@ -163,4 +163,14 @@ int rm_submit_read_request(server_read_req_t* req);
 int rm_submit_client_rpc_request(unifyfs_fops_ctx_t* ctx,
                                  client_rpc_req_t* req);
 
+/* MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
+
+int invoke_chunk_read_request_rpc(int dst_srvr_rank,
+                                  server_read_req_t* rdreq,
+                                  int num_chunks,
+                                  void* data_buf, size_t buf_sz);
+
+/* create arraylist of failed clients for cleanup */
+void queue_cleanup(reqmgr_thrd_t* thrd_ctrl);
+
 #endif

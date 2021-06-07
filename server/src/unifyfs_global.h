@@ -58,6 +58,9 @@
 
 /* Some global variables/structures used throughout the server code */
 
+/* arraylist for failed clients to clean up */
+extern arraylist_t* cleanup_arraylist;
+
 /* PMI server rank and server count */
 extern int glb_pmi_rank;
 extern int glb_pmi_size;

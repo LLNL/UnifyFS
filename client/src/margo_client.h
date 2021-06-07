@@ -37,6 +37,7 @@ typedef struct ClientRpcIds {
     hg_id_t mread_id;
     hg_id_t mread_req_data_id;
     hg_id_t mread_req_complete_id;
+    hg_id_t heartbeat_id;
 } client_rpcs_t;
 
 typedef struct ClientRpcContext {

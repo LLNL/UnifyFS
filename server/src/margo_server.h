@@ -51,6 +51,7 @@ typedef struct ServerRpcIds {
     /* client-server rpcs */
     hg_id_t client_mread_data_id;
     hg_id_t client_mread_complete_id;
+    hg_id_t client_heartbeat_id;
 } server_rpcs_t;
 
 typedef struct ServerRpcContext {
@@ -94,5 +95,8 @@ int invoke_client_mread_req_complete_rpc(int app_id,
                                          int mread_id,
                                          int read_index,
                                          int read_error);
+
+/* invokes the heartbeat rpc function */
+int invoke_heartbeat_rpc(int app_id, int client_id);
 
 #endif // MARGO_SERVER_H

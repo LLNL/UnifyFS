@@ -45,6 +45,9 @@
 // margo rpcs
 #include "margo_server.h"
 
+/* arraylist of failed clients for cleanup */
+arraylist_t* cleanup_arraylist;
+
 /* PMI information */
 int glb_pmi_rank; /* = 0 */
 int glb_pmi_size = 1; // for standalone server tests
@@ -196,7 +199,7 @@ static int process_servers_hostfile(const char* hostfile)
     int rc;
     size_t i, cnt;
     FILE* fp = NULL;
-    char hostbuf[UNIFYFS_MAX_HOSTNAME+1];
+    char hostbuf[UNIFYFS_MAX_HOSTNAME + 1];
 
     if (NULL == hostfile) {
         return EINVAL;
@@ -246,6 +249,20 @@ static int process_servers_hostfile(const char* hostfile)
     }
 
     return (int)UNIFYFS_SUCCESS;
+}
+
+
+/* call cleanup for failed clients */
+// TODO: make code match arraylist
+static void process_cleanup_requests(int num_cleanup,
+                                     arraylist_t* cleanup_arraylist)
+{
+    ABT_mutex_lock(app_configs_abt_sync);
+
+	//cleanup_app_client(app, client);
+
+    ABT_mutex_unlock(app_configs_abt_sync);
+
 }
 
 int main(int argc, char* argv[])
@@ -342,12 +359,12 @@ int main(int argc, char* argv[])
     }
     if (glb_pmi_rank != kv_rank) {
         LOGWARN("mismatch on pmi (%d) vs kvstore (%d) rank",
-               glb_pmi_rank, kv_rank);
+                glb_pmi_rank, kv_rank);
         glb_pmi_rank = kv_rank;
     }
     if (glb_pmi_size != kv_nranks) {
         LOGWARN("mismatch on pmi (%d) vs kvstore (%d) num ranks",
-               glb_pmi_size, kv_nranks);
+                glb_pmi_size, kv_nranks);
         glb_pmi_size = kv_nranks;
     }
 
@@ -410,7 +427,13 @@ int main(int argc, char* argv[])
 
     LOGDBG("server[%d] - finished initialization", glb_pmi_rank);
 
+    int num_cleanup;
     while (1) {
+        num_cleanup = arraylist_size(cleanup_arraylist);
+        if (num_cleanup) {
+            process_cleanup_requests(num_cleanup, cleanup_arraylist);
+            break;
+        }
         sleep(1);
         if (time_to_exit) {
             LOGDBG("starting service shutdown");
@@ -676,7 +699,7 @@ app_config* new_application(int app_id,
         app_config* existing = app_configs[i];
         if (NULL == existing) {
             new_app->clients = (app_client**) calloc(clients_per_app,
-                                                     sizeof(app_client*));
+                               sizeof(app_client*));
             if (NULL == new_app->clients) {
                 LOGERR("failed to allocate application clients arrays");
                 ABT_mutex_unlock(app_configs_abt_sync);
@@ -762,7 +785,7 @@ app_client* get_app_client(int app_id,
  * @return success|error code
  */
 static unifyfs_rc attach_to_client_shmem(app_client* client,
-                                         size_t shmem_super_sz)
+        size_t shmem_super_sz)
 {
     shm_context* shm_ctx;
     char shm_name[SHMEM_NAME_LEN] = {0};

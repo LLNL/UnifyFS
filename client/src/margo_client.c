@@ -63,6 +63,7 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
     CLIENT_REGISTER_RPC(mread);
     CLIENT_REGISTER_RPC_HANDLER(mread_req_data);
     CLIENT_REGISTER_RPC_HANDLER(mread_req_complete);
+    CLIENT_REGISTER_RPC_HANDLER(heartbeat);
 
 #undef CLIENT_REGISTER_RPC
 #undef CLIENT_REGISTER_RPC_HANDLER
@@ -911,3 +912,30 @@ static void unifyfs_mread_req_complete_rpc(hg_handle_t handle)
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(unifyfs_mread_req_complete_rpc)
+
+/* for client read request identified by mread_id and request index,
+ * update request completion state according to input params */
+static void unifyfs_heartbeat_rpc(hg_handle_t handle)
+{
+    int ret = UNIFYFS_SUCCESS;
+
+    /* get input params */
+    unifyfs_heartbeat_in_t in;
+    hg_return_t hret = margo_get_input(handle, &in);
+
+    /* set rpc result status */
+    unifyfs_heartbeat_out_t out;
+    out.ret = ret;
+
+    LOGDBG("responding");
+
+    /* return to caller */
+    hret = margo_respond(handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* free margo resources */
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(unifyfs_heartbeat_rpc)
