@@ -12,13 +12,15 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
+#define _GNU_SOURCE /* for Linux mremap() */
+#include <sys/mman.h>
+
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/mman.h>
 #include <sys/stat.h>
 
 #include "unifyfs_log.h"
@@ -33,11 +35,12 @@
 
 /* log-based I/O header - first page of shmem region or spill file */
 typedef struct log_header {
+    size_t hdr_sz;             /* total header bytes (struct and chunk_map) */
     size_t data_sz;            /* total data bytes in log */
     size_t reserved_sz;        /* reserved data bytes */
     size_t chunk_sz;           /* data chunk size */
     size_t max_reserved_slot;  /* slot index for last reserved chunk */
-    off_t data_offset;         /* file/memory offset where data chunks start */
+    off_t  data_offset;        /* file/memory offset where data chunks start */
 } log_header;
 /* chunk slot_map immediately follows header and occupies rest of the page */
 // slot_map chunk_map;         /* chunk slot_map that tracks reservations */
@@ -133,16 +136,37 @@ static int get_spillfile(const char* path,
 }
 
 /* map log header (1st page) of spill file given by file descriptor */
-static void* map_spillfile(int spill_fd, int mmap_prot)
+static void* map_spillfile(int spill_fd, int mmap_prot, int n_pages)
 {
+    int err;
     size_t pgsz = get_page_size();
+    size_t mapsz = pgsz * n_pages;
+
     LOGDBG("mapping spillfile - fd=%d, pgsz=%zu", spill_fd, pgsz);
-    void* addr = mmap(NULL, pgsz, mmap_prot, MAP_SHARED, spill_fd, 0);
+    errno = 0;
+    void* addr = mmap(NULL, mapsz, mmap_prot, MAP_SHARED, spill_fd, 0);
+    err = errno;
     if (MAP_FAILED == addr) {
-        int err = errno;
         LOGERR("mmap(fd=%d, sz=%zu, MAP_SHARED) failed - %s",
-               spill_fd, pgsz, strerror(err));
+               spill_fd, mapsz, strerror(err));
         return NULL;
+    }
+
+    if (mmap_prot == PROT_READ) { /* server maps for read only */
+        log_header* loghdr = (log_header*) addr;
+        size_t hdr_sz = loghdr->hdr_sz;
+        if (hdr_sz > mapsz) {
+            /* need to remap to access the entire header */
+            errno = 0;
+            void* new_addr = mremap(addr, mapsz, hdr_sz, MREMAP_MAYMOVE);
+            err = errno;
+            if (MAP_FAILED == new_addr) {
+                LOGERR("mremap(old_sz=%zu, new_sz=%zu, MAYMOVE) failed - %s",
+                       mapsz, hdr_sz, strerror(err));
+                return NULL;
+            }
+            return new_addr;
+        }
     }
     return addr;
 }
@@ -182,7 +206,7 @@ int unifyfs_logio_init_server(const int app_id,
             return EINVAL;
         }
 
-        /* open the spill over file */
+        /* open the spill-over file */
         snprintf(spillfile, sizeof(spillfile), LOGIO_SPILL_FMTSTR,
                  spill_dir, app_id, client_id);
         spill_fd = get_spillfile(spillfile, spill_size);
@@ -190,9 +214,9 @@ int unifyfs_logio_init_server(const int app_id,
             LOGERR("Failed to open logio spill file!");
             return UNIFYFS_FAILURE;
         } else {
-            /* map first page of the spill over file, which contains log header
+            /* map the start of the spill-over file, which contains log header
              * and chunk slot_map. server only needs read access. */
-            spill_mapping = map_spillfile(spill_fd, PROT_READ);
+            spill_mapping = map_spillfile(spill_fd, PROT_READ, 1);
             if (NULL == spill_mapping) {
                 LOGERR("Failed to map logio spill file header!");
                 return UNIFYFS_FAILURE;
@@ -236,23 +260,42 @@ static int init_log_header(char* log_region,
 
     /* zero all log header fields */
     memset(log_region, 0, sizeof(log_header));
-
-    /* chunk data starts after header page */
-    size_t data_size = region_size - pgsz;
-    hdr->data_sz = data_size;
     hdr->chunk_sz = chunk_size;
-    hdr->data_offset = (off_t)pgsz;
 
-    /* initialize chunk slot map (immediately follows header in memory) */
+    /* chunk slot map immediately follows header */
     char* slotmap = log_region + sizeof(log_header);
-    size_t slotmap_size = pgsz - sizeof(log_header);
-    size_t n_chunks = data_size / chunk_size;
-    slot_map* chunkmap = slotmap_init(n_chunks, (void*)slotmap, slotmap_size);
-    if (NULL == chunkmap) {
-        LOGERR("Failed to initialize chunk slotmap @ %p (sz=%zu, #chunks=%zu)",
-               slotmap, slotmap_size, n_chunks);
-        return UNIFYFS_FAILURE;
+
+    /* determine number of pages necessary to hold chunkmap */
+    size_t hdr_pages = 1;
+    size_t hdr_size = 0;
+    size_t data_size = 0;
+    while (1) {
+        hdr_size = (hdr_pages * pgsz);
+        if (hdr_size >= region_size) {
+            LOGERR("Failed chunk slotmap init (region_sz=%zu, chunk_sz=%zu)",
+                   region_size, chunk_size);
+            return UNIFYFS_FAILURE;
+        }
+
+        /* chunk data starts after header pages */
+        data_size = region_size - hdr_size;
+        size_t n_chunks = data_size / chunk_size;
+
+        /* try to init chunk slotmap */
+        size_t slotmap_size = hdr_size - sizeof(log_header);
+        slot_map* chunkmap = slotmap_init(n_chunks, slotmap, slotmap_size);
+        if (NULL == chunkmap) {
+            LOGDBG("chunk slotmap init failed (sz=%zu, #chunks=%zu)",
+                   slotmap_size, n_chunks);
+            hdr_pages++;
+            continue;
+        }
+        break;
     }
+
+    hdr->hdr_sz = hdr_size;
+    hdr->data_sz = data_size;
+    hdr->data_offset = (off_t)hdr_size;
 
     return UNIFYFS_SUCCESS;
 }
@@ -333,7 +376,7 @@ int unifyfs_logio_init_client(const int app_id,
     void* spill_mapping = NULL;
     int spill_fd = -1;
     if (unifyfs_use_spillover) {
-        /* get directory in which to create spill over files */
+        /* get directory in which to create spill-over files */
         cfgval = client_cfg->logio_spill_dir;
         if (NULL == cfgval) {
             LOGERR("UNIFYFS_LOGIO_SPILL_DIR configuration not set! "
@@ -341,20 +384,28 @@ int unifyfs_logio_init_client(const int app_id,
             return UNIFYFS_ERROR_BADCONFIG;
         }
 
-        /* define path to the spill over file for data chunks */
+        /* define path to the spill-over file for data chunks */
         char spillfile[UNIFYFS_MAX_FILENAME];
         snprintf(spillfile, sizeof(spillfile), LOGIO_SPILL_FMTSTR,
                  cfgval, app_id, client_id);
 
-        /* create the spill over file */
+        /* create the spill-over file */
         spill_fd = get_spillfile(spillfile, spill_size);
         if (spill_fd < 0) {
             LOGERR("Failed to open logio spill file!");
             return UNIFYFS_FAILURE;
         } else {
-            /* map first page of the spill over file, which contains log header
+            /* estimate header size based on number of chunks */
+            size_t pgsz = get_page_size();
+            size_t n_chunks = spill_size / chunk_size;
+            size_t chunks_per_page = pgsz * 8; /* 8 chunks per map byte */
+            size_t n_pages = n_chunks / chunks_per_page;
+            n_pages++; /* +1 to account for logio metadata */
+
+            /* map start of the spill-over file, which contains log header
              * and chunk slot_map. client needs read and write access. */
-            spill_mapping = map_spillfile(spill_fd, PROT_READ|PROT_WRITE);
+            int map_flags = PROT_READ | PROT_WRITE;
+            spill_mapping = map_spillfile(spill_fd, map_flags, n_pages);
             if (NULL == spill_mapping) {
                 LOGERR("Failed to map logio spill file header!");
                 return UNIFYFS_FAILURE;
