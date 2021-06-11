@@ -25,9 +25,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h>
-#include "config.h"
+
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
+
+#include "config.h" // for USE_SPATH
 
 int chdir_test(char* unifyfs_root)
 {
@@ -164,7 +166,7 @@ int chdir_test(char* unifyfs_root)
        "%s:%d getcwd returned %s expected %s",
        __FILE__, __LINE__, str, buf);
 
-#ifdef HAVE_SPATH
+#ifdef USE_SPATH
     /* change back to root unifyfs directory */
     errno = 0;
     rc = chdir("..");
@@ -218,7 +220,7 @@ int chdir_test(char* unifyfs_root)
 #else
     skip(1, 9, "test requires missing spath dependency");
     end_skip;
-#endif /* HAVE_SPATH */
+#endif /* USE_SPATH */
 
 /* TODO: Some compilers throw a warning/error if one uses getwd().
  * For those compilers that allow it, it would be nice to execute
@@ -353,7 +355,7 @@ int chdir_test(char* unifyfs_root)
         free(str);
     }
 
-#ifdef HAVE_SPATH
+#ifdef USE_SPATH
     /* change back to root unifyfs directory */
     errno = 0;
     rc = chdir("..");
@@ -396,7 +398,7 @@ int chdir_test(char* unifyfs_root)
 #else
     skip(1, 6, "test requires missing spath dependency");
     end_skip;
-#endif /* HAVE_SPATH */
+#endif /* USE_SPATH */
 
 
 /* TODO: Our directory wrappers are not fully functioning yet,

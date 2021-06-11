@@ -5,20 +5,30 @@ AC_DEFUN([UNIFYFS_AC_GOTCHA], [
   GOTCHA_OLD_LDFLAGS=$LDFLAGS
 
   AC_ARG_WITH([gotcha], [AC_HELP_STRING([--with-gotcha=PATH],
-    [path to installed libgotcha [default=/usr/local]])], [
-    GOTCHA_CFLAGS="-I${withval}/include"
-    GOTCHA_LDFLAGS="-L${withval}/lib64 -L${withval}/lib"
-    CFLAGS="$CFLAGS ${GOTCHA_CFLAGS}"
-    CXXFLAGS="$CXXFLAGS ${GOTCHA_CFLAGS}"
-    LDFLAGS="$LDFLAGS ${GOTCHA_LDFLAGS}"
-  ], [])
+    [path to installed libgotcha [default=/usr/local]])],
+    [
+      GOTCHA_DIR="${withval}"
+      GOTCHA_CFLAGS="-I${GOTCHA_DIR}/include"
+      GOTCHA_LDFLAGS="-L${GOTCHA_DIR}/lib64 -L${GOTCHA_DIR}/lib -Wl,-rpath,${GOTCHA_DIR}/lib64 -Wl,-rpath,${GOTCHA_DIR}/lib"
+      CFLAGS="$CFLAGS ${GOTCHA_CFLAGS}"
+      CXXFLAGS="$CXXFLAGS ${GOTCHA_CFLAGS}"
+      LDFLAGS="$LDFLAGS ${GOTCHA_LDFLAGS}"
+    ],
+    [
+      GOTCHA_CFLAGS=""
+      GOTCHA_LDFLAGS=""
+    ]
+  )
 
   AC_CHECK_LIB([gotcha], [gotcha_wrap],
     [
+      GOTCHA_LIBS="${GOTCHA_LDFLAGS} -lgotcha"
       AC_SUBST(GOTCHA_CFLAGS)
       AC_SUBST(GOTCHA_LDFLAGS)
+      AC_SUBST(GOTCHA_LIBS)
       AM_CONDITIONAL([HAVE_GOTCHA], [true])
-    ],[
+    ],
+    [
       AC_MSG_WARN([couldn't find a suitable libgotcha, use --with-gotcha=PATH])
       AM_CONDITIONAL([HAVE_GOTCHA], [false])
     ],
