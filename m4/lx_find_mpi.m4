@@ -118,6 +118,13 @@ AC_DEFUN([LX_QUERY_MPI_COMPILER],
                      echo yes
                  else
                      echo no
+                     echo -n "Checking whether $$1 responds to '--cray-print-opts=all'... "
+                     lx_mpi_command_line=`$$1 --cray-print-opts=all 2>/dev/null`
+                     if [[ "$?" -eq 0 ]]; then
+                         echo yes
+                     else
+                         echo no
+                     fi
                  fi
              fi
          else

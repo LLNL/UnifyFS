@@ -210,6 +210,12 @@ Alternatively, UnifyFS can be configured using ``--with`` options:
 To see all available build configuration options, run ``./configure --help``
 after ``./autogen.sh`` has been run.
 
+
+.. note::
+
+    On Cray systems, the detection of MPI compiler wrappers requires passing the
+    following flags to the configure command: ``MPICC=cc MPIFC=ftn``
+
 ---------------------------
 
 -----------------
