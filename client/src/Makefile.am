@@ -2,15 +2,21 @@ include $(top_srcdir)/common/src/Makefile.mk
 
 lib_LTLIBRARIES = libunifyfs.la libunifyfs_api.la
 
-libunifyfsdir = $(includedir)
+if USE_PMPI_WRAPPERS
+lib_LTLIBRARIES += libunifyfs_mpi.la
+endif #USE_PMPI_WRAPPERS
 
 if HAVE_GOTCHA
 lib_LTLIBRARIES += libunifyfs_gotcha.la
-libunifyfs_gotchadir = $(includedir)
+
+if USE_PMPI_WRAPPERS
+lib_LTLIBRARIES += libunifyfs_mpi_gotcha.la
+endif #USE_PMPI_WRAPPERS
 
 if HAVE_FORTRAN
 lib_LTLIBRARIES += libunifyfsf.la
 endif #HAVE_FORTRAN
+
 endif #HAVE_GOTCHA
 
 AM_CFLAGS = -Wall -Wno-strict-aliasing -Werror
@@ -24,6 +30,9 @@ include_HEADERS += unifyfsf.h
 endif #HAVE_FORTRAN
 endif #HAVE_GOTCHA
 
+
+# Common compile/link flag definitions
+
 CLIENT_COMMON_CPPFLAGS = \
   -I$(top_builddir)/client \
   -I$(top_srcdir)/client/include \
@@ -35,12 +44,17 @@ CLIENT_COMMON_CFLAGS = \
   $(MPI_CFLAGS)
 
 CLIENT_COMMON_LDFLAGS = \
-  -version-info $(LIBUNIFYFS_LT_VERSION) \
-  $(MPI_CLDFLAGS)
+  -version-info $(LIBUNIFYFS_LT_VERSION)
 
 CLIENT_COMMON_LIBADD = \
   $(UNIFYFS_COMMON_LIBS) \
+  $(MPI_CLDFLAGS) \
   -lm -lrt -lcrypto -lpthread
+
+if HAVE_SPATH
+CLIENT_COMMON_CFLAGS += $(SPATH_CFLAGS)
+CLIENT_COMMON_LIBADD += $(SPATH_LIBS)
+endif
 
 CLIENT_API_SRC_FILES = \
   unifyfs_api.h \
@@ -67,10 +81,6 @@ CLIENT_CORE_SRC_FILES = \
   uthash.h \
   utlist.h
 
-if USE_PMPI_WRAPPERS
-CLIENT_CORE_SRC_FILES += pmpi_wrappers.c pmpi_wrappers.h
-endif
-
 CLIENT_POSIX_SRC_FILES = \
   unifyfs-dirops.c \
   unifyfs-dirops.h \
@@ -78,6 +88,13 @@ CLIENT_POSIX_SRC_FILES = \
   unifyfs-stdio.h \
   unifyfs-sysio.c \
   unifyfs-sysio.h
+
+PMPI_SRC_FILES = \
+  pmpi_wrappers.c \
+  pmpi_wrappers.h
+
+
+# Per-target flags begin here
 
 libunifyfs_api_la_SOURCES  = \
   $(CLIENT_API_SRC_FILES) \
@@ -96,6 +113,15 @@ libunifyfs_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS)
 libunifyfs_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS)
 libunifyfs_la_LIBADD   = $(CLIENT_COMMON_LIBADD)
 
+if USE_PMPI_WRAPPERS
+libunifyfs_mpi_la_SOURCES  = $(PMPI_SRC_FILES)
+libunifyfs_mpi_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS)
+libunifyfs_mpi_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS)
+libunifyfs_mpi_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS)
+libunifyfs_mpi_la_LIBADD   = libunifyfs.la
+endif #USE_PMPI_WRAPPERS
+
+
 if HAVE_GOTCHA
 
 libunifyfs_gotcha_la_SOURCES  = \
@@ -104,16 +130,22 @@ libunifyfs_gotcha_la_SOURCES  = \
   gotcha_map_unifyfs_list.c
 libunifyfs_gotcha_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS) -DUNIFYFS_GOTCHA
 libunifyfs_gotcha_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS) $(GOTCHA_CFLAGS)
-libunifyfs_gotcha_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS) $(GOTCHA_LDFLAGS)
-libunifyfs_gotcha_la_LIBADD   = $(CLIENT_COMMON_LIBADD) -lgotcha
+libunifyfs_gotcha_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS)
+libunifyfs_gotcha_la_LIBADD   = $(CLIENT_COMMON_LIBADD) $(GOTCHA_LIBS)
 
-endif
+if USE_PMPI_WRAPPERS
+libunifyfs_mpi_gotcha_la_SOURCES  = $(PMPI_SRC_FILES)
+libunifyfs_mpi_gotcha_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS)
+libunifyfs_mpi_gotcha_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS)
+libunifyfs_mpi_gotcha_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS)
+libunifyfs_mpi_gotcha_la_LIBADD   = libunifyfs_gotcha.la
+endif #USE_PMPI_WRAPPERS
 
 if HAVE_FORTRAN
-
 libunifyfsf_la_SOURCES  = unifyfsf.c
 libunifyfsf_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS)
 libunifyfsf_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS)
 libunifyfsf_la_LIBADD   = libunifyfs_gotcha.la
+endif #HAVE_FORTRAN
 
-endif
+endif #HAVE_GOTCHA

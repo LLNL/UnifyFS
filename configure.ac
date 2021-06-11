@@ -163,7 +163,7 @@ AS_IF([test "$have_C_mpi" != "yes"],
     []
 )
 
-# look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
+# look for gotcha library, sets GOTCHA_CFLAGS, GOTCHA_LDFLAGS, GOTCHA_LIBS
 UNIFYFS_AC_GOTCHA
 
 # error out if fortran was enabled but GOTCHA wasn't found
