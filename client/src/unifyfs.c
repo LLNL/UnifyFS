@@ -50,9 +50,9 @@
 #include "unifyfs_rpc_util.h"
 #include "margo_client.h"
 
-#ifdef HAVE_SPATH
+#ifdef USE_SPATH
 #include "spath.h"
-#endif /* HAVE_SPATH */
+#endif /* USE_SPATH */
 
 /* avoid duplicate mounts (for now) */
 int unifyfs_mounted = -1;
@@ -279,13 +279,13 @@ static void unifyfs_normalize_path(const char* path, char* normalized)
         snprintf(normalized, UNIFYFS_MAX_FILENAME, "%s", path);
     }
 
-#ifdef HAVE_SPATH
+#ifdef USE_SPATH
     /* normalize path to handle '.', '..',
      * and extra or trailing '/' characters */
     char* str = spath_strdup_reduce_str(normalized);
     snprintf(normalized, UNIFYFS_MAX_FILENAME, "%s", str);
     free(str);
-#endif /* HAVE_SPATH */
+#endif /* USE_SPATH */
 }
 
 /* Given a path, which may relative or absoluate,
