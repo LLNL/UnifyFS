@@ -1,9 +1,12 @@
 libexec_PROGRAMS = unifyfs-stage
 
-unifyfs_stage_SOURCES = unifyfs-stage.c \
-                        unifyfs-stage-transfer.c
-
 noinst_HEADERS = unifyfs-stage.h
+
+CLEANFILES = $(libexec_PROGRAMS)
+
+# Compiler/linker flags
+
+AM_CFLAGS = -Wall -Werror
 
 stage_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) \
    $(OPENSSL_CFLAGS) \
@@ -12,15 +15,31 @@ stage_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) \
 
 if USE_PMPI_WRAPPERS
 stage_cppflags += -DENABLE_MPI_MOUNT
+stage_unify_lib = $(top_builddir)/client/src/libunifyfs_mpi.la
+else
+stage_unify_lib = $(top_builddir)/client/src/libunifyfs.la
 endif
 
+stage_ldadd = \
+  $(stage_unify_lib) \
+  -lrt -lm \
+  $(OPENSSL_LIBS) \
+  $(MPI_CLDFLAGS)
+
+stage_ldflags = \
+  $(AM_LDFLAGS) \
+  $(CP_WRAPPERS) \
+  -static
+
+# Per-target flags begin here
+
+stage_sources = \
+  unifyfs-stage.c \
+  unifyfs-stage-transfer.c
+
 unifyfs_stage_CPPFLAGS = $(stage_cppflags)
+unifyfs_stage_LDADD    = $(stage_ldadd)
+unifyfs_stage_LDFLAGS  = $(stage_ldflags)
+unifyfs_stage_SOURCES  = $(stage_sources)
 
-unifyfs_stage_LDADD = $(top_builddir)/client/src/libunifyfs.la -lrt -lm
 
-unifyfs_stage_LDFLAGS = -static $(CP_WRAPPERS) $(AM_LDFLAGS) \
-                        $(MPI_CLDFLAGS) $(OPENSSL_LIBS)
-
-AM_CFLAGS = -Wall -Werror
-
-CLEANFILES = $(libexec_PROGRAMS)
