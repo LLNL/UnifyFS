@@ -287,9 +287,9 @@ in (i.e., testing a wrapper that doesn't have any tests yet):
 Running the Tests
 *****************
 
-To manually run the UnifyFS unit test suite, simply run ``make check`` from the
-inside the t/ directory of wherever you built UnifyFS. E.g., if you built in a
-separate build/ directory, then do:
+To manually run the UnifyFS unit test suite, simply run ``make check`` in a
+single-node allocation from inside the t/ directory of wherever you built
+UnifyFS. E.g., if you built in a separate build/ directory, then do:
 
 .. code-block:: BASH
 

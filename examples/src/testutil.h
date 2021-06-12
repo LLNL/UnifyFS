@@ -123,6 +123,7 @@ typedef struct {
     int enable_mpi_mount; /* automount during MPI_Init() */
     char* output_file;    /* print test messages to output file */
     FILE* output_fp;
+    int reuse_filename; /* remove and then reuse filename from prior run*/
 
     /* I/O behavior options */
     int io_pattern; /* N1 or NN */
@@ -213,6 +214,7 @@ void test_config_print(test_cfg* cfg)
     fprintf(fp, "\t use_unifyfs = %d\n", cfg->use_unifyfs);
     fprintf(fp, "\t mpi_mount   = %d\n", cfg->enable_mpi_mount);
     fprintf(fp, "\t outfile     = %s\n", cfg->output_file);
+    fprintf(fp, "\t reuse_fname = %d\n", cfg->reuse_filename);
 
     fprintf(fp, "\n-- IO Behavior --\n");
     fprintf(fp, "\t io_pattern  = %s\n", io_pattern_str(cfg->io_pattern));
@@ -491,7 +493,7 @@ int test_is_static(const char* program)
 
 // common options for all tests
 
-static const char* test_short_opts = "a:Ab:c:df:hkLm:MNn:o:p:PSt:T:UvVx";
+static const char* test_short_opts = "a:Ab:c:df:hkLm:MNn:o:p:PrSt:T:UvVx";
 
 static const struct option test_long_opts[] = {
     { "appid", 1, 0, 'a' },
@@ -510,9 +512,10 @@ static const struct option test_long_opts[] = {
     { "outfile", 1, 0, 'o' },
     { "pattern", 1, 0, 'p' },
     { "prdwr", 0, 0, 'P' },
+    { "reuse-filename", 0, 0, 'r' },
+    { "stdio", 0, 0, 'S' },
     { "pre-truncate", 1, 0, 't' },
     { "post-truncate", 1, 0, 'T' },
-    { "stdio", 0, 0, 'S' },
     { "disable-unifyfs", 0, 0, 'U' },
     { "verbose", 0, 0, 'v' },
     { "vecio", 0, 0, 'V' },
@@ -554,6 +557,8 @@ static const char* test_usage_str =
     " -p, --pattern=<pattern>          'n1' (N-to-1 shared file) or 'nn' (N-to-N file per process)\n"
     "                                  (default: 'n1')\n"
     " -P, --prdwr                      use pread|pwrite instead of read|write\n"
+    "                                  (default: off)\n"
+    " -r, --reuse-filename             remove and reuse the same target file name\n"
     "                                  (default: off)\n"
     " -S, --stdio                      use fread|fwrite instead of read|write\n"
     "                                  (default: off)\n"
@@ -650,6 +655,10 @@ int test_process_argv(test_cfg* cfg,
 
         case 'P':
             cfg->use_prdwr = 1;
+            break;
+
+        case 'r':
+            cfg->reuse_filename = 1;
             break;
 
         case 'S':
@@ -1076,6 +1085,54 @@ int test_close_file(test_cfg* cfg)
 
     if (-1 != cfg->fd) {
         close(cfg->fd);
+    }
+    return 0;
+}
+
+/*
+ * remove the given file if it exists
+ */
+static inline
+int test_remove_file(test_cfg* cfg, const char* filepath)
+{
+    struct stat sb;
+    int rc;
+
+    assert(NULL != cfg);
+
+    /* stat file and simply return if it already doesn't exist */
+    rc = stat(filepath, &sb);
+    if (rc) {
+        test_print_verbose_once(cfg,
+            "DEBUG: stat(%s): file already doesn't exist", filepath);
+        return 0;
+    }
+
+    if (cfg->use_mpiio) {
+        MPI_CHECK(cfg, (MPI_File_delete(filepath, MPI_INFO_NULL)));
+        if (mpi_error) {
+            return -1;
+        }
+        return 0;
+    }
+
+    /* POSIX I/O
+     *   N-to-1 - rank 0 deletes shared files
+     *   N-to-N - all ranks delete per-process files */
+    if (cfg->rank == 0 || cfg->io_pattern == IO_PATTERN_NN) {
+        if (cfg->use_stdio) {
+            rc = remove(filepath);
+            if (rc) {
+                test_print(cfg, "ERROR: remove(%s) failed", filepath);
+                return -1;
+            }
+        } else {
+            rc = unlink(filepath);
+            if (rc) {
+                test_print(cfg, "ERROR: unlink(%s) failed", filepath);
+                return -1;
+            }
+        }
     }
     return 0;
 }
