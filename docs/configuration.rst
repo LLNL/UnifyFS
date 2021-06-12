@@ -108,7 +108,7 @@ files.
    ===========  ======  ============================================================
    chunk_size   INT     data chunk size (B) (default: 4 MiB)
    shmem_size   INT     maximum size (B) of data in shared memory (default: 256 MiB)
-   spill_size   INT     maximum size (B) of data in spillover file (default: 1 GiB)
+   spill_size   INT     maximum size (B) of data in spillover file (default: 4 GiB)
    spill_dir    STRING  path to spillover data directory
    ===========  ======  ============================================================
 
