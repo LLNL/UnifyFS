@@ -132,6 +132,9 @@ configure and build UnifyFS from its source code directory.
     $ spack load mochi-margo
     $ spack load spath
     $
+    $ gotcha_install=$(spack location -i gotcha)
+    $ spath_install=$(spack location -i spath)
+    $
     $ ./autogen.sh
     $ ./configure --prefix=/path/to/install --with-gotcha=${gotcha_install} --with-spath=${spath_install}
     $ make
@@ -142,13 +145,6 @@ Alternatively, UnifyFS can be configured using ``CPPFLAGS`` and ``LDFLAGS``:
 .. code-block:: Bash
 
     $ ./configure --prefix=/path/to/install CPPFLAGS="-I${gotcha_install}/include -I{spath_install}/include" LDFLAGS="-L${gotcha_install}/lib64 -L${spath_install}/lib64
-
-.. admonition:: Spack package install location
-
-    The location where Spack installs any given package can be retrieved by
-    running ``spack location -i <package_name>``.
-
-    E.g.: ``gotcha_install=$(spack location -i gotcha)``
 
 To see all available build configuration options, run ``./configure --help``
 after ``./autogen.sh`` has been run.

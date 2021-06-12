@@ -109,42 +109,124 @@ int UNIFYFS_WRAP(mkdir)(const char* path, mode_t mode)
     }
 }
 
-int UNIFYFS_WRAP(rmdir)(const char* path)
+/* Function for shared logic between rmdir, remove, and unlink wrappers.
+ *
+ * Remove the target at upath based on the input file mode indicated by mask.
+ * If mask == 0 (e.g., remove wrapper made request), the target doesn't need
+ * any mode specific checks before attempting to remove.
+ * */
+static int unifyfs_remove(const char* upath, mode_t mask)
 {
-    /* determine whether we should intercept this path */
-    char upath[UNIFYFS_MAX_FILENAME];
-    if (unifyfs_intercept_path(path, upath)) {
-        /* check if the mount point itself is being deleted */
-        if (!strcmp(upath, unifyfs_mount_prefix)) {
-            errno = EBUSY;
-            return -1;
+    /* check if the mount point itself is being deleted */
+    if (!strcmp(upath, unifyfs_mount_prefix)) {
+        errno = EBUSY;
+        return -1;
+    }
+
+    /* check if path exists locally */
+    int fid = unifyfs_get_fid_from_path(upath);
+    if (fid >= 0) {
+        /* found path locally */
+        int is_dir = unifyfs_fid_is_dir(fid);
+
+        /* is it a directory? */
+        if (is_dir) {
+            /* check if remove request was made for a regular file */
+            if (mask & S_IFREG) {
+                /* ERROR: unlink likely made this request but path is a dir */
+                LOGDBG("Attempting to unlink a directory %s in UNIFYFS", upath);
+                errno = EISDIR;
+                return -1;
+            }
+            /* remove/rmdir likely made this request (mask & (0 | S_IFDIR)) */
+
+            /* is it empty? */
+            if (!unifyfs_fid_is_dir_empty(upath)) {
+                /* ERROR: is a directory, but isn't empty */
+                LOGDBG("Attempting to remove non-empty dir %s in UNIFYFS",
+                        upath);
+                errno = ENOTEMPTY;
+                return -1;
+            }
+        } else { /* not a directory */
+            /* check if remove request was for a directory */
+            if (mask & S_IFDIR) {
+                /* ERROR: rmdir likely made this request but path not a dir */
+                LOGDBG("Attempting to rmdir a non-dir %s in UNIFYFS", upath);
+                errno = ENOTDIR;
+                return -1;
+            }
         }
 
-        /* check if path exists */
-        int fid = unifyfs_get_fid_from_path(upath);
-        if (fid < 0) {
+        /* remove the target from the file list */
+        int ret = unifyfs_fid_unlink(fid);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* failed to remove the target,
+             * set errno and return */
+            LOGDBG("remove failed on %s in UNIFYFS", upath);
+            errno = unifyfs_rc_errno(ret);
+            return -1;
+        }
+    } else {
+        /* path doesn't exist locally, but may exist globally */
+        int gfid = unifyfs_generate_gfid(upath);
+        unifyfs_file_attr_t attr = {0};
+
+        int ret = unifyfs_get_global_file_meta(gfid, &attr);
+        if (ret != UNIFYFS_SUCCESS) {
+            /* ERROR: path doesn't exist locally or globally */
+            LOGDBG("Couldn't find entry for %s in UNIFYFS", upath);
             errno = ENOENT;
             return -1;
         }
 
         /* is it a directory? */
-        if (!unifyfs_fid_is_dir(fid)) {
-            errno = ENOTDIR;
-            return -1;
+        if (attr.mode & S_IFDIR) {
+            /* check if remove request was for a regular file */
+            if (mask & S_IFREG) {
+                /* ERROR: unlink likely made this request but path is a dir */
+                LOGDBG("Attempting to unlink a directory %s in UNIFYFS", upath);
+                errno = EISDIR;
+                return -1;
+            }
+
+            /* Current directory structure assumes all directories are empty.
+             * If wanting to enforce directory structure, will need logic to
+             * globally check whether a directory is empty.
+             * Possibly an rpc to check if_dir and if_empty at once to avoid
+             * status change between rpc calls.*/
+
+        } else { /* not a directory */
+            /* check if remove request was for a directory */
+            if ((mask & S_IFDIR)) {
+                LOGDBG("Attempting to rmdir a non-dir %s in UNIFYFS", upath);
+                errno = ENOTDIR;
+                return -1;
+            }
         }
 
-        /* is it empty? */
-        if (!unifyfs_fid_is_dir_empty(upath)) {
-            errno = ENOTEMPTY;
-            return -1;
-        }
-
-        /* remove the directory from the file list */
-        int ret = unifyfs_fid_unlink(fid);
+        /* delete the target */
+        ret = invoke_client_unlink_rpc(gfid);
         if (ret != UNIFYFS_SUCCESS) {
-            /* failed to remove the directory,
-             * set errno and return */
+            LOGDBG("unlink rpc failed on %s in UNIFYFS", upath);
             errno = unifyfs_rc_errno(ret);
+            return -1;
+        }
+    }
+
+    /* success */
+    return 0;
+}
+
+int UNIFYFS_WRAP(rmdir)(const char* path)
+{
+    /* determine whether we should intercept this path */
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        /* call shared logic function with S_IFDIR mask */
+        int ret = unifyfs_remove(upath, S_IFDIR);
+        if (ret != UNIFYFS_SUCCESS) {
+            LOGDBG("rmdir() failed on %s in UNIFYFS", upath);
             return -1;
         }
 
@@ -575,27 +657,10 @@ int UNIFYFS_WRAP(unlink)(const char* path)
     /* determine whether we should intercept this path or not */
     char upath[UNIFYFS_MAX_FILENAME];
     if (unifyfs_intercept_path(path, upath)) {
-        /* get file id for path name */
-        int fid = unifyfs_get_fid_from_path(upath);
-        if (fid < 0) {
-            /* ERROR: file does not exist */
-            LOGDBG("Couldn't find entry for %s in UNIFYFS", upath);
-            errno = ENOENT;
-            return -1;
-        }
-
-        /* check that it's not a directory */
-        if (unifyfs_fid_is_dir(fid)) {
-            /* ERROR: is a directory */
-            LOGDBG("Attempting to unlink a directory %s in UNIFYFS", upath);
-            errno = EISDIR;
-            return -1;
-        }
-
-        /* delete the file */
-        int ret = unifyfs_fid_unlink(fid);
+        /* call shared logic function with S_IFREG mask */
+        int ret = unifyfs_remove(upath, S_IFREG);
         if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_rc_errno(ret);
+            LOGDBG("unlink() failed on %s in UNIFYFS", upath);
             return -1;
         }
 
@@ -613,29 +678,10 @@ int UNIFYFS_WRAP(remove)(const char* path)
     /* determine whether we should intercept this path or not */
     char upath[UNIFYFS_MAX_FILENAME];
     if (unifyfs_intercept_path(path, upath)) {
-        /* get file id for path name */
-        int fid = unifyfs_get_fid_from_path(upath);
-        if (fid < 0) {
-            /* ERROR: file does not exist */
-            LOGDBG("Couldn't find entry for %s in UNIFYFS", upath);
-            errno = ENOENT;
-            return -1;
-        }
-
-        /* check that it's not a directory */
-        if (unifyfs_fid_is_dir(fid)) {
-            /* TODO: shall be equivalent to rmdir(path) */
-            /* ERROR: is a directory */
-            LOGDBG("Attempting to remove a directory %s in UNIFYFS", upath);
-            errno = EISDIR;
-            return -1;
-        }
-
-        /* shall be equivalent to unlink(path) */
-        /* delete the file */
-        int ret = unifyfs_fid_unlink(fid);
+        /* call shared logic function with 0 mask */
+        int ret = unifyfs_remove(upath, 0);
         if (ret != UNIFYFS_SUCCESS) {
-            errno = unifyfs_rc_errno(ret);
+            LOGDBG("remove() failed on %s in UNIFYFS", upath);
             return -1;
         }
 
