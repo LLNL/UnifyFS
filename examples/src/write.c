@@ -156,13 +156,24 @@ int main(int argc, char* argv[])
         return -1;
     }
 
+    target_file = test_target_filename(cfg);
+
+    // if reusing filename, remove old target file before starting timers
+    if (cfg->reuse_filename) {
+        test_print_verbose_once(cfg,
+            "DEBUG: removing file %s for reuse", target_file);
+        rc = test_remove_file(cfg, target_file);
+        if (rc) {
+            test_print(cfg, "ERROR - test_remove_file(%s) failed", target_file);
+        }
+    }
+
     // timer to wrap all parts of write operation
     timer_start_barrier(cfg, &time_create2laminate);
 
     // create file
-    target_file = test_target_filename(cfg);
-    test_print_verbose_once(cfg, "DEBUG: creating target file %s",
-                            target_file);
+    test_print_verbose_once(cfg,
+        "DEBUG: creating target file %s", target_file);
     timer_start_barrier(cfg, &time_create);
     rc = test_create_file(cfg, target_file, O_RDWR);
     if (rc) {
