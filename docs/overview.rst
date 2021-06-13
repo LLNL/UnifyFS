@@ -2,25 +2,29 @@
 Overview
 ================
 
-UnifyFS is a user level file system currently under active development. An
-application can use node-local storage as burst buffers for shared files.
-UnifyFS is designed to support both checkpoint/restart which is the most
-important I/O workload for HPC and other common I/O workloads. With
-UnifyFS, applications can write to fast, scalable, node-local burst buffers as
-easily as they do to the parallel file system. This section provides a high
-level design of UnifyFS. It describes the UnifyFS library and the UnifyFS
-daemon.
+UnifyFS is a user-level file system under active development
+that supports shared file I/O over distributed storage on HPC systems,
+e.g., node-local burst buffers.
+With UnifyFS, applications can write to fast, scalable, node-local burst buffers as
+easily as they do to the parallel file system.
+UnifyFS is designed to support common I/O workloads such as
+checkpoint/restart and other bulk-synchronous I/O workloads typically
+performed by HPC applications.
 
-The file system that UnifyFS instantiates only exists in user space and is
-only visible to applications linked against the UnifyFS client library.  Since
-traditional file system tools (ls, cd, etc.) are not linked against the
-UnifyFS client library they cannot see nor manipulate files within UnifyFS.
-Each UnifyFS file system lasts as
-long as the server processes are running, which is typically as long as the
-job they are running within.  When the servers exit the file system is
-deleted.  It is the responsibility of the user to copy files that
-need to be persisted from UnifyFS to a permanent file system.
-UnifyFS provides an API and a utility to conduct such copies.
+Because the UnifyFS file system is implemented at user-level,  the
+file system is visible only to applications linked with the UnifyFS client library.
+A consequence of this is that
+traditional file system tools (ls, cd, etc.) installed by system administrators
+cannot act on files in a UnifyFS file system because they are not linked
+against the UnifyFS client library.
+The lifetime of a UnifyFS file system is the duration of the execution of
+the UnifyFS server processes, which is typically for the duration of an
+HPC job.
+When the servers exit, the UnifyFS file system terminates.
+Users must copy files that need to be persisted beyond the lifetime of the
+job from UnifyFS to a permanent file system.
+UnifyFS provides an API and a utility to perform these copies.
+
 
 ---------------------------
 High Level Design
@@ -28,6 +32,8 @@ High Level Design
 
 .. image:: images/design-high-lvl.png
 
+This section provides a high
+level design of UnifyFS.
 UnifyFS presents a shared namespace (e.g., /unifyfs as a mount point) to
 all compute nodes in a job allocation. There are two main components of
 UnifyFS: the UnifyFS library and the UnifyFS server.
