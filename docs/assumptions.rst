@@ -182,6 +182,10 @@ Further, since a file may be lost on application failure unless laminated, data
 redundancy schemes can be delayed until lamination.
 **do we need to define our failure behavior better?**
 
+---------------------------
+File System Behavior
+---------------------------
+
 The following lists summarize available application I/O operations according to
 our consistency model.
 
@@ -214,10 +218,6 @@ Behavior after lamination (read phase):
   - truncate: Truncation is invalid (considered to be a write operation).
 
   - unlink: A process may delete a file.
-
----------------------------
-File System Behavior
----------------------------
 
 The additional behavior of UnifyFS can be summarized as follows.
 
