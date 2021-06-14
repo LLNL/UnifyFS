@@ -61,7 +61,7 @@ Commit Consistency Semantics in UnifyFS
 
 Commit consistency semantics require
 explicit "commit" operations to be performed before updates to a file
-are globally visible
+are globally visible.
 We chose commit consistency semantics for UnifyFS because it is sufficient
 for correct execution of typical HPC applications that adhere to
 the bulk synchronous I/O pattern, and enables UnifyFS to provide better
@@ -228,12 +228,12 @@ The additional behavior of UnifyFS can be summarized as follows.
       options. **need to add API options**
 
     - UnifyFS also can be coupled with SymphonyFS_, high level I/O libraries, or
-      a checkpoint library (VeloC_) to move data to PFS periodically.
+      a checkpoint library like (SCR_) or (VeloC_) to move data to the PFS periodically.
 
     - UnifyFS can be used with checkpointing libraries like (SCR_) or (VeloC_),
       or with I/O libraries libraries like (HDF5_) to support shared files on burst buffers.
 
-    - The UnifyFS file system will be empty at job start. User job must populate the file system
+    - The UnifyFS file system will be empty at job start. A user job must populate the file system
       manually or by using
       :ref:`unifyfs utility <unifyfs_utility_label>`.
       **need to add API options**
@@ -241,7 +241,7 @@ The additional behavior of UnifyFS can be summarized as follows.
     - UnifyFS creates a shared file system namespace across all compute nodes in
       a job, even if an application process is not running on all compute nodes.
 
-    - UnifyFS survives across multiple application runs within a job.
+    - UnifyFS survives across multiple application runs within a job. **what if there is a failure???**
 
     - UnifyFS transparently intercepts system level I/O calls of
       applications and I/O libraries.
