@@ -45,8 +45,9 @@ Consistency Model
 ---------------------------
 
 The UnifyFS file system does not support strict POSIX consistency semantics.
-(Please see Chen et al., HPDC 2021 XXXX **link needed** for more details
+(Please see Chen et al., HPDC 2021 for more details
 on different file system consistency semantics models.)
+.. paper link needed when proceedings are out
 Instead, UnifyFS supports two different consistency models:
 *commit consistency semantics* when a file is actively
 being modified; and *lamination semantics* when the file is no longer being
@@ -73,6 +74,31 @@ access to file regions. This assumption allows us to cache file
 modifications locally which greatly improves the write performance
 of UnifyFS.
 
+The use of synchronization operations are required for applications that exhibit
+I/O accesses that deviate from the bulk synchronous I/O pattern to perform
+correctly with UnifyFS.
+There are several methods by which applications can adhere to the synchronization
+requirements.
+      - Using MPI-IO. The (MPI-IO_) interface requirements are a good match for the
+        consistency model of UnifyFS. Specifically, the MPI-IO interface requires
+        explicit synchronization in order for updates made by processes to
+        be globally visible. If an application utilizes the MPI-IO interface
+        correctly, it will adhere to the requirements of UnifyFS.
+      - Using (HDF5_) and other parallel I/O libraries. Most parallel I/O libraries
+        hide the synchronization requirements of file systems from their users.
+        For example, HDF5 implements the synchronization required by the MPI-IO
+        interface so users of HDF5 do not need to perform any synchronization
+        operations explicitly in their codes.
+      - With explicit synchronization. If an application does not use a compliant
+        parallel I/O library or if the developer wishes to perform explicit
+        synchronization, the synchronization can be achieved through adding
+        explicit "flush" operations with calls to fflush(), close(), or fsync()
+        in the application source code,
+        or by supplying the "write_sync" configuration parameter to UnifyFS
+        on startup, which will cause an implicit "flush" operation after
+        every write (note: the "write_sync" mode can significantly slow down
+        write performance.).
+
 During a write phase, a process can deviate from the bulk synchronous
 I/O pattern and read any byte in
 a file, including remote data that has been written by processes
@@ -96,32 +122,6 @@ In summary, reading the local data (which has been written by processes
 executing on the same compute node) will always be faster than reading
 remote data.
 
-Synchronization operations are required for applications that exhibit
-I/O accesses that deviate from the bulk synchronous I/O pattern.
-There are several methods by which applications can adhere to the synchronization
-requirements.
-      - Using MPI-IO. The (MPI-IO_) interface requirements are a good match for the
-        consistency model of UnifyFS. Specifically, the MPI-IO interface requires
-        explicit synchronization in order for updates made by processes to
-        be globally visible. If an application utilizes the MPI-IO interface
-        correctly, it will adhere to the requirements of UnifyFS.
-      - Using (HDF5_) and other parallel I/O libraries. Most parallel I/O libraries
-        hide the synchronization requirements of file systems from their users.
-        For example, HDF5 implements the synchronization required by the MPI-IO
-        interface so users of HDF5 do not need to perform any synchronization
-        operations explicitly in their codes.
-      - With explicit synchronization. If an application does not use a compliant
-        parallel I/O library or if the developer wishes to perform explicit
-        synchronization, the synchronization can be achieved through adding
-        explicit "flush" operations in the application source code,
-        or by supplying the "write_sync" configuration parameter to UnifyFS
-        on startup, which will cause an implicit "flush" operation after
-        every write (note: the "write_sync" mode can significantly slow down
-        write performance.). **which operations are a flush?***
-
-**How can one check if an application is properly synchronized??**
-
-
 Note that commit semantics also require synchronization for potentially conflicting
 write accesses. If an application does not enforce sequential ordering of file
 modifications during a write phase, e.g., with MPI synchronization,
@@ -130,17 +130,20 @@ overlapping region, the result is undefined and may
 reflect the result of any of the processes' operations to that offset or region.
 **I don't think this paragraph is true. I think we won't return the last write even if synchronization is applied**
 
+.. How can users check that their application is correctly synchronized? Will we have the checker scripts ready?
+
 '''''''''''''''''''''''''''
 Lamination Consistency Semantics in UnifyFS
 '''''''''''''''''''''''''''
 
-One key aspect of UnifyFS is the idea of "laminating" a file.  After a file is
+The other consistency model that UnifyFS employs is called "lamination
+semantics" which is intended to be applied once a file is done being modified
+at the end of a write phase of an application.  After a file is
 laminated, it becomes permanently read-only and its data is accessible across
-all the compute nodes in the job.
+all the compute nodes in the job without further synchronization.
 Once a file is laminated, it cannot be further modified,
 except for being renamed or deleted.
-**If the application process group fails
-before a file has been laminated, UnifyFS may delete the file.**
+.. Is the next sentence true? Does more need to be added?
 If a failure occurs during a job before a file is laminated, the file
 contents may be unrecoverable.
 
@@ -180,7 +183,7 @@ Also, since file contents cannot change after lamination,
 aggressive caching may be used during the read phase with minimal locking.
 Further, since a file may be lost on application failure unless laminated, data
 redundancy schemes can be delayed until lamination.
-**do we need to define our failure behavior better?**
+.. do we need to define our failure behavior better?
 
 ---------------------------
 File System Behavior
@@ -197,7 +200,7 @@ Behavior before lamination (write phase):
     to the same location, the value is undefined.
 
   - read: A process may read bytes it has written. Reading other bytes is
-    invalid **without explicit synchronization operations.**
+    invalid without explicit synchronization operations.
 
   - rename: A process may rename a file.
 
@@ -225,7 +228,7 @@ The additional behavior of UnifyFS can be summarized as follows.
       persisted to stable storage like a parallel file system (PFS). When the
       data needs to be persisted to an external file system, users can use
       :ref:`unifyfs utility <unifyfs_utility_label>` with its data staging
-      options. **need to add API options**
+      options.
 
     - UnifyFS also can be coupled with SymphonyFS_, high level I/O libraries, or
       a checkpoint library like (SCR_) or (VeloC_) to move data to the PFS periodically.
@@ -236,12 +239,15 @@ The additional behavior of UnifyFS can be summarized as follows.
     - The UnifyFS file system will be empty at job start. A user job must populate the file system
       manually or by using
       :ref:`unifyfs utility <unifyfs_utility_label>`.
-      **need to add API options**
 
     - UnifyFS creates a shared file system namespace across all compute nodes in
       a job, even if an application process is not running on all compute nodes.
 
-    - UnifyFS survives across multiple application runs within a job. **what if there is a failure???**
+    - UnifyFS survives across multiple application runs within a job.
+
+    - If a failure occurs during a job before a file is laminated, the file
+      contents may be unrecoverable.
+.. is this adequate to describe failure behavior?
 
     - UnifyFS transparently intercepts system level I/O calls of
       applications and I/O libraries.
