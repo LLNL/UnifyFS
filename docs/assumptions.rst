@@ -14,7 +14,7 @@ The system requirements to run UnifyFS are:
     - Compute nodes must be equipped with local storage device(s) that UnifyFS can
       use for storing file data, e.g., SSD or RAM.
 
-    - The system must support the ability for UnifyFS user-level daemon processes
+    - The system must support the ability for UnifyFS user-level server processes
       to run concurrently with user application processes on compute nodes.
 
 ---------------------------
@@ -32,7 +32,7 @@ where processes access computable, regular offsets of files, e.g., in strided or
 segmented access patterns, in contrast to random, interleaved, small writes and reads.
 
 UnifyFS offers the best performance for applications that exhibit the bulk
-synchronous I/O pattern. While UnifyFS does support deviations to this pattern,
+synchronous I/O pattern. While UnifyFS does support deviations from this pattern,
 the performance might be slower and the user may
 have to take additional steps to ensure correct execution of the application
 with UnifyFS.
@@ -94,9 +94,9 @@ requirements.
         synchronization, the synchronization can be achieved through adding
         explicit "flush" operations with calls to fflush(), close(), or fsync()
         in the application source code,
-        or by supplying the "write_sync" configuration parameter to UnifyFS
+        or by supplying the client.write_sync configuration parameter to UnifyFS
         on startup, which will cause an implicit "flush" operation after
-        every write (note: the "write_sync" mode can significantly slow down
+        every write (note: use of the client.write_sync mode can significantly slow down
         write performance.).
 
 During a write phase, a process can deviate from the bulk synchronous
@@ -109,7 +109,8 @@ is being read:
         the bytes, UnifyFS offers the fastest performance and no synchronization
         operations are needed. This kind of access is typical in some I/O
         libraries, e.g., HDF5, where file metadata may be updated and read by
-        the same process.
+        the same process. (Note: to obtain the performance benefit for this case,
+        one must set the client.local_extents configuration parameter.)
       - If the bytes being read were written by a process executing on the same compute
         node as the reading process, UnifyFS can offer slightly slower performance
         than the first case and requires no additional synchronization operations.
@@ -234,7 +235,7 @@ The additional behavior of UnifyFS can be summarized as follows.
       a checkpoint library like (SCR_) or (VeloC_) to move data to the PFS periodically.
 
     - UnifyFS can be used with checkpointing libraries like (SCR_) or (VeloC_),
-      or with I/O libraries libraries like (HDF5_) to support shared files on burst buffers.
+      or with I/O libraries like (HDF5_) to support shared files on burst buffers.
 
     - The UnifyFS file system will be empty at job start. A user job must populate the file system
       manually or by using
