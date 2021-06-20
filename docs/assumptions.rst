@@ -75,10 +75,27 @@ modifications locally which greatly improves the write performance
 of UnifyFS.
 
 The use of synchronization operations are required for applications that exhibit
-I/O accesses that deviate from the bulk synchronous I/O pattern to perform
-correctly with UnifyFS.
+I/O accesses that deviate from the bulk synchronous I/O pattern.
+There are two types of synchronization that are required for correct execution
+of parallel I/O on UnifyFS: *local synchronization* and *global synchronization*.
+Here, *local synchronization* refers to synchronization operations performed
+locally by a process to ensure that its updates to a file are visible
+to other processes. For example, a process may update a region of a file
+and then execute fflush() so that a different process can read the updated
+file contents.
+*Global synchronization* refers to synchronization
+operations that are performed to enforce ordering of conflicting I/O operations
+from multiple processes.
+These global synchronizations occur outside of normal file I/O operations and
+typically involve interprocess communication, e.g., with MPI. For example,
+if two processes need to update the same file region and it is important to
+the outcome of the program that the updates occur in a particular order, then
+the program needs to enforce this ordering with an operation like an MPI_Barrier()
+to be sure that the first process has completed its updates before the next
+process begins its updates.
+
 There are several methods by which applications can adhere to the synchronization
-requirements.
+requirements of UnifyFS.
       - Using MPI-IO. The (MPI-IO_) interface requirements are a good match for the
         consistency model of UnifyFS. Specifically, the MPI-IO interface requires
         explicit synchronization in order for updates made by processes to
@@ -91,13 +108,14 @@ requirements.
         operations explicitly in their codes.
       - With explicit synchronization. If an application does not use a compliant
         parallel I/O library or if the developer wishes to perform explicit
-        synchronization, the synchronization can be achieved through adding
+        synchronization, local synchronization can be achieved through adding
         explicit "flush" operations with calls to fflush(), close(), or fsync()
         in the application source code,
         or by supplying the client.write_sync configuration parameter to UnifyFS
         on startup, which will cause an implicit "flush" operation after
         every write (note: use of the client.write_sync mode can significantly slow down
-        write performance.).
+        write performance.). In this case, global synchronization is still required
+        for applications that perform conflicting updates to files.
 
 During a write phase, a process can deviate from the bulk synchronous
 I/O pattern and read any byte in
@@ -113,7 +131,8 @@ is being read:
         one must set the client.local_extents configuration parameter.)
       - If the bytes being read were written by a process executing on the same compute
         node as the reading process, UnifyFS can offer slightly slower performance
-        than the first case and requires no additional synchronization operations.
+        than the first case and the application must introduce synchronization
+        operations to ensure that the most recent data is read.
       - If the bytes being read were written by a process executing on a different
         compute node than the reading process, then the performance is slower
         than the first two cases and the application must
@@ -123,7 +142,8 @@ In summary, reading the local data (which has been written by processes
 executing on the same compute node) will always be faster than reading
 remote data.
 
-Note that commit semantics also require synchronization for potentially conflicting
+Note that, as we discuss above, commit semantics also require global synchronization
+for potentially conflicting
 write accesses. If an application does not enforce sequential ordering of file
 modifications during a write phase, e.g., with MPI synchronization,
 and multiple processes write concurrently to the same file offset or to an
