@@ -182,16 +182,27 @@ file data for processes locally, instead of performing costly exchanges of
 metadata and file data between compute nodes on every write.
 Also, since file contents cannot change after lamination,
 aggressive caching may be used during the read phase with minimal locking.
-Further, since a file may be lost on application failure unless laminated, data
-redundancy schemes can be delayed until lamination.
-.. do we need to define our failure behavior better?
 
 ---------------------------
 File System Behavior
 ---------------------------
 
-The following lists summarize available application I/O operations according to
-our consistency model.
+The following summarize the behavior of UnifyFS under our
+consistency model.
+
+Failure behavior:
+  - In the event of a compute node failure, all file data from the processes running
+    on the failed compute node will be lost.
+  - In the event of the failure of a UnifyFS server process, all file data from
+    the processes assigned to that server process (typically on the same compute
+    node) will be lost.
+  - In the event of application process failures when the UnifyFS server
+    processes remain running, the file data can retrieved by the local
+    UnifyFS server or a remote UnifyFS server.
+  - The UnifyFS team plans to improve the reliability of UnifyFS in the event
+    of failures using redundancy scheme implementations available from
+    the (VeloC_) project as part of a future release.
+
 
 Behavior before lamination (write phase):
 
@@ -245,10 +256,6 @@ The additional behavior of UnifyFS can be summarized as follows.
       a job, even if an application process is not running on all compute nodes.
 
     - UnifyFS survives across multiple application runs within a job.
-
-    - If a failure occurs during a job before a file is laminated, the file
-      contents may be unrecoverable.
-.. is this adequate to describe failure behavior?
 
     - UnifyFS transparently intercepts system level I/O calls of
       applications and I/O libraries.
