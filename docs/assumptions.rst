@@ -191,14 +191,18 @@ The following summarize the behavior of UnifyFS under our
 consistency model.
 
 Failure behavior:
+
   - In the event of a compute node failure, all file data from the processes running
     on the failed compute node will be lost.
+
   - In the event of the failure of a UnifyFS server process, all file data from
     the processes assigned to that server process (typically on the same compute
     node) will be lost.
+
   - In the event of application process failures when the UnifyFS server
     processes remain running, the file data can retrieved by the local
     UnifyFS server or a remote UnifyFS server.
+
   - The UnifyFS team plans to improve the reliability of UnifyFS in the event
     of failures using redundancy scheme implementations available from
     the (VeloC_) project as part of a future release.
