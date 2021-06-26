@@ -224,7 +224,7 @@ Failure behavior:
 
   - The UnifyFS team plans to improve the reliability of UnifyFS in the event
     of failures using redundancy scheme implementations available from
-    the (VeloC_) project as part of a future release.
+    the VeloC_ project as part of a future release.
 
 
 Behavior before lamination (write phase):
