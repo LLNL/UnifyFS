@@ -77,17 +77,17 @@ of UnifyFS.
 The use of synchronization operations are required for applications that exhibit
 I/O accesses that deviate from the bulk synchronous I/O pattern.
 There are two types of synchronization that are required for correct execution
-of parallel I/O on UnifyFS: *local synchronization* and *global synchronization*.
+of parallel I/O on UnifyFS: *local synchronization* and *inter-process synchronization*.
 Here, *local synchronization* refers to synchronization operations performed
 locally by a process to ensure that its updates to a file are visible
 to other processes. For example, a process may update a region of a file
 and then execute fflush() so that a different process can read the updated
 file contents.
-*Global synchronization* refers to synchronization
+*Inter-process synchronization* refers to synchronization
 operations that are performed to enforce ordering of conflicting I/O operations
 from multiple processes.
-These global synchronizations occur outside of normal file I/O operations and
-typically involve interprocess communication, e.g., with MPI. For example,
+These inter-process synchronizations occur outside of normal file I/O operations and
+typically involve inter-process communication, e.g., with MPI. For example,
 if two processes need to update the same file region and it is important to
 the outcome of the program that the updates occur in a particular order, then
 the program needs to enforce this ordering with an operation like an MPI_Barrier()
@@ -114,7 +114,7 @@ requirements of UnifyFS.
         or by supplying the client.write_sync configuration parameter to UnifyFS
         on startup, which will cause an implicit "flush" operation after
         every write (note: use of the client.write_sync mode can significantly slow down
-        write performance.). In this case, global synchronization is still required
+        write performance.). In this case, inter-process synchronization is still required
         for applications that perform conflicting updates to files.
 
 During a write phase, a process can deviate from the bulk synchronous
@@ -142,7 +142,7 @@ In summary, reading the local data (which has been written by processes
 executing on the same compute node) will always be faster than reading
 remote data.
 
-Note that, as we discuss above, commit semantics also require global synchronization
+Note that, as we discuss above, commit semantics also require inter-process synchronization
 for potentially conflicting
 write accesses. If an application does not enforce sequential ordering of file
 modifications during a write phase, e.g., with MPI synchronization,
@@ -164,9 +164,6 @@ laminated, it becomes permanently read-only and its data is accessible across
 all the compute nodes in the job without further synchronization.
 Once a file is laminated, it cannot be further modified,
 except for being renamed or deleted.
-.. Is the next sentence true? Does more need to be added?
-If a failure occurs during a job before a file is laminated, the file
-contents may be unrecoverable.
 
 A typical use case for lamination is for checkpoint/restart.
 An application can laminate checkpoint files after they have
