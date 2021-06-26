@@ -117,7 +117,7 @@ requirements of UnifyFS.
         or by supplying the client.write_sync configuration parameter to UnifyFS
         on startup, which will cause an implicit "flush" operation after
         every write (note: use of the client.write_sync mode can significantly slow down
-        write performance.). In this case, inter-process synchronization is still required
+        write performance). In this case, inter-process synchronization is still required
         for applications that perform conflicting updates to files.
 
 During a write phase, a process can deviate from the bulk synchronous
