@@ -65,7 +65,7 @@ explicit "commit" operations to be performed before updates to a file
 are globally visible.
 We chose commit consistency semantics for UnifyFS because it is sufficient
 for correct execution of typical HPC applications that adhere to
-the bulk synchronous I/O pattern, and enables UnifyFS to provide better
+the bulk synchronous I/O pattern, and it enables UnifyFS to provide better
 performance than with strict POSIX semantics. For example, because
 we assume that applications using UnifyFS
 will not execute concurrent modifications to the same file offset,
@@ -195,7 +195,7 @@ processes do not need to read arbitrary
 bytes of a file until the write phase is completed, which in practice is
 when the file is done being modified and closed and can be safely made
 read-only with lamination.
-By assuming that processes do not need to access file data modified
+For applications in which processes do not need to access file data modified
 by other processes before lamination,
 UnifyFS can optimize write performance by buffering all metadata and
 file data for processes locally, instead of performing costly exchanges of
