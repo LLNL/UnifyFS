@@ -29,7 +29,10 @@ For example, files are written during checkpointing (a write phase)
 and read during recovery/restart (a read phase).
 Additionally, parallel writes and reads to shared files occur systematically,
 where processes access computable, regular offsets of files, e.g., in strided or
-segmented access patterns, in contrast to random, interleaved, small writes and reads.
+segmented access patterns, with ordering of potential conflicting updates
+enforced by inter-process communication.
+This behavior is in contrast to other I/O patterns that may perform
+random, small writes and reads or overlapping writes without synchronization.
 
 UnifyFS offers the best performance for applications that exhibit the bulk
 synchronous I/O pattern. While UnifyFS does support deviations from this pattern,
@@ -148,8 +151,7 @@ write accesses. If an application does not enforce sequential ordering of file
 modifications during a write phase, e.g., with MPI synchronization,
 and multiple processes write concurrently to the same file offset or to an
 overlapping region, the result is undefined and may
-reflect the result of any of the processes' operations to that offset or region.
-**I don't think this paragraph is true. I think we won't return the last write even if synchronization is applied**
+reflect the result of a mixture of the processes' operations to that offset or region.
 
 .. How can users check that their application is correctly synchronized? Will we have the checker scripts ready?
 
@@ -230,7 +232,8 @@ Behavior before lamination (write phase):
   - open/close: A process may open/close a file multiple times.
 
   - write: A process may write to any part of a file. If two processes write
-    to the same location, the value is undefined.
+    to the same location concurrently (i.e., without inter-process
+    synchronization to enforce ordering), the result is undefined.
 
   - read: A process may read bytes it has written. Reading other bytes is
     invalid without explicit synchronization operations.
