@@ -48,9 +48,9 @@ Consistency Model
 ---------------------------
 
 The UnifyFS file system does not support strict POSIX consistency semantics.
-(Please see Chen et al., HPDC 2021 for more details
-on different file system consistency semantics models.)
-.. paper link needed when proceedings are out
+(Please see
+`Chen et al., HPDC 2021 <https://dl.acm.org/doi/10.1145/3431379.3460637>`_
+for more details on different file system consistency semantics models.)
 Instead, UnifyFS supports two different consistency models:
 *commit consistency semantics* when a file is actively
 being modified; and *lamination semantics* when the file is no longer being
@@ -267,10 +267,10 @@ The additional behavior of UnifyFS can be summarized as follows.
       options.
 
     - UnifyFS also can be coupled with SymphonyFS_, high level I/O libraries, or
-      a checkpoint library like (SCR_) or (VeloC_) to move data to the PFS periodically.
+      a checkpoint library like SCR_ or VeloC_ to move data to the PFS periodically.
 
-    - UnifyFS can be used with checkpointing libraries like (SCR_) or (VeloC_),
-      or with I/O libraries like (HDF5_) to support shared files on burst buffers.
+    - UnifyFS can be used with checkpointing libraries like SCR_ or VeloC_,
+      or with I/O libraries like HDF5_ to support shared files on burst buffers.
 
     - The UnifyFS file system will be empty at job start. A user job must populate the file system
       manually or by using
