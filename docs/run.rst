@@ -122,6 +122,13 @@ Support for the SLURM resource manager is under development.
   Stage-in and Stage-out Manifest File Format
 -----------------------------------------------
 
+The transfer subsystem within UnifyFS can be invoked as above
+within the start process (to transfer files into the UnifyFS
+volume) or during the stop process (to transfer files out of
+the UnifyFS volume).  To do so, the user supplies a manifest
+file specifying the requested transfers.  Here is the formatted
+for that manifest file.
+
 The manifest file contains one or more file copy requests.
 Each line in the manifest corresponds to one file copy request,
 and it contains both the source and destination file paths. Currently,
@@ -143,3 +150,21 @@ Here is an example of a valid stage-in manifest file:
 ``/scratch/users/me/input_data/input_1.dat /unifyfs/input/input_1.dat``
 ``/home/users/me/configuration/run_12345.conf /unifyfs/config/run_12345.conf``
 ``"/home/users/me/file with space.dat" "/unifyfs/file with space.dat"``
+
+-----------------------------------------------
+  Stand-alone file stage application
+-----------------------------------------------
+The manifest subsystem can also be used during the job by
+invoking stand-alone transfer executable.  The command to use is
+"unify-static".  It's used similarly to the unix
+"cp" command, with source and destination, except that unify-static
+is aware that it is copying files between the external parallel
+file system and the internal UnifyFS volume.
+
+The stand-alone can be invoked at any time the UnifyFS servers
+are up and responding to requests.  Thus the user can move files
+in or out during a job where UnifyFS is running at any time
+during the job, if UnifyFS has been "start"ed as above.  This
+could be done during the job to bring in new input, or perhaps
+transfer results files out so they can be verified before they
+job terminates.
