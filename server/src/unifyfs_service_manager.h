@@ -31,15 +31,8 @@
 #define UNIFYFS_SERVICE_MANAGER_H
 
 #include "unifyfs_global.h"
+#include "unifyfs_transfer.h"
 
-typedef struct {
-    server_rpc_e req_type;
-    hg_handle_t handle;
-    void* coll;
-    void* input;
-    void* bulk_buf;
-    size_t bulk_sz;
-} server_rpc_req_t;
 
 /* service manager pthread routine */
 void* service_manager_thread(void* ctx);
@@ -58,6 +51,12 @@ int svcmgr_fini(void);
  * @return UNIFYFS_SUCCESS, or error code
  */
 int sm_submit_service_request(server_rpc_req_t* req);
+
+/* submit a transfer request to the service manager thread */
+int sm_submit_transfer_request(transfer_thread_args* tta);
+
+/* tell service manager thread transfer has completed */
+int sm_complete_transfer_request(transfer_thread_args* tta);
 
 /* decode and issue chunk reads contained in message buffer */
 int sm_issue_chunk_reads(int src_rank,
@@ -89,7 +88,17 @@ int sm_find_extents(int gfid,
                     unsigned int* out_num_chunks,
                     chunk_read_req_t** out_chunks);
 
+int sm_transfer(int client_server,
+                int client_app,
+                int client_id,
+                int transfer_id,
+                int gfid,
+                int transfer_mode,
+                const char* dest_file,
+                server_rpc_req_t* bcast_req);
+
 int sm_truncate(int gfid,
                 size_t filesize);
+
 
 #endif // UNIFYFS_SERVICE_MANAGER_H

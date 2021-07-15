@@ -86,6 +86,20 @@ int unifyfs_invoke_broadcast_fileattr(int gfid,
 int unifyfs_invoke_broadcast_laminate(int gfid);
 
 /**
+ * @brief Broadcast request to transfer file to all servers
+ *
+ * @param gfid      target file
+ *
+ * @return success|failure
+ */
+int unifyfs_invoke_broadcast_transfer(int client_app,
+                                      int client_id,
+                                      int transfer_id,
+                                      int gfid,
+                                      int transfer_mode,
+                                      const char* dest_file);
+
+/**
  * @brief Truncate target file at all servers
  *
  * @param gfid      target file

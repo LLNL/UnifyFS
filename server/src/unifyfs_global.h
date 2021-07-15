@@ -47,6 +47,7 @@
 // common headers
 #include "arraylist.h"
 #include "tree.h"
+#include "unifyfs_client.h"
 #include "unifyfs_const.h"
 #include "unifyfs_log.h"
 #include "unifyfs_logio.h"
@@ -129,25 +130,17 @@ typedef struct {
 // forward declaration of reqmgr_thrd
 struct reqmgr_thrd;
 
+
 /**
  * Structure to maintain application client state, including
  * logio and shared memory contexts, margo rpc address, etc.
  */
 typedef struct app_client {
-    int app_id;              /* index of app in server app_configs array */
-    int client_id;           /* this client's index in app's clients array */
-    int dbg_rank;            /* client debug rank - NOT CURRENTLY USED */
-    int connected;           /* is client currently connected? */
+    unifyfs_client_state state;
 
     hg_addr_t margo_addr;    /* client Margo address */
 
     struct reqmgr_thrd* reqmgr; /* this client's request manager thread */
-
-    logio_context* logio;    /* logio context for write data */
-
-    shm_context* shmem_super; /* shmem context for superblock region */
-    size_t super_meta_offset; /* superblock offset to index metadata */
-    size_t super_meta_size;   /* size of index metadata region in bytes */
 } app_client;
 
 /**

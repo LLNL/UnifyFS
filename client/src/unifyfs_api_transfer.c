@@ -16,11 +16,6 @@
 #include "unifyfs_api_internal.h"
 #include "client_transfer.h"
 
-/* this avoids a #include of <unifyfs.h> */
-extern int unifyfs_transfer_file(const char* src,
-                                 const char* dst,
-                                 int parallel);
-
 /*
  * Public Methods
  */
@@ -37,51 +32,13 @@ unifyfs_rc unifyfs_dispatch_transfer(unifyfs_handle fshdl,
     if (nreqs == 0) {
         return UNIFYFS_SUCCESS;
     } else if (NULL == reqs) {
+        /* non-zero req count, but NULL reqs pointer */
         return EINVAL;
     }
 
-    unifyfs_transfer_request* req;
-    for (size_t i = 0; i < nreqs; i++) {
-        req = reqs + i;
-        req->state = UNIFYFS_IOREQ_STATE_IN_PROGRESS;
-
-        /* check for a valid transfer mode */
-        switch (req->mode) {
-        case UNIFYFS_TRANSFER_MODE_COPY:
-        case UNIFYFS_TRANSFER_MODE_MOVE:
-            break;
-        default:
-            req->result.error = EINVAL;
-            req->result.rc = UNIFYFS_FAILURE;
-            req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
-            continue;
-        }
-
-        int rc = unifyfs_transfer_file(req->src_path, req->dst_path,
-                                       req->use_parallel);
-        if (rc) {
-            /* unifyfs_transfer_file() returns a negative error code */
-            req->result.error = -rc;
-            req->result.rc = UNIFYFS_FAILURE;
-        } else {
-            req->result.error = 0;
-            req->result.rc = UNIFYFS_SUCCESS;
-
-            if (req->mode == UNIFYFS_TRANSFER_MODE_MOVE) {
-                /* successful copy, now remove source */
-                errno = 0;
-                rc = unlink(req->src_path);
-                if (rc) {
-                    req->result.error = errno;
-                    req->result.rc = UNIFYFS_FAILURE;
-                }
-            }
-        }
-
-        req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
-    }
-
-    return UNIFYFS_SUCCESS;
+    unifyfs_client* client = fshdl;
+    size_t n_reqs = nreqs;
+    return client_submit_transfers(client, reqs, n_reqs);
 }
 
 /* Cancel an array of transfer requests */
@@ -99,6 +56,16 @@ unifyfs_rc unifyfs_cancel_transfer(unifyfs_handle fshdl,
         return EINVAL;
     }
 
+    for (size_t i = 0; i < nreqs; i++) {
+        unifyfs_transfer_request* req = reqs + i;
+        if (req->state != UNIFYFS_IOREQ_STATE_COMPLETED) {
+            req->state = UNIFYFS_IOREQ_STATE_CANCELED;
+
+            /* TODO: cancel the transfer */
+        }
+    }
+
+    /* not actually canceling the transfer yet */
     return UNIFYFS_ERROR_NYI;
 }
 
@@ -118,14 +85,28 @@ unifyfs_rc unifyfs_wait_transfer(unifyfs_handle fshdl,
         return EINVAL;
     }
 
+    unifyfs_client* client = fshdl;
+    unifyfs_transfer_request* req;
+    client_transfer_status* transfer;
     size_t i, n_done;
-    while (1) {
+    int max_loop = 30000;
+    int loop_cnt = 0;
+    do {
         n_done = 0;
         for (i = 0; i < nreqs; i++) {
-            unifyfs_transfer_request* req = reqs + i;
-            if ((req->state == UNIFYFS_IOREQ_STATE_CANCELED) ||
-                (req->state == UNIFYFS_IOREQ_STATE_COMPLETED)) {
+            req = reqs + i;
+            transfer = client_get_transfer(client, req->_reqid);
+            if ((NULL != transfer) &&
+                client_check_transfer_complete(transfer)) {
+                LOGDBG("checked - complete");
                 n_done++;
+                client_cleanup_transfer(client, transfer);
+            } else if ((req->state == UNIFYFS_IOREQ_STATE_CANCELED) ||
+                       (req->state == UNIFYFS_IOREQ_STATE_COMPLETED)) {
+                /* this handles the case where we have already cleaned the
+                 * transfer status in a prior loop iteration */
+                n_done++;
+                LOGDBG("state - complete");
             }
         }
         if (waitall) {
@@ -137,7 +118,17 @@ unifyfs_rc unifyfs_wait_transfer(unifyfs_handle fshdl,
             /* at least one req is done */
             break;
         }
+
+        /* TODO: we probably need a timeout mechanism to prevent an infinite
+         *       loop when something goes wrong and the transfer status never
+         *       gets updated. For now, just using a hardcoded maximum loop
+         *       iteration count that roughly equates to 30 sec */
+        loop_cnt++;
         usleep(1000); /* sleep 1 ms */
+    } while (loop_cnt < max_loop);
+
+    if (loop_cnt == max_loop) {
+        return ETIMEDOUT;
     }
 
     return UNIFYFS_SUCCESS;

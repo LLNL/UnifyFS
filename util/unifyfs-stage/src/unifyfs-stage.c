@@ -283,7 +283,7 @@ int main(int argc, char** argv)
     }
 
     if (should_we_mount_unifyfs && !ctx->enable_mpi_mount) {
-        ret = unifyfs_mount(mountpoint, rank, total_ranks, 0);
+        ret = unifyfs_mount(mountpoint, rank, total_ranks);
         if (ret) {
             fprintf(stderr, "failed to mount unifyfs at %s (%s)",
                     ctx->mountpoint, strerror(ret));

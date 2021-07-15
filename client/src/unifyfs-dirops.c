@@ -13,13 +13,15 @@
  */
 
 #include "unifyfs-sysio.h"
+#include "posix_client.h"
+#include "unifyfs_fid.h"
 
 /* given a file id corresponding to a directory,
  * allocate and initialize a directory stream */
-static inline unifyfs_dirstream_t* unifyfs_dirstream_alloc(int fid)
+static unifyfs_dirstream_t* unifyfs_dirstream_alloc(int fid)
 {
     /* allocate a file descriptor for this stream */
-    int fd = unifyfs_stack_pop(unifyfs_fd_stack);
+    int fd = unifyfs_stack_pop(posix_fd_stack);
     if (fd < 0) {
         /* exhausted our file descriptors */
         errno = EMFILE;
@@ -27,11 +29,11 @@ static inline unifyfs_dirstream_t* unifyfs_dirstream_alloc(int fid)
     }
 
     /* allocate a directory stream id */
-    int dirid = unifyfs_stack_pop(unifyfs_dirstream_stack);
+    int dirid = unifyfs_stack_pop(posix_dirstream_stack);
     if (dirid < 0) {
         /* exhausted our directory streams,
          * return our file descriptor and set errno */
-        unifyfs_stack_push(unifyfs_fd_stack, fd);
+        unifyfs_stack_push(posix_fd_stack, fd);
         errno = EMFILE;
         return NULL;
     }
@@ -65,21 +67,21 @@ static inline unifyfs_dirstream_t* unifyfs_dirstream_alloc(int fid)
 }
 
 /* release resources allocated in unifyfs_dirstream_alloc */
-static inline int unifyfs_dirstream_free(unifyfs_dirstream_t* dirp)
+static int unifyfs_dirstream_free(unifyfs_dirstream_t* dirp)
 {
     /* reinit file descriptor to indicate that it's no longer in use,
      * not really necessary, but should help find bugs */
     unifyfs_fd_init(dirp->fd);
 
     /* return file descriptor to the free stack */
-    unifyfs_stack_push(unifyfs_fd_stack, dirp->fd);
+    unifyfs_stack_push(posix_fd_stack, dirp->fd);
 
     /* reinit dir stream to indicate that it's no longer in use,
      * not really necessary, but should help find bugs */
     unifyfs_dirstream_init(dirp->dirid);
 
     /* return our index to directory stream stack */
-    unifyfs_stack_push(unifyfs_dirstream_stack, dirp->dirid);
+    unifyfs_stack_push(posix_dirstream_stack, dirp->dirid);
 
     return UNIFYFS_SUCCESS;
 }
@@ -99,11 +101,11 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
      * if valid, populate the local file meta cache accordingly.
      */
 
-    int fid  = unifyfs_get_fid_from_path(upath);
+    int fid  = unifyfs_fid_from_path(posix_client, upath);
     int gfid = unifyfs_generate_gfid(upath);
 
     unifyfs_file_attr_t gfattr = { 0, };
-    int ret = unifyfs_get_global_file_meta(gfid, &gfattr);
+    int ret = unifyfs_get_global_file_meta(posix_client, gfid, &gfattr);
     if (ret != UNIFYFS_SUCCESS) {
         errno = ENOENT;
         return NULL;
@@ -120,7 +122,7 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
 
     unifyfs_filemeta_t* meta = NULL;
     if (fid >= 0) {
-        meta = unifyfs_get_meta_from_fid(fid);
+        meta = unifyfs_get_meta_from_fid(posix_client, fid);
         assert(meta != NULL);
 
         /*
@@ -128,18 +130,18 @@ DIR* UNIFYFS_WRAP(opendir)(const char* name)
          * global metadb. is it safe to invalidate the local entry and
          * re-populate with the global data?
          */
-        if (!unifyfs_fid_is_dir(fid)) {
+        if (!unifyfs_fid_is_dir(posix_client, fid)) {
             errno = ENOTDIR;
             return NULL;
         }
     } else {
-        fid = unifyfs_fid_create_file(upath, 0);
+        fid = unifyfs_fid_create_file(posix_client, upath, 0);
         if (fid < 0) {
             errno = unifyfs_rc_errno(-fid);
             return NULL;
         }
 
-        meta = unifyfs_get_meta_from_fid(fid);
+        meta = unifyfs_get_meta_from_fid(posix_client, fid);
         assert(meta != NULL);
 
         /* set as directory */

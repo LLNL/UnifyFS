@@ -8,7 +8,7 @@ test_description="Test basic functionality of unifyfs-stage executable"
 . $(dirname $0)/sharness.sh
 
 test_expect_success "unifyfs-stage exists" '
-    test_path_is_file ${SHARNESS_BUILD_DIRECTORY}/util/unifyfs-stage/src/unifyfs-stage
+    test_path_is_file ${UNIFYFS_BUILD_DIR}/util/unifyfs-stage/src/unifyfs-stage
 '
 test_expect_success "testing temp dir exists" '
     test_path_is_dir  ${UNIFYFS_TEST_TMPDIR}
@@ -58,7 +58,7 @@ test_expect_success "target directory is empty" '
 
 stage_in_log=$stage_cfg_dir/stage_IN.log
 stage_out_log=$stage_cfg_dir/stage_OUT.log
-stage_exe=${SHARNESS_BUILD_DIRECTORY}/util/unifyfs-stage/src/unifyfs-stage
+stage_exe=${UNIFYFS_BUILD_DIR}/util/unifyfs-stage/src/unifyfs-stage
 
 $JOB_RUN_COMMAND $stage_exe -v -m ${UNIFYFS_TEST_MOUNT} $stage_in_manifest &> $stage_in_log
 

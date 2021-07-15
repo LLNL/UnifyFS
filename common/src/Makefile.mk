@@ -19,6 +19,7 @@ UNIFYFS_COMMON_BASE_SRCS = \
   %reldir%/tinyexpr.h \
   %reldir%/tinyexpr.c \
   %reldir%/tree.h \
+  %reldir%/unifyfs_client.h \
   %reldir%/unifyfs_const.h \
   %reldir%/unifyfs_configurator.h \
   %reldir%/unifyfs_configurator.c \

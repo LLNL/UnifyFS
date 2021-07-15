@@ -12,7 +12,7 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
-#include "client_api_suite.h"
+#include "api_suite.h"
 
 int api_initialize_test(char* unifyfs_root,
                         unifyfs_handle* fshdl)

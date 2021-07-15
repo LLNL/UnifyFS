@@ -13,330 +13,298 @@
  */
 
 #include "client_transfer.h"
-#include "unifyfs-sysio.h"
 
-static
-int do_transfer_data(int fd_src,
-                     int fd_dst,
-                     off_t offset,
-                     size_t count)
+
+static const char* invalid_str = "INVALID";
+
+static const char* mode_copy_str = "COPY";
+static const char* mode_move_str = "MOVE";
+static const char* transfer_mode_str(unifyfs_transfer_mode mode)
 {
-    int ret = UNIFYFS_SUCCESS;
-    int err;
-    off_t pos = 0;
-    ssize_t n_written = 0;
-    ssize_t n_read = 0;
-    ssize_t n_processed = 0;
-    size_t len = UNIFYFS_TX_BUFSIZE;
-    char* buf = NULL;
+    switch (mode) {
+    case UNIFYFS_TRANSFER_MODE_COPY:
+        return mode_copy_str;
+    case UNIFYFS_TRANSFER_MODE_MOVE:
+        return mode_move_str;
+    default:
+        return invalid_str;
+    }
+    return NULL;
+}
 
-    buf = malloc(UNIFYFS_TX_BUFSIZE);
-    if (NULL == buf) {
-        LOGERR("failed to allocate transfer buffer");
+static const char* state_canceled_str = "CANCELED";
+static const char* state_completed_str = "COMPLETED";
+static const char* state_inprogress_str = "IN-PROGRESS";
+static const char* transfer_state_str(unifyfs_ioreq_state state)
+{
+    switch (state) {
+    case UNIFYFS_IOREQ_STATE_IN_PROGRESS:
+        return state_inprogress_str;
+    case UNIFYFS_IOREQ_STATE_CANCELED:
+        return state_canceled_str;
+    case UNIFYFS_IOREQ_STATE_COMPLETED:
+        return state_completed_str;
+    default:
+        return invalid_str;
+    }
+    return NULL;
+}
+
+#define debug_print_transfer_req(req) \
+do { \
+    if (NULL != (req)) { \
+        LOGDBG("transfer_req[%p] src=%s, dst=%s, mode=%s, parallel=%d" \
+               " - id=%d, state=%s, result=%d, errcode=%d (%s)", \
+               (req), (req)->src_path, (req)->dst_path, \
+               transfer_mode_str((req)->mode), (req)->use_parallel, \
+               (req)->_reqid, transfer_state_str((req)->state), \
+               (req)->result.rc, (req)->result.error, \
+               unifyfs_rc_enum_description((req)->result.error)); \
+    } \
+} while (0)
+
+/* compute the arraylist index for the given request id. we use
+ * modulo operator to reuse slots in the list */
+static inline
+unsigned int id_to_list_index(unifyfs_client* client,
+                              unsigned int id)
+{
+    unsigned int capacity = (unsigned int)
+        arraylist_capacity(client->active_transfers);
+    return id % capacity;
+}
+
+/* Create a new transfer status for the given transfer request */
+int client_create_transfer(unifyfs_client* client,
+                           unifyfs_transfer_request* req,
+                           bool src_in_unify)
+{
+    if ((NULL == client) || (NULL == client->active_transfers)) {
+        LOGERR("client->active_transfers is NULL");
+        return UNIFYFS_FAILURE;
+    }
+
+    if (NULL == req) {
+        LOGERR("transfer req is NULL");
+        return EINVAL;
+    }
+
+    int active_count = arraylist_size(client->active_transfers);
+    if (active_count == arraylist_capacity(client->active_transfers)) {
+        /* already at full capacity for outstanding reads */
+        LOGWARN("too many outstanding client transfers");
+        return UNIFYFS_FAILURE;
+    }
+
+    /* generate an id that doesn't conflict with another active mread */
+    unsigned int transfer_id, req_ndx;
+    void* existing;
+    do {
+        transfer_id = client->transfer_id_generator++;
+        req_ndx = id_to_list_index(client, transfer_id);
+        existing = arraylist_get(client->active_transfers, req_ndx);
+    } while (existing != NULL);
+
+    client_transfer_status* transfer = calloc(1, sizeof(*transfer));
+    if (NULL == transfer) {
+        LOGERR("failed to allocate transfer status struct");
         return ENOMEM;
     }
+    transfer->client = client;
+    transfer->req = req;
+    transfer->complete = 0;
+    transfer->src_in_unify = src_in_unify;
+    ABT_mutex_create(&(transfer->sync));
 
-    errno = 0;
-    pos = UNIFYFS_WRAP(lseek)(fd_src, offset, SEEK_SET);
-    err = errno;
-    if (pos == (off_t) -1) {
-        LOGERR("lseek failed (%d: %s)\n", err, strerror(err));
-        ret = err;
-        goto out;
+    int rc = arraylist_insert(client->active_transfers,
+                              (int)req_ndx, (void*)transfer);
+    if (rc != 0) {
+        free(transfer);
+        return rc;
     }
+    req->_reqid = transfer_id;
+    debug_print_transfer_req(req);
 
-    errno = 0;
-    pos = UNIFYFS_WRAP(lseek)(fd_dst, offset, SEEK_SET);
-    err = errno;
-    if (pos == (off_t) -1) {
-        LOGERR("lseek failed (%d: %s)\n", err, strerror(err));
-        ret = err;
-        goto out;
-    }
-
-    while (count > n_processed) {
-        if (len > count) {
-            len = count;
-        }
-
-        errno = 0;
-        n_read = UNIFYFS_WRAP(read)(fd_src, buf, len);
-        err = errno;
-        if (n_read == 0) {  /* EOF */
-            break;
-        } else if (n_read < 0) {   /* error */
-            ret = err;
-            goto out;
-        }
-
-        do {
-            errno = 0;
-            n_written = UNIFYFS_WRAP(write)(fd_dst, buf, n_read);
-            err = errno;
-            if (n_written < 0) {
-                ret = err;
-                goto out;
-            } else if ((n_written == 0) && err && (err != EAGAIN)) {
-                ret = err;
-                goto out;
-            }
-
-            n_read -= n_written;
-            n_processed += n_written;
-        } while (n_read > 0);
-    }
-
-out:
-    if (NULL != buf) {
-        free(buf);
-    }
-
-    return ret;
+    return UNIFYFS_SUCCESS;
 }
 
-int do_transfer_file_serial(const char* src,
-                            const char* dst,
-                            struct stat* sb_src,
-                            int direction)
+/* Remove the transfer status */
+client_transfer_status* client_get_transfer(unifyfs_client* client,
+                                            unsigned int transfer_id)
 {
-    /* NOTE: we currently do not use the @direction */
-
-    int err;
-    int ret = UNIFYFS_SUCCESS;
-    int fd_src = 0;
-    int fd_dst = 0;
-
-    errno = 0;
-    fd_src = UNIFYFS_WRAP(open)(src, O_RDONLY);
-    err = errno;
-    if (fd_src < 0) {
-        LOGERR("failed to open() source file %s", src);
-        return err;
+    if ((NULL == client) || (NULL == client->active_transfers)) {
+        LOGERR("client->active_transfers is NULL");
+        return NULL;
     }
 
-    errno = 0;
-    fd_dst = UNIFYFS_WRAP(open)(dst, O_WRONLY);
-    err = errno;
-    if (fd_dst < 0) {
-        LOGERR("failed to open() destination file %s", dst);
-        close(fd_src);
-        return err;
+    int list_index = (int) id_to_list_index(client, transfer_id);
+    void* list_item = arraylist_get(client->active_transfers, list_index);
+    if (list_item == NULL) {
+        LOGERR("client->active_transfers index=%d is NULL", list_index);
+        return NULL;
     }
 
-    LOGDBG("serial transfer (rank=%d of %d): length=%zu",
-           client_rank, global_rank_cnt, sb_src->st_size);
-
-    ret = do_transfer_data(fd_src, fd_dst, 0, sb_src->st_size);
-    if (UNIFYFS_SUCCESS != ret) {
-        LOGERR("failed to transfer data (ret=%d, %s)",
-               ret, unifyfs_rc_enum_description(ret));
-    } else {
-        UNIFYFS_WRAP(fsync)(fd_dst);
-    }
-
-    UNIFYFS_WRAP(close)(fd_dst);
-    UNIFYFS_WRAP(close)(fd_src);
-
-    return ret;
+    client_transfer_status* transfer = list_item;
+    return transfer;
 }
 
-int do_transfer_file_parallel(const char* src,
-                              const char* dst,
-                              struct stat* sb_src,
-                              int direction)
+/* Check if the transfer has completed */
+bool client_check_transfer_complete(client_transfer_status* transfer)
 {
-    /* NOTE: we currently do not use the @direction */
-
-    int err;
-    int ret = UNIFYFS_SUCCESS;
-    int fd_src = 0;
-    int fd_dst = 0;
-    uint64_t total_chunks = 0;
-    uint64_t chunk_start = 0;
-    uint64_t n_chunks_remainder = 0;
-    uint64_t n_chunks_per_rank = 0;
-    uint64_t offset = 0;
-    uint64_t len = 0;
-    uint64_t size = sb_src->st_size;
-    uint64_t last_chunk_size = 0;
-
-    /* calculate total number of chunk transfers */
-    total_chunks = size / UNIFYFS_TX_BUFSIZE;
-    last_chunk_size = size % UNIFYFS_TX_BUFSIZE;
-    if (last_chunk_size) {
-        total_chunks++;
+    if ((NULL == transfer) || (NULL == transfer->req)) {
+        LOGERR("transfer is NULL");
+        return false;
     }
 
-    /* calculate chunks per rank */
-    n_chunks_per_rank = total_chunks / global_rank_cnt;
-    n_chunks_remainder = total_chunks % global_rank_cnt;
+    unifyfs_transfer_request* req = transfer->req;
+    //debug_print_transfer_req(req);
 
-    /*
-     * if the file is smaller than (rank_count * transfer_size), just
-     * use the serial mode.
-     *
-     * FIXME: is this assumption fair even for the large rank count?
-     */
-    if (total_chunks <= (uint64_t)global_rank_cnt) {
-        if (client_rank == 0) {
-            LOGDBG("using serial transfer for small file");
-            ret = do_transfer_file_serial(src, dst, sb_src, direction);
-            if (ret) {
-                LOGERR("do_transfer_file_serial() failed");
-            }
+    bool is_complete = false;
+
+    switch (req->state) {
+    case UNIFYFS_IOREQ_STATE_IN_PROGRESS:
+        ABT_mutex_lock(transfer->sync);
+        is_complete = (transfer->complete == 1);
+        ABT_mutex_unlock(transfer->sync);
+        break;
+    case UNIFYFS_IOREQ_STATE_CANCELED:
+    case UNIFYFS_IOREQ_STATE_COMPLETED:
+        is_complete = true;
+        break;
+    default:
+        break;
+    }
+
+    return is_complete;
+}
+
+/* Remove the transfer status */
+int client_cleanup_transfer(unifyfs_client* client,
+                           client_transfer_status* transfer)
+{
+    if ((NULL == client) || (NULL == client->active_transfers)) {
+        LOGERR("client->active_transfers is NULL");
+        return UNIFYFS_FAILURE;
+    }
+
+    if ((NULL == transfer) || (NULL == transfer->req)) {
+        LOGERR("transfer status or request is NULL");
+        return EINVAL;
+    }
+
+    unifyfs_transfer_request* req = transfer->req;
+    debug_print_transfer_req(req);
+
+    if ((req->state == UNIFYFS_IOREQ_STATE_COMPLETED) &&
+        (req->mode == UNIFYFS_TRANSFER_MODE_MOVE)) {
+        /* successful copy, now remove source */
+        if (transfer->src_in_unify) {
+            unifyfs_remove(client, req->src_path);
         } else {
-            ret = UNIFYFS_SUCCESS;
+            LOGWARN("Not removing non-UnifyFS source file %s for "
+                    "UNIFYFS_TRANSFER_MODE_MOVE", req->src_path);
         }
-        return ret;
     }
 
-    errno = 0;
-    fd_src = UNIFYFS_WRAP(open)(src, O_RDONLY);
-    err = errno;
-    if (fd_src < 0) {
-        LOGERR("failed to open() source file %s", src);
-        return err;
-    }
-
-    errno = 0;
-    fd_dst = UNIFYFS_WRAP(open)(dst, O_WRONLY);
-    err = errno;
-    if (fd_dst < 0) {
-        LOGERR("failed to open() destination file %s", dst);
-        UNIFYFS_WRAP(close)(fd_src);
-        return err;
-    }
-
-    chunk_start = n_chunks_per_rank * client_rank;
-    offset = chunk_start * UNIFYFS_TX_BUFSIZE;
-    len = n_chunks_per_rank * UNIFYFS_TX_BUFSIZE;
-
-    LOGDBG("parallel transfer (rank=%d of %d): "
-           "#chunks=%zu, offset=%zu, length=%zu",
-           client_rank, global_rank_cnt,
-           (size_t)n_chunks_per_rank, (size_t)offset, (size_t)len);
-
-    ret = do_transfer_data(fd_src, fd_dst, (off_t)offset, (size_t)len);
-    if (ret) {
-        LOGERR("failed to transfer data (ret=%d, %s)",
-               ret, unifyfs_rc_enum_description(ret));
+    int list_index = (int) id_to_list_index(client, req->_reqid);
+    void* list_item = arraylist_remove(client->active_transfers, list_index);
+    if (list_item == (void*)transfer) {
+        ABT_mutex_free(&(transfer->sync));
+        free(transfer);
+        return UNIFYFS_SUCCESS;
     } else {
-        if (n_chunks_remainder && (client_rank < n_chunks_remainder)) {
-            /* do single chunk transfer per rank of remainder portion */
-            len = UNIFYFS_TX_BUFSIZE;
-            if (last_chunk_size && (client_rank == (n_chunks_remainder - 1))) {
-                len = last_chunk_size;
-            }
-            chunk_start = (total_chunks - n_chunks_remainder) + client_rank;
-            offset = chunk_start * UNIFYFS_TX_BUFSIZE;
-
-            LOGDBG("parallel transfer (rank=%d of %d): "
-                   "#chunks=1, offset=%zu, length=%zu",
-                   client_rank, global_rank_cnt,
-                   (size_t)offset, (size_t)len);
-            ret = do_transfer_data(fd_src, fd_dst, (off_t)offset, (size_t)len);
-            if (ret) {
-                LOGERR("failed to transfer data (ret=%d, %s)",
-                       ret, unifyfs_rc_enum_description(ret));
-            }
-        }
-        fsync(fd_dst);
+        LOGERR("mismatch on client->active_transfers index=%d", list_index);
+        return UNIFYFS_FAILURE;
     }
-
-    UNIFYFS_WRAP(close)(fd_dst);
-    UNIFYFS_WRAP(close)(fd_src);
-
-    return ret;
 }
 
-int unifyfs_transfer_file(const char* src,
-                          const char* dst,
-                          int parallel)
+/* Update the transfer status for the client (app_id + client_id)
+ * transfer request (transfer_id) using the given error_code */
+int client_complete_transfer(unifyfs_client* client,
+                             int transfer_id,
+                             int error_code)
 {
-    int rc, err;
-    int ret = 0;
-    int txdir = 0;
-    struct stat sb_src = { 0, };
-    mode_t mode_no_write;
-    struct stat sb_dst = { 0, };
-    int unify_src = 0;
-    int unify_dst = 0;
-
-    char* src_path = strdup(src);
-    if (NULL == src_path) {
-        return -ENOMEM;
+    if (NULL == client) {
+        LOGERR("NULL client");
+        return EINVAL;
     }
 
-    char src_upath[UNIFYFS_MAX_FILENAME];
-    if (unifyfs_intercept_path(src, src_upath)) {
-        txdir = UNIFYFS_TX_STAGE_OUT;
-        unify_src = 1;
+    client_transfer_status* transfer = client_get_transfer(client,
+                                                           transfer_id);
+    if (NULL == transfer) {
+        LOGERR("failed to find client transfer with id=%d", transfer_id);
+        return EINVAL;
     }
 
-    errno = 0;
-    rc = UNIFYFS_WRAP(stat)(src, &sb_src);
-    err = errno;
-    if (rc < 0) {
-        return -err;
+    unifyfs_transfer_request* req = transfer->req;
+    if (NULL == req) {
+        LOGERR("found transfer status, but request is NULL - internal error");
+        return UNIFYFS_FAILURE;
     }
 
-    char dst_path[UNIFYFS_MAX_FILENAME] = { 0, };
-    char* pos = dst_path;
-    pos += sprintf(pos, "%s", dst);
+    /* update the request status */
+    ABT_mutex_lock(transfer->sync);
+    req->result.error = error_code;
+    req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
+    transfer->complete = 1;
+    ABT_mutex_unlock(transfer->sync);
 
-    errno = 0;
-    rc = UNIFYFS_WRAP(stat)(dst, &sb_dst);
-    err = errno;
-    if (rc == 0 && S_ISDIR(sb_dst.st_mode)) {
-        /* if the given destination path is a directory, append the
-         * basename of the source file */
-        sprintf(pos, "/%s", basename((char*) src_path));
-    }
+    return UNIFYFS_SUCCESS;
+}
 
-    char dst_upath[UNIFYFS_MAX_FILENAME];
-    if (unifyfs_intercept_path(dst_path, dst_upath)) {
-        txdir = UNIFYFS_TX_STAGE_IN;
-        unify_dst = 1;
-    }
+int client_submit_transfers(unifyfs_client* client,
+                            unifyfs_transfer_request* t_reqs,
+                            size_t n_reqs)
+{
+    int ret = UNIFYFS_SUCCESS;
+    int rc;
 
-    if (unify_src + unify_dst != 1) {
-        // we may fail the operation with EINVAL, but useful for testing
-        LOGDBG("WARNING: none of pathnames points to unifyfs volume");
-    }
+    for (size_t i = 0; i < n_reqs; i++) {
+        unifyfs_transfer_request* req = t_reqs + i;
 
-    /* for both serial and parallel transfers, use rank 0 client to
-     * create the destination file using the source file's mode*/
-    if (0 == client_rank) {
-        errno = 0;
-        int create_flags = O_CREAT | O_WRONLY | O_TRUNC;
-        int fd = UNIFYFS_WRAP(open)(dst_path, create_flags, sb_src.st_mode);
-        err = errno;
-        if (fd < 0) {
-            LOGERR("failed to create destination file %s", dst);
-            return -err;
+        /* check for a valid transfer mode */
+        switch (req->mode) {
+        case UNIFYFS_TRANSFER_MODE_COPY:
+        case UNIFYFS_TRANSFER_MODE_MOVE:
+            break;
+        default:
+            req->result.error = EINVAL;
+            req->result.rc = UNIFYFS_FAILURE;
+            req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
+            continue;
         }
-        close(fd);
-    }
 
-    if (parallel) {
-        rc = do_transfer_file_parallel(src_path, dst_path, &sb_src, txdir);
-    } else {
-        rc = do_transfer_file_serial(src_path, dst_path, &sb_src, txdir);
-    }
+        const char* src = req->src_path;
+        const char* dst = req->dst_path;
+        int parallel = req->use_parallel;
 
-    if (rc != UNIFYFS_SUCCESS) {
-        ret = -unifyfs_rc_errno(rc);
-    } else {
-        ret = 0;
+        bool src_in_unify = is_unifyfs_path(client, src);
+        bool dst_in_unify = is_unifyfs_path(client, dst);
 
-        /* If the destination file is in UnifyFS, then laminate it so that it
-         * will be readable by other clients. */
-        if (unify_dst) {
-            /* remove the write bits from the source file's mode bits to set
-             * the new file mode. use chmod with the new mode to ask for file
-             * lamination. */
-            mode_no_write = (sb_src.st_mode) & ~(0222);
-            UNIFYFS_WRAP(chmod)(dst_path, mode_no_write);
+        /* either src or dst must be within client namespace, but not both */
+        if ((!src_in_unify && !dst_in_unify) ||
+            (src_in_unify && dst_in_unify)) {
+            rc = EINVAL;
+        } else {
+            req->state = UNIFYFS_IOREQ_STATE_IN_PROGRESS;
+            rc = client_create_transfer(client, req, src_in_unify);
+            if (UNIFYFS_SUCCESS == rc) {
+                if (src_in_unify) {
+                    int gfid = unifyfs_generate_gfid(src);
+                    rc = invoke_client_transfer_rpc(client, req->_reqid,
+                                                    gfid, parallel, dst);
+                } else {
+                    /* need to create dest file and copy all source data */
+                    rc = UNIFYFS_ERROR_NYI;
+                }
+            }
+        }
+
+        if (rc != UNIFYFS_SUCCESS) {
+            req->result.error = rc;
+            req->result.rc = UNIFYFS_FAILURE;
+            ret = UNIFYFS_FAILURE;
+            req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
         }
     }
 

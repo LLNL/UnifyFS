@@ -80,7 +80,7 @@ static int create_server_pid_file(void)
     }
 
     snprintf(filename, sizeof(filename), "%s/%s",
-             server_cfg.sharedfs_dir, UNIFYFSD_PID_FILENAME);
+             server_cfg.sharedfs_dir, UNIFYFS_SERVER_PID_FILENAME);
 
     fp = fopen(filename, "w");
     if (!fp) {

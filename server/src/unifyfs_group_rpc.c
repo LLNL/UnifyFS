@@ -254,6 +254,11 @@ void collective_set_local_retval(coll_request* coll_req, int val)
         lbo->ret = val;
         break;
     }
+    case UNIFYFS_SERVER_BCAST_RPC_TRANSFER: {
+        transfer_bcast_out_t* tbo = (transfer_bcast_out_t*) output;
+        tbo->ret = val;
+        break;
+    }
     case UNIFYFS_SERVER_BCAST_RPC_TRUNCATE: {
         truncate_bcast_out_t* tbo = (truncate_bcast_out_t*) output;
         tbo->ret = val;
@@ -312,6 +317,15 @@ static int coll_get_child_response(coll_request* coll_req,
                 child_ret = clbo->ret;
                 if (child_ret != UNIFYFS_SUCCESS) {
                     lbo->ret = child_ret;
+                }
+                break;
+            }
+            case UNIFYFS_SERVER_BCAST_RPC_TRANSFER: {
+                transfer_bcast_out_t* ctbo = (transfer_bcast_out_t*) out;
+                transfer_bcast_out_t* tbo  = (transfer_bcast_out_t*) output;
+                child_ret = ctbo->ret;
+                if (child_ret != UNIFYFS_SUCCESS) {
+                    tbo->ret = child_ret;
                 }
                 break;
             }
@@ -636,7 +650,7 @@ int unifyfs_invoke_broadcast_extents_rpc(int gfid)
  * Broadcast file attributes and extents metadata due to laminate
  *************************************************************************/
 
-/* file extents metadata broadcast rpc handler */
+/* file lamination broadcast rpc handler */
 static void laminate_bcast_rpc(hg_handle_t handle)
 {
     LOGDBG("BCAST_RPC: laminate handler");
@@ -790,6 +804,140 @@ int unifyfs_invoke_broadcast_laminate(int gfid)
     if (ret != UNIFYFS_SUCCESS) {
         if (NULL != extents) {
             free(extents);
+        }
+    }
+
+    return ret;
+}
+
+
+/*************************************************************************
+ * Broadcast file transfer request
+ *************************************************************************/
+
+/* file transfer broadcast rpc handler */
+static void transfer_bcast_rpc(hg_handle_t handle)
+{
+    LOGDBG("BCAST_RPC: transfer handler");
+
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
+
+    coll_request* coll = NULL;
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
+    transfer_bcast_in_t* in = calloc(1, sizeof(*in));
+    transfer_bcast_out_t* out = calloc(1, sizeof(*out));
+    if ((NULL == req) || (NULL == in) || (NULL == out)) {
+        ret = ENOMEM;
+    } else {
+        /* get input params */
+        hg_return_t hret = margo_get_input(handle, in);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_get_input() failed");
+            ret = UNIFYFS_ERROR_MARGO;
+        } else {
+            hg_id_t op_hgid = unifyfsd_rpc_context->rpcs.transfer_bcast_id;
+            server_rpc_e rpc = UNIFYFS_SERVER_BCAST_RPC_TRANSFER;
+            coll = collective_create(rpc, handle, op_hgid, (int)(in->root),
+                                     (void*)in, (void*)out, sizeof(*out),
+                                     HG_BULK_NULL, HG_BULK_NULL, NULL);
+            if (NULL == coll) {
+                ret = ENOMEM;
+            } else {
+                ret = collective_forward(coll);
+                if (ret == UNIFYFS_SUCCESS) {
+                    req->req_type = rpc;
+                    req->coll = coll;
+                    req->handle = handle;
+                    req->input = (void*) in;
+                    req->bulk_buf = NULL;
+                    req->bulk_sz = 0;
+                    ret = sm_submit_service_request(req);
+                    if (ret != UNIFYFS_SUCCESS) {
+                        LOGERR("failed to submit coll request to svcmgr");
+                    }
+                }
+            }
+        }
+    }
+
+    if (ret != UNIFYFS_SUCCESS) {
+        /* report failure back to caller */
+        transfer_bcast_out_t tbo;
+        tbo.ret = (int32_t)ret;
+        hg_return_t hret = margo_respond(handle, &tbo);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_respond() failed");
+        }
+
+        if (NULL != coll) {
+            collective_cleanup(coll);
+        } else {
+            margo_destroy(handle);
+        }
+    }
+}
+DEFINE_MARGO_RPC_HANDLER(transfer_bcast_rpc)
+
+/* Execute broadcast tree for attributes and extent metadata due to transfer */
+int unifyfs_invoke_broadcast_transfer(int client_app,
+                                      int client_id,
+                                      int transfer_id,
+                                      int gfid,
+                                      int transfer_mode,
+                                      const char* dest_file)
+{
+    /* assuming success */
+    int ret = UNIFYFS_SUCCESS;
+
+    /* get attributes and extents metadata */
+    unifyfs_file_attr_t attrs;
+    ret = unifyfs_inode_metaget(gfid, &attrs);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("failed to get file attributes for gfid=%d", gfid);
+        return ret;
+    }
+
+    if (!attrs.is_shared) {
+        /* no need to broadcast for private files */
+        LOGDBG("gfid=%d is private, not broadcasting", gfid);
+        return UNIFYFS_SUCCESS;
+    }
+
+    ret = sm_transfer(glb_pmi_rank, client_app, client_id, transfer_id, gfid,
+                      transfer_mode, dest_file, NULL);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("sm_transfer() at root failed for gfid=%d", gfid);
+        return ret;
+    }
+
+    LOGDBG("BCAST_RPC: starting transfer(mode=%d) for gfid=%d to file %s",
+           transfer_mode, gfid, dest_file);
+
+    coll_request* coll = NULL;
+    transfer_bcast_in_t* in = calloc(1, sizeof(*in));
+    if (NULL == in) {
+        ret = ENOMEM;
+    } else {
+        /* set input params */
+        in->root        = (int32_t) glb_pmi_rank;
+        in->gfid        = (int32_t) gfid;
+        in->mode        = (int32_t) transfer_mode;
+        in->dst_file    = (hg_const_string_t) dest_file;
+
+        hg_id_t op_hgid = unifyfsd_rpc_context->rpcs.transfer_bcast_id;
+        server_rpc_e rpc = UNIFYFS_SERVER_BCAST_RPC_TRANSFER;
+        coll = collective_create(rpc, HG_HANDLE_NULL, op_hgid,
+                                 glb_pmi_rank, (void*)in,
+                                 NULL, sizeof(transfer_bcast_out_t),
+                                 HG_BULK_NULL, HG_BULK_NULL, NULL);
+        if (NULL == coll) {
+            ret = ENOMEM;
+        } else {
+            ret = collective_forward(coll);
+            if (ret == UNIFYFS_SUCCESS) {
+                ret = invoke_bcast_progress_rpc(coll);
+            }
         }
     }
 

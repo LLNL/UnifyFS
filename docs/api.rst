@@ -54,17 +54,16 @@ For instance, to use UnifyFS on all path prefixes that begin with
 .. code-block:: C
     :caption: C
 
-    unifyfs_mount('/unifyfs', rank, rank_num, 0);
+    unifyfs_mount('/unifyfs', rank, rank_num);
 
 .. code-block:: Fortran
     :caption: Fortran
 
-    call UNIFYFS_MOUNT('/unifyfs', rank, size, 0, ierr);
+    call UNIFYFS_MOUNT('/unifyfs', rank, size, ierr);
 
 Here, ``/unifyfs`` is the path prefix for UnifyFS to intercept.
 The ``rank`` parameter specifies the MPI rank of the calling process.
 The ``size`` parameter specifies the number of MPI ranks in the user job.
-Lastly, the zero corresponds to the app id.
 
 ---------------------------
 Unmounting
