@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
     /*
      * Verify unifyfs_mount succeeds.
      */
-    rc = unifyfs_mount(unifyfs_root, rank, rank_num, 0);
+    rc = unifyfs_mount(unifyfs_root, rank, rank_num);
     ok(rc == 0, "unifyfs_mount at %s (rc=%d)", unifyfs_root, rc);
 
     rc = unifyfs_unmount();

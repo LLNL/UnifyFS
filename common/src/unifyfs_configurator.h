@@ -85,14 +85,11 @@
     UNIFYFS_CFG(logio, spill_dir, STRING, NULLSTRING, "spillover directory", configurator_directory_check) \
     UNIFYFS_CFG(margo, lazy_connect, BOOL, off, "wait until first communication with server to resolve its connection address", NULL) \
     UNIFYFS_CFG(margo, tcp, BOOL, on, "use TCP for server-to-server margo RPCs", NULL) \
-    UNIFYFS_CFG(meta, db_name, STRING, META_DEFAULT_DB_NAME, "metadata database name", NULL) \
-    UNIFYFS_CFG(meta, db_path, STRING, RUNDIR, "metadata database path", configurator_directory_check) \
-    UNIFYFS_CFG(meta, server_ratio, INT, META_DEFAULT_SERVER_RATIO, "metadata server ratio", NULL) \
-    UNIFYFS_CFG(meta, range_size, INT, META_DEFAULT_RANGE_SZ, "metadata range size", NULL) \
+    UNIFYFS_CFG(meta, range_size, INT, UNIFYFS_META_DEFAULT_SLICE_SZ, "metadata range size", NULL) \
     UNIFYFS_CFG_CLI(runstate, dir, STRING, RUNDIR, "runstate file directory", configurator_directory_check, 'R', "specify full path to directory to contain server-local state") \
     UNIFYFS_CFG_CLI(server, hostfile, STRING, NULLSTRING, "server hostfile name", NULL, 'H', "specify full path to server hostfile") \
     UNIFYFS_CFG_CLI(server, init_timeout, INT, UNIFYFS_DEFAULT_INIT_TIMEOUT, "timeout of waiting for server initialization", NULL, 't', "timeout in seconds to wait for servers to be ready for clients") \
-    UNIFYFS_CFG(server, max_app_clients, INT, MAX_APP_CLIENTS, "maximum number of clients per application", NULL) \
+    UNIFYFS_CFG(server, max_app_clients, INT, UNIFYFS_SERVER_MAX_APP_CLIENTS, "maximum number of clients per application", NULL) \
     UNIFYFS_CFG_CLI(sharedfs, dir, STRING, NULLSTRING, "shared file system directory", configurator_directory_check, 'S', "specify full path to directory to contain server shared files") \
 
 #ifdef __cplusplus

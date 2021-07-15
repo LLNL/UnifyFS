@@ -13,24 +13,49 @@
  */
 
 #include "unifyfs-internal.h"
+#include "unifyfs_api_internal.h"
+#include "margo_client.h"
 
-/* client transfer (stage-in/out) support */
+typedef struct transfer_request_status {
+    unifyfs_client* client;
+    unifyfs_transfer_request* req;
 
-#define UNIFYFS_TX_BUFSIZE (8*(1<<20))
+    /* set to 1 if source file is in client namespace, otherwise
+     * destination file is in the namespace */
+    int src_in_unify;
 
-enum {
-    UNIFYFS_TX_STAGE_OUT = 0,
-    UNIFYFS_TX_STAGE_IN = 1,
-    UNIFYFS_TX_SERIAL = 0,
-    UNIFYFS_TX_PARALLEL = 1,
-};
+    /* the following is for synchronizing access/updates to below state */
+    ABT_mutex sync;
+    volatile unsigned int complete; /* has request completed? */
+} client_transfer_status;
 
-int do_transfer_file_serial(const char* src,
-                            const char* dst,
-                            struct stat* sb_src,
-                            int direction);
 
-int do_transfer_file_parallel(const char* src,
-                              const char* dst,
-                              struct stat* sb_src,
-                              int direction);
+/* Create a new transfer status for the given transfer request and
+ * insert it into client->active_transfers arraylist */
+int client_create_transfer(unifyfs_client* client,
+                           unifyfs_transfer_request* req,
+                           bool src_in_unify);
+
+/* Retrieve the transfer status for request with the given id */
+client_transfer_status* client_get_transfer(unifyfs_client* client,
+                                            unsigned int transfer_id);
+
+/* Check if the transfer has completed */
+bool client_check_transfer_complete(client_transfer_status* transfer);
+
+/* Remove the transfer status from client->active_transfers arraylist */
+int client_cleanup_transfer(unifyfs_client* client,
+                           client_transfer_status* transfer);
+
+/* Update the transfer status for the client (app_id + client_id)
+ * transfer request (transfer_id) using the given error_code */
+int client_complete_transfer(unifyfs_client* client,
+                             int transfer_id,
+                             int error_code);
+
+/* Given an array of transfer requests, submit each request after
+ * creating a transfer status structure for the request and storing it
+ * within client->active_transfers */
+int client_submit_transfers(unifyfs_client* client,
+                            unifyfs_transfer_request* t_reqs,
+                            size_t n_reqs);

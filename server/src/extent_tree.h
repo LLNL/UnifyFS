@@ -27,6 +27,12 @@ struct extent_tree_node {
     unsigned long pos;   /* physical offset of data in log */
 };
 
+#define extent_tree_node_offset(node_ptr) \
+    ((off_t)(node_ptr)->start)
+
+#define extent_tree_node_length(node_ptr) \
+    ((size_t)1 + ((node_ptr)->end - (node_ptr)->start))
+
 struct extent_tree {
     RB_HEAD(ext_tree, extent_tree_node) head;
     pthread_rwlock_t rwlock;

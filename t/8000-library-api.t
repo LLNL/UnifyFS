@@ -5,4 +5,4 @@
 #
 . $(dirname $0)/sharness.d/00-test-env.sh
 . $(dirname $0)/sharness.d/01-unifyfs-settings.sh
-$JOB_RUN_COMMAND $UNIFYFS_BUILD_DIR/t/api/client_api_test.t
+$JOB_RUN_COMMAND $UNIFYFS_BUILD_DIR/t/api/api_test.t

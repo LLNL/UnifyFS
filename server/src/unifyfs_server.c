@@ -59,8 +59,8 @@ server_info_t* glb_servers; // array of server_info_t
 unifyfs_cfg_t server_cfg;
 
 static ABT_mutex app_configs_abt_sync;
-static app_config* app_configs[MAX_NUM_APPS]; /* list of apps */
-static size_t clients_per_app = MAX_APP_CLIENTS;
+static app_config* app_configs[UNIFYFS_SERVER_MAX_NUM_APPS]; /* list of apps */
+static size_t clients_per_app = UNIFYFS_SERVER_MAX_APP_CLIENTS;
 
 
 static int unifyfs_exit(void);
@@ -594,7 +594,7 @@ static int unifyfs_exit(void)
     /* iterate over each active application and free resources */
     LOGDBG("cleaning application state");
     ABT_mutex_lock(app_configs_abt_sync);
-    for (int i = 0; i < MAX_NUM_APPS; i++) {
+    for (int i = 0; i < UNIFYFS_SERVER_MAX_NUM_APPS; i++) {
         /* get pointer to app config for this app_id */
         app_config* app = app_configs[i];
         if (NULL != app) {
@@ -639,7 +639,7 @@ static int unifyfs_exit(void)
 app_config* get_application(int app_id)
 {
     ABT_mutex_lock(app_configs_abt_sync);
-    for (int i = 0; i < MAX_NUM_APPS; i++) {
+    for (int i = 0; i < UNIFYFS_SERVER_MAX_NUM_APPS; i++) {
         app_config* app_cfg = app_configs[i];
         if ((NULL != app_cfg) && (app_cfg->app_id == app_id)) {
             ABT_mutex_unlock(app_configs_abt_sync);
@@ -672,7 +672,7 @@ app_config* new_application(int app_id,
     new_app->app_id = app_id;
 
     /* insert the given app_config in an empty slot */
-    for (int i = 0; i < MAX_NUM_APPS; i++) {
+    for (int i = 0; i < UNIFYFS_SERVER_MAX_NUM_APPS; i++) {
         app_config* existing = app_configs[i];
         if (NULL == existing) {
             new_app->clients = (app_client**) calloc(clients_per_app,
@@ -772,8 +772,8 @@ static unifyfs_rc attach_to_client_shmem(app_client* client,
         return EINVAL;
     }
 
-    int app_id = client->app_id;
-    int client_id = client->client_id;
+    int app_id = client->state.app_id;
+    int client_id = client->state.client_id;
 
     /* initialize shmem region for client's superblock */
     sprintf(shm_name, SHMEM_SUPER_FMTSTR, app_id, client_id);
@@ -782,7 +782,7 @@ static unifyfs_rc attach_to_client_shmem(app_client* client,
         LOGERR("Failed to attach to shmem superblock region %s", shm_name);
         return UNIFYFS_ERROR_SHMEM;
     }
-    client->shmem_super = shm_ctx;
+    client->state.shm_super_ctx = shm_ctx;
 
     return UNIFYFS_SUCCESS;
 }
@@ -815,9 +815,9 @@ app_client* new_app_client(app_config* app,
     app_client* client = (app_client*) calloc(1, sizeof(app_client));
     if (NULL != client) {
         int failure = 0;
-        client->app_id = app_id;
-        client->client_id = client_id;
-        client->dbg_rank = debug_rank;
+        client->state.app_id = app_id;
+        client->state.client_id = client_id;
+        client->state.app_rank = debug_rank;
 
         /* convert client_addr_str to margo hg_addr_t */
         hg_return_t hret = margo_addr_lookup(unifyfsd_rpc_context->shm_mid,
@@ -867,8 +867,8 @@ unifyfs_rc attach_app_client(app_client* client,
         return EINVAL;
     }
 
-    int app_id = client->app_id;
-    int client_id = client->client_id;
+    int app_id = client->state.app_id;
+    int client_id = client->state.client_id;
     int failure = 0;
 
     /* initialize server-side logio for this client */
@@ -876,7 +876,7 @@ unifyfs_rc attach_app_client(app_client* client,
                                        logio_shmem_size,
                                        logio_spill_size,
                                        logio_spill_dir,
-                                       &(client->logio));
+                                       &(client->state.logio_ctx));
     if (rc != UNIFYFS_SUCCESS) {
         failure = 1;
     }
@@ -892,9 +892,16 @@ unifyfs_rc attach_app_client(app_client* client,
         return UNIFYFS_FAILURE;
     }
 
-    client->super_meta_offset = super_meta_offset;
-    client->super_meta_size = super_meta_size;
-    client->connected = 1;
+    client->state.write_index.index_offset = super_meta_offset;
+    client->state.write_index.index_size = super_meta_size;
+
+    char* super_ptr = (char*)(client->state.shm_super_ctx->addr);
+    char* index_ptr = super_ptr + super_meta_offset;
+    client->state.write_index.ptr_num_entries = (size_t*) index_ptr;
+    index_ptr += get_page_size();
+    client->state.write_index.index_entries = (unifyfs_index_t*) index_ptr;
+
+    client->state.initialized = 1;
 
     return UNIFYFS_SUCCESS;
 }
@@ -909,12 +916,12 @@ unifyfs_rc disconnect_app_client(app_client* client)
         return EINVAL;
     }
 
-    if (!client->connected) {
+    if (!client->state.initialized) {
         /* already done */
         return UNIFYFS_SUCCESS;
     }
 
-    client->connected = 0;
+    client->state.initialized = 0;
 
     /* stop client request manager thread */
     if (NULL != client->reqmgr) {
@@ -926,12 +933,12 @@ unifyfs_rc disconnect_app_client(app_client* client)
                     client->margo_addr);
 
     /* release client shared memory regions */
-    if (NULL != client->shmem_super) {
+    if (NULL != client->state.shm_super_ctx) {
         /* Release superblock shared memory region.
          * Server is responsible for deleting superblock shared
          * memory file that was created by the client. */
-        unifyfs_shm_unlink(client->shmem_super);
-        unifyfs_shm_free(&(client->shmem_super));
+        unifyfs_shm_unlink(client->state.shm_super_ctx);
+        unifyfs_shm_free(&(client->state.shm_super_ctx));
     }
 
     return UNIFYFS_SUCCESS;
@@ -954,18 +961,18 @@ unifyfs_rc cleanup_app_client(app_config* app, app_client* client)
     }
 
     LOGDBG("cleaning application client %d:%d",
-           client->app_id, client->client_id);
+           client->state.app_id, client->state.client_id);
 
     disconnect_app_client(client);
 
     /* close client logio context */
-    if (NULL != client->logio) {
-        unifyfs_logio_close(client->logio, 1);
-        client->logio = NULL;
+    if (NULL != client->state.logio_ctx) {
+        unifyfs_logio_close(client->state.logio_ctx, 1);
+        client->state.logio_ctx = NULL;
     }
 
     /* reset app->clients array index if set */
-    int client_ndx = client->client_id - 1; /* client ids start at 1 */
+    int client_ndx = client->state.client_id - 1; /* client ids start at 1 */
     if (client == app->clients[client_ndx]) {
         app->clients[client_ndx] = NULL;
     }

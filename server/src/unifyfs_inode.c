@@ -542,7 +542,7 @@ int unifyfs_inode_resolve_extent_chunks(unsigned int n_extents,
         for (i = 0; i < n_extents; i++) {
             chunk_read_req_t* ext_chunks = resolved[i];
             for (j = 0; j < n_resolved[i]; j++) {
-                /* debug_print_chunk_read_req(ext_chunks + j); */
+                //debug_print_chunk_read_req(ext_chunks + j);
                 *pos = ext_chunks[j];
                 pos++;
             }

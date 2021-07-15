@@ -1220,6 +1220,123 @@ DEFINE_MARGO_RPC_HANDLER(laminate_rpc)
 
 
 /*************************************************************************
+ * File transfer request
+ *************************************************************************/
+
+/* Transfer the target file */
+int unifyfs_invoke_transfer_rpc(int client_app,
+                                int client_id,
+                                int transfer_id,
+                                int gfid,
+                                int transfer_mode,
+                                const char* dest_file)
+{
+    int owner_rank = hash_gfid_to_server(gfid);
+    if (owner_rank == glb_pmi_rank) {
+        return sm_transfer(glb_pmi_rank, client_app, client_id, transfer_id,
+                           gfid, transfer_mode, dest_file, NULL);
+    }
+
+    /* forward request to file owner */
+    p2p_request preq;
+    hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.transfer_id;
+    int rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
+    if (rc != UNIFYFS_SUCCESS) {
+        return rc;
+    }
+
+    /* fill rpc input struct and forward request */
+    transfer_in_t in;
+    in.src_rank    = (int32_t) glb_pmi_rank;
+    in.client_app  = (int32_t) client_app;
+    in.client_id   = (int32_t) client_id;
+    in.transfer_id = (int32_t) transfer_id;
+    in.gfid        = (int32_t) gfid;
+    in.mode        = (int32_t) transfer_mode;
+    in.dst_file    = (hg_const_string_t) dest_file;
+    rc = forward_p2p_request((void*)&in, &preq);
+    if (rc != UNIFYFS_SUCCESS) {
+        return rc;
+    }
+
+    /* wait for request completion */
+    rc = wait_for_p2p_request(&preq);
+    if (rc != UNIFYFS_SUCCESS) {
+        return rc;
+    }
+
+    /* get the output of the rpc */
+    int ret;
+    transfer_out_t out;
+    hg_return_t hret = margo_get_output(preq.handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_get_output() failed");
+        ret = UNIFYFS_ERROR_MARGO;
+    } else {
+        /* set return value */
+        ret = out.ret;
+        margo_free_output(preq.handle, &out);
+    }
+    margo_destroy(preq.handle);
+
+    return ret;
+}
+
+/* Transfer rpc handler */
+static void transfer_rpc(hg_handle_t handle)
+{
+    LOGDBG("transfer rpc handler");
+
+    int ret = UNIFYFS_SUCCESS;
+
+    /* get input params */
+    transfer_in_t* in = malloc(sizeof(*in));
+    server_rpc_req_t* req = malloc(sizeof(*req));
+    if ((NULL == in) || (NULL == req)) {
+        ret = ENOMEM;
+    } else {
+        hg_return_t hret = margo_get_input(handle, in);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_get_input() failed");
+            ret = UNIFYFS_ERROR_MARGO;
+        } else {
+            req->req_type = UNIFYFS_SERVER_RPC_TRANSFER;
+            req->handle   = handle;
+            req->input    = (void*) in;
+            req->bulk_buf = NULL;
+            req->bulk_sz  = 0;
+            ret = sm_submit_service_request(req);
+            if (ret != UNIFYFS_SUCCESS) {
+                margo_free_input(handle, in);
+            }
+        }
+    }
+
+    /* if we hit an error during request submission, respond with the error */
+    if (ret != UNIFYFS_SUCCESS) {
+        if (NULL != in) {
+            free(in);
+        }
+        if (NULL != req) {
+            free(req);
+        }
+
+        /* return to caller */
+        transfer_out_t out;
+        out.ret = (int32_t) ret;
+        hg_return_t hret = margo_respond(handle, &out);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_respond() failed");
+        }
+
+        /* free margo resources */
+        margo_destroy(handle);
+    }
+}
+DEFINE_MARGO_RPC_HANDLER(transfer_rpc)
+
+
+/*************************************************************************
  * File truncation request
  *************************************************************************/
 

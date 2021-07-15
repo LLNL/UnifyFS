@@ -12,7 +12,7 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
-#include "client_api_suite.h"
+#include "api_suite.h"
 #include <string.h>
 
 /* Tests file laminate, with subsequent write/read/stat */

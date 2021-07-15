@@ -23,16 +23,9 @@
 static
 int rpc_init(unifyfs_cfg_t* cfg)
 {
-    int ret = 0;
-    long range_sz = 0;
+    int ret = UNIFYFS_SUCCESS;
 
-    LOGDBG("initializing file operations..");
-
-    ret = configurator_int_val(cfg->meta_range_size, &range_sz);
-    if (ret != 0) {
-        LOGERR("failed to read configuration (meta_range_size)");
-    }
-    meta_slice_sz = (size_t) range_sz;
+    LOGDBG("initializing RPC file operations..");
 
     return ret;
 }
@@ -66,29 +59,11 @@ int rpc_fsync(unifyfs_fops_ctx_t* ctx,
     /* assume we'll succeed */
     int ret = UNIFYFS_SUCCESS;
 
-    /* get memory page size on this machine */
-    int page_sz = (int) get_page_size();
-
     /* get application client */
     app_client* client = get_app_client(ctx->app_id, ctx->client_id);
     if (NULL == client) {
         return EINVAL;
     }
-
-    /* get pointer to superblock for this client and app */
-    shm_context* super_ctx = client->shmem_super;
-    if (NULL == super_ctx) {
-        LOGERR("missing client superblock");
-        return UNIFYFS_FAILURE;
-    }
-    char* superblk = (char*)(super_ctx->addr);
-
-    /* get pointer to start of key/value region in superblock */
-    char* meta = superblk + client->super_meta_offset;
-
-    /* get number of file extent index values client has for us,
-     * stored as a size_t value in meta region of shared memory */
-    size_t num_extents = *(size_t*)(meta);
 
     /* indices are stored in the superblock shared memory
      * created by the client, these are stored as index_t
@@ -97,13 +72,19 @@ int rpc_fsync(unifyfs_fops_ctx_t* ctx,
      * Is it safe to assume that the index information in this superblock is
      * not going to be modified by the client while we perform this operation?
      */
-    char* ptr_extents = meta + page_sz;
+
+    /* get number of file extent index values client has for us,
+     * stored as a size_t value in index region of shared memory */
+    size_t num_extents = *(client->state.write_index.ptr_num_entries);
 
     if (num_extents == 0) {
         return UNIFYFS_SUCCESS;  /* Nothing to do */
     }
 
-    unifyfs_index_t* meta_payload = (unifyfs_index_t*)(ptr_extents);
+    unifyfs_index_t* index_entry = client->state.write_index.index_entries;
+
+    /* the sync rpc now contains extents from a single file/gfid */
+    assert(gfid == index_entry[0].gfid);
 
     struct extent_tree_node* extents = calloc(num_extents, sizeof(*extents));
     if (NULL == extents) {
@@ -111,12 +92,9 @@ int rpc_fsync(unifyfs_fops_ctx_t* ctx,
         return ENOMEM;
     }
 
-    /* the sync rpc now contains extents from a single file/gfid */
-    assert(gfid == meta_payload[0].gfid);
-
     for (i = 0; i < num_extents; i++) {
-        struct extent_tree_node* extent = &extents[i];
-        unifyfs_index_t* meta = &meta_payload[i];
+        struct extent_tree_node* extent = extents + i;
+        unifyfs_index_t* meta = index_entry + i;
 
         extent->start = meta->file_pos;
         extent->end = (meta->file_pos + meta->length) - 1;
@@ -150,6 +128,28 @@ int rpc_filesize(unifyfs_fops_ctx_t* ctx,
                  size_t* filesize)
 {
     return unifyfs_invoke_filesize_rpc(gfid, filesize);
+}
+
+static
+int rpc_transfer(unifyfs_fops_ctx_t* ctx,
+                 int transfer_id,
+                 int gfid,
+                 int transfer_mode,
+                 const char* dest_file)
+{
+    if (TRANSFER_MODE_OWNER == transfer_mode) {
+        return unifyfs_invoke_transfer_rpc(ctx->app_id, ctx->client_id,
+                                           transfer_id, gfid, transfer_mode,
+                                           dest_file);
+    } else if (TRANSFER_MODE_LOCAL == transfer_mode) {
+        return unifyfs_invoke_broadcast_transfer(ctx->app_id, ctx->client_id,
+                                                 transfer_id, gfid,
+                                                 transfer_mode, dest_file);
+    } else {
+        LOGERR("invalid transfer mode=%d");
+        return EINVAL;
+    }
+
 }
 
 static
@@ -363,17 +363,18 @@ int rpc_mread(unifyfs_fops_ctx_t* ctx,
 }
 
 static struct unifyfs_fops _fops_rpc = {
-    .name = "rpc",
-    .init = rpc_init,
-    .metaget = rpc_metaget,
-    .metaset = rpc_metaset,
-    .fsync = rpc_fsync,
+    .name     = "rpc",
+    .init     = rpc_init,
     .filesize = rpc_filesize,
-    .truncate = rpc_truncate,
+    .fsync    = rpc_fsync,
     .laminate = rpc_laminate,
-    .unlink = rpc_unlink,
-    .read = rpc_read,
-    .mread = rpc_mread,
+    .metaget  = rpc_metaget,
+    .metaset  = rpc_metaset,
+    .mread    = rpc_mread,
+    .read     = rpc_read,
+    .transfer = rpc_transfer,
+    .truncate = rpc_truncate,
+    .unlink   = rpc_unlink
 };
 
 struct unifyfs_fops* unifyfs_fops_impl = &_fops_rpc;

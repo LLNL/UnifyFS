@@ -311,7 +311,7 @@ int main(int argc, char** argv)
     if (strncmp(filename, mountpoint, strlen(mountpoint)) == 0) {
         printf("mounting unifyfs at %s ..\n", mountpoint);
 
-        ret = unifyfs_mount(mountpoint, 0, 1, 0);
+        ret = unifyfs_mount(mountpoint, 0, 1);
         if (ret) {
             fprintf(stderr, "unifyfs_mount failed (return = %d)\n", ret);
             return -1;

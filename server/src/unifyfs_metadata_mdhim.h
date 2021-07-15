@@ -34,6 +34,19 @@
 #include "unifyfs_log.h"
 #include "unifyfs_meta.h"
 
+/* number of metadata servers =
+ *   number of unifyfs servers / UNIFYFS_META_SERVER_RATIO */
+#define UNIFYFS_META_SERVER_RATIO 1
+
+/* max count of remote read requests (per-server) */
+#define UNIFYFS_MAX_META_PER_SEND (4 * KIB)
+
+/* max count of metadata slices for a single data extent */
+#define UNIFYFS_MAX_META_SPLIT_COUNT (4 * KIB)
+
+/* NOTE: The maximum size of an individual read operation is
+ * (UNIFYFS_MAX_META_SPLIT_COUNT * UNIFYFS_META_DEFAULT_SLICE_SZ) */
+
 
 /* Key for file attributes */
 typedef int fattr_key_t;

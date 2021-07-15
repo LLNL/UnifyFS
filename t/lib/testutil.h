@@ -27,10 +27,16 @@ void testutil_rand_string(char* buf, size_t len);
 void testutil_rand_path(char* buf, size_t len, const char* pfx);
 
 /*
+ * Return a pointer to the path name of the test temp directory. Use the
+ * value of the environment variable UNIFYFS_TEST_TMPDIR if it exists,
+ * otherwise use P_tmpdir (defined in stdio.h, typically '/tmp').
+ */
+char* testutil_get_tmp_dir(void);
+
+/*
  * Return a pointer to the path name of the UnifyFS mount point. Use the
- * value of the environment variable UNIFYFS_MOUNT_POINT if it exists,
- * otherwise use P_tmpdir which is defined in stdio.h and is typically
- * /tmp.
+ * value of the environment variable UNIFYFS_MOUNTPOINT if it exists,
+ * otherwise use 'tmpdir/unifyfs'.
  */
 char* testutil_get_mount_point(void);
 

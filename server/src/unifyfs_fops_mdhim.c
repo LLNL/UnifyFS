@@ -195,7 +195,7 @@ static int mdhim_fsync(unifyfs_fops_ctx_t* ctx, int gfid)
     }
 
     /* get pointer to superblock for this client and app */
-    shm_context* super_ctx = client->shmem_super;
+    shm_context* super_ctx = client->state.shm_super_ctx;
     if (NULL == super_ctx) {
         LOGERR("missing client superblock");
         return UNIFYFS_FAILURE;
@@ -203,7 +203,7 @@ static int mdhim_fsync(unifyfs_fops_ctx_t* ctx, int gfid)
     char* superblk = (char*)(super_ctx->addr);
 
     /* get pointer to start of key/value region in superblock */
-    char* meta = superblk + client->super_meta_offset;
+    char* meta = superblk + client->state.write_index.index_offset;
 
     /* get number of file extent index values client has for us,
      * stored as a size_t value in meta region of shared memory */
@@ -229,7 +229,7 @@ static int mdhim_fsync(unifyfs_fops_ctx_t* ctx, int gfid)
         size_t length = meta_payload[i].length;
         slices += meta_num_slices(offset, length);
     }
-    if (slices >= UNIFYFS_MAX_SPLIT_CNT) {
+    if (slices >= UNIFYFS_MAX_META_SPLIT_COUNT) {
         LOGERR("Error allocating buffers");
         return ENOMEM;
     }
@@ -767,7 +767,7 @@ static int get_local_keyvals(
     *keyvals     = NULL;
 
     /* allocate memory to copy key/value data */
-    int max_keyvals = UNIFYFS_MAX_SPLIT_CNT;
+    int max_keyvals = UNIFYFS_MAX_META_SPLIT_COUNT;
     unifyfs_keyval_t* kvs_local = (unifyfs_keyval_t*) calloc(
         max_keyvals, sizeof(unifyfs_keyval_t));
     if (NULL == kvs_local) {
@@ -812,13 +812,14 @@ static int get_local_keyvals(
 
         /* we'll define key/values in these temp arrays that correspond
          * to extents we have locally */
-        unifyfs_key_t tmpkeys[UNIFYFS_MAX_SPLIT_CNT];
-        unifyfs_val_t tmpvals[UNIFYFS_MAX_SPLIT_CNT];
+        unifyfs_key_t tmpkeys[UNIFYFS_MAX_META_SPLIT_COUNT];
+        unifyfs_val_t tmpvals[UNIFYFS_MAX_META_SPLIT_COUNT];
 
         /* look up any entries we can find in our local extent map */
         int num_local = 0;
         int ret = unifyfs_inode_span_extents(gfid, start, end,
-                UNIFYFS_MAX_SPLIT_CNT, tmpkeys, tmpvals, &num_local);
+                                             UNIFYFS_MAX_META_SPLIT_COUNT,
+                                             tmpkeys, tmpvals, &num_local);
         if (ret) {
             LOGERR("failed to span extents (gfid=%d)", gfid);
             // now what?
@@ -957,8 +958,8 @@ static int create_gfid_chunk_reads(reqmgr_thrd_t* thrd_ctrl, int gfid,
 
     /* this is to maintain limits imposed in previous code
      * that would throw fatal errors */
-    if (num_vals >= UNIFYFS_MAX_SPLIT_CNT ||
-        num_vals >= MAX_META_PER_SEND) {
+    if (num_vals >= UNIFYFS_MAX_META_SPLIT_COUNT ||
+        num_vals >= UNIFYFS_MAX_META_PER_SEND) {
         LOGERR("too many key/values returned in range lookup");
         if (NULL != keyvals) {
             free(keyvals);
@@ -1033,7 +1034,7 @@ static int mdhim_read(unifyfs_fops_ctx_t* ctx,
 
     /* count number of slices this range covers */
     size_t slices = meta_num_slices(offset, length);
-    if (slices >= UNIFYFS_MAX_SPLIT_CNT) {
+    if (slices >= UNIFYFS_MAX_META_SPLIT_COUNT) {
         LOGERR("Error allocating buffers");
         return ENOMEM;
     }
@@ -1095,7 +1096,7 @@ static int mdhim_mread(unifyfs_fops_ctx_t* ctx, size_t num_req, void* reqbuf)
         /* add in number of slices this request needs */
         slices += meta_num_slices(off, len);
     }
-    if (slices >= UNIFYFS_MAX_SPLIT_CNT) {
+    if (slices >= UNIFYFS_MAX_META_SPLIT_COUNT) {
         LOGERR("Error allocating buffers");
         return ENOMEM;
     }

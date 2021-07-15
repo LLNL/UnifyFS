@@ -12,7 +12,8 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
-#include "client_api_suite.h"
+#include "api_suite.h"
+#include <fcntl.h>
 
 int api_create_open_remove_test(char* unifyfs_root,
                                 unifyfs_handle* fshdl)
@@ -48,15 +49,17 @@ int api_create_open_remove_test(char* unifyfs_root,
 
     diag("Starting API open tests");
 
+    int rdwr_flags = O_RDWR;
+    int rd_flags = O_RDONLY;
     unifyfs_gfid t3_gfid = UNIFYFS_INVALID_GFID;
     unifyfs_gfid t4_gfid = UNIFYFS_INVALID_GFID;
 
-    rc = unifyfs_open(*fshdl, testfile1, &t3_gfid);
+    rc = unifyfs_open(*fshdl, rdwr_flags, testfile1, &t3_gfid);
     ok(rc == UNIFYFS_SUCCESS && t3_gfid == t1_gfid,
        "%s:%d unifyfs_open(%s) is successful: rc=%d (%s)",
        __FILE__, __LINE__, testfile1, rc, unifyfs_rc_enum_description(rc));
 
-    rc = unifyfs_open(*fshdl, testfile2, &t4_gfid);
+    rc = unifyfs_open(*fshdl, rd_flags, testfile2, &t4_gfid);
     ok(rc == UNIFYFS_SUCCESS && t4_gfid == t2_gfid,
        "%s:%d unifyfs_open(%s) is successful: rc=%d (%s)",
        __FILE__, __LINE__, testfile2, rc, unifyfs_rc_enum_description(rc));
@@ -73,7 +76,7 @@ int api_create_open_remove_test(char* unifyfs_root,
        __FILE__, __LINE__, testfile1, rc, unifyfs_rc_enum_description(rc));
     if (UNIFYFS_SUCCESS == rc) {
         unifyfs_gfid t5_gfid = UNIFYFS_INVALID_GFID;
-        rc = unifyfs_open(*fshdl, testfile1, &t5_gfid);
+        rc = unifyfs_open(*fshdl, rd_flags, testfile1, &t5_gfid);
         ok(rc != UNIFYFS_SUCCESS && t5_gfid == UNIFYFS_INVALID_GFID,
            "%s:%d unifyfs_open(%s) after unifyfs_remove() fails: rc=%d (%s)",
            __FILE__, __LINE__, testfile1, rc, unifyfs_rc_enum_description(rc));
@@ -85,7 +88,7 @@ int api_create_open_remove_test(char* unifyfs_root,
        __FILE__, __LINE__, testfile2, rc, unifyfs_rc_enum_description(rc));
     if (UNIFYFS_SUCCESS == rc) {
         unifyfs_gfid t6_gfid = UNIFYFS_INVALID_GFID;
-        rc = unifyfs_open(*fshdl, testfile1, &t6_gfid);
+        rc = unifyfs_open(*fshdl, rd_flags, testfile1, &t6_gfid);
         ok(rc != UNIFYFS_SUCCESS && t6_gfid == UNIFYFS_INVALID_GFID,
            "%s:%d unifyfs_open(%s) after unifyfs_remove() fails: rc=%d (%s)",
            __FILE__, __LINE__, testfile1, rc, unifyfs_rc_enum_description(rc));

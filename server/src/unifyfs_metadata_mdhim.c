@@ -42,6 +42,9 @@
 #include "indexes.h"
 #include "mdhim.h"
 
+#define UNIFYFS_META_DB_NAME unifyfs_db
+#define UNIFYFS_META_DB_PATH RUNDIR
+
 struct mdhim_t* md;
 
 /* we use two MDHIM indexes:
@@ -115,7 +118,7 @@ int meta_init_store(unifyfs_cfg_t* cfg)
         return -1;
     }
     mdhim_options_set_db_type(db_opts, LEVELDB);
-    mdhim_options_set_db_name(db_opts, cfg->meta_db_name);
+    mdhim_options_set_db_name(db_opts, UNIFYFS_META_DB_NAME);
     mdhim_options_set_key_type(db_opts, MDHIM_UNIFYFS_KEY);
     mdhim_options_set_debug_level(db_opts, MLOG_CRIT);
 
@@ -133,12 +136,7 @@ int meta_init_store(unifyfs_cfg_t* cfg)
 
     /* number of metadata servers =
      *   number of unifyfs servers / UNIFYFS_META_SERVER_RATIO */
-    svr_ratio = 0;
-    rc = configurator_int_val(cfg->meta_server_ratio, &svr_ratio);
-    if (rc != 0) {
-        return -1;
-    }
-    ratio = (int) svr_ratio;
+    ratio = (int) UNIFYFS_META_SERVER_RATIO;
     mdhim_options_set_server_factor(db_opts, ratio);
 
     /* indices/attributes are striped to servers according

@@ -148,6 +148,9 @@ size_t generate_read_reqs(test_cfg* cfg, char* dstbuf,
  *    cfg.use_aio - when enabled, aio(7) will be used for issuing and
  *    completion of reads and writes.
  *
+ *    cfg.use_api - when enabled, the UnifyFS library API will be used
+ *    for issuing and completion of reads and writes.
+ *
  *    cfg.use_lio - when enabled, lio_listio(3) will be used for batching
  *    reads and writes. When cfg.use_aio is also enabled, the mode will
  *    be LIO_NOWAIT.
