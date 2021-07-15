@@ -212,7 +212,7 @@ static int wait_server_initialization(unifyfs_resource_t* resource,
 
     return_val_from_scnprintf =
         scnprintf(filename, PATH_MAX,
-                  "%s/%s", args->share_dir, UNIFYFSD_PID_FILENAME);
+                  "%s/%s", args->share_dir, UNIFYFS_SERVER_PID_FILENAME);
     if (return_val_from_scnprintf > (PATH_MAX - 2)) {
         fprintf(stderr, "Unifyfs status filename is too long!\n");
         return -ENOMEM;
@@ -357,7 +357,7 @@ static int remove_server_pid_file(unifyfs_args_t* args)
 
     return_val_from_scnprintf =
         scnprintf(filename, PATH_MAX,
-                  "%s/%s", args->share_dir, UNIFYFSD_PID_FILENAME);
+                  "%s/%s", args->share_dir, UNIFYFS_SERVER_PID_FILENAME);
     if (return_val_from_scnprintf > (PATH_MAX - 2)) {
         fprintf(stderr, "Unifyfs status filename is too long!\n");
         return -ENOMEM;

@@ -19,7 +19,7 @@
 #include "unifyfs_meta.h"
 
 /* extent slice size used for metadata */
-size_t meta_slice_sz = META_DEFAULT_RANGE_SZ;
+size_t meta_slice_sz = UNIFYFS_META_DEFAULT_SLICE_SZ;
 
 /* calculate number of slices in an extent given by start offset and length */
 size_t meta_num_slices(size_t offset, size_t length)

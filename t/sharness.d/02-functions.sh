@@ -107,8 +107,19 @@ unifyfsd_dump_state()
             fi
         done
     fi
-    # print out dumpfile contents to current test log
-    cat $dumpfile >&3
+
+    server_log=$UNIFYFS_TEST_TMPDIR/unifyfsd.stdlog
+    if [ -f $server_log ]; then
+        echo "Dumping server stdout/err file contents :" >> $dumpfile
+        echo "========= $server_log ==========" >> $dumpfile
+        cat $server_log >> $dumpfile
+        echo "+++++++++++++++++++++++" >> $dumpfile
+        echo >> $dumpfile
+    fi
+
+    # copy dumpfile to /tmp for later access
+    cp $dumpfile /tmp
+
     return 0
 }
 

@@ -194,6 +194,16 @@ static void register_server_server_rpcs(margo_instance_id mid)
                        server_pid_in_t, server_pid_out_t,
                        server_pid_rpc);
 
+    unifyfsd_rpc_context->rpcs.transfer_id =
+        MARGO_REGISTER(mid, "transfer_rpc",
+                       transfer_in_t, transfer_out_t,
+                       transfer_rpc);
+
+    unifyfsd_rpc_context->rpcs.transfer_bcast_id =
+        MARGO_REGISTER(mid, "transfer_bcast_rpc",
+                       transfer_bcast_in_t, transfer_bcast_out_t,
+                       transfer_bcast_rpc);
+
     unifyfsd_rpc_context->rpcs.truncate_id =
         MARGO_REGISTER(mid, "truncate_rpc",
                        truncate_in_t, truncate_out_t,
@@ -285,6 +295,10 @@ static void register_client_server_rpcs(margo_instance_id mid)
                    unifyfs_filesize_in_t, unifyfs_filesize_out_t,
                    unifyfs_filesize_rpc);
 
+    MARGO_REGISTER(mid, "unifyfs_transfer_rpc",
+                   unifyfs_transfer_in_t, unifyfs_transfer_out_t,
+                   unifyfs_transfer_rpc);
+
     MARGO_REGISTER(mid, "unifyfs_truncate_rpc",
                    unifyfs_truncate_in_t, unifyfs_truncate_out_t,
                    unifyfs_truncate_rpc);
@@ -312,6 +326,12 @@ static void register_client_server_rpcs(margo_instance_id mid)
         MARGO_REGISTER(mid, "unifyfs_mread_req_complete_rpc",
                        unifyfs_mread_req_complete_in_t,
                        unifyfs_mread_req_complete_out_t,
+                       NULL);
+
+    unifyfsd_rpc_context->rpcs.client_transfer_complete_id =
+        MARGO_REGISTER(mid, "unifyfs_transfer_complete_rpc",
+                       unifyfs_transfer_complete_in_t,
+                       unifyfs_transfer_complete_out_t,
                        NULL);
 }
 
@@ -538,10 +558,11 @@ void* pull_margo_bulk_buffer(hg_handle_t rpc_hdl,
      * transfer size that the underlying transport supports, and a
      * large bulk transfer may result in failure. */
     int i = 0;
+    hg_size_t max_bulk = UNIFYFS_SERVER_MAX_BULK_TX_SIZE;
     hg_size_t remain = bulk_sz;
     do {
-        hg_size_t offset = i * MAX_BULK_TX_SIZE;
-        hg_size_t len = remain < MAX_BULK_TX_SIZE ? remain : MAX_BULK_TX_SIZE;
+        hg_size_t offset = i * max_bulk;
+        hg_size_t len = (remain < max_bulk) ? remain : max_bulk;
         hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
                                    bulk_remote, offset,
                                    bulk_local, offset, len);
@@ -615,6 +636,8 @@ int invoke_client_mread_req_data_rpc(int app_id,
 
     /* fill input struct */
     unifyfs_mread_req_data_in_t in;
+    in.app_id        = (int32_t) app_id;
+    in.client_id     = (int32_t) client_id;
     in.mread_id      = (int32_t) mread_id;
     in.read_index    = (int32_t) read_index;
     in.read_offset   = (hg_size_t) read_offset;
@@ -682,6 +705,8 @@ int invoke_client_mread_req_complete_rpc(int app_id,
 
     /* fill input struct */
     unifyfs_mread_req_complete_in_t in;
+    in.app_id        = (int32_t) app_id;
+    in.client_id     = (int32_t) client_id;
     in.mread_id      = (int32_t) mread_id;
     in.read_index    = (int32_t) read_index;
     in.read_error    = (int32_t) read_error;
@@ -703,6 +728,59 @@ int invoke_client_mread_req_complete_rpc(int app_id,
     /* decode response */
     int ret;
     unifyfs_mread_req_complete_out_t out;
+    hret = margo_get_output(handle, &out);
+    if (hret == HG_SUCCESS) {
+        LOGDBG("Got response ret=%" PRIi32, out.ret);
+        ret = (int) out.ret;
+        margo_free_output(handle, &out);
+    } else {
+        LOGERR("margo_get_output() failed");
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+
+    /* free resources */
+    margo_destroy(handle);
+
+    return ret;
+}
+
+/* invokes the client mread request completion rpc function */
+int invoke_client_transfer_complete_rpc(int app_id,
+                                        int client_id,
+                                        int transfer_id,
+                                        int error_code)
+{
+    hg_return_t hret;
+
+    /* check that we have initialized margo */
+    if (NULL == unifyfsd_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* fill input struct */
+    unifyfs_transfer_complete_in_t in;
+    in.app_id      = (int32_t) app_id;
+    in.client_id   = (int32_t) client_id;
+    in.transfer_id = (int32_t) transfer_id;
+    in.error_code  = (int32_t) error_code;
+
+    /* get handle to rpc function */
+    hg_id_t rpc_id = unifyfsd_rpc_context->rpcs.client_transfer_complete_id;
+    hg_handle_t handle = create_client_handle(rpc_id, app_id, client_id);
+
+    /* call rpc function */
+    LOGDBG("invoking the transfer[%d] complete rpc function in client",
+           transfer_id);
+    hret = margo_forward(handle, &in);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_forward() failed");
+        margo_destroy(handle);
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    /* decode response */
+    int ret;
+    unifyfs_transfer_complete_out_t out;
     hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);

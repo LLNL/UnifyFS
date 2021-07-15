@@ -26,33 +26,32 @@ static void debug_print_read_req(read_req_t* req)
     }
 }
 
-/* an arraylist to maintain the active mread requests for the client */
-arraylist_t* active_mreads; // = NULL
 
-/* use to generated unique ids for each new mread */
-static unsigned int id_generator; // = 0
 
 /* compute the arraylist index for the given request id. we use
  * modulo operator to reuse slots in the list */
 static inline
-unsigned int id_to_list_index(unsigned int id)
+unsigned int id_to_list_index(unifyfs_client* client,
+                              unsigned int id)
 {
-    unsigned int capacity = (unsigned int) arraylist_capacity(active_mreads);
+    unsigned int capacity = (unsigned int)
+        arraylist_capacity(client->active_mreads);
     return id % capacity;
 }
 
 /* Create a new mread request containing the n_reads requests provided
  * in read_reqs array */
-client_mread_status* client_create_mread_request(int n_reads,
+client_mread_status* client_create_mread_request(unifyfs_client* client,
+                                                 int n_reads,
                                                  read_req_t* read_reqs)
 {
-    if (NULL == active_mreads) {
-        LOGERR("active_mreads is NULL");
+    if ((NULL == client) || (NULL == client->active_mreads)) {
+        LOGERR("client->active_mreads is NULL");
         return NULL;
     }
 
-    int active_count = arraylist_size(active_mreads);
-    if (active_count == arraylist_capacity(active_mreads)) {
+    int active_count = arraylist_size(client->active_mreads);
+    if (active_count == arraylist_capacity(client->active_mreads)) {
         /* already at full capacity for outstanding reads */
         LOGWARN("too many outstanding client reads");
         return NULL;
@@ -62,9 +61,9 @@ client_mread_status* client_create_mread_request(int n_reads,
     unsigned int mread_id, req_ndx;
     void* existing;
     do {
-        mread_id = id_generator++;
-        req_ndx = id_to_list_index(mread_id);
-        existing = arraylist_get(active_mreads, req_ndx);
+        mread_id = client->mread_id_generator++;
+        req_ndx = id_to_list_index(client, mread_id);
+        existing = arraylist_get(client->active_mreads, req_ndx);
     } while (existing != NULL);
 
     client_mread_status* mread = calloc(1, sizeof(client_mread_status));
@@ -72,17 +71,18 @@ client_mread_status* client_create_mread_request(int n_reads,
         LOGERR("failed to allocate client mread status");
         return NULL;
     }
-
-    int rc = arraylist_insert(active_mreads, (int)req_ndx, (void*)mread);
-    if (rc != 0) {
-        free(mread);
-        return NULL;
-    }
-
+    mread->client = client;
     mread->id = mread_id;
     mread->reqs = read_reqs;
     mread->n_reads = (unsigned int) n_reads;
     ABT_mutex_create(&(mread->sync));
+
+    int rc = arraylist_insert(client->active_mreads,
+                              (int)req_ndx, (void*)mread);
+    if (rc != 0) {
+        free(mread);
+        return NULL;
+    }
 
     return mread;
 }
@@ -90,37 +90,40 @@ client_mread_status* client_create_mread_request(int n_reads,
 /* Remove the mread status */
 int client_remove_mread_request(client_mread_status* mread)
 {
-    if (NULL == active_mreads) {
-        LOGERR("active_mreads is NULL");
-        return EINVAL;
-    }
     if (NULL == mread) {
         LOGERR("mread is NULL");
         return EINVAL;
     }
 
-    int list_index = (int) id_to_list_index(mread->id);
-    void* list_item = arraylist_remove(active_mreads, list_index);
+    unifyfs_client* client = mread->client;
+    if (NULL == client->active_mreads) {
+        LOGERR("client->active_mreads is NULL");
+        return EINVAL;
+    }
+
+    int list_index = (int) id_to_list_index(client, mread->id);
+    void* list_item = arraylist_remove(client->active_mreads, list_index);
     if (list_item == (void*)mread) {
         ABT_mutex_free(&(mread->sync));
         free(mread);
         return UNIFYFS_SUCCESS;
     } else {
-        LOGERR("mismatch on active_mreads index=%d", list_index);
+        LOGERR("mismatch on client->active_mreads index=%d", list_index);
         return UNIFYFS_FAILURE;
     }
 }
 
 /* Retrieve the mread request corresponding to the given mread_id. */
-client_mread_status* client_get_mread_status(unsigned int mread_id)
+client_mread_status* client_get_mread_status(unifyfs_client* client,
+                                             unsigned int mread_id)
 {
-    if (NULL == active_mreads) {
-        LOGERR("active_mreads is NULL");
+    if ((NULL == client) || (NULL == client->active_mreads)) {
+        LOGERR("client->active_mreads is NULL");
         return NULL;
     }
 
-    int list_index = (int) id_to_list_index(mread_id);
-    void* list_item = arraylist_get(active_mreads, list_index);
+    int list_index = (int) id_to_list_index(client, mread_id);
+    void* list_item = arraylist_get(client->active_mreads, list_index);
     client_mread_status* status = (client_mread_status*)list_item;
     if (NULL != status) {
         if (status->id != mread_id) {
@@ -277,6 +280,7 @@ void update_read_req_coverage(read_req_t* req,
  * requests to be handled by the server. */
 static
 void service_local_reqs(
+    unifyfs_client* client,
     read_req_t* read_reqs,   /* list of input read requests */
     int count,               /* number of input read requests */
     read_req_t* local_reqs,  /* output list of requests completed by client */
@@ -298,7 +302,7 @@ void service_local_reqs(
         int gfid = req->gfid;
 
         /* lookup local extents if we have them */
-        int fid = unifyfs_fid_from_gfid(gfid);
+        int fid = unifyfs_fid_from_gfid(client, gfid);
 
         /* move to next request if we can't find the matching fid */
         if (fid < 0) {
@@ -314,7 +318,7 @@ void service_local_reqs(
         size_t req_end   = req->offset + req->length;
 
         /* get pointer to extents for this file */
-        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(fid);
+        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
         assert(meta != NULL);
         struct seg_tree* extents = &meta->extents;
 
@@ -398,8 +402,8 @@ void service_local_reqs(
             /* copy data from local write log into user buffer */
             off_t log_offset = ext_log_pos + ext_byte_offset;
             size_t nread = 0;
-            int rc = unifyfs_logio_read(logio_ctx, log_offset, cover_length,
-                                        req_ptr, &nread);
+            int rc = unifyfs_logio_read(client->state.logio_ctx, log_offset,
+                                        cover_length, req_ptr, &nread);
             if (rc == UNIFYFS_SUCCESS) {
                 /* update bytes we have filled in the request buffer */
                 update_read_req_coverage(req, req_byte_offset, nread);
@@ -460,7 +464,9 @@ int compare_read_req(const void* a, const void* b)
  *
  * @return error code
  */
-int process_gfid_reads(read_req_t* in_reqs, int in_count)
+int process_gfid_reads(unifyfs_client* client,
+                       read_req_t* in_reqs,
+                       int in_count)
 {
     if (0 == in_count) {
         return UNIFYFS_SUCCESS;
@@ -498,7 +504,7 @@ int process_gfid_reads(read_req_t* in_reqs, int in_count)
     read_req_t* reqs = NULL;
 
     /* attempt to complete requests locally if enabled */
-    if (unifyfs_local_extents) {
+    if (client->use_local_extents) {
         /* allocate space to make local and server copies of the requests,
          * each list will be at most in_count long */
         size_t reqs_size = 2 * in_count;
@@ -517,7 +523,7 @@ int process_gfid_reads(read_req_t* in_reqs, int in_count)
          * completed requests from in_reqs into local_reqs, and it copies
          * any requests that can't be completed locally into the server_reqs
          * to be processed by the server */
-        service_local_reqs(in_reqs, in_count,
+        service_local_reqs(client, in_reqs, in_count,
                            local_reqs, server_reqs, &server_count);
 
         /* return early if we satisfied all requests locally */
@@ -546,7 +552,8 @@ int process_gfid_reads(read_req_t* in_reqs, int in_count)
     qsort(server_reqs, server_count, sizeof(read_req_t), compare_read_req);
 
     /* create mread status for tracking completion */
-    client_mread_status* mread = client_create_mread_request(server_count,
+    client_mread_status* mread = client_create_mread_request(client,
+                                                             server_count,
                                                              server_reqs);
     if (NULL == mread) {
         return ENOMEM;
@@ -572,7 +579,8 @@ int process_gfid_reads(read_req_t* in_reqs, int in_count)
            mread_id, server_count, server_reqs);
 
     /* invoke multi-read rpc on server */
-    read_rc = invoke_client_mread_rpc(mread_id, server_count, size, buffer);
+    read_rc = invoke_client_mread_rpc(client, mread_id, server_count,
+                                      size, buffer);
     free(buffer);
 
     if (read_rc != UNIFYFS_SUCCESS) {
@@ -654,7 +662,7 @@ int process_gfid_reads(read_req_t* in_reqs, int in_count)
         }
 
         /* get file size for this file */
-        off_t filesize_offt = unifyfs_gfid_filesize(req->gfid);
+        off_t filesize_offt = unifyfs_gfid_filesize(client, req->gfid);
         if (filesize_offt == (off_t)-1) {
             /* failed to get file size */
             req->errcode = ENOENT;
@@ -704,7 +712,7 @@ int process_gfid_reads(read_req_t* in_reqs, int in_count)
     /* if we attempted to service requests from our local extent map,
      * then we need to copy the resulting read requests from the local
      * and server arrays back into the user's original array */
-    if (unifyfs_local_extents) {
+    if (client->use_local_extents) {
         /* TODO: would be nice to copy these back into the same order
          * in which we received them. */
 

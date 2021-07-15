@@ -56,13 +56,21 @@ typedef struct {
     int gfid;
 } unifyfs_extent_t;
 
-/* write-log metadata index structure */
+/* write-log metadata index structures */
 typedef struct {
     off_t file_pos; /* start offset of data in file */
     off_t log_pos;  /* start offset of data in write log */
     size_t length;  /* length of data */
     int gfid;       /* global file id */
 } unifyfs_index_t;
+
+typedef struct {
+    size_t  index_size;    /* size of index metadata region in bytes */
+    size_t  index_offset;  /* superblock offset of index metadata region */
+
+    size_t* ptr_num_entries;         /* pointer to number of index entries */
+    unifyfs_index_t* index_entries;  /* pointer to first unifyfs_index_t */
+} unifyfs_write_index;
 
 /* UnifyFS file attributes */
 typedef struct {

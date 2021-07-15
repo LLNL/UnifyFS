@@ -27,32 +27,56 @@ extern "C" {
 /* "UnifyFS!" in ASCII */
 #define UNIFYFS_SUPER_MAGIC (0x556E696679465321)
 
-int unifyfs_mount(const char prefix[], int rank, size_t size,
-                  int l_app_id);
-int unifyfs_unmount(void);
+/**
+ * Mount UnifyFS file system at given prefix
+ *
+ * @param prefix  mountpoint prefix
+ * @param rank    client rank within application
+ * @param size    the number of application clients
+ *
+ * @return success/error code
+ */
+int unifyfs_mount(const char prefix[], int rank, size_t size);
 
 /**
- * @brief transfer a single file between unifyfs and other file system. either
- * @src or @dst should (not both) specify a unifyfs pathname, i.e., /unifyfs/..
+ * Unmount the UnifyFS file system
  *
- * @param src source file path
- * @param dst destination file path
- * @param parallel parallel transfer if set (parallel=1)
+ * @return success/error code
+ */
+int unifyfs_unmount(void);
+
+
+/* Enumeration to control transfer mode */
+enum {
+    UNIFYFS_TRANSFER_SERIAL = 0,
+    UNIFYFS_TRANSFER_PARALLEL = 1,
+};
+
+/**
+ * Transfer a single file between UnifyFS and another file system.
+ * Either @src or @dst (not both) should specify a path within
+ * the UnifyFS namespace prefixed by the mountpoint, e.g., /unifyfs/..
+ *
+ * @param src   source file path
+ * @param dst   destination file path
+ * @param mode  transfer mode
  *
  * @return 0 on success, negative errno otherwise.
  */
-int unifyfs_transfer_file(const char* src, const char* dst, int parallel);
+int unifyfs_transfer_file(const char* src,
+                          const char* dst,
+                          int mode);
 
 static inline
 int unifyfs_transfer_file_serial(const char* src, const char* dst)
 {
-    return unifyfs_transfer_file(src, dst, 0);
+    return unifyfs_transfer_file(src, dst, UNIFYFS_TRANSFER_SERIAL);
 }
 
 static inline
 int unifyfs_transfer_file_parallel(const char* src, const char* dst)
 {
-    return unifyfs_transfer_file(src, dst, 1);
+    return unifyfs_transfer_file(src, dst, UNIFYFS_TRANSFER_PARALLEL);
 }
 
 

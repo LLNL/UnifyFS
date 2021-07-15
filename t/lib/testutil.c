@@ -84,24 +84,47 @@ void testutil_rand_path(char* buf, size_t len, const char* pfx)
 }
 
 /*
- * Return a pointer to the path name of the UnifyFS mount point. Use the
- * value of the environment variable UNIFYFS_MOUNTPOINT if it exists,
- * otherwise use P_tmpdir which is defined in stdio.h and is typically
- * /tmp.
+ * Return a pointer to the path name of the test temp directory. Use the
+ * value of the environment variable UNIFYFS_TEST_TMPDIR if it exists,
+ * otherwise use P_tmpdir (defined in stdio.h, typically '/tmp').
  */
-char* testutil_get_mount_point(void)
+char* testutil_get_tmp_dir(void)
 {
     char* path;
-    char* env = getenv("UNIFYFS_MOUNTPOINT");
+    char* val = getenv("UNIFYFS_TEST_TMPDIR");
 
-    if (env != NULL) {
-        path = env;
+    if (val != NULL) {
+        path = val;
     } else {
         path = P_tmpdir;
     }
 
     return path;
 }
+
+/*
+ * Return a pointer to the path name of the UnifyFS mount point. Use the
+ * value of the environment variable UNIFYFS_MOUNTPOINT if it exists,
+ * otherwise use 'tmpdir/unifyfs'.
+ */
+char* testutil_get_mount_point(void)
+{
+    char* path;
+    char* val = getenv("UNIFYFS_MOUNTPOINT");
+
+    if (val != NULL) {
+        path = val;
+    } else {
+        char* tmpdir = testutil_get_tmp_dir();
+        size_t path_len = strlen(tmpdir) + strlen("/unifyfs") + 1;
+        path = malloc(path_len);
+        snprintf(path, path_len, "%s/unifyfs", tmpdir);
+    }
+
+    return path;
+}
+
+
 
 /* Stat the file associated to by path and store the global size of the
  * file at path in the address of the global pointer passed in. */

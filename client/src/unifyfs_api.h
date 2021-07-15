@@ -184,12 +184,14 @@ unifyfs_rc unifyfs_create(unifyfs_handle fshdl,
  * Open an existing file in UnifyFS.
  *
  * @param[in]   fshdl       Client file system handle
+ * @param[in]   flags       File access flags
  * @param[in]   filepath    Path of file to open
  * @param[out]  gfid        Global file id of opened file
  *
  * @return      UnifyFS success or failure code
  */
 unifyfs_rc unifyfs_open(unifyfs_handle fshdl,
+                        const int flags,
                         const char* filepath,
                         unifyfs_gfid* gfid);
 

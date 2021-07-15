@@ -44,6 +44,9 @@
 #define UNIFYFS_SYSIO_H
 
 #include "unifyfs-internal.h"
+#include "unifyfs_wrap.h"
+
+#include "unifyfs-dirops.h"
 
 #define AIOCB_ERROR_CODE(cbp) (cbp->__error_code)
 #define AIOCB_RETURN_VAL(cbp) (cbp->__return_value)
@@ -139,7 +142,5 @@ int unifyfs_fd_write(
     size_t count,    /* number of bytes to write */
     size_t* nwritten /* number of bytes written */
 );
-
-#include "unifyfs-dirops.h"
 
 #endif /* UNIFYFS_SYSIO_H */

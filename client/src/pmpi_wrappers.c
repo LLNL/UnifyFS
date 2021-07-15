@@ -14,6 +14,8 @@
 
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "pmpi_wrappers.h"
 #include "unifyfs.h"
@@ -24,7 +26,6 @@ int unifyfs_mpi_init(int* argc, char*** argv)
     int rc, ret;
     int rank;
     int world_sz = 0;
-    int app_id = 0;
 
     //fprintf(stderr, "DEBUG: %s - before PMPI_Init()\n", __func__);
 
@@ -36,10 +37,15 @@ int unifyfs_mpi_init(int* argc, char*** argv)
     //fprintf(stderr, "DEBUG: %s - after PMPI_Init(), rank=%d ret=%d\n",
     //        __func__, rank, ret);
 
-    rc = unifyfs_mount("/unifyfs", rank, (size_t)world_sz, app_id);
+    char* mountpoint = getenv("UNIFYFS_MOUNTPOINT");
+    if (NULL == mountpoint) {
+        mountpoint = strdup("/unifyfs");
+    }
+
+    rc = unifyfs_mount(mountpoint, rank, (size_t)world_sz);
     if (UNIFYFS_SUCCESS != rc) {
-        fprintf(stderr, "UNIFYFS ERROR: unifyfs_mount() failed with '%s'\n",
-                unifyfs_rc_enum_description((unifyfs_rc)rc));
+        fprintf(stderr, "UNIFYFS ERROR: unifyfs_mount(%s) failed with '%s'\n",
+                mountpoint, unifyfs_rc_enum_description((unifyfs_rc)rc));
     }
 
     return ret;

@@ -48,7 +48,7 @@
     ENUMITEM(NYI, "Not yet implemented")                               \
     ENUMITEM(PMI, "PMI2/PMIx error")                                   \
     ENUMITEM(SHMEM, "Shared memory region init/access error")          \
-    ENUMITEM(THRDINIT, "Thread initialization failed")                 \
+    ENUMITEM(THREAD, "POSIX thread operation failed")                  \
     ENUMITEM(TIMEOUT, "Timed out")                                     \
 
 
