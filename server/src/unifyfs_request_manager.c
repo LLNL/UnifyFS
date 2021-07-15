@@ -40,7 +40,6 @@
 #include "margo_server.h"
 #include "unifyfs_group_rpc.h"
 #include "unifyfs_p2p_rpc.h"
-
 #include "unifyfs_server_rpcs.h"
 
 
@@ -148,7 +147,6 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
     thrd_ctrl->exit_flag              = 0;
     thrd_ctrl->exited                 = 0;
     thrd_ctrl->waiting_for_work       = 0;
-    thrd_ctrl->has_waiting_dispatcher = 0;
 
     /* launch request manager thread */
     rc = pthread_create(&(thrd_ctrl->thrd), NULL,
@@ -178,13 +176,13 @@ server_read_req_t* rm_reserve_read_req(reqmgr_thrd_t* thrd_ctrl)
 {
     server_read_req_t* rdreq = NULL;
     RM_REQ_LOCK(thrd_ctrl);
-    if (thrd_ctrl->num_read_reqs < RM_MAX_SERVER_READS) {
-        if (thrd_ctrl->next_rdreq_ndx < (RM_MAX_SERVER_READS - 1)) {
+    if (thrd_ctrl->num_read_reqs < UNIFYFS_SERVER_MAX_READS) {
+        if (thrd_ctrl->next_rdreq_ndx < (UNIFYFS_SERVER_MAX_READS - 1)) {
             rdreq = thrd_ctrl->read_reqs + thrd_ctrl->next_rdreq_ndx;
             assert((rdreq->req_ndx == 0) && (rdreq->in_use == 0));
             rdreq->req_ndx = thrd_ctrl->next_rdreq_ndx++;
         } else { // search for unused slot
-            for (int i = 0; i < RM_MAX_SERVER_READS; i++) {
+            for (int i = 0; i < UNIFYFS_SERVER_MAX_READS; i++) {
                 rdreq = thrd_ctrl->read_reqs + i;
                 if ((rdreq->req_ndx == 0) && (rdreq->in_use == 0)) {
                     rdreq->req_ndx = i;
@@ -260,7 +258,7 @@ static void signal_new_responses(reqmgr_thrd_t* reqmgr)
         /* wake up the request manager thread */
         RM_LOCK(reqmgr);
         if (reqmgr->waiting_for_work) {
-            /* have a reqmgr thread waiting on condition variable,
+            /* reqmgr thread is waiting on condition variable,
              * signal it to begin processing the responses we just added */
             LOGDBG("signaling new responses");
             pthread_cond_signal(&reqmgr->thrd_cond);
@@ -455,8 +453,7 @@ int rm_request_exit(reqmgr_thrd_t* thrd_ctrl)
     /* inform reqmgr thread that it's time to exit */
     thrd_ctrl->exit_flag = 1;
 
-    /* if reqmgr thread is not waiting in critical
-     * section, let's wait on it to come back */
+    /* if reqmgr thread is waiting for work, wake it up */
     if (thrd_ctrl->waiting_for_work) {
          /* signal reqmgr thread */
         pthread_cond_signal(&thrd_ctrl->thrd_cond);
@@ -491,7 +488,7 @@ static int rm_request_remote_chunks(reqmgr_thrd_t* thrd_ctrl)
 
     /* iterate over each active read request */
     RM_REQ_LOCK(thrd_ctrl);
-    for (i = 0; i < RM_MAX_SERVER_READS; i++) {
+    for (i = 0; i < UNIFYFS_SERVER_MAX_READS; i++) {
         server_read_req_t* req = thrd_ctrl->read_reqs + i;
         if (!req->in_use) {
             continue;
@@ -549,7 +546,7 @@ static int rm_process_remote_chunk_responses(reqmgr_thrd_t* thrd_ctrl)
     int ret = (int)UNIFYFS_SUCCESS;
 
     /* iterate over each active read request */
-    for (i = 0; i < RM_MAX_SERVER_READS; i++) {
+    for (i = 0; i < UNIFYFS_SERVER_MAX_READS; i++) {
         server_read_req_t* req = thrd_ctrl->read_reqs + i;
         if (!req->in_use) {
             continue;
@@ -668,7 +665,7 @@ int send_data_to_client(server_read_req_t* rdreq,
     }
 
     size_t data_size = (size_t) resp->read_rc;
-    size_t send_sz = MAX_DATA_TX_SIZE;
+    size_t send_sz = UNIFYFS_SERVER_MAX_DATA_TX_SIZE;
     char* bufpos = data;
 
     size_t resp_file_offset = resp->offset;
@@ -1114,6 +1111,45 @@ static int process_read_rpc(reqmgr_thrd_t* reqmgr,
     return ret;
 }
 
+static int process_transfer_rpc(reqmgr_thrd_t* reqmgr,
+                                client_rpc_req_t* req)
+{
+    int ret = UNIFYFS_SUCCESS;
+
+    unifyfs_transfer_in_t* in = req->input;
+    assert(in != NULL);
+    int transfer_id = in->transfer_id;
+    int gfid = in->gfid;
+    int mode = in->mode;
+    const char* dest_file = strdup(in->dst_file);
+    margo_free_input(req->handle, in);
+    free(in);
+
+    LOGDBG("transferring gfid=%d to file %s", gfid, dest_file);
+
+    unifyfs_fops_ctx_t ctx = {
+        .app_id = reqmgr->app_id,
+        .client_id = reqmgr->client_id,
+    };
+    ret = unifyfs_fops_transfer(&ctx, transfer_id, gfid, mode, dest_file);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("unifyfs_fops_transfer() failed");
+    }
+
+    /* send rpc response */
+    unifyfs_transfer_out_t out;
+    out.ret = (int32_t) ret;
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
+}
+
 static int process_truncate_rpc(reqmgr_thrd_t* reqmgr,
                                 client_rpc_req_t* req)
 {
@@ -1243,6 +1279,9 @@ static int rm_process_client_requests(reqmgr_thrd_t* reqmgr)
             break;
         case UNIFYFS_CLIENT_RPC_SYNC:
             rret = process_fsync_rpc(reqmgr, req);
+            break;
+        case UNIFYFS_CLIENT_RPC_TRANSFER:
+            rret = process_transfer_rpc(reqmgr, req);
             break;
         case UNIFYFS_CLIENT_RPC_TRUNCATE:
             rret = process_truncate_rpc(reqmgr, req);

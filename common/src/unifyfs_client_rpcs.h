@@ -41,6 +41,7 @@ typedef enum {
     UNIFYFS_CLIENT_RPC_MOUNT,
     UNIFYFS_CLIENT_RPC_READ,
     UNIFYFS_CLIENT_RPC_SYNC,
+    UNIFYFS_CLIENT_RPC_TRANSFER,
     UNIFYFS_CLIENT_RPC_TRUNCATE,
     UNIFYFS_CLIENT_RPC_UNLINK,
     UNIFYFS_CLIENT_RPC_UNMOUNT
@@ -134,6 +135,35 @@ MERCURY_GEN_PROC(unifyfs_filesize_out_t,
                  ((hg_size_t)(filesize)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_filesize_rpc)
 
+/* unifyfs_transfer_rpc (client => server)
+ *
+ * given an app_id, client_id, transfer id, global file id, transfer mode,
+ * and a destination file path, transfer data to that file */
+MERCURY_GEN_PROC(unifyfs_transfer_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
+                 ((int32_t)(transfer_id))
+                 ((int32_t)(gfid))
+                 ((int32_t)(mode))
+                 ((hg_const_string_t)(dst_file)))
+MERCURY_GEN_PROC(unifyfs_transfer_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_transfer_rpc)
+
+/* unifyfs_transfer_complete_rpc (server => client)
+ *
+ * Transfer completion response for a request with specified transfer_id.
+ *
+ * A non-zero error_code indicates the server encountered an error during
+ * processing of the request. */
+MERCURY_GEN_PROC(unifyfs_transfer_complete_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
+                 ((int32_t)(transfer_id))
+                 ((int32_t)(error_code)))
+MERCURY_GEN_PROC(unifyfs_transfer_complete_out_t, ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_transfer_complete_rpc)
+
 /* unifyfs_truncate_rpc (client => server)
  *
  * given an app_id, client_id, global file id,
@@ -194,6 +224,8 @@ DECLARE_MARGO_RPC_HANDLER(unifyfs_mread_rpc)
  * read_offset is the offset to be added to the start offset of the request,
  * and is used to transfer data for very large extents in multiple chunks. */
 MERCURY_GEN_PROC(unifyfs_mread_req_data_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
                  ((int32_t)(mread_id))
                  ((int32_t)(read_index))
                  ((hg_size_t)(read_offset))
@@ -211,6 +243,8 @@ DECLARE_MARGO_RPC_HANDLER(unifyfs_mread_req_data_rpc)
  * A non-zero read_error indicates the server encountered an error during
  * processing of the request. */
 MERCURY_GEN_PROC(unifyfs_mread_req_complete_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
                  ((int32_t)(mread_id))
                  ((int32_t)(read_index))
                  ((int32_t)(read_error)))

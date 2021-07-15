@@ -13,13 +13,14 @@
  */
 
 #include "unifyfs_api_internal.h"
+#include "unifyfs_fid.h"
+#include "margo_client.h"
 
 /*
  * Public Methods
  */
 
 /* Initialize client's use of UnifyFS */
-// TODO: replace unifyfs_mount()
 unifyfs_rc unifyfs_initialize(const char* mountpoint,
                               unifyfs_cfg_option* options, int n_opts,
                               unifyfs_handle* fshdl)
@@ -38,10 +39,10 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
         LOGERR("failed to allocate client handle");
         return ENOMEM;
     }
-    unifyfs_app_id = unifyfs_generate_gfid(mountpoint);
-    client->app_id = unifyfs_app_id;
 
     // initialize configuration
+    long l;
+    bool b;
     unifyfs_cfg_t* client_cfg = &(client->cfg);
     int rc = unifyfs_config_init(client_cfg, 0, NULL, n_opts, options);
     if (rc) {
@@ -50,18 +51,113 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
     }
     client_cfg->ptype = UNIFYFS_CLIENT;
     client_cfg->unifyfs_mountpoint = strdup(mountpoint);
-    unifyfs_mount_prefix = client_cfg->unifyfs_mountpoint;
-    unifyfs_mount_prefixlen = strlen(unifyfs_mount_prefix);
+    client->state.mount_prefix = strdup(mountpoint);
+    client->state.mount_prefixlen = strlen(mountpoint);
 
-    // set log level from config
-    char* cfgval = client_cfg->log_verbosity;
+    /* set our current working directory if user provided one */
+    char* cfgval = client_cfg->client_cwd;
     if (cfgval != NULL) {
-        long l;
+        client->cwd = strdup(cfgval);
+
+        /* check that cwd falls somewhere under the mount point */
+        int cwd_within_mount = 0;
+        if (0 == strncmp(client->cwd, client->state.mount_prefix,
+                         client->state.mount_prefixlen)) {
+            /* characters in target up through mount point match,
+             * assume we match */
+            cwd_within_mount = 1;
+
+            /* if we have another character, it must be '/' */
+            if ((strlen(client->cwd) > client->state.mount_prefixlen) &&
+                (client->cwd[client->state.mount_prefixlen] != '/')) {
+                cwd_within_mount = 0;
+            }
+        }
+        if (!cwd_within_mount) {
+            /* path given in CWD is outside of the UnifyFS mount point */
+            LOGERR("UNIFYFS_CLIENT_CWD '%s' must be within the mount '%s'",
+                   client->cwd, client->state.mount_prefix);
+
+            /* ignore setting and set back to NULL */
+            free(client->cwd);
+            client->cwd = NULL;
+        }
+    } else {
+        /* user did not specify a CWD, so initialize with the actual
+         * current working dir */
+        char* cwd = getcwd(NULL, 0);
+        if (cwd != NULL) {
+            client->cwd = cwd;
+        } else {
+            LOGERR("Failed getcwd (%s)", strerror(errno));
+        }
+    }
+
+    /* set log level from config */
+    cfgval = client_cfg->log_verbosity;
+    if (cfgval != NULL) {
         rc = configurator_int_val(cfgval, &l);
         if (rc == 0) {
             unifyfs_set_log_level((unifyfs_log_level_t)l);
         }
     }
+
+    /* determine max number of files to store in file system */
+    client->max_files = UNIFYFS_CLIENT_MAX_FILES;
+    cfgval = client_cfg->client_max_files;
+    if (cfgval != NULL) {
+        rc = configurator_int_val(cfgval, &l);
+        if (rc == 0) {
+            client->max_files = (int)l;
+        }
+    }
+
+    /* Determine if we should track all write extents and use them
+     * to service read requests if all data is local */
+    client->use_local_extents = 0;
+    cfgval = client_cfg->client_local_extents;
+    if (cfgval != NULL) {
+        rc = configurator_bool_val(cfgval, &b);
+        if (rc == 0) {
+            client->use_local_extents = (bool)b;
+        }
+    }
+
+    /* Determine whether we automatically sync every write to server.
+     * This slows write performance, but it can serve as a work
+     * around for apps that do not have all necessary syncs. */
+    client->use_write_sync = false;
+    cfgval = client_cfg->client_write_sync;
+    if (cfgval != NULL) {
+        rc = configurator_bool_val(cfgval, &b);
+        if (rc == 0) {
+            client->use_write_sync = (bool)b;
+        }
+    }
+
+    /* Determine SUPER MAGIC value to return from statfs.
+     * Use UNIFYFS_SUPER_MAGIC if true, TMPFS_SUPER_MAGIC otherwise. */
+    client->use_unifyfs_magic = true;
+    cfgval = client_cfg->client_super_magic;
+    if (cfgval != NULL) {
+        rc = configurator_bool_val(cfgval, &b);
+        if (rc == 0) {
+            client->use_unifyfs_magic = (bool)b;
+        }
+    }
+
+    /* Define size of buffer used to cache key/value pairs for
+     * data offsets before passing them to the server */
+    client->write_index_size = UNIFYFS_CLIENT_WRITE_INDEX_SIZE;
+    cfgval = client_cfg->client_write_index_size;
+    if (cfgval != NULL) {
+        rc = configurator_int_val(cfgval, &l);
+        if (rc == 0) {
+            client->write_index_size = (size_t)l;
+        }
+    }
+    client->max_write_index_entries =
+        client->write_index_size / sizeof(unifyfs_index_t);
 
     // initialize k-v store access
     int kv_rank = 0;
@@ -80,20 +176,20 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
     }
 
     /* Call client mount rpc function to get client id */
+    int app_id = unifyfs_generate_gfid(mountpoint);
+    client->state.app_id  = app_id;
     LOGDBG("calling mount rpc");
-    rc = invoke_client_mount_rpc(client_cfg);
+    rc = invoke_client_mount_rpc(client);
     if (rc != UNIFYFS_SUCCESS) {
         /* If we fail to connect to the server, bail with an error */
         LOGERR("failed to mount to server");
         return rc;
     }
-    unifyfs_mounted = unifyfs_app_id;
-    client->is_mounted = true;
-    client->client_id = unifyfs_client_id;
+    client->state.is_mounted = true;
 
     /* initialize our library using assigned client id, creates shared memory
      * regions (e.g., superblock and data recv) and inits log-based I/O */
-    rc = unifyfs_init(client_cfg);
+    rc = unifyfs_client_init(client);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
     }
@@ -101,23 +197,23 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
     /* Call client attach rpc function to register our newly created shared
      * memory and files with server */
     LOGDBG("calling attach rpc");
-    rc = invoke_client_attach_rpc(client_cfg);
+    rc = invoke_client_attach_rpc(client);
     if (rc != UNIFYFS_SUCCESS) {
         /* If we fail, bail with an error */
         LOGERR("failed to attach to server");
-        unifyfs_fini();
+        unifyfs_client_fini(client);
         return rc;
     }
 
     /* add mount point as a new directory in the file list */
-    if (unifyfs_get_fid_from_path(mountpoint) < 0) {
+    if (unifyfs_fid_from_path(client, mountpoint) < 0) {
         /* no entry exists for mount point, so create one */
-        int fid = unifyfs_fid_create_directory(mountpoint);
+        int fid = unifyfs_fid_create_directory(client, mountpoint);
         if (fid < 0) {
             /* if there was an error, return it */
             LOGERR("failed to create directory entry for mount point: `%s'",
                    mountpoint);
-            unifyfs_fini();
+            unifyfs_client_fini(client);
             return UNIFYFS_FAILURE;
         }
     }
@@ -128,7 +224,6 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
 }
 
 /* Finalize client's use of UnifyFS */
-// TODO: replace unifyfs_unmount()
 unifyfs_rc unifyfs_finalize(unifyfs_handle fshdl)
 {
     if (UNIFYFS_INVALID_HANDLE == fshdl) {
@@ -138,10 +233,10 @@ unifyfs_rc unifyfs_finalize(unifyfs_handle fshdl)
 
     int ret = UNIFYFS_SUCCESS;
 
-    if (client->is_mounted) {
+    if (client->state.is_mounted) {
         /* sync any outstanding writes */
         LOGDBG("syncing data");
-        int rc = unifyfs_sync_extents(-1);
+        int rc = unifyfs_sync_files(client);
         if (rc != UNIFYFS_SUCCESS) {
             LOGERR("client sync failed");
             ret = rc;
@@ -149,42 +244,30 @@ unifyfs_rc unifyfs_finalize(unifyfs_handle fshdl)
 
         /* invoke unmount rpc to tell server we're disconnecting */
         LOGDBG("calling unmount");
-        rc = invoke_client_unmount_rpc();
+        rc = invoke_client_unmount_rpc(client);
         if (rc != UNIFYFS_SUCCESS) {
             LOGERR("client unmount rpc failed");
             ret = rc;
         }
-
-        unifyfs_mounted = -1;
     }
 
     /* free resources allocated in client_rpc_init */
     unifyfs_client_rpc_finalize();
 
-    /************************
-     * free our mount point, and detach from structures
-     * storing data
-     ************************/
-
-    /* free resources allocated in unifyfs_init */
-    unifyfs_fini();
+    /* free resources allocated in unifyfs_client_init */
+    unifyfs_client_fini(client);
 
     /* free memory tracking our mount prefix string */
-    if (unifyfs_mount_prefix != NULL) {
-        free(unifyfs_mount_prefix);
-        unifyfs_mount_prefix = NULL;
-        unifyfs_mount_prefixlen = 0;
-        client->cfg.unifyfs_mountpoint = NULL;
+    if (client->state.mount_prefix != NULL) {
+        free(client->state.mount_prefix);
+        client->state.mount_prefix = NULL;
+        client->state.mount_prefixlen = 0;
     }
 
-    /************************
-     * free configuration values
-     ************************/
-
     /* free global holding current working directory */
-    if (unifyfs_cwd != NULL) {
-        free(unifyfs_cwd);
-        unifyfs_cwd = NULL;
+    if (client->cwd != NULL) {
+        free(client->cwd);
+        client->cwd = NULL;
     }
 
     /* clean up configuration */

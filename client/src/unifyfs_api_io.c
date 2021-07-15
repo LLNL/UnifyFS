@@ -22,7 +22,8 @@
  * Private Methods
  */
 
-static int process_gfid_writes(unifyfs_io_request* wr_reqs,
+static int process_gfid_writes(unifyfs_client* client,
+                               unifyfs_io_request* wr_reqs,
                                size_t n_reqs)
 {
     int ret = UNIFYFS_SUCCESS;
@@ -31,7 +32,7 @@ static int process_gfid_writes(unifyfs_io_request* wr_reqs,
     for (i = 0; i < n_reqs; i++) {
         unifyfs_io_request* req = wr_reqs + i;
 
-        int fid = unifyfs_fid_from_gfid(req->gfid);
+        int fid = unifyfs_fid_from_gfid(client, req->gfid);
         if (-1 == fid) {
             req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
             req->result.error = EINVAL;
@@ -48,7 +49,7 @@ static int process_gfid_writes(unifyfs_io_request* wr_reqs,
         }
 
         /* write user buffer to file */
-        int rc = unifyfs_fid_write(fid, req->offset, req->user_buf,
+        int rc = unifyfs_fid_write(client, fid, req->offset, req->user_buf,
                                    req->nbytes, &(req->result.count));
         if (rc != UNIFYFS_SUCCESS) {
             req->result.error = rc;
@@ -65,7 +66,8 @@ static int process_gfid_writes(unifyfs_io_request* wr_reqs,
     return ret;
 }
 
-static int process_gfid_truncates(unifyfs_io_request* tr_reqs,
+static int process_gfid_truncates(unifyfs_client* client,
+                                  unifyfs_io_request* tr_reqs,
                                   size_t n_reqs)
 {
     int ret = UNIFYFS_SUCCESS;
@@ -74,13 +76,13 @@ static int process_gfid_truncates(unifyfs_io_request* tr_reqs,
     for (i = 0; i < n_reqs; i++) {
         unifyfs_io_request* req = tr_reqs + i;
 
-        int fid = unifyfs_fid_from_gfid(req->gfid);
+        int fid = unifyfs_fid_from_gfid(client, req->gfid);
         if (-1 == fid) {
             req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
             req->result.error = EINVAL;
         }
 
-        int rc = unifyfs_fid_truncate(fid, req->offset);
+        int rc = unifyfs_fid_truncate(client, fid, req->offset);
         if (rc != UNIFYFS_SUCCESS) {
             req->result.error = rc;
         }
@@ -90,7 +92,8 @@ static int process_gfid_truncates(unifyfs_io_request* tr_reqs,
     return ret;
 }
 
-static int process_gfid_syncs(unifyfs_io_request* s_reqs,
+static int process_gfid_syncs(unifyfs_client* client,
+                              unifyfs_io_request* s_reqs,
                               size_t n_reqs)
 {
     int ret = UNIFYFS_SUCCESS;
@@ -101,13 +104,13 @@ static int process_gfid_syncs(unifyfs_io_request* s_reqs,
         unifyfs_io_request* req = s_reqs + i;
 
         if (req->op == UNIFYFS_IOREQ_OP_SYNC_META) {
-            int fid = unifyfs_fid_from_gfid(req->gfid);
+            int fid = unifyfs_fid_from_gfid(client, req->gfid);
             if (-1 == fid) {
                 req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
                 req->result.error = EINVAL;
             }
 
-            rc = unifyfs_fid_sync(fid);
+            rc = unifyfs_fid_sync_extents(client, fid);
             if (rc != UNIFYFS_SUCCESS) {
                 req->result.error = rc;
             }
@@ -115,7 +118,7 @@ static int process_gfid_syncs(unifyfs_io_request* s_reqs,
         } else if (req->op == UNIFYFS_IOREQ_OP_SYNC_DATA) {
             /* logio_sync covers all files' data - only do it once */
             if (!data_sync_completed) {
-                rc = unifyfs_logio_sync(logio_ctx);
+                rc = unifyfs_logio_sync(client->state.logio_ctx);
                 if (UNIFYFS_SUCCESS != rc) {
                     req->result.error = rc;
                 } else {
@@ -148,6 +151,8 @@ unifyfs_rc unifyfs_dispatch_io(unifyfs_handle fshdl,
     } else if (NULL == reqs) {
         return EINVAL;
     }
+
+    unifyfs_client* client = fshdl;
 
     unifyfs_io_request* req;
 
@@ -260,7 +265,7 @@ unifyfs_rc unifyfs_dispatch_io(unifyfs_handle fshdl,
     }
 
     /* process reads */
-    int rc = process_gfid_reads(rd_reqs, (int)n_read);
+    int rc = process_gfid_reads(client, rd_reqs, (int)n_read);
     if (rc != UNIFYFS_SUCCESS) {
         /* error encountered while issuing reads */
         for (i = 0; i < n_read; i++) {
@@ -270,7 +275,7 @@ unifyfs_rc unifyfs_dispatch_io(unifyfs_handle fshdl,
     }
 
     /* process writes */
-    rc = process_gfid_writes(wr_reqs, n_write);
+    rc = process_gfid_writes(client, wr_reqs, n_write);
     if (rc != UNIFYFS_SUCCESS) {
         /* error encountered while issuing writes */
         for (i = 0; i < n_write; i++) {
@@ -280,7 +285,7 @@ unifyfs_rc unifyfs_dispatch_io(unifyfs_handle fshdl,
     }
 
     /* process truncates */
-    rc = process_gfid_truncates(tr_reqs, n_trunc);
+    rc = process_gfid_truncates(client, tr_reqs, n_trunc);
     if (rc != UNIFYFS_SUCCESS) {
         /* error encountered while issuing writes */
         for (i = 0; i < n_trunc; i++) {
@@ -290,7 +295,7 @@ unifyfs_rc unifyfs_dispatch_io(unifyfs_handle fshdl,
     }
 
     /* process syncs */
-    rc = process_gfid_syncs(s_reqs, n_sync);
+    rc = process_gfid_syncs(client, s_reqs, n_sync);
     if (rc != UNIFYFS_SUCCESS) {
         /* error encountered while issuing writes */
         for (i = 0; i < n_sync; i++) {

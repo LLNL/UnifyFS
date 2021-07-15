@@ -79,8 +79,7 @@ typedef struct {
     long offset;
     long length;
     char* buf;
-
-} read_req_t;
+} rdreq_t;
 
 int main(int argc, char* argv[])
 {
@@ -175,7 +174,7 @@ int main(int argc, char* argv[])
     /* calculate the number of I/O requests of writing these 3D cells */
     long num_reqs = elems_per_tile * elems_per_tile * nr_tiles_per_proc;
 
-    read_req_t* r_w_reqs = (read_req_t*) malloc(num_reqs * sizeof(read_req_t));
+    rdreq_t* r_w_reqs = (rdreq_t*) calloc(num_reqs, sizeof(rdreq_t));
 
     /*initialize these I/O requests */
     long cursor = 0, tot_sz;
@@ -197,7 +196,7 @@ int main(int argc, char* argv[])
     memset(buf, 0, elems_per_tile * SZ_PER_ELEM);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    unifyfs_mount("/unifyfs", rank, ranknum, 0);
+    unifyfs_mount("/unifyfs", rank, ranknum);
     MPI_Barrier(MPI_COMM_WORLD);
 
     int fd = open(fname, O_RDWR | O_CREAT | O_TRUNC, 0600);

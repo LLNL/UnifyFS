@@ -18,7 +18,7 @@ TESTS += \
   0510-statfs-static.t \
   0600-stdio-static.t \
   0700-unifyfs-stage-full.t \
-  8000-client-api.t \
+  8000-library-api.t \
   9005-unifyfs-unmount.t \
   9010-stop-unifyfsd.t \
   9020-mountpoint-empty.t \
@@ -41,7 +41,7 @@ clean-local:
 	rm -fr trash-directory.* test-results *.log test_run_env.sh
 
 libexec_PROGRAMS = \
-  api/client_api_test.t \
+  api/api_test.t \
   common/seg_tree_test.t \
   common/slotmap_test.t \
   std/stdio-static.t \
@@ -80,7 +80,6 @@ test_api_ldadd = \
 
 test_api_ldflags =  \
   $(AM_LDFLAGS) \
-  $(CP_WRAPPERS) \
   -static
 
 # flags for common tests
@@ -107,16 +106,17 @@ test_wrap_ldflags = \
 
 # Per-target flags begin here
 
-api_client_api_test_t_CPPFLAGS = $(test_cppflags)
-api_client_api_test_t_LDADD    = $(test_api_ldadd)
-api_client_api_test_t_LDFLAGS  = $(test_api_ldflags)
-api_client_api_test_t_SOURCES  = \
-	api/client_api_suite.h \
-	api/client_api_suite.c \
+api_api_test_t_CPPFLAGS = $(test_cppflags)
+api_api_test_t_LDADD    = $(test_api_ldadd)
+api_api_test_t_LDFLAGS  = $(test_api_ldflags)
+api_api_test_t_SOURCES  = \
+	api/api_suite.h \
+	api/api_suite.c \
 	api/init-fini.c \
 	api/create-open-remove.c \
 	api/write-read-sync-stat.c \
-	api/laminate.c
+	api/laminate.c \
+  api/transfer.c
 
 test_sysio_sources = \
   sys/sysio_suite.h \

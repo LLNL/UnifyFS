@@ -14,7 +14,7 @@
 
 #include <string.h>
 
-#include "client_api_suite.h"
+#include "api_suite.h"
 
 int api_write_read_sync_stat_test(char* unifyfs_root,
                                   unifyfs_handle* fshdl,

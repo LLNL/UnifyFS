@@ -44,6 +44,7 @@
 #define UNIFYFS_STDIO_H
 
 #include "unifyfs-internal.h"
+#include "unifyfs_wrap.h"
 
 /* TODO: declare the wrapper functions we define in unifyfs-stdio.c
  * so other routines can call them */

@@ -12,7 +12,7 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
-/* This is the collection of client API tests.
+/* This is the collection of library API tests.
  *
  * When new API functionality needs to be tested:
  * 1. Create a t/api/<function>.c file with a function called:
@@ -22,10 +22,10 @@
  * 3. In t/Makefile.am, add the new file to the source file list for
  *    the api test suite (api_client_api_test_t_SOURCES).
  * 4. The api_<function>_test function can now be called from the suite's
- *    implementation in t/api/client_api_suite.c */
+ *    implementation in t/api/api_suite.c */
 
-#ifndef T_CLIENT_API_SUITE_H
-#define T_CLIENT_API_SUITE_H
+#ifndef T_LIBRARY_API_SUITE_H
+#define T_LIBRARY_API_SUITE_H
 
 #include "t/lib/tap.h"
 #include "t/lib/testutil.h"
@@ -53,4 +53,11 @@ int api_write_read_sync_stat_test(char* unifyfs_root,
 int api_laminate_test(char* unifyfs_root,
                       unifyfs_handle* fshdl);
 
-#endif /* T_CLIENT_API_SUITE_H */
+/* Tests file transfers, both serial and parallel */
+int api_transfer_test(char* unifyfs_root,
+                      char* tmpdir,
+                      unifyfs_handle* fshdl,
+                      size_t filesize,
+                      size_t chksize);
+
+#endif /* T_LIBRARY_API_SUITE_H */

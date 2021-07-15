@@ -33,6 +33,7 @@
 #include "unifyfs_request_manager.h"
 #include "unifyfs_service_manager.h"
 #include "unifyfs_server_rpcs.h"
+#include "unifyfs_transfer.h"
 #include "margo_server.h"
 
 /* Service Manager (SM) state */
@@ -59,6 +60,10 @@ typedef struct {
 
     /* list of chunk read requests from remote servers */
     arraylist_t* chunk_reads;
+
+    /* list of local transfer requests */
+    arraylist_t* local_transfers;
+    arraylist_t* completed_transfers;
 
     /* list of service requests (server_rpc_req_t*) */
     arraylist_t* svc_reqs;
@@ -98,11 +103,70 @@ do { \
     } \
 } while (0)
 
+
+static inline void signal_svcmgr(void)
+{
+    pid_t this_thread = unifyfs_gettid();
+    if (this_thread != sm->tid) {
+        /* signal svcmgr to begin processing the requests we just added */
+        LOGDBG("signaling new service requests");
+        pthread_cond_signal(&(sm->thrd_cond));
+    }
+}
+
+/* submit a request to the service manager thread */
+int sm_submit_service_request(server_rpc_req_t* req)
+{
+    if ((NULL == sm) || (NULL == sm->svc_reqs)) {
+        return UNIFYFS_FAILURE;
+    }
+
+    SM_REQ_LOCK();
+    arraylist_add(sm->svc_reqs, req);
+    SM_REQ_UNLOCK();
+
+    signal_svcmgr();
+
+    return UNIFYFS_SUCCESS;
+}
+
+/* submit a transfer request to the service manager thread */
+int sm_submit_transfer_request(transfer_thread_args* tta)
+{
+    if ((NULL == sm) || (NULL == sm->local_transfers)) {
+        return UNIFYFS_FAILURE;
+    }
+
+    SM_REQ_LOCK();
+    arraylist_add(sm->local_transfers, tta);
+    SM_REQ_UNLOCK();
+
+    signal_svcmgr();
+
+    return UNIFYFS_SUCCESS;
+}
+
+/* tell service manager thread transfer has completed */
+int sm_complete_transfer_request(transfer_thread_args* tta)
+{
+    if ((NULL == sm) || (NULL == sm->completed_transfers)) {
+        return UNIFYFS_FAILURE;
+    }
+
+    SM_REQ_LOCK();
+    arraylist_add(sm->completed_transfers, tta);
+    SM_REQ_UNLOCK();
+
+    signal_svcmgr();
+
+    return UNIFYFS_SUCCESS;
+}
+
 /* initialize and launch service manager thread */
 int svcmgr_init(void)
 {
-    /* allocate a service manager struct,
-     * store in global variable */
+    /* allocate a struct to maintain service manager state.
+     * store pointer to struct in a global variable */
     sm = (svcmgr_state_t*)calloc(1, sizeof(svcmgr_state_t));
     if (NULL == sm) {
         LOGERR("failed to allocate service manager state!");
@@ -110,7 +174,7 @@ int svcmgr_init(void)
     }
 
     /* initialize lock for shared data structures of the
-     * request manager */
+     * service manager */
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
@@ -143,6 +207,20 @@ int svcmgr_init(void)
         return ENOMEM;
     }
 
+    /* allocate lists to track local transfer requests */
+    sm->local_transfers = arraylist_create(0);
+    if (sm->local_transfers == NULL) {
+        LOGERR("failed to allocate service manager local_transfers!");
+        svcmgr_fini();
+        return ENOMEM;
+    }
+    sm->completed_transfers = arraylist_create(0);
+    if (sm->completed_transfers == NULL) {
+        LOGERR("failed to allocate service manager completed_transfers!");
+        svcmgr_fini();
+        return ENOMEM;
+    }
+
     /* allocate a list to track service requests */
     sm->svc_reqs = arraylist_create(0);
     if (sm->svc_reqs == NULL) {
@@ -158,7 +236,7 @@ int svcmgr_init(void)
     if (rc != 0) {
         LOGERR("failed to create service manager thread");
         svcmgr_fini();
-        return UNIFYFS_ERROR_THRDINIT;
+        return UNIFYFS_ERROR_THREAD;
     }
 
     return UNIFYFS_SUCCESS;
@@ -181,6 +259,14 @@ int svcmgr_fini(void)
 
         if (NULL != sm->chunk_reads) {
             arraylist_free(sm->chunk_reads);
+        }
+
+        if (NULL != sm->local_transfers) {
+            arraylist_free(sm->local_transfers);
+        }
+
+        if (NULL != sm->completed_transfers) {
+            arraylist_free(sm->completed_transfers);
         }
 
         if (NULL != sm->svc_reqs) {
@@ -298,7 +384,7 @@ int sm_issue_chunk_reads(int src_rank,
         int cli_id = rreq->log_client_id;
         app_clnt = get_app_client(app_id, cli_id);
         if (NULL != app_clnt) {
-            logio_context* logio_ctx = app_clnt->logio;
+            logio_context* logio_ctx = app_clnt->state.logio_ctx;
             if (NULL != logio_ctx) {
                 size_t nread = 0;
                 int rc = unifyfs_logio_read(logio_ctx, log_offset, nbytes,
@@ -459,6 +545,54 @@ int sm_find_extents(int gfid,
     return ret;
 }
 
+int sm_transfer(int client_server,
+                int client_app,
+                int client_id,
+                int transfer_id,
+                int gfid,
+                int transfer_mode,
+                const char* dest_file,
+                server_rpc_req_t* bcast_req)
+{
+    int owner_rank = hash_gfid_to_server(gfid);
+    int is_owner = (owner_rank == glb_pmi_rank);
+
+    unifyfs_file_attr_t attrs;
+    int ret = unifyfs_inode_metaget(gfid, &attrs);
+    if (ret == UNIFYFS_SUCCESS) {
+        /* we have local file state */
+        LOGDBG("transfer - gfid=%d mode=%d file=%s",
+               gfid, transfer_mode, dest_file);
+        transfer_thread_args* tta = calloc(1, sizeof(*tta));
+        if (transfer_mode == TRANSFER_MODE_LOCAL) {
+            /* each server transfers local data to the destination file */
+            int rc = create_local_transfers(gfid, dest_file, tta);
+            if (rc != UNIFYFS_SUCCESS) {
+                ret = rc;
+            } else {
+                /* submit transfer request for processing */
+                tta->bcast_req = bcast_req;
+                tta->client_server = client_server;
+                tta->client_app = client_app;
+                tta->client_id = client_id;
+                tta->transfer_id = transfer_id;
+                rc = sm_submit_transfer_request(tta);
+                if (rc != UNIFYFS_SUCCESS) {
+                    ret = rc;
+                }
+            }
+        } else if (is_owner && (transfer_mode == TRANSFER_MODE_OWNER)) {
+            // TODO: support TRANSFER_MODE_OWNER
+            ret = UNIFYFS_ERROR_NYI;
+        }
+        if (ret != UNIFYFS_SUCCESS) {
+            LOGERR("transfer(gfid=%d, mode=%d, file=%s) failed",
+                   gfid, transfer_mode, dest_file);
+        }
+    }
+    return ret;
+}
+
 int sm_truncate(int gfid, size_t filesize)
 {
     int owner_rank = hash_gfid_to_server(gfid);
@@ -471,7 +605,7 @@ int sm_truncate(int gfid, size_t filesize)
         size_t old_size = (size_t) attrs.size;
         LOGDBG("truncate - gfid=%d size=%zu old-size=%zu",
                gfid, filesize, old_size);
-        int ret = unifyfs_inode_truncate(gfid, (unsigned long)filesize);
+        ret = unifyfs_inode_truncate(gfid, (unsigned long)filesize);
         if (ret != UNIFYFS_SUCCESS) {
             LOGERR("truncate(gfid=%d, size=%zu) failed",
                    gfid, filesize);
@@ -504,7 +638,7 @@ static int send_chunk_read_responses(void)
      * list on the service manager structure */
     int num_chunk_reads = arraylist_size(sm->chunk_reads);
     if (num_chunk_reads) {
-        /* got some chunk read requets, take the list and replace
+        /* got some chunk read requests, take the list and replace
          * it with an empty list */
         LOGDBG("processing %d chunk read responses", num_chunk_reads);
         chunk_reads = sm->chunk_reads;
@@ -531,30 +665,106 @@ static int send_chunk_read_responses(void)
     return rc;
 }
 
-static inline void signal_new_requests(void)
+static int spawn_local_transfers(void)
 {
-    pid_t this_thread = unifyfs_gettid();
-    if (this_thread != sm->tid) {
-        /* signal svcmgr to begin processing the requests we just added */
-        LOGDBG("signaling new service requests");
-        pthread_cond_signal(&(sm->thrd_cond));
-    }
-}
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
 
-/* submit a request to the service manager thread */
-int sm_submit_service_request(server_rpc_req_t* req)
-{
-    if ((NULL == sm) || (NULL == sm->svc_reqs)) {
-        return UNIFYFS_FAILURE;
-    }
+    /* this will hold a list of local transfers if we find any */
+    arraylist_t* transfers = NULL;
 
+    /* lock to access global service manager object */
     SM_REQ_LOCK();
-    arraylist_add(sm->svc_reqs, req);
+
+    /* if we have any local transfers, take pointer to the list
+     * of transfer args and replace it with a newly allocated
+     * list on the service manager structure */
+    int num_transfers = arraylist_size(sm->local_transfers);
+    if (num_transfers) {
+        /* got some transfer requests, take the list and replace
+         * it with an empty list */
+        LOGDBG("processing %d local transfers", num_transfers);
+        transfers = sm->local_transfers;
+        sm->local_transfers = arraylist_create(0);
+    }
+
+    /* release lock on service manager object */
     SM_REQ_UNLOCK();
 
-    signal_new_requests();
+    /* iterate over each transfer and spawn helper thread */
+    transfer_thread_args* tta;
+    for (int i = 0; i < num_transfers; i++) {
+        /* get next transfer */
+        tta = (transfer_thread_args*) arraylist_remove(transfers, i);
 
-    return UNIFYFS_SUCCESS;
+        /* spawn transfer helper thread */
+        int rc = pthread_create(&(tta->thrd), NULL,
+                                transfer_helper_thread, (void*)tta);
+        if (rc != 0) {
+            LOGERR("failed to spawn transfer helper thread for tta=%p", tta);
+            ret = UNIFYFS_ERROR_THREAD;
+            release_transfer_thread_args(tta);
+        }
+    }
+
+    return ret;
+}
+
+static int complete_local_transfers(void)
+{
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
+
+    /* this will hold a list of local transfers if we find any */
+    arraylist_t* transfers = NULL;
+
+    /* lock to access global service manager object */
+    SM_REQ_LOCK();
+
+    /* if we have any local transfers, take pointer to the list
+     * of transfer args and replace it with a newly allocated
+     * list on the service manager structure */
+    int num_transfers = arraylist_size(sm->completed_transfers);
+    if (num_transfers) {
+        /* got some transfer requests, take the list and replace
+         * it with an empty list */
+        LOGDBG("completing %d local transfers", num_transfers);
+        transfers = sm->completed_transfers;
+        sm->completed_transfers = arraylist_create(0);
+    }
+
+    /* release lock on service manager object */
+    SM_REQ_UNLOCK();
+
+    /* iterate over each transfer and spawn helper thread */
+    transfer_thread_args* tta;
+    for (int i = 0; i < num_transfers; i++) {
+        /* get next transfer */
+        tta = (transfer_thread_args*) arraylist_remove(transfers, i);
+
+        /* spawn transfer helper thread */
+        int rc = pthread_join(tta->thrd, NULL);
+        if (rc != 0) {
+            LOGERR("failed to join transfer helper thread for tta=%p", tta);
+            ret = UNIFYFS_ERROR_THREAD;
+        }
+
+        if (glb_pmi_rank == tta->client_server) {
+            rc = invoke_client_transfer_complete_rpc(tta->client_app,
+                                                     tta->client_id,
+                                                     tta->transfer_id,
+                                                     tta->status);
+            if (rc != 0) {
+                LOGERR("failed transfer(id=%d) complete rpc to client[%d:%d]",
+                       tta->transfer_id, tta->client_app, tta->client_id);
+                ret = rc;
+            }
+        }
+
+        release_transfer_thread_args(tta);
+    }
+
+    return ret;
 }
 
 static int process_chunk_read_rpc(server_rpc_req_t* req)
@@ -829,6 +1039,39 @@ static int process_server_pid_rpc(server_rpc_req_t* req)
     return ret;
 }
 
+static int process_transfer_rpc(server_rpc_req_t* req)
+{
+    /* get target file and requested file size */
+    transfer_in_t* in = req->input;
+    int src_rank      = (int) in->src_rank;
+    int client_app    = (int) in->client_app;
+    int client_id     = (int) in->client_id;
+    int transfer_id   = (int) in->transfer_id;
+    int gfid          = (int) in->gfid;
+    int transfer_mode = (int) in->mode;
+    char* dest_file = strdup(in->dst_file);
+    margo_free_input(req->handle, in);
+    free(in);
+
+    /* do file transfer */
+    int ret = sm_transfer(src_rank, client_app, client_id, transfer_id,
+                          gfid, transfer_mode, dest_file, NULL);
+    free(dest_file);
+
+    /* send rpc response */
+    transfer_out_t out;
+    out.ret = (int32_t) ret;
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
+}
+
 static int process_truncate_rpc(server_rpc_req_t* req)
 {
     /* get target file and requested file size */
@@ -952,6 +1195,31 @@ static int process_laminate_bcast_rpc(server_rpc_req_t* req)
     return ret;
 }
 
+static int process_transfer_bcast_rpc(server_rpc_req_t* req)
+{
+    /* get target file and requested file size */
+    transfer_bcast_in_t* in = req->input;
+    int src_rank      = (int) in->root;
+    int gfid          = (int) in->gfid;
+    int transfer_mode = (int) in->mode;
+    const char* dest_file = (const char*) in->dst_file;
+
+    LOGDBG("gfid=%d file=%s", gfid, dest_file);
+
+    /* do file transfer */
+    int ret = sm_transfer(src_rank, -1, -1, -1, gfid, transfer_mode,
+                          dest_file, req);
+    if (UNIFYFS_SUCCESS != ret) {
+        /* submission of transfer request failed */
+        collective_set_local_retval(req->coll, ret);
+
+         /* create a ULT to finish broadcast operation */
+        ret = invoke_bcast_progress_rpc(req->coll);
+    }
+
+    return ret;
+}
+
 static int process_truncate_bcast_rpc(server_rpc_req_t* req)
 {
     /* get target file and requested file size */
@@ -1067,6 +1335,9 @@ static int process_service_requests(void)
         case UNIFYFS_SERVER_RPC_PID_REPORT:
             rret = process_server_pid_rpc(req);
             break;
+        case UNIFYFS_SERVER_RPC_TRANSFER:
+            rret = process_transfer_rpc(req);
+            break;
         case UNIFYFS_SERVER_RPC_TRUNCATE:
             rret = process_truncate_rpc(req);
             break;
@@ -1078,6 +1349,9 @@ static int process_service_requests(void)
             break;
         case UNIFYFS_SERVER_BCAST_RPC_LAMINATE:
             rret = process_laminate_bcast_rpc(req);
+            break;
+        case UNIFYFS_SERVER_BCAST_RPC_TRANSFER:
+            rret = process_transfer_bcast_rpc(req);
             break;
         case UNIFYFS_SERVER_BCAST_RPC_TRUNCATE:
             rret = process_truncate_bcast_rpc(req);
@@ -1157,6 +1431,11 @@ void* service_manager_thread(void* arg)
             LOGERR("failed to send chunk read responses");
         }
 
+        rc = spawn_local_transfers();
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to send chunk read responses");
+        }
+
 #if defined(USE_SVCMGR_PROGRESS_TIMER)
         if (have_progress_timer) {
             /* cancel progress alarm */
@@ -1190,6 +1469,11 @@ void* service_manager_thread(void* arg)
         /* set flag to indicate we're no longer waiting */
         sm->waiting_for_work = 0;
         SM_UNLOCK();
+
+        rc = complete_local_transfers();
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to complete local transfers");
+        }
 
         if (sm->time_to_exit) {
             break;

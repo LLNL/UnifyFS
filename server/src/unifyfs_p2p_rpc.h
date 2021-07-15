@@ -144,6 +144,25 @@ int unifyfs_invoke_metaset_rpc(int gfid, int attr_op,
                                unifyfs_file_attr_t* attrs);
 
 /**
+ * @brief Transfer target file
+ *
+ * @param client_app      requesting client app id
+ * @param client_id       requesting client id
+ * @param transfer_id     requesting client transfer id
+ * @param gfid            target file
+ * @param transfer_mode   transfer mode
+ * @param dest_file       destination file
+ *
+ * @return success|failure
+ */
+int unifyfs_invoke_transfer_rpc(int client_app,
+                                int client_id,
+                                int transfer_id,
+                                int gfid,
+                                int transfer_mode,
+                                const char* dest_file);
+
+/**
  * @brief Truncate target file
  *
  * @param gfid      target file

@@ -99,6 +99,9 @@ void* arraylist_remove(arraylist_t* arr, int pos)
     return item;
 }
 
+/* Inserts element at given index (pos) in the arraylist.
+ * Overwrites (and frees) any existing element at that index.
+ * Returns 0 on success, or -1 on error */
 int arraylist_insert(arraylist_t* arr, int pos, void* elem)
 {
     if (NULL == arr) {
@@ -133,36 +136,21 @@ int arraylist_insert(arraylist_t* arr, int pos, void* elem)
     return 0;
 }
 
-
+/* Adds element to the end of the current list.
+ * Returns list index of newly added element, or -1 on error */
 int arraylist_add(arraylist_t* arr, void* elem)
 {
     if (NULL == arr) {
         return -1;
     }
 
-    if (arr->size == arr->cap) {
-        int newcap = 2 * arr->cap;
-        void** newlist = (void**) realloc(arr->elems,
-                                          newcap * sizeof(void*));
-        if (NULL == newlist) {
-            return -1;
-        }
-        arr->elems = newlist;
-        arr->cap = newcap;
-
-        int i;
-        for (i = arr->size; i < newcap; i++) {
-            arr->elems[i] = NULL;
-        }
+    int pos = arr->size;
+    int rc = arraylist_insert(arr, pos, elem);
+    if (rc == -1) {
+        return rc;
+    } else {
+        return pos;
     }
-
-    if (arr->elems[arr->size] != NULL) {
-        free(arr->elems[arr->size]);
-    }
-    arr->elems[arr->size] = elem;
-    arr->size += 1;
-
-    return 0;
 }
 
 int arraylist_reset(arraylist_t* arr)

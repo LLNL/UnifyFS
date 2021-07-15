@@ -75,9 +75,6 @@ typedef struct reqmgr_thrd {
     /* flag indicating request manager thread is waiting on thrd_cond CV */
     int waiting_for_work;
 
-    /* flag indicating a margo rpc handler ULT is waiting on thrd_cond CV */
-    int has_waiting_dispatcher;
-
     /* argobots mutex for synchronizing access to request state between
      * margo rpc handler ULTs and request manager thread */
     ABT_mutex reqs_sync;
@@ -85,7 +82,7 @@ typedef struct reqmgr_thrd {
     /* array of server read requests */
     int num_read_reqs;
     int next_rdreq_ndx;
-    server_read_req_t read_reqs[RM_MAX_SERVER_READS];
+    server_read_req_t read_reqs[UNIFYFS_SERVER_MAX_READS];
 
     /* list of client rpc requests */
     arraylist_t* client_reqs;

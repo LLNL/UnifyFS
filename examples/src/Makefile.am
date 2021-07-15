@@ -26,7 +26,8 @@ libexec_PROGRAMS += \
   size-static \
   transfer-static \
   write-static \
-  writeread-static
+  writeread-static \
+  write-transfer-static
 endif #HAVE_LD_WRAP
 
 if HAVE_GOTCHA
@@ -44,7 +45,8 @@ libexec_PROGRAMS += \
   size-gotcha \
   transfer-gotcha \
   write-gotcha \
-  writeread-gotcha
+  writeread-gotcha \
+  write-transfer-gotcha
 
 if HAVE_HDF5
 libexec_PROGRAMS += \
@@ -261,3 +263,12 @@ writeread_static_SOURCES  = writeread.c testutil.c $(testutil_headers)
 writeread_static_CPPFLAGS = $(ex_mpi_cppflags)
 writeread_static_LDADD    = $(ex_static_mpi_ldadd)
 writeread_static_LDFLAGS  = $(ex_static_ldflags)
+
+write_transfer_gotcha_SOURCES  = write-transfer.c testutil.c $(testutil_headers)
+write_transfer_gotcha_CPPFLAGS = $(ex_mpi_cppflags)
+write_transfer_gotcha_LDADD    = $(ex_gotcha_mpi_ldadd)
+
+write_transfer_static_SOURCES  = write-transfer.c testutil.c $(testutil_headers)
+write_transfer_static_CPPFLAGS = $(ex_mpi_cppflags)
+write_transfer_static_LDADD    = $(ex_static_mpi_ldadd)
+write_transfer_static_LDFLAGS  = $(ex_static_ldflags)

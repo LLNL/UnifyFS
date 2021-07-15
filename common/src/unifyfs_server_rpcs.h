@@ -31,6 +31,7 @@
 extern "C" {
 #endif
 
+/* enumerate the various server-to-server rpcs */
 typedef enum {
     UNIFYFS_SERVER_RPC_INVALID = 0,
     UNIFYFS_SERVER_RPC_CHUNK_READ,
@@ -41,13 +42,25 @@ typedef enum {
     UNIFYFS_SERVER_RPC_METAGET,
     UNIFYFS_SERVER_RPC_METASET,
     UNIFYFS_SERVER_RPC_PID_REPORT,
+    UNIFYFS_SERVER_RPC_TRANSFER,
     UNIFYFS_SERVER_RPC_TRUNCATE,
     UNIFYFS_SERVER_BCAST_RPC_EXTENTS,
     UNIFYFS_SERVER_BCAST_RPC_FILEATTR,
     UNIFYFS_SERVER_BCAST_RPC_LAMINATE,
+    UNIFYFS_SERVER_BCAST_RPC_TRANSFER,
     UNIFYFS_SERVER_BCAST_RPC_TRUNCATE,
     UNIFYFS_SERVER_BCAST_RPC_UNLINK
 } server_rpc_e;
+
+/* structure to track server-to-server rpc request state */
+typedef struct {
+    server_rpc_e req_type;
+    hg_handle_t handle;
+    void* coll;
+    void* input;
+    void* bulk_buf;
+    size_t bulk_sz;
+} server_rpc_req_t;
 
 /*---- Server Point-to-Point (p2p) RPCs ----*/
 
@@ -140,6 +153,19 @@ MERCURY_GEN_PROC(metaset_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(metaset_rpc)
 
+/* Transfer file */
+MERCURY_GEN_PROC(transfer_in_t,
+                 ((int32_t)(src_rank))
+                 ((int32_t)(client_app))
+                 ((int32_t)(client_id))
+                 ((int32_t)(transfer_id))
+                 ((int32_t)(gfid))
+                 ((int32_t)(mode))
+                 ((hg_const_string_t)(dst_file)))
+MERCURY_GEN_PROC(transfer_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(transfer_rpc)
+
 /* Truncate file at owner */
 MERCURY_GEN_PROC(truncate_in_t,
                  ((int32_t)(gfid))
@@ -148,7 +174,7 @@ MERCURY_GEN_PROC(truncate_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(truncate_rpc)
 
-/*---- Collective RPCs ----*/
+/*---- Server Collective RPCs ----*/
 
 /* Finish an ongoing broadcast rpc */
 MERCURY_GEN_PROC(bcast_progress_in_t,
@@ -187,6 +213,16 @@ MERCURY_GEN_PROC(laminate_bcast_in_t,
 MERCURY_GEN_PROC(laminate_bcast_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(laminate_bcast_rpc)
+
+/* Broadcast transfer request to all servers */
+MERCURY_GEN_PROC(transfer_bcast_in_t,
+                 ((int32_t)(root))
+                 ((int32_t)(gfid))
+                 ((int32_t)(mode))
+                 ((hg_const_string_t)(dst_file)))
+MERCURY_GEN_PROC(transfer_bcast_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(transfer_bcast_rpc)
 
 /* Broadcast truncation point to all servers */
 MERCURY_GEN_PROC(truncate_bcast_in_t,

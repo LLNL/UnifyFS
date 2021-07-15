@@ -239,7 +239,8 @@ Existing files can be opened by any client process using ``unifyfs_open()``.
 
     const char* filename = "/my/unifyfs/namespace/an/existing/file";
     unifyfs_gfid gfid = UNIFYFS_INVALID_GFID;
-    int rc = unifyfs_open(fshdl, filename, &gfid);
+    int access_flags = O_RDWR;
+    int rc = unifyfs_open(fshdl, access_flags, filename, &gfid);
 
 When no longer required, files can be deleted using ``unifyfs_remove()``.
 

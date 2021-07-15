@@ -13,9 +13,9 @@
  */
 
 //#include <mpi.h>
-#include "client_api_suite.h"
+#include "api_suite.h"
 
-/* This is the collection of client API tests.
+/* This is the collection of library API tests.
  *
  * To add new subtests to existing API functionality tests:
  * 1. Simply add the tests (order matters) to the appropriate
@@ -25,7 +25,7 @@
  * 1. Create a t/api/<function>.c source file with a function called:
  *       api_<function>_test(char *unifyfs_root)
  *    to contain all the TAP tests for that API functionality.
- * 2. Add the function name to t/api/client_api_suite.h, with comments.
+ * 2. Add the function name to t/api/api_suite.h, with comments.
  * 3. In t/Makefile.am, add the new file to the source file list for
  *    the api test suite (api_client_api_test_t_SOURCES).
  * 4. The api_<function>_test function can now be used in this suite. */
@@ -34,6 +34,7 @@ int main(int argc, char* argv[])
 {
     int rc;
     char* unifyfs_root = testutil_get_mount_point();
+    char* tmp_dir = testutil_get_tmp_dir();
 
     unifyfs_handle fshdl;
 
@@ -60,6 +61,9 @@ int main(int argc, char* argv[])
                                       (size_t)4 * MIB, (size_t)128 * KIB);
 
         api_laminate_test(unifyfs_root, &fshdl);
+
+        api_transfer_test(unifyfs_root, tmp_dir, &fshdl,
+                          (size_t)64 * MIB, (size_t)4 * MIB);
 
         api_finalize_test(unifyfs_root, &fshdl);
     }

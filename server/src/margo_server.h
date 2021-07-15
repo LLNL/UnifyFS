@@ -44,6 +44,8 @@ typedef struct ServerRpcIds {
     hg_id_t metaset_id;
     hg_id_t fileattr_bcast_id;
     hg_id_t server_pid_id;
+    hg_id_t transfer_id;
+    hg_id_t transfer_bcast_id;
     hg_id_t truncate_id;
     hg_id_t truncate_bcast_id;
     hg_id_t unlink_bcast_id;
@@ -51,6 +53,7 @@ typedef struct ServerRpcIds {
     /* client-server rpcs */
     hg_id_t client_mread_data_id;
     hg_id_t client_mread_complete_id;
+    hg_id_t client_transfer_complete_id;
 } server_rpcs_t;
 
 typedef struct ServerRpcContext {
@@ -75,9 +78,9 @@ hg_addr_t get_margo_server_address(int rank);
 /* use passed bulk handle to pull data into a newly allocated buffer.
  * returns buffer, or NULL on failure. */
 void* pull_margo_bulk_buffer(hg_handle_t rpc_hdl,
-                            hg_bulk_t bulk_in,
-                            hg_size_t bulk_sz,
-                            hg_bulk_t* local_bulk);
+                             hg_bulk_t bulk_in,
+                             hg_size_t bulk_sz,
+                             hg_bulk_t* local_bulk);
 
 /* invokes the client mread request data response rpc function */
 int invoke_client_mread_req_data_rpc(int app_id,
@@ -94,5 +97,11 @@ int invoke_client_mread_req_complete_rpc(int app_id,
                                          int mread_id,
                                          int read_index,
                                          int read_error);
+
+/* invokes the client transfer request completion rpc function */
+int invoke_client_transfer_complete_rpc(int app_id,
+                                        int client_id,
+                                        int transfer_id,
+                                        int error_code);
 
 #endif // MARGO_SERVER_H

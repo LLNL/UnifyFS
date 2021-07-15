@@ -32,6 +32,8 @@ unifyfsd_SOURCES = \
   unifyfs_service_manager.c \
   unifyfs_service_manager.h \
   unifyfs_server_pid.c \
+  unifyfs_transfer.c \
+  unifyfs_transfer.h \
   unifyfs_tree.c \
   unifyfs_tree.h
 
