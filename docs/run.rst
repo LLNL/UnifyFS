@@ -119,14 +119,17 @@ within the source repository at ``util/scripts/lsfcsm``.
 Support for the SLURM resource manager is under development.
 
 -----------------------------------------------
-  Stage-in and Stage-out Manifest File Format
+  Transferring Data In and Out of UnifyFS
 -----------------------------------------------
+
+Stage Application
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 The transfer subsystem within UnifyFS can be invoked as above
 within the start process (to transfer files into the UnifyFS
 volume) or during the stop process (to transfer files out of
 the UnifyFS volume).  To do so, the user supplies a manifest
-file specifying the requested transfers.  Here is the formatted
+file specifying the requested transfers.  Here is the format
 for that manifest file.
 
 The manifest file contains one or more file copy requests.
@@ -151,12 +154,17 @@ Here is an example of a valid stage-in manifest file:
 ``/home/users/me/configuration/run_12345.conf /unifyfs/config/run_12345.conf``
 ``"/home/users/me/file with space.dat" "/unifyfs/file with space.dat"``
 
------------------------------------------------
+The transfer API stage functionality can also be used with a stand-alone
+application called "unifyfs-stage".  This function takes the argument
+of the name of a manifest file.  It can be run at any time, so could
+be run during a job, to transfer new into into the UnifyFS volume,
+or trasnfer results out and checked before the job ends.
+
   Stand-alone file stage application
------------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 The manifest subsystem can also be used during the job by
 invoking stand-alone transfer executable.  The command to use is
-"unify-static".  It's used similarly to the unix
+"transfer-static".  It's used similarly to the unix
 "cp" command, with source and destination, except that unify-static
 is aware that it is copying files between the external parallel
 file system and the internal UnifyFS volume.
@@ -168,3 +176,8 @@ during the job, if UnifyFS has been "start"ed as above.  This
 could be done during the job to bring in new input, or perhaps
 transfer results files out so they can be verified before they
 job terminates.
+
+Examples of use of the transfer-static command:
+srun -N 2 /path/to/libexec/transfer-static /path/on/parallelfs/file.dat /unifyfs/file.dat
+
+srun -N 2 /path/to/libexec/transfer-static /unifyfs/output.dat /scratch/my_output/output.dat
