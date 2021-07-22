@@ -33,21 +33,14 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
 
     hg_id_t hgid;
 
+    /* client-to-server RPCs */
+
 #define CLIENT_REGISTER_RPC(name) \
     do { \
         hgid = MARGO_REGISTER(mid, "unifyfs_" #name "_rpc", \
                               unifyfs_##name##_in_t, \
                               unifyfs_##name##_out_t, \
                               NULL); \
-        ctx->rpcs.name##_id = hgid; \
-    } while (0)
-
-#define CLIENT_REGISTER_RPC_HANDLER(name) \
-    do { \
-        hgid = MARGO_REGISTER(mid, "unifyfs_" #name "_rpc", \
-                              unifyfs_##name##_in_t, \
-                              unifyfs_##name##_out_t, \
-                              unifyfs_##name##_rpc); \
         ctx->rpcs.name##_id = hgid; \
     } while (0)
 
@@ -63,11 +56,25 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
     CLIENT_REGISTER_RPC(laminate);
     CLIENT_REGISTER_RPC(fsync);
     CLIENT_REGISTER_RPC(mread);
+
+#undef CLIENT_REGISTER_RPC
+
+    /* server-to-client RPCs */
+
+#define CLIENT_REGISTER_RPC_HANDLER(name) \
+    do { \
+        hgid = MARGO_REGISTER(mid, "unifyfs_" #name "_rpc", \
+                              unifyfs_##name##_in_t, \
+                              unifyfs_##name##_out_t, \
+                              unifyfs_##name##_rpc); \
+        ctx->rpcs.name##_id = hgid; \
+    } while (0)
+
+    CLIENT_REGISTER_RPC_HANDLER(heartbeat);
     CLIENT_REGISTER_RPC_HANDLER(mread_req_data);
     CLIENT_REGISTER_RPC_HANDLER(mread_req_complete);
     CLIENT_REGISTER_RPC_HANDLER(transfer_complete);
 
-#undef CLIENT_REGISTER_RPC
 #undef CLIENT_REGISTER_RPC_HANDLER
 }
 
@@ -190,6 +197,8 @@ int unifyfs_client_rpc_finalize(void)
 
     return UNIFYFS_SUCCESS;
 }
+
+/*--- Invocation methods for client-to-server RPCs ---*/
 
 /* create and return a margo handle for given rpc id */
 static hg_handle_t create_handle(hg_id_t id)
@@ -847,6 +856,53 @@ int invoke_client_mread_rpc(unifyfs_client* client,
     return ret;
 }
 
+/*--- Handler methods for server-to-client RPCs ---*/
+
+/* simple heartbeat ping rpc */
+static void unifyfs_heartbeat_rpc(hg_handle_t handle)
+{
+    int ret;
+
+    /* get input params */
+    unifyfs_heartbeat_in_t in;
+    hg_return_t hret = margo_get_input(handle, &in);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_get_input() failed");
+        ret = UNIFYFS_ERROR_MARGO;
+    } else {
+        /* lookup client */
+        unifyfs_client* client;
+        int client_app = (int) in.app_id;
+        int client_id  = (int) in.client_id;
+        client = unifyfs_find_client(client_app, client_id, NULL);
+        if (NULL == client) {
+            /* unknown client */
+            ret = EINVAL;
+        } else if (client->state.is_mounted) {
+            /* client is still active */
+            ret = UNIFYFS_SUCCESS;
+        } else {
+            ret = UNIFYFS_FAILURE;
+        }
+        margo_free_input(handle, &in);
+    }
+
+    /* set rpc result status */
+    unifyfs_heartbeat_out_t out;
+    out.ret = ret;
+
+    /* return to caller */
+    LOGDBG("responding");
+    hret = margo_respond(handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* free margo resources */
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(unifyfs_heartbeat_rpc)
+
 /* for client read request identified by mread_id and request index, copy bulk
  * data to request's user buffer at given byte offset from start of request */
 static void unifyfs_mread_req_data_rpc(hg_handle_t handle)
@@ -954,9 +1010,8 @@ static void unifyfs_mread_req_data_rpc(hg_handle_t handle)
     unifyfs_mread_req_data_out_t out;
     out.ret = ret;
 
-    LOGDBG("responding");
-
     /* return to caller */
+    LOGDBG("responding");
     hret = margo_respond(handle, &out);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_respond() failed");
@@ -1034,7 +1089,7 @@ static void unifyfs_transfer_complete_rpc(hg_handle_t handle)
         LOGERR("margo_get_input() failed");
         ret = UNIFYFS_ERROR_MARGO;
     } else {
-        /* lookup client mread request */
+        /* lookup client transfer request */
         unifyfs_client* client;
         int client_app   = (int) in.app_id;
         int client_id    = (int) in.client_id;
