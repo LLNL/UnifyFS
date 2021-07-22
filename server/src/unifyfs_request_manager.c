@@ -1312,6 +1312,38 @@ static int rm_process_client_requests(reqmgr_thrd_t* reqmgr)
     return ret;
 }
 
+static int rm_heartbeat(reqmgr_thrd_t* reqmgr)
+{
+    static time_t last_check; // = 0
+    static int check_interval = 30; /* seconds */
+
+    int ret = UNIFYFS_SUCCESS;
+
+    /* send a heartbeat rpc to associated client every 30 seconds */
+    time_t now = time(NULL);
+    if (0 == last_check) {
+        last_check = now;
+    }
+
+    time_t elapsed = now - last_check;
+    if (elapsed >= check_interval) {
+        last_check = now;
+
+        /* invoke heartbeat rpc */
+        LOGDBG("sending heartbeat rpc");
+        int app = reqmgr->app_id;
+        int clid = reqmgr->client_id;
+        int rc = invoke_client_heartbeat_rpc(app, clid);
+        if (rc != UNIFYFS_SUCCESS) {
+            ret = rc;
+            LOGDBG("heartbeat rpc for client[%d:%d] failed", app, clid);
+            add_failed_client(app, clid);
+        }
+    }
+
+    return ret;
+}
+
 /* Entry point for request manager thread. One thread is created
  * for each client process to retrieve remote data and notify the
  * client when data is ready.
@@ -1380,6 +1412,12 @@ void* request_manager_thread(void* arg)
         /* set flag to indicate we're no longer waiting */
         thrd_ctrl->waiting_for_work = 0;
         RM_UNLOCK(thrd_ctrl);
+
+        rc = rm_heartbeat(thrd_ctrl);
+        if (rc != UNIFYFS_SUCCESS) {
+            /* detected failure of our client, time to exit */
+            break;
+        }
 
         /* bail out if we've been told to exit */
         if (thrd_ctrl->exit_flag == 1) {

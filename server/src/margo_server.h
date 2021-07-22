@@ -51,6 +51,7 @@ typedef struct ServerRpcIds {
     hg_id_t unlink_bcast_id;
 
     /* client-server rpcs */
+    hg_id_t client_heartbeat_id;
     hg_id_t client_mread_data_id;
     hg_id_t client_mread_complete_id;
     hg_id_t client_transfer_complete_id;
@@ -81,6 +82,9 @@ void* pull_margo_bulk_buffer(hg_handle_t rpc_hdl,
                              hg_bulk_t bulk_in,
                              hg_size_t bulk_sz,
                              hg_bulk_t* local_bulk);
+
+/* invokes the client heartbeat rpc function */
+int invoke_client_heartbeat_rpc(int app_id, int client_id);
 
 /* invokes the client mread request data response rpc function */
 int invoke_client_mread_req_data_rpc(int app_id,

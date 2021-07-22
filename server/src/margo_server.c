@@ -316,6 +316,12 @@ static void register_client_server_rpcs(margo_instance_id mid)
                    unifyfs_mread_rpc);
 
     /* register the RPCs we call (and capture assigned hg_id_t) */
+    unifyfsd_rpc_context->rpcs.client_heartbeat_id =
+            MARGO_REGISTER(mid, "unifyfs_heartbeat_rpc",
+                           unifyfs_heartbeat_in_t,
+                           unifyfs_heartbeat_out_t,
+                           NULL);
+
     unifyfsd_rpc_context->rpcs.client_mread_data_id =
         MARGO_REGISTER(mid, "unifyfs_mread_req_data_rpc",
                        unifyfs_mread_req_data_in_t,
@@ -616,6 +622,55 @@ static hg_handle_t create_client_handle(hg_id_t id,
         LOGERR("invalid app-client [%d:%d]", app_id, client_id);
     }
     return handle;
+}
+
+/* invokes the heartbeat rpc function */
+int invoke_client_heartbeat_rpc(int app_id,
+                                int client_id)
+{
+    hg_return_t hret;
+
+    /* check that we have initialized margo */
+    if (NULL == unifyfsd_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* fill input struct */
+    unifyfs_heartbeat_in_t in;
+    in.app_id    = (int32_t) app_id;
+    in.client_id = (int32_t) client_id;
+
+    /* get handle to rpc function */
+    hg_id_t rpc_id = unifyfsd_rpc_context->rpcs.client_heartbeat_id;
+    hg_handle_t handle = create_client_handle(rpc_id, app_id, client_id);
+
+    /* call rpc function */
+    LOGDBG("invoking the heartbeat rpc function in client");
+    double timeout_msec = 500; /* half a second */
+    hret = margo_forward_timed(handle, &in, timeout_msec);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_forward_timed() failed");
+        margo_destroy(handle);
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    /* decode response */
+    int ret;
+    unifyfs_heartbeat_out_t out;
+    hret = margo_get_output(handle, &out);
+    if (hret == HG_SUCCESS) {
+        LOGDBG("Got response ret=%" PRIi32, out.ret);
+        ret = (int) out.ret;
+        margo_free_output(handle, &out);
+    } else {
+        LOGERR("margo_get_output() failed");
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+
+    /* free resources */
+    margo_destroy(handle);
+
+    return ret;
 }
 
 /* invokes the client mread request data response rpc function */

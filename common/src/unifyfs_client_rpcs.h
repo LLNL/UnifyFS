@@ -251,6 +251,15 @@ MERCURY_GEN_PROC(unifyfs_mread_req_complete_in_t,
 MERCURY_GEN_PROC(unifyfs_mread_req_complete_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_mread_req_complete_rpc)
 
+/* unifyfs_heartbeat_rpc (server => client)
+ *
+ * Used to detect when client unexpectedly goes away */
+MERCURY_GEN_PROC(unifyfs_heartbeat_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id)))
+MERCURY_GEN_PROC(unifyfs_heartbeat_out_t, ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_heartbeat_rpc)
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
