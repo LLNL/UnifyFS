@@ -248,6 +248,39 @@ static int process_servers_hostfile(const char* hostfile)
     return (int)UNIFYFS_SUCCESS;
 }
 
+static void process_client_failures(void)
+{
+    int num_failed = 0;
+    arraylist_t* failures = NULL;
+
+    ABT_mutex_lock(app_configs_abt_sync);
+    if (NULL != failed_clients) {
+        /* if we have any failed clients, take pointer to the list
+         * and replace it with a newly allocated list */
+        num_failed = arraylist_size(failed_clients);
+        if (num_failed) {
+            LOGDBG("processing %d client failures", num_failed);
+            failures = failed_clients;
+            failed_clients = arraylist_create(0);
+        }
+    }
+    ABT_mutex_unlock(app_configs_abt_sync);
+
+    if (NULL != failures) {
+        app_config* app;
+        app_client* client;
+        for (int i = 0; i < num_failed; i++) {
+             /* cleanup client at index */
+            client = (app_client*) arraylist_remove(failures, i);
+            if (NULL != client) {
+                app = get_application(client->state.app_id);
+                cleanup_app_client(app, client);
+            }
+        }
+        arraylist_free(failures);
+    }
+}
+
 int main(int argc, char* argv[])
 {
     int rc;
@@ -375,6 +408,10 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
+    ABT_mutex_lock(app_configs_abt_sync);
+    failed_clients = arraylist_create(0);
+    ABT_mutex_unlock(app_configs_abt_sync);
+
     /* launch the service manager (note: must happen after ABT_init) */
     LOGDBG("launching service manager thread");
     rc = svcmgr_init();
@@ -411,7 +448,11 @@ int main(int argc, char* argv[])
     LOGDBG("server[%d] - finished initialization", glb_pmi_rank);
 
     while (1) {
+        /* process any newly failed clients */
+        process_client_failures();
+
         sleep(1);
+
         if (time_to_exit) {
             LOGDBG("starting service shutdown");
             break;
@@ -604,6 +645,10 @@ static int unifyfs_exit(void)
                 ret = rc;
             }
         }
+    }
+    if (NULL != failed_clients) {
+        arraylist_free(failed_clients);
+        failed_clients = NULL;
     }
     ABT_mutex_unlock(app_configs_abt_sync);
 
@@ -985,4 +1030,23 @@ unifyfs_rc cleanup_app_client(app_config* app, app_client* client)
     free(client);
 
     return UNIFYFS_SUCCESS;
+}
+
+unifyfs_rc add_failed_client(int app_id, int client_id)
+{
+    app_client* client = get_app_client(app_id, client_id);
+    if (NULL == client) {
+        return EINVAL;
+    }
+    unifyfs_rc ret = UNIFYFS_SUCCESS;
+    ABT_mutex_lock(app_configs_abt_sync);
+    if (NULL != failed_clients) {
+        int rc = arraylist_add(failed_clients, client);
+        if (rc == -1) {
+            LOGERR("failed to add client to failed_clients arraylist");
+            ret = UNIFYFS_FAILURE;
+        }
+    }
+    ABT_mutex_unlock(app_configs_abt_sync);
+    return ret;
 }
