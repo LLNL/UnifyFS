@@ -170,12 +170,15 @@ int arraylist_free(arraylist_t* arr)
         return -1;
     }
 
-    int i;
-    for (i = 0; i < arr->cap; i++) {
-        if (arr->elems[i] != NULL) {
-            free(arr->elems[i]);
+    if (NULL != arr->elems) {
+        for (int i = 0; i < arr->cap; i++) {
+            if (arr->elems[i] != NULL) {
+                free(arr->elems[i]);
+            }
         }
+        free(arr->elems);
     }
+
     free(arr);
 
     return 0;

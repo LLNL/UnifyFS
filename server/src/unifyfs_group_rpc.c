@@ -379,7 +379,7 @@ static int collective_finish(coll_request* coll_req)
         if (NULL != coll_req->child_reqs) {
             margo_request* creq;
             hg_handle_t* chdl;
-            /* MJB TODO - use margo_wait_any() instead of our own loop */
+            /* TODO: use margo_wait_any() instead of our own loop */
             for (i = 0; i < child_count; i++) {
                 chdl = coll_req->child_hdls + i;
                 creq = coll_req->child_reqs + i;
