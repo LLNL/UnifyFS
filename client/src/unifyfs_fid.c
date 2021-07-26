@@ -984,6 +984,34 @@ static off_t rewrite_index_from_seg_tree(unifyfs_client* client,
     return max_log_offset;
 }
 
+/* Sync extent data for file to storage */
+int unifyfs_fid_sync_data(unifyfs_client* client,
+                          int fid)
+{
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
+
+    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
+    if ((NULL == meta) || (meta->fid != fid)) {
+        /* bail out with an error if we fail to find it */
+        LOGERR("missing filemeta for fid=%d", fid);
+        return UNIFYFS_FAILURE;
+    }
+
+    /* sync file data to storage.
+     * NOTE: this syncs all client data, not just the target file's */
+    int rc = unifyfs_logio_sync(client->state.logio_ctx);
+    if (UNIFYFS_SUCCESS != rc) {
+        /* something went wrong when trying to flush extents */
+        LOGERR("failed to flush data to storage for client[%d:%d]",
+               client->state.app_id, client->state.client_id);
+        ret = rc;
+    }
+
+    return ret;
+}
+
+
 /* Sync data for file to server if needed */
 int unifyfs_fid_sync_extents(unifyfs_client* client,
                              int fid)

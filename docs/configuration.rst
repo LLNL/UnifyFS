@@ -67,8 +67,9 @@ a given section and key.
    Key               Type    Description
    ================  ======  =================================================================
    cwd               STRING  effective starting current working directory
-   max_files         INT     maximum number of open files per client process (default: 128)
+   fsync_persist     BOOL    persist data to storage on fsync() (default: on)
    local_extents     BOOL    service reads from local data if possible (default: off)
+   max_files         INT     maximum number of open files per client process (default: 128)
    super_magic       BOOL    whether to return UNIFYFS (on) or TMPFS (off) statfs magic (default: on)
    write_index_size  INT     maximum size (B) of memory buffer for storing write log metadata
    write_sync        BOOL    sync data to server after every write (default: off)

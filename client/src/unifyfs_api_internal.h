@@ -60,6 +60,7 @@ typedef struct unifyfs_client {
     /* mountpoint configuration */
     unifyfs_cfg_t cfg;               /* user-provided configuration */
 
+    bool use_fsync_persist;          /* persist data to storage on fsync() */
     bool use_local_extents;          /* enable tracking of local extents */
     bool use_write_sync;             /* sync for every write operation */
     bool use_unifyfs_magic;          /* return UNIFYFS (true) or TMPFS (false)
