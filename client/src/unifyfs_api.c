@@ -123,9 +123,21 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
         }
     }
 
+    /* Determine whether we persist data to storage device on fsync().
+     * Turning this setting off speeds up fsync() by only syncing the
+     * extent metadata, but it violates POSIX semanatics. */
+    client->use_fsync_persist = true;
+    cfgval = client_cfg->client_fsync_persist;
+    if (cfgval != NULL) {
+        rc = configurator_bool_val(cfgval, &b);
+        if (rc == 0) {
+            client->use_fsync_persist = (bool)b;
+        }
+    }
+
     /* Determine whether we automatically sync every write to server.
-     * This slows write performance, but it can serve as a work
-     * around for apps that do not have all necessary syncs. */
+     * Turning this setting on slows write performance, but it can serve
+     * as a workaround for apps that do not have all the necessary syncs. */
     client->use_write_sync = false;
     cfgval = client_cfg->client_write_sync;
     if (cfgval != NULL) {

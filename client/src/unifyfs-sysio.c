@@ -1933,13 +1933,20 @@ int UNIFYFS_WRAP(fsync)(int fd)
         }
 
         /* invoke fsync rpc to register index metadata with server */
-        int ret = unifyfs_fid_sync_extents(posix_client, fid);
-        if (ret != UNIFYFS_SUCCESS) {
-            /* sync failed for some reason, set errno and return error */
-            errno = unifyfs_rc_errno(ret);
+        int rc = unifyfs_fid_sync_extents(posix_client, fid);
+        if (rc != UNIFYFS_SUCCESS) {
+            /* metadata sync failed, set errno and return error */
+            errno = unifyfs_rc_errno(rc);
             return -1;
+        } else if (posix_client->use_fsync_persist) {
+            /* now sync file data to storage */
+            rc = unifyfs_fid_sync_data(posix_client, fid);
+            if (rc != UNIFYFS_SUCCESS) {
+                /* data sync failed, set errno and return error */
+                errno = unifyfs_rc_errno(rc);
+                return -1;
+            }
         }
-
         return 0;
     } else {
         MAP_OR_FAIL(fsync);
