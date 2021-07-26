@@ -70,6 +70,7 @@
     UNIFYFS_CFG_CLI(unifyfs, daemonize, BOOL, on, "enable server daemonization", NULL, 'D', "on|off") \
     UNIFYFS_CFG_CLI(unifyfs, mountpoint, STRING, /unifyfs, "mountpoint directory", NULL, 'm', "specify full path to desired mountpoint") \
     UNIFYFS_CFG(client, cwd, STRING, NULLSTRING, "current working directory", NULL) \
+    UNIFYFS_CFG(client, fsync_persist, BOOL, on, "persist written data to storage on fsync()", NULL) \
     UNIFYFS_CFG(client, local_extents, BOOL, off, "track extents to service reads of local data", NULL) \
     UNIFYFS_CFG(client, max_files, INT, UNIFYFS_CLIENT_MAX_FILES, "client max file count", NULL) \
     UNIFYFS_CFG(client, write_index_size, INT, UNIFYFS_CLIENT_WRITE_INDEX_SIZE, "write metadata index buffer size", NULL) \
