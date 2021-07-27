@@ -516,7 +516,7 @@ static int unifyfs_fskv_init(unifyfs_cfg_t* cfg)
             err = errno;
             if ((rc != 0) && (err != EEXIST)) {
                 LOGERR("failed to create local kvstore directory %s - %s",
-                    localfs_kvdir, strerror(err));
+                       localfs_kvdir, strerror(err));
                 return (int)UNIFYFS_ERROR_KEYVAL;
             }
         } else {
@@ -525,39 +525,45 @@ static int unifyfs_fskv_init(unifyfs_cfg_t* cfg)
         }
     }
 
-    if ((UNIFYFS_SERVER == cfg->ptype) && (NULL != cfg->sharedfs_dir)) {
-        // find or create shared kvstore directory
-        snprintf(sharedfs_kvdir, sizeof(sharedfs_kvdir), "%s/kvstore",
-                 cfg->sharedfs_dir);
-        memset(&s, 0, sizeof(struct stat));
-        rc = stat(sharedfs_kvdir, &s);
-        if (rc != 0) {
-            // try to create it
-            rc = mkdir(sharedfs_kvdir, 0770);
-            err = errno;
-            if ((rc != 0) && (err != EEXIST)) {
-                LOGERR("failed to create kvstore directory %s - %s",
-                       sharedfs_kvdir, strerror(err));
-                return (int)UNIFYFS_ERROR_KEYVAL;
+    if (UNIFYFS_SERVER == cfg->ptype) {
+        if (NULL != cfg->sharedfs_dir) {
+            // find or create shared kvstore directory
+            snprintf(sharedfs_kvdir, sizeof(sharedfs_kvdir), "%s/kvstore",
+                     cfg->sharedfs_dir);
+            memset(&s, 0, sizeof(struct stat));
+            rc = stat(sharedfs_kvdir, &s);
+            if (rc != 0) {
+                // try to create it
+                rc = mkdir(sharedfs_kvdir, 0770);
+                err = errno;
+                if ((rc != 0) && (err != EEXIST)) {
+                    LOGERR("failed to create kvstore directory %s - %s",
+                           sharedfs_kvdir, strerror(err));
+                    return (int)UNIFYFS_ERROR_KEYVAL;
+                }
             }
-        }
 
-        // find or create rank-specific subdir
-        scnprintf(sharedfs_rank_kvdir, sizeof(sharedfs_rank_kvdir), "%s/%d",
-                 sharedfs_kvdir, kv_myrank);
-        memset(&s, 0, sizeof(struct stat));
-        rc = stat(sharedfs_rank_kvdir, &s);
-        if (rc != 0) {
-            // try to create it
-            rc = mkdir(sharedfs_rank_kvdir, 0770);
-            err = errno;
-            if ((rc != 0) && (err != EEXIST)) {
-                LOGERR("failed to create rank kvstore directory %s - %s",
-                       sharedfs_rank_kvdir, strerror(err));
-                return (int)UNIFYFS_ERROR_KEYVAL;
+            // find or create rank-specific subdir
+            scnprintf(sharedfs_rank_kvdir, sizeof(sharedfs_rank_kvdir), "%s/%d",
+                      sharedfs_kvdir, kv_myrank);
+            memset(&s, 0, sizeof(struct stat));
+            rc = stat(sharedfs_rank_kvdir, &s);
+            if (rc != 0) {
+                // try to create it
+                rc = mkdir(sharedfs_rank_kvdir, 0770);
+                err = errno;
+                if ((rc != 0) && (err != EEXIST)) {
+                    LOGERR("failed to create rank kvstore directory %s - %s",
+                           sharedfs_rank_kvdir, strerror(err));
+                    return (int)UNIFYFS_ERROR_KEYVAL;
+                }
             }
+            have_sharedfs_kvstore = 1;
+        } else {
+            // Server process, but nobody specified the sharedfs dir
+            LOGERR("can't create kvstore - sharedfs not specified");
+            return (int)UNIFYFS_ERROR_KEYVAL;
         }
-        have_sharedfs_kvstore = 1;
     }
 
     kv_max_keylen = UNIFYFS_MAX_KV_KEYLEN;
