@@ -157,6 +157,8 @@ int slotmap_clear(slot_map* smap)
 
     /* set used to zero */
     smap->used_slots = 0;
+    smap->first_used_slot = -1;
+    smap->last_used_slot = -1;
 
     /* zero-out use map */
     uint8_t* usemap = get_use_map(smap);
@@ -228,9 +230,9 @@ ssize_t slotmap_reserve(slot_map* smap,
 
     /* search for contiguous free slots */
     size_t search_start = 0;
-    if (slot_bytes > 1) {
-        /* skip past (likely) used slots */
-        search_start = SLOT_BYTE(smap->used_slots);
+    if ((smap->last_used_slot != -1) && (slot_bytes > 1)) {
+        /* skip past likely-used slots */
+        search_start = SLOT_BYTE(smap->last_used_slot);
     }
     uint8_t* usemap = get_use_map(smap);
     size_t map_bytes = slot_map_bytes(smap->total_slots);
@@ -292,8 +294,17 @@ ssize_t slotmap_reserve(slot_map* smap,
 
     if (found_start) {
         /* success, reserve bits in consecutive slots */
-        for (size_t i = 0; i < num_slots; i++) {
-            use_slot(usemap, start_slot + i);
+        size_t end_slot = start_slot + num_slots - 1;
+        for (size_t i = start_slot; i <= end_slot; i++) {
+            use_slot(usemap, i);
+        }
+        if ((smap->first_used_slot == -1) ||
+            (start_slot < smap->first_used_slot)) {
+            smap->first_used_slot = start_slot;
+        }
+        if ((smap->last_used_slot == -1) ||
+            (end_slot > smap->last_used_slot)) {
+            smap->last_used_slot = end_slot;
         }
         smap->used_slots += num_slots;
         return (ssize_t)start_slot;
@@ -328,10 +339,40 @@ int slotmap_release(slot_map* smap,
     }
 
     /* release the slots */
-    for (size_t i = 0; i < num_slots; i++) {
-        release_slot(usemap, start_index + i);
+    size_t end_slot = start_index + num_slots - 1;
+    for (size_t i = start_index; i <= end_slot; i++) {
+        release_slot(usemap, i);
     }
     smap->used_slots -= num_slots;
+
+    if (smap->used_slots == 0) {
+        smap->first_used_slot = -1;
+        smap->last_used_slot = -1;
+        return UNIFYFS_SUCCESS;
+    }
+
+    /* find new first-used slot if necessary */
+    if (start_index == smap->first_used_slot) {
+        ssize_t first_slot = end_slot + 1;
+        while ((first_slot < smap->total_slots) &&
+               (!check_slot(usemap, (size_t)first_slot))) {
+            first_slot++;
+        }
+        if (first_slot == smap->total_slots) {
+            first_slot = -1;
+        }
+        smap->last_used_slot = first_slot;
+    }
+
+    /* find new last-used slot if necessary */
+    if (end_slot == smap->last_used_slot) {
+        ssize_t last_slot = start_index - 1;
+        while ((last_slot >= 0) &&
+               (!check_slot(usemap, (size_t)last_slot))) {
+            last_slot--;
+        }
+        smap->last_used_slot = last_slot;
+    }
 
     return UNIFYFS_SUCCESS;
 }
