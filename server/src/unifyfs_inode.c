@@ -50,31 +50,7 @@ struct unifyfs_inode* unifyfs_inode_alloc(int gfid, unifyfs_file_attr_t* attr)
     return ino;
 }
 
-static inline
-int unifyfs_inode_destroy(struct unifyfs_inode* ino)
-{
-    int ret = UNIFYFS_SUCCESS;
-
-    if (ino) {
-        if (NULL != ino->attr.filename) {
-            free(ino->attr.filename);
-        }
-
-        if (NULL != ino->extents) {
-            extent_tree_destroy(ino->extents);
-            free(ino->extents);
-        }
-
-        pthread_rwlock_destroy(&(ino->rwlock));
-        ABT_mutex_free(&(ino->abt_sync));
-
-        free(ino);
-    } else {
-        ret = EINVAL;
-    }
-
-    return ret;
-}
+static int unifyfs_inode_destroy(struct unifyfs_inode* ino);
 
 /**
  * @brief read lock the inode for ro access.
@@ -133,6 +109,62 @@ int unifyfs_inode_create(int gfid, unifyfs_file_attr_t* attr)
 
     if (ret != UNIFYFS_SUCCESS) {
         unifyfs_inode_destroy(ino);
+    }
+
+    return ret;
+}
+
+static
+int unifyfs_inode_destroy(struct unifyfs_inode* ino)
+{
+    int ret = UNIFYFS_SUCCESS;
+
+    if (ino) {
+        if (NULL != ino->attr.filename) {
+            free(ino->attr.filename);
+        }
+
+        if (NULL != ino->extents) {
+            /* iterate over extents and release local logio allocations */
+            unifyfs_inode_rdlock(ino);
+            {
+                struct extent_tree* tree = ino->extents;
+                struct extent_tree_node* curr = NULL;
+                while (NULL != (curr = extent_tree_iter(tree, curr))) {
+                    if (curr->svr_rank == glb_pmi_rank) {
+                        /* lookup client's logio context and release
+                         * allocation for this extent */
+                        int app_id    = curr->app_id;
+                        int client_id = curr->cli_id;
+                        app_client* client = get_app_client(app_id, client_id);
+                        if ((NULL == client) ||
+                            (NULL == client->state.logio_ctx)) {
+                            continue;
+                        }
+                        logio_context* logio = client->state.logio_ctx;
+                        size_t nbytes = (1 + (curr->end - curr->start));
+                        off_t log_off = curr->pos;
+                        int rc = unifyfs_logio_free(logio, log_off, nbytes);
+                        if (UNIFYFS_SUCCESS != rc) {
+                            LOGERR("failed to free logio allocation for "
+                                   "client[%d:%d] log_offset=%zu nbytes=%zu",
+                                   app_id, client_id, (size_t)log_off, nbytes);
+                        }
+                    }
+                }
+            }
+            unifyfs_inode_unlock(ino);
+
+            extent_tree_destroy(ino->extents);
+            free(ino->extents);
+        }
+
+        pthread_rwlock_destroy(&(ino->rwlock));
+        ABT_mutex_free(&(ino->abt_sync));
+
+        free(ino);
+    } else {
+        ret = EINVAL;
     }
 
     return ret;

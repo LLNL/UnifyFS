@@ -53,6 +53,14 @@ int api_write_read_sync_stat_test(char* unifyfs_root,
 int api_laminate_test(char* unifyfs_root,
                       unifyfs_handle* fshdl);
 
+
+/* Tests file storage space reuse */
+int api_storage_test(char* unifyfs_root,
+                     unifyfs_handle* fshdl,
+                     size_t filesize,
+                     size_t chksize);
+
+
 /* Tests file transfers, both serial and parallel */
 int api_transfer_test(char* unifyfs_root,
                       char* tmpdir,
