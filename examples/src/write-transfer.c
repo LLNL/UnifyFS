@@ -429,6 +429,15 @@ int main(int argc, char* argv[])
                         global_read_bw);
     }
 
+    if (cfg->remove_target) {
+        test_print_verbose_once(cfg,
+            "DEBUG: removing file %s", target_file);
+        rc = test_remove_file(cfg, target_file);
+        if (rc) {
+            test_print(cfg, "ERROR - test_remove_file(%s) failed", target_file);
+        }
+    }
+
     // cleanup
     free(target_file);
     free(destination_file);

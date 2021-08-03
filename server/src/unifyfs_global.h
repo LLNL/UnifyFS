@@ -186,9 +186,6 @@ unifyfs_rc disconnect_app_client(app_client* clnt);
 
 unifyfs_rc cleanup_app_client(app_config* app, app_client* clnt);
 
-
-/* arraylist to track failed clients */
-arraylist_t* failed_clients; // = NULL
 unifyfs_rc add_failed_client(int app_id, int client_id);
 
 

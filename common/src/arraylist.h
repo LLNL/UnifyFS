@@ -39,14 +39,44 @@ typedef struct {
     void** elems;
 } arraylist_t;
 
+/* Create an arraylist with the given capacity.
+ * If capacity == 0, use the default ARRAYLIST_CAPACITY.
+ * Returns the new arraylist, or NULL on error. */
 arraylist_t* arraylist_create(int capacity);
-int arraylist_add(arraylist_t* arr, void* elem);
-int arraylist_reset(arraylist_t* arr);
-int arraylist_free(arraylist_t* arr);
-int arraylist_insert(arraylist_t* arr, int pos, void* elem);
-void* arraylist_get(arraylist_t* arr, int pos);
-void* arraylist_remove(arraylist_t* arr, int pos);
+
+/* Returns the arraylist capacity in elements, or -1 on error */
 int arraylist_capacity(arraylist_t* arr);
+
+/* Returns the current arraylist size in elements, or -1 on error */
 int arraylist_size(arraylist_t* arr);
+
+/* Reset the arraylist size to zero */
+int arraylist_reset(arraylist_t* arr);
+
+/* Get the element at the given list index (pos)) */
+void* arraylist_get(arraylist_t* arr, int pos);
+
+/* Remove the element at given list index (pos) and return it */
+void* arraylist_remove(arraylist_t* arr, int pos);
+
+/* Free all arraylist elements, the array storage, and the arraylist_t.
+ * Returns 0 on success, -1 on error */
+int arraylist_free(arraylist_t* arr);
+
+/* Adds element to the end of the current list.
+ * Returns list index of newly added element, or -1 on error */
+int arraylist_add(arraylist_t* arr, void* elem);
+
+/* Insert the element at the given list index (pos) in the arraylist.
+ * Overwrites (and frees) any existing element at that index.
+ * Returns 0 on success, or -1 on error */
+int arraylist_insert(arraylist_t* arr, int pos, void* elem);
+
+/* Sort the arraylist elements using the given comparison function (cmpfn).
+ * Note that the comparison function should properly handle NULL pointer
+ * elements of the array.
+ * Return 0 on success, -1 on error */
+int arraylist_sort(arraylist_t* arr,
+                   int (*cmpfn)(const void *, const void *));
 
 #endif

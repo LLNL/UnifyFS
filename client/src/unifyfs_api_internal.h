@@ -34,9 +34,12 @@ typedef struct {
     int fid;                      /* local file index in filemetas array */
     int storage;                  /* FILE_STORAGE type */
 
+    int pending_unlink;           /* received unlink callback */
+
     int needs_sync;               /* have unsynced writes */
     struct seg_tree extents_sync; /* Segment tree containing our coalesced
                                    * writes between sync operations */
+
     struct seg_tree extents;      /* Segment tree of all local data extents */
 
     unifyfs_file_attr_t attrs;    /* UnifyFS and POSIX file attributes */
