@@ -145,8 +145,14 @@ int unifyfs_fid_truncate(unifyfs_client* client,
                          int fid,
                          off_t length);
 
-/* Sync extent data for file to server if needed */
+/* Sync extent data for file to storage */
+int unifyfs_fid_sync_data(unifyfs_client* client,
+                          int fid);
+
+/* Sync extent metadata for file to server if needed */
 int unifyfs_fid_sync_extents(unifyfs_client* client,
                              int fid);
+
+
 
 #endif /* UNIFYFS_FID_H */

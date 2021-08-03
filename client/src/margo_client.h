@@ -24,6 +24,7 @@
 #include <margo.h>
 
 typedef struct ClientRpcIds {
+    /* client-to-server */
     hg_id_t attach_id;
     hg_id_t mount_id;
     hg_id_t unmount_id;
@@ -36,6 +37,9 @@ typedef struct ClientRpcIds {
     hg_id_t laminate_id;
     hg_id_t fsync_id;
     hg_id_t mread_id;
+
+    /* server-to-client */
+    hg_id_t heartbeat_id;
     hg_id_t mread_req_data_id;
     hg_id_t mread_req_complete_id;
     hg_id_t transfer_complete_id;

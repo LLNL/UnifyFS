@@ -110,13 +110,15 @@ api_api_test_t_CPPFLAGS = $(test_cppflags)
 api_api_test_t_LDADD    = $(test_api_ldadd)
 api_api_test_t_LDFLAGS  = $(test_api_ldflags)
 api_api_test_t_SOURCES  = \
-	api/api_suite.h \
-	api/api_suite.c \
-	api/init-fini.c \
-	api/create-open-remove.c \
-	api/write-read-sync-stat.c \
-	api/laminate.c \
+  api/api_suite.h \
+  api/api_suite.c \
+  api/init-fini.c \
+  api/create-open-remove.c \
+  api/write-read-sync-stat.c \
+  api/laminate.c \
+  api/storage-reuse.c \
   api/transfer.c
+
 
 test_sysio_sources = \
   sys/sysio_suite.h \
@@ -142,6 +144,7 @@ sys_sysio_static_t_CPPFLAGS = $(test_cppflags)
 sys_sysio_static_t_LDADD    = $(test_wrap_ldadd)
 sys_sysio_static_t_LDFLAGS  = $(test_wrap_ldflags)
 sys_sysio_static_t_SOURCES  = $(test_sysio_sources)
+
 
 test_statfs_sources = \
   sys/statfs_suite.h \

@@ -12,8 +12,8 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
-//#include <mpi.h>
 #include "api_suite.h"
+#include <stdlib.h>
 
 /* This is the collection of library API tests.
  *
@@ -49,6 +49,12 @@ int main(int argc, char* argv[])
      * functionality or files that were already tested.
      */
 
+    size_t spill_sz = (size_t)512 * MIB;
+    char* spill_size_env = getenv("UNIFYFS_LOGIO_SPILL_SIZE");
+    if (NULL != spill_size_env) {
+        spill_sz = (size_t) strtoul(spill_size_env, NULL, 0);
+    }
+
     rc = api_initialize_test(unifyfs_root, &fshdl);
     if (rc == UNIFYFS_SUCCESS) {
         api_create_open_remove_test(unifyfs_root, &fshdl);
@@ -61,6 +67,9 @@ int main(int argc, char* argv[])
                                       (size_t)4 * MIB, (size_t)128 * KIB);
 
         api_laminate_test(unifyfs_root, &fshdl);
+
+        api_storage_test(unifyfs_root, &fshdl,
+                         spill_sz, (spill_sz / 8));
 
         api_transfer_test(unifyfs_root, tmp_dir, &fshdl,
                           (size_t)64 * MIB, (size_t)4 * MIB);

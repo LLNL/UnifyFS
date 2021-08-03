@@ -39,7 +39,6 @@ typedef struct log_header {
     size_t data_sz;            /* total data bytes in log */
     size_t reserved_sz;        /* reserved data bytes */
     size_t chunk_sz;           /* data chunk size */
-    size_t max_reserved_slot;  /* slot index for last reserved chunk */
     off_t  data_offset;        /* file/memory offset where data chunks start */
 } log_header;
 /* chunk slot_map immediately follows header and occupies rest of the page */
@@ -136,7 +135,10 @@ static int get_spillfile(const char* path,
 }
 
 /* map log header (1st page) of spill file given by file descriptor */
-static void* map_spillfile(int spill_fd, int mmap_prot, int n_pages)
+static void* map_spillfile(int spill_fd,
+                           int mmap_prot,
+                           int n_pages,
+                           int server)
 {
     int err;
     size_t pgsz = get_page_size();
@@ -152,7 +154,7 @@ static void* map_spillfile(int spill_fd, int mmap_prot, int n_pages)
         return NULL;
     }
 
-    if (mmap_prot == PROT_READ) { /* server maps for read only */
+    if (server) {
         log_header* loghdr = (log_header*) addr;
         size_t hdr_sz = loghdr->hdr_sz;
         if (hdr_sz > mapsz) {
@@ -184,6 +186,7 @@ int unifyfs_logio_init_server(const int app_id,
     }
     *pctx = NULL;
 
+    log_header* hdr = NULL;
     shm_context* shm_ctx = NULL;
     if (mem_size) {
         /* attach to client shmem region */
@@ -195,6 +198,9 @@ int unifyfs_logio_init_server(const int app_id,
             LOGERR("Failed to attach logio shmem buffer!");
             return UNIFYFS_ERROR_SHMEM;
         }
+        hdr = (log_header*) shm_ctx->addr;
+        LOGDBG("shmem header - hdr_sz=%zu, data_sz=%zu, data_offset=%zu",
+               hdr->hdr_sz, hdr->data_sz, hdr->data_offset);
     }
 
     char spillfile[UNIFYFS_MAX_FILENAME];
@@ -215,12 +221,16 @@ int unifyfs_logio_init_server(const int app_id,
             return UNIFYFS_FAILURE;
         } else {
             /* map the start of the spill-over file, which contains log header
-             * and chunk slot_map. server only needs read access. */
-            spill_mapping = map_spillfile(spill_fd, PROT_READ, 1);
+             * and chunk slot_map. server needs read and write access */
+            int map_flags = PROT_READ | PROT_WRITE;
+            spill_mapping = map_spillfile(spill_fd, map_flags, 1, 1);
             if (NULL == spill_mapping) {
                 LOGERR("Failed to map logio spill file header!");
                 return UNIFYFS_FAILURE;
             }
+            hdr = (log_header*) spill_mapping;
+            LOGDBG("spill header - hdr_sz=%zu, data_sz=%zu, data_offset=%zu",
+                    hdr->hdr_sz, hdr->data_sz, hdr->data_offset);
         }
     }
 
@@ -278,8 +288,8 @@ static int init_log_header(char* log_region,
         }
 
         /* chunk data starts after header pages */
-        data_size = region_size - hdr_size;
-        size_t n_chunks = data_size / chunk_size;
+        size_t data_space = region_size - hdr_size;
+        size_t n_chunks = data_space / chunk_size;
 
         /* try to init chunk slotmap */
         size_t slotmap_size = hdr_size - sizeof(log_header);
@@ -290,6 +300,10 @@ static int init_log_header(char* log_region,
             hdr_pages++;
             continue;
         }
+
+        /* the data_size is an exact multiple of chunk_size, which may be
+         * slightly less than the data_space */
+        data_size = n_chunks * chunk_size;
         break;
     }
 
@@ -355,6 +369,9 @@ int unifyfs_logio_init_client(const int app_id,
             LOGERR("Failed to initialize shmem logio header");
             return rc;
         }
+        log_header* hdr = (log_header*) memlog;
+        LOGDBG("shmem header - hdr_sz=%zu, data_sz=%zu, data_offset=%zu",
+               hdr->hdr_sz, hdr->data_sz, hdr->data_offset);
     }
 
     /* will we use spillover to store the files? */
@@ -405,7 +422,7 @@ int unifyfs_logio_init_client(const int app_id,
             /* map start of the spill-over file, which contains log header
              * and chunk slot_map. client needs read and write access. */
             int map_flags = PROT_READ | PROT_WRITE;
-            spill_mapping = map_spillfile(spill_fd, map_flags, n_pages);
+            spill_mapping = map_spillfile(spill_fd, map_flags, n_pages, 0);
             if (NULL == spill_mapping) {
                 LOGERR("Failed to map logio spill file header!");
                 return UNIFYFS_FAILURE;
@@ -418,6 +435,9 @@ int unifyfs_logio_init_client(const int app_id,
                 LOGERR("Failed to initialize spill logio header");
                 return rc;
             }
+            log_header* hdr = (log_header*) spill;
+            LOGDBG("spill header - hdr_sz=%zu, data_sz=%zu, data_offset=%zu",
+                   hdr->hdr_sz, hdr->data_sz, hdr->data_offset);
         }
     }
 
@@ -541,7 +561,6 @@ int unifyfs_logio_alloc(logio_context* ctx,
             /* success, all needed chunks allocated in shmem */
             allocated_bytes = res_chunks * chunk_sz;
             shmem_hdr->reserved_sz += allocated_bytes;
-            shmem_hdr->max_reserved_slot = (res_slot + res_chunks) - 1;
             res_off = (off_t)(res_slot * chunk_sz);
             *log_offset = res_off;
             return UNIFYFS_SUCCESS;
@@ -550,7 +569,7 @@ int unifyfs_logio_alloc(logio_context* ctx,
         /* could not get full allocation in shmem, reserve any available
          * chunks at the end of the shmem log */
         size_t log_end_chunks = chunkmap->total_slots -
-                                (shmem_hdr->max_reserved_slot + 1);
+                                (chunkmap->last_used_slot + 1);
         if (log_end_chunks > 0) {
             res_chunks = log_end_chunks;
             res_slot = slotmap_reserve(chunkmap, res_chunks);
@@ -584,7 +603,6 @@ int unifyfs_logio_alloc(logio_context* ctx,
             if (0 == mem_res_at_end) {
                 /* success, full reservation in spill */
                 spill_hdr->reserved_sz += allocated_bytes;
-                spill_hdr->max_reserved_slot = (res_slot + res_chunks) - 1;
                 res_off = (off_t)(res_slot * chunk_sz);
                 if (NULL != shmem_hdr) {
                     /* update log offset to account for shmem log size */
@@ -622,9 +640,8 @@ int unifyfs_logio_alloc(logio_context* ctx,
                     res_slot = slotmap_reserve(chunkmap, res_chunks);
                     if (-1 != res_slot) {
                         /* success, full reservation in spill */
+                        allocated_bytes = res_chunks * chunk_sz;
                         spill_hdr->reserved_sz += allocated_bytes;
-                        spill_hdr->max_reserved_slot =
-                            (res_slot + res_chunks) - 1;
                         res_off = (off_t)(res_slot * chunk_sz);
                         if (NULL != shmem_hdr) {
                             /* update log offset to include shmem log size */
@@ -636,10 +653,7 @@ int unifyfs_logio_alloc(logio_context* ctx,
                 } else {
                     /* successful reservation spanning shmem and spill */
                     shmem_hdr->reserved_sz += mem_allocation;
-                    shmem_hdr->max_reserved_slot =
-                        (mem_res_slot + mem_res_nchk) - 1;
                     spill_hdr->reserved_sz += allocated_bytes;
-                    spill_hdr->max_reserved_slot = (res_slot + res_chunks) - 1;
                     *log_offset = res_off;
                     return UNIFYFS_SUCCESS;
                 }
@@ -656,6 +670,7 @@ int unifyfs_logio_alloc(logio_context* ctx,
             LOGERR("slotmap_release() for logio shmem failed");
         }
     }
+    LOGDBG("returning ENOSPC");
     return ENOSPC;
 }
 
@@ -689,6 +704,8 @@ int unifyfs_logio_free(logio_context* ctx,
     off_t spill_offset = 0;
     get_log_sizes(log_offset, nbytes, mem_size,
                   &sz_in_mem, &sz_in_spill, &spill_offset);
+    LOGDBG("log_off=%zu, nbytes=%zu : mem_sz=%zu spill_sz=%zu spill_off=%zu",
+           log_offset, nbytes, sz_in_mem, sz_in_spill, (size_t)spill_offset);
 
     int rc = UNIFYFS_SUCCESS;
     size_t chunk_sz, chunk_slot, num_chunks;
@@ -828,6 +845,8 @@ int unifyfs_logio_write(logio_context* ctx,
     off_t spill_offset = 0;
     get_log_sizes(log_offset, nbytes, mem_size,
                   &sz_in_mem, &sz_in_spill, &spill_offset);
+    LOGDBG("log_off=%zu, nbytes=%zu : mem_sz=%zu spill_sz=%zu spill_off=%zu",
+           log_offset, nbytes, sz_in_mem, sz_in_spill, (size_t)spill_offset);
 
     /* do writes */
     int err_rc = 0;

@@ -92,6 +92,24 @@ static int fid_storage_free(unifyfs_client* client,
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
     if ((meta != NULL) && (meta->fid == fid)) {
         if (meta->storage == FILE_STORAGE_LOGIO) {
+            /* client needs to release unsynced write extents, since server
+             * does not know about them */
+            seg_tree_rdlock(&meta->extents_sync);
+            struct seg_tree_node* node = NULL;
+            while ((node = seg_tree_iter(&meta->extents_sync, node))) {
+                size_t nbytes = (size_t) (node->end - node->start + 1);
+                off_t log_offset = (off_t) node->ptr;
+                int rc = unifyfs_logio_free(client->state.logio_ctx,
+                                            log_offset, nbytes);
+                if (UNIFYFS_SUCCESS != rc) {
+                    LOGERR("failed to free logio allocation for "
+                           "client[%d:%d] log_offset=%zu nbytes=%zu",
+                           client->state.app_id, client->state.client_id,
+                           log_offset, nbytes);
+                }
+            }
+            seg_tree_unlock(&meta->extents_sync);
+
             /* Free our write seg_tree */
             seg_tree_destroy(&meta->extents_sync);
 
@@ -983,6 +1001,34 @@ static off_t rewrite_index_from_seg_tree(unifyfs_client* client,
 
     return max_log_offset;
 }
+
+/* Sync extent data for file to storage */
+int unifyfs_fid_sync_data(unifyfs_client* client,
+                          int fid)
+{
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
+
+    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
+    if ((NULL == meta) || (meta->fid != fid)) {
+        /* bail out with an error if we fail to find it */
+        LOGERR("missing filemeta for fid=%d", fid);
+        return UNIFYFS_FAILURE;
+    }
+
+    /* sync file data to storage.
+     * NOTE: this syncs all client data, not just the target file's */
+    int rc = unifyfs_logio_sync(client->state.logio_ctx);
+    if (UNIFYFS_SUCCESS != rc) {
+        /* something went wrong when trying to flush extents */
+        LOGERR("failed to flush data to storage for client[%d:%d]",
+               client->state.app_id, client->state.client_id);
+        ret = rc;
+    }
+
+    return ret;
+}
+
 
 /* Sync data for file to server if needed */
 int unifyfs_fid_sync_extents(unifyfs_client* client,
