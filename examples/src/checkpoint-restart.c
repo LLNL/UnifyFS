@@ -358,6 +358,15 @@ int main(int argc, char* argv[])
         test_print(cfg, "ERROR - Restart data verification failed!");
     }
 
+    if (cfg->remove_target) {
+        test_print_verbose_once(cfg,
+            "DEBUG: removing file %s", target_file);
+        rc = test_remove_file(cfg, target_file);
+        if (rc) {
+            test_print(cfg, "ERROR - test_remove_file(%s) failed", target_file);
+        }
+    }
+
     // post-restart cleanup
     free(restart_data);
     free(req);

@@ -43,6 +43,7 @@ typedef struct ClientRpcIds {
     hg_id_t mread_req_data_id;
     hg_id_t mread_req_complete_id;
     hg_id_t transfer_complete_id;
+    hg_id_t unlink_callback_id;
 } client_rpcs_t;
 
 typedef struct ClientRpcContext {

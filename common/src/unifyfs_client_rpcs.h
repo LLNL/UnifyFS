@@ -47,6 +47,13 @@ typedef enum {
     UNIFYFS_CLIENT_RPC_UNMOUNT
 } client_rpc_e;
 
+typedef enum {
+    UNIFYFS_CLIENT_CALLBACK_INVALID = 0,
+    UNIFYFS_CLIENT_CALLBACK_LAMINATE,
+    UNIFYFS_CLIENT_CALLBACK_TRUNCATE,
+    UNIFYFS_CLIENT_CALLBACK_UNLINK
+} client_callback_e;
+
 /* unifyfs_attach_rpc (client => server)
  *
  * initialize server access to client's shared memory and file state */
@@ -188,6 +195,18 @@ MERCURY_GEN_PROC(unifyfs_unlink_in_t,
 MERCURY_GEN_PROC(unifyfs_unlink_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_unlink_rpc)
+
+/* unifyfs_unlink_callback_rpc (server => client)
+ *
+ * given an app_id, client_id, and global file id,
+ * free the client metadata and data associated with the file */
+MERCURY_GEN_PROC(unifyfs_unlink_callback_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
+                 ((int32_t)(gfid)))
+MERCURY_GEN_PROC(unifyfs_unlink_callback_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_unlink_callback_rpc)
 
 /* unifyfs_laminate_rpc (client => server)
  *

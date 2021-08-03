@@ -139,6 +139,16 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
         return NULL;
     }
 
+    /* allocate a list to track client rpc requests */
+    thrd_ctrl->client_callbacks =
+        arraylist_create(UNIFYFS_CLIENT_MAX_FILES);
+    if (thrd_ctrl->client_callbacks == NULL) {
+        LOGERR("failed to allocate request manager client_callbacks!");
+        pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
+        free(thrd_ctrl);
+        return NULL;
+    }
+
     /* record app and client id this thread will be serving */
     thrd_ctrl->app_id    = app_id;
     thrd_ctrl->client_id = client_id;
@@ -802,6 +812,186 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
     return ret;
 }
 
+/* submit a client callback request to the request manager thread */
+int rm_submit_client_callback_request(client_callback_req* req)
+{
+    assert(req != NULL);
+
+    /* get application client */
+    app_client* client = get_app_client(req->app_id, req->client_id);
+    if (NULL == client) {
+        LOGERR("app client [%d:%d] lookup failed",
+               req->app_id, req->client_id);
+        return EINVAL;
+    }
+
+    /* LOGDBG("client callback: client=[%d:%d], type=%d, gfid=%d",
+     *      req->app_id, req->client_id, req->req_type, req->gfid); */
+
+    /* get thread control structure */
+    reqmgr_thrd_t* reqmgr = client->reqmgr;
+    assert(NULL != reqmgr);
+    RM_REQ_LOCK(reqmgr);
+    arraylist_add(reqmgr->client_callbacks, req);
+    RM_REQ_UNLOCK(reqmgr);
+
+    signal_new_requests(reqmgr);
+
+    return UNIFYFS_SUCCESS;
+}
+
+/* this qsort() comparison function groups callbacks by type, then
+ * client + gfid. It also pushes any NULL elements to the end of the array */
+static int cb_arraylist_compare(const void* a, const void* b)
+{
+    const void* elema = *(const void**)a;
+    const void* elemb = *(const void**)b;
+
+    /* first handle the NULL cases (use 'NULL > ptr' to push NULLs to end) */
+    if (NULL == elema) {
+        if (NULL == elemb) {
+            return 0;
+        } else {
+            return 1;
+        }
+    } else if (NULL == elemb) {
+        return -1;
+    }
+
+    /* now compare the callback requests */
+    const client_callback_req* reqa = elema;
+    const client_callback_req* reqb = elemb;
+
+    if (reqa->req_type < reqb->req_type) {
+        return -1;
+    } else if (reqa->req_type > reqb->req_type) {
+        return 1;
+    } else { // request types are equal
+        if (reqa->app_id < reqb->app_id) {
+            return -1;
+        } else if (reqa->app_id > reqb->app_id) {
+            return 1;
+        } else { // app_ids are equal
+            if (reqa->client_id < reqb->client_id) {
+                return -1;
+            } else if (reqa->client_id > reqb->client_id) {
+                return 1;
+            } else { // client_ids are equal
+                if (reqa->gfid < reqb->gfid) {
+                    return -1;
+                } else if (reqa->gfid > reqb->gfid) {
+                    return 1;
+                } else { // gfids are equal
+                    return 0;
+                }
+            }
+        }
+    }
+}
+
+/* iterate over list of callbacks and invoke rpcs */
+static int rm_process_client_callbacks(reqmgr_thrd_t* reqmgr)
+{
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
+
+    /* this will hold a list of client requests if we find any */
+    arraylist_t* client_cbs = NULL;
+
+    /* lock to access requests */
+    RM_REQ_LOCK(reqmgr);
+
+    /* if we have any requests, take pointer to the list
+     * of requests and replace it with a newly allocated
+     * list on the request manager structure */
+    int num_client_cbs = arraylist_size(reqmgr->client_callbacks);
+    if (num_client_cbs) {
+        /* got some client requets, take the list and replace
+         * it with an empty list */
+        LOGDBG("processing %d client callback requests", num_client_cbs);
+        client_cbs = reqmgr->client_callbacks;
+        reqmgr->client_callbacks =
+            arraylist_create(UNIFYFS_CLIENT_MAX_FILES);
+    }
+
+    /* release lock on reqmgr requests */
+    RM_REQ_UNLOCK(reqmgr);
+
+    if (0 == num_client_cbs) {
+        return UNIFYFS_SUCCESS;
+    }
+
+    /* sort the requests to make it easy to find duplicates */
+    int rc = arraylist_sort(client_cbs, cb_arraylist_compare);
+    if (rc) {
+        LOGERR("failed to sort client callback arraylist");
+    }
+
+    /* iterate over each client request */
+    int last_req_type = -1;
+    int last_req_app  = -1;
+    int last_req_cli  = -1;
+    int last_req_gfid = -1;
+    client_callback_req* req;
+    for (int i = 0; i < num_client_cbs; i++) {
+        /* process next request */
+        int rret;
+        req = (client_callback_req*) arraylist_get(client_cbs, i);
+        if (NULL == req) {
+            continue;
+        }
+
+        /* ignore duplicate callback reqs */
+        if ((last_req_type == req->req_type)  &&
+            (last_req_app  == req->app_id)    &&
+            (last_req_cli  == req->client_id) &&
+            (last_req_gfid == req->gfid)) {
+            continue;
+        }
+        last_req_type = req->req_type;
+        last_req_app  = req->app_id;
+        last_req_cli  = req->client_id;
+        last_req_gfid = req->gfid;
+
+        switch (req->req_type) {
+        case UNIFYFS_CLIENT_CALLBACK_LAMINATE:
+            LOGERR("laminate callback not yet implemented");
+            rret = UNIFYFS_ERROR_NYI;
+            break;
+        case UNIFYFS_CLIENT_CALLBACK_TRUNCATE:
+            LOGERR("truncate callback not yet implemented");
+            rret = UNIFYFS_ERROR_NYI;
+            break;
+        case UNIFYFS_CLIENT_CALLBACK_UNLINK:
+            LOGDBG("unlink callback - client[%d:%d] gfid=%d",
+                   req->app_id, req->client_id, req->gfid);
+            rret = invoke_client_unlink_callback_rpc(req->app_id,
+                                                     req->client_id,
+                                                     req->gfid);
+            break;
+        default:
+            LOGERR("unsupported client rpc request type %d", req->req_type);
+            rret = UNIFYFS_ERROR_NYI;
+            break;
+        }
+        if (rret != UNIFYFS_SUCCESS) {
+            if ((rret != ENOENT) && (rret != EEXIST)) {
+                LOGERR("client rpc request %d failed (%s)",
+                       i, unifyfs_rc_enum_description(rret));
+            }
+            ret = rret;
+        }
+    }
+
+    /* free the list if we have one */
+    if (NULL != client_cbs) {
+        /* NOTE: this will call free() on each req in the arraylist */
+        arraylist_free(client_cbs);
+    }
+
+    return ret;
+}
+
 /* submit a client rpc request to the request manager thread */
 int rm_submit_client_rpc_request(unifyfs_fops_ctx_t* ctx,
                                  client_rpc_req_t* req)
@@ -1223,7 +1413,6 @@ static int process_unlink_rpc(reqmgr_thrd_t* reqmgr,
     return ret;
 }
 
-
 /* iterate over list of chunk reads and send responses */
 static int rm_process_client_requests(reqmgr_thrd_t* reqmgr)
 {
@@ -1365,6 +1554,12 @@ void* request_manager_thread(void* arg)
      * with main thread, new items inserted by the rpc handler */
     int rc;
     while (1) {
+        /* process any client callback requests */
+        rc = rm_process_client_callbacks(thrd_ctrl);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGWARN("failed to process client rpc requests");
+        }
+
         /* process any client requests */
         rc = rm_process_client_requests(thrd_ctrl);
         if (rc != UNIFYFS_SUCCESS) {
@@ -1386,8 +1581,7 @@ void* request_manager_thread(void* arg)
         /* grab lock */
         RM_LOCK(thrd_ctrl);
 
-        /* inform dispatcher that we're waiting for work
-         * inside the critical section */
+        /* set flag to indicate that we're waiting for work */
         thrd_ctrl->waiting_for_work = 1;
 
         /* release lock and wait to be signaled by dispatcher */
