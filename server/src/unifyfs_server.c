@@ -58,6 +58,9 @@ server_info_t* glb_servers; // array of server_info_t
 
 unifyfs_cfg_t server_cfg;
 
+/* arraylist to track failed clients */
+arraylist_t* failed_clients; // = NULL
+
 static ABT_mutex app_configs_abt_sync;
 static app_config* app_configs[UNIFYFS_SERVER_MAX_NUM_APPS]; /* list of apps */
 static size_t clients_per_app = UNIFYFS_SERVER_MAX_APP_CLIENTS;

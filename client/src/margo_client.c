@@ -74,6 +74,7 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
     CLIENT_REGISTER_RPC_HANDLER(mread_req_data);
     CLIENT_REGISTER_RPC_HANDLER(mread_req_complete);
     CLIENT_REGISTER_RPC_HANDLER(transfer_complete);
+    CLIENT_REGISTER_RPC_HANDLER(unlink_callback);
 
 #undef CLIENT_REGISTER_RPC_HANDLER
 }
@@ -1122,3 +1123,54 @@ static void unifyfs_transfer_complete_rpc(hg_handle_t handle)
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(unifyfs_transfer_complete_rpc)
+
+/* unlink callback rpc */
+static void unifyfs_unlink_callback_rpc(hg_handle_t handle)
+{
+    int ret;
+
+    /* get input params */
+    unifyfs_unlink_callback_in_t in;
+    hg_return_t hret = margo_get_input(handle, &in);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_get_input() failed");
+        ret = UNIFYFS_ERROR_MARGO;
+    } else {
+        /* lookup client */
+        unifyfs_client* client;
+        int client_app = (int) in.app_id;
+        int client_id  = (int) in.client_id;
+        client = unifyfs_find_client(client_app, client_id, NULL);
+        if (NULL == client) {
+            /* unknown client */
+            ret = EINVAL;
+        } else {
+            int gfid = (int) in.gfid;
+            int fid = unifyfs_fid_from_gfid(client, gfid);
+            if (-1 != fid) {
+                unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client,
+                                                                     fid);
+                if ((meta != NULL) && (fid == meta->fid)) {
+                    meta->pending_unlink = 1;
+                }
+            }
+            ret = UNIFYFS_SUCCESS;
+        }
+        margo_free_input(handle, &in);
+    }
+
+    /* set rpc result status */
+    unifyfs_unlink_callback_out_t out;
+    out.ret = ret;
+
+    /* return to caller */
+    LOGDBG("responding");
+    hret = margo_respond(handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* free margo resources */
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(unifyfs_unlink_callback_rpc)

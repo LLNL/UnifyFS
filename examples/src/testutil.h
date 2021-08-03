@@ -117,29 +117,30 @@ const char* io_pattern_str(int pattern)
 
 typedef struct {
     /* program behavior options */
-    int debug;        /* during startup, wait for input at rank 0 */
-    int verbose;      /* print verbose information to stderr */
+    int debug;            /* during startup, wait for input at rank 0 */
+    int verbose;          /* print verbose information to stderr */
     int use_mpi;
     int use_unifyfs;
     int enable_mpi_mount; /* automount during MPI_Init() */
     char* output_file;    /* print test messages to output file */
     FILE* output_fp;
-    int reuse_filename; /* remove and then reuse filename from prior run*/
+    int reuse_filename;   /* remove and then reuse filename from prior run */
+    int remove_target;    /* remove the target file */
 
     /* I/O behavior options */
-    int io_pattern; /* N1 or NN */
-    int io_check;   /* use lipsum to verify data */
-    int io_shuffle; /* read and write different extents */
+    int io_pattern;    /* N1 or NN */
+    int io_check;      /* use lipsum to verify data */
+    int io_shuffle;    /* read and write different extents */
     int pre_wr_trunc;  /* truncate file before writing */
     int post_wr_trunc; /* truncate file after writing */
-    int use_aio;    /* use asynchronous IO */
-    int use_api;    /* use UnifyFS library API */
-    int use_lio;    /* use lio_listio instead of read/write */
-    int use_mapio;  /* use mmap instead of read/write */
-    int use_mpiio;  /* use MPI-IO instead of POSIX I/O */
-    int use_prdwr;  /* use pread/pwrite instead of read/write */
-    int use_stdio;  /* use fread/fwrite instead of read/write */
-    int use_vecio;  /* use readv/writev instead of read/write */
+    int use_aio;       /* use asynchronous IO */
+    int use_api;       /* use UnifyFS library API */
+    int use_lio;       /* use lio_listio instead of read/write */
+    int use_mapio;     /* use mmap instead of read/write */
+    int use_mpiio;     /* use MPI-IO instead of POSIX I/O */
+    int use_prdwr;     /* use pread/pwrite instead of read/write */
+    int use_stdio;     /* use fread/fwrite instead of read/write */
+    int use_vecio;     /* use readv/writev instead of read/write */
 
     /* I/O size options */
     uint64_t n_blocks; /* number of I/O blocks */
@@ -153,6 +154,7 @@ typedef struct {
     FILE*  fp;
     int    fd;
     int    fd_access;  /* access flags for cfg.fd */
+    int    is_open;    /* flag to indicate if file is currently open */
     void*  mapped;     /* address of mapped extent of cfg.fd */
     off_t  mapped_off; /* start offset for mapped extent */
     size_t mapped_sz;  /* size of mapped extent */
@@ -231,6 +233,7 @@ void test_config_print(test_cfg* cfg)
     fprintf(fp, "\t mpi_mount   = %d\n", cfg->enable_mpi_mount);
     fprintf(fp, "\t outfile     = %s\n", cfg->output_file);
     fprintf(fp, "\t reuse_fname = %d\n", cfg->reuse_filename);
+    fprintf(fp, "\t unlink      = %d\n", cfg->remove_target);
 
     fprintf(fp, "\n-- IO Behavior --\n");
     fprintf(fp, "\t io_pattern  = %s\n", io_pattern_str(cfg->io_pattern));
@@ -520,7 +523,7 @@ int test_is_static(const char* program)
 
 // common options for all tests
 
-static const char* test_short_opts = "Ab:c:dD:f:hklLm:Mn:No:p:PrSt:T:UvVx";
+static const char* test_short_opts = "Ab:c:dD:f:hklLm:Mn:No:p:PrSt:T:uUvVx";
 
 static const struct option test_long_opts[] = {
     { "aio", 0, 0, 'A' },
@@ -544,6 +547,7 @@ static const struct option test_long_opts[] = {
     { "stdio", 0, 0, 'S' },
     { "pre-truncate", 1, 0, 't' },
     { "post-truncate", 1, 0, 'T' },
+    { "unlink", 0, 0, 'u' },
     { "disable-unifyfs", 0, 0, 'U' },
     { "verbose", 0, 0, 'v' },
     { "vecio", 0, 0, 'V' },
@@ -595,6 +599,8 @@ static const char* test_usage_str =
     " -t, --pre-truncate=<size>        truncate file to size (B) before writing\n"
     "                                  (default: off)\n"
     " -T, --post-truncate=<size>       truncate file to size (B) after writing\n"
+    "                                  (default: off)\n"
+    " -u, --unlink                     unlink target file\n"
     "                                  (default: off)\n"
     " -U, --disable-unifyfs            do not use UnifyFS\n"
     "                                  (default: enable UnifyFS)\n"
@@ -707,6 +713,10 @@ int test_process_argv(test_cfg* cfg,
         case 'T':
             cfg->post_wr_trunc = 1;
             cfg->trunc_size = (off_t) strtoul(optarg, NULL, 0);
+            break;
+
+        case 'u':
+            cfg->remove_target = 1;
             break;
 
         case 'U':
@@ -1120,6 +1130,7 @@ int test_open_file(test_cfg* cfg, const char* filepath, int access)
         cfg->fd = fd;
         cfg->fd_access = access;
     }
+    cfg->is_open = 1;
     return 0;
 }
 
@@ -1169,6 +1180,10 @@ int test_close_file(test_cfg* cfg)
 {
     assert(NULL != cfg);
 
+    if (!cfg->is_open) {
+        return 0;
+    }
+
     if (cfg->use_api) {
 #ifndef DISABLE_UNIFYFS
         cfg->gfid = UNIFYFS_INVALID_GFID;
@@ -1195,6 +1210,7 @@ int test_close_file(test_cfg* cfg)
         cfg->fd = -1;
     }
 
+    cfg->is_open = 0;
     return 0;
 }
 
@@ -1230,6 +1246,9 @@ int test_remove_file(test_cfg* cfg, const char* filepath)
 
     assert(NULL != cfg);
 
+    /* close the file if it's still open */
+    test_close_file(cfg);
+
     /* stat file and simply return if it already doesn't exist */
     rc = stat(filepath, &sb);
     if (rc) {
@@ -1239,10 +1258,10 @@ int test_remove_file(test_cfg* cfg, const char* filepath)
     }
 
     if (cfg->use_mpiio) {
-        MPI_CHECK(cfg, (MPI_File_delete(filepath, MPI_INFO_NULL)));
-        if (mpi_error) {
-            return -1;
+        if (cfg->rank == 0 || cfg->io_pattern == IO_PATTERN_NN) {
+            MPI_CHECK(cfg, (MPI_File_delete(filepath, MPI_INFO_NULL)));
         }
+        test_barrier(cfg);
         return 0;
     }
 
@@ -1272,6 +1291,7 @@ int test_remove_file(test_cfg* cfg, const char* filepath)
             }
         }
     }
+    test_barrier(cfg);
     return 0;
 }
 
@@ -1304,6 +1324,7 @@ int test_create_file(test_cfg* cfg, const char* filepath, int access)
         if (mpi_error) {
             return -1;
         }
+        cfg->is_open = 1;
         return 0;
     }
 
@@ -1340,6 +1361,7 @@ int test_create_file(test_cfg* cfg, const char* filepath, int access)
             cfg->fd = fd;
             cfg->fd_access = access;
         }
+        cfg->is_open = 1;
     }
 
     if (cfg->io_pattern == IO_PATTERN_N1) {
@@ -1514,6 +1536,7 @@ void test_fini(test_cfg* cfg)
         return;
     }
 
+    /* close the target file if it's still open */
     test_close_file(cfg);
 
     if (cfg->use_unifyfs) {
