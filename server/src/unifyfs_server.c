@@ -396,8 +396,6 @@ int main(int argc, char* argv[])
     }
 
     LOGDBG("initializing rpc service");
-    ABT_init(argc, argv);
-    ABT_mutex_create(&app_configs_abt_sync);
     rc = configurator_bool_val(server_cfg.margo_lazy_connect,
                                &margo_lazy_connect);
     rc = configurator_bool_val(server_cfg.margo_tcp,
@@ -407,6 +405,11 @@ int main(int argc, char* argv[])
         LOGERR("%s", unifyfs_rc_enum_description(rc));
         exit(1);
     }
+
+    /* We wait to call any ABT functions until after margo_init.
+     * Margo configures ABT in a particular way, so we defer to
+     * Margo to call ABT_init. */
+    ABT_mutex_create(&app_configs_abt_sync);
 
     ABT_mutex_lock(app_configs_abt_sync);
     failed_clients = arraylist_create(0);
