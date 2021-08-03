@@ -55,6 +55,7 @@ typedef struct ServerRpcIds {
     hg_id_t client_mread_data_id;
     hg_id_t client_mread_complete_id;
     hg_id_t client_transfer_complete_id;
+    hg_id_t client_unlink_callback_id;
 } server_rpcs_t;
 
 typedef struct ServerRpcContext {
@@ -107,5 +108,10 @@ int invoke_client_transfer_complete_rpc(int app_id,
                                         int client_id,
                                         int transfer_id,
                                         int error_code);
+
+/* invokes the client unlink callback rpc function */
+int invoke_client_unlink_callback_rpc(int app_id,
+                                      int client_id,
+                                      int gfid);
 
 #endif // MARGO_SERVER_H

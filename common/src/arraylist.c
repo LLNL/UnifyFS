@@ -32,6 +32,9 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+/* Create an arraylist with the given capacity.
+ * If capacity == 0, use the default ARRAYLIST_CAPACITY.
+ * Returns the new arraylist, or NULL on error. */
 arraylist_t* arraylist_create(int capacity)
 {
     arraylist_t* arr = (arraylist_t*) malloc(sizeof(arraylist_t));
@@ -54,6 +57,7 @@ arraylist_t* arraylist_create(int capacity)
     return arr;
 }
 
+/* Returns the arraylist capacity in elements, or -1 on error */
 int arraylist_capacity(arraylist_t* arr)
 {
     if (NULL == arr) {
@@ -62,6 +66,7 @@ int arraylist_capacity(arraylist_t* arr)
     return arr->cap;
 }
 
+/* Returns the current arraylist size in elements, or -1 on error */
 int arraylist_size(arraylist_t* arr)
 {
     if (NULL == arr) {
@@ -70,6 +75,40 @@ int arraylist_size(arraylist_t* arr)
     return arr->size;
 }
 
+/* Reset the arraylist size to zero */
+int arraylist_reset(arraylist_t* arr)
+{
+    if (NULL == arr) {
+        return -1;
+    }
+
+    arr->size = 0;
+
+    return 0;
+}
+
+/* Free all arraylist elements, the array storage, and the arraylist_t */
+int arraylist_free(arraylist_t* arr)
+{
+    if (NULL == arr) {
+        return -1;
+    }
+
+    if (NULL != arr->elems) {
+        for (int i = 0; i < arr->cap; i++) {
+            if (arr->elems[i] != NULL) {
+                free(arr->elems[i]);
+            }
+        }
+        free(arr->elems);
+    }
+
+    free(arr);
+
+    return 0;
+}
+
+/* Get the element at given position */
 void* arraylist_get(arraylist_t* arr, int pos)
 {
     if ((NULL == arr) || (pos >= arr->size)) {
@@ -78,6 +117,7 @@ void* arraylist_get(arraylist_t* arr, int pos)
     return arr->elems[pos];
 }
 
+/* Remove the element at given list index and return it */
 void* arraylist_remove(arraylist_t* arr, int pos)
 {
     void* item = arraylist_get(arr, pos);
@@ -99,7 +139,7 @@ void* arraylist_remove(arraylist_t* arr, int pos)
     return item;
 }
 
-/* Inserts element at given index (pos) in the arraylist.
+/* Insert the element at the given list index (pos) in the arraylist.
  * Overwrites (and frees) any existing element at that index.
  * Returns 0 on success, or -1 on error */
 int arraylist_insert(arraylist_t* arr, int pos, void* elem)
@@ -153,33 +193,28 @@ int arraylist_add(arraylist_t* arr, void* elem)
     }
 }
 
-int arraylist_reset(arraylist_t* arr)
+/* Sort the arraylist elements using the given comparison function (cmpfn).
+ * Note that the comparison function should properly handle NULL pointer
+ * elements of the array.
+ * Return 0 on success, -1 on error */
+int arraylist_sort(arraylist_t* arr,
+                   int (*cmpfn)(const void *, const void *))
 {
     if (NULL == arr) {
         return -1;
     }
 
-    arr->size = 0;
+    /* sort using provided comparison function */
+    qsort(arr->elems, arr->cap, sizeof(void*), cmpfn);
 
-    return 0;
-}
-
-int arraylist_free(arraylist_t* arr)
-{
-    if (NULL == arr) {
-        return -1;
-    }
-
-    if (NULL != arr->elems) {
-        for (int i = 0; i < arr->cap; i++) {
-            if (arr->elems[i] != NULL) {
-                free(arr->elems[i]);
-            }
+    /* adjust size to match last used index */
+    int last_used_pos = -1;
+    for (int i = 0; i < arr->cap; i++) {
+        if (arr->elems[i] != NULL) {
+            last_used_pos = i;
         }
-        free(arr->elems);
     }
-
-    free(arr);
+    arr->size = last_used_pos + 1;
 
     return 0;
 }

@@ -90,7 +90,7 @@ static int fid_storage_free(unifyfs_client* client,
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
-    if ((meta != NULL) && (meta->fid == fid)) {
+    if ((meta != NULL) && (fid == meta->fid)) {
         if (meta->storage == FILE_STORAGE_LOGIO) {
             /* client needs to release unsynced write extents, since server
              * does not know about them */
@@ -121,6 +121,8 @@ static int fid_storage_free(unifyfs_client* client,
 
         /* set storage type back to NULL */
         meta->storage = FILE_STORAGE_NULL;
+
+        meta->fid = -1;
 
         return UNIFYFS_SUCCESS;
     }
@@ -240,9 +242,10 @@ int unifyfs_fid_create_file(unifyfs_client* client,
     meta->attrs.ctime = tp;
 
     /* set UnifyFS client metadata */
-    meta->fid          = fid;
-    meta->storage      = FILE_STORAGE_NULL;
-    meta->needs_sync   = 0;
+    meta->fid            = fid;
+    meta->storage        = FILE_STORAGE_NULL;
+    meta->needs_sync     = 0;
+    meta->pending_unlink = 0;
 
     return fid;
 }
@@ -611,12 +614,6 @@ int unifyfs_fid_unlink(unifyfs_client* client,
 
     /* invoke unlink rpc */
     int gfid = unifyfs_gfid_from_fid(client, fid);
-    rc = invoke_client_unlink_rpc(client, gfid);
-    if (rc != UNIFYFS_SUCCESS) {
-        /* TODO: if item does not exist globally, but just locally,
-         * we still want to delete item locally */
-        return rc;
-    }
 
     /* finalize the storage we're using for this file */
     rc = unifyfs_fid_delete(client, fid);
@@ -624,6 +621,11 @@ int unifyfs_fid_unlink(unifyfs_client* client,
         /* released storage for file, but failed to release
          * structures tracking storage, again bail out to keep
          * its file id active */
+        return rc;
+    }
+
+    rc = invoke_client_unlink_rpc(client, gfid);
+    if (rc != UNIFYFS_SUCCESS) {
         return rc;
     }
 
@@ -644,6 +646,18 @@ unifyfs_filemeta_t* unifyfs_get_meta_from_fid(unifyfs_client* client,
     if (fid >= 0 && fid < client->max_files) {
         /* get a pointer to the file meta data structure */
         unifyfs_filemeta_t* meta = &(client->unifyfs_filemetas[fid]);
+
+        if (fid == meta->fid) {
+            /* before returning metadata, process any pending callbacks */
+            if (meta->pending_unlink) {
+                LOGDBG("processing pending global unlink");
+                meta->pending_unlink = 0;
+                int rc = unifyfs_fid_delete(client, fid);
+                if (UNIFYFS_SUCCESS != rc) {
+                    LOGERR("fid delete failed");
+                }
+            }
+        }
         return meta;
     }
     return NULL;

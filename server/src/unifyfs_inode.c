@@ -20,6 +20,7 @@
 
 #include "unifyfs_inode.h"
 #include "unifyfs_inode_tree.h"
+#include "unifyfs_request_manager.h"
 
 struct unifyfs_inode_tree _global_inode_tree;
 struct unifyfs_inode_tree* global_inode_tree = &_global_inode_tree;
@@ -114,6 +115,13 @@ int unifyfs_inode_create(int gfid, unifyfs_file_attr_t* attr)
     return ret;
 }
 
+static int int_cmp_fn(const void* a, const void* b)
+{
+    int ai = *(int*)a;
+    int bi = *(int*)b;
+    return ai - bi;
+}
+
 static
 int unifyfs_inode_destroy(struct unifyfs_inode* ino)
 {
@@ -125,9 +133,19 @@ int unifyfs_inode_destroy(struct unifyfs_inode* ino)
         }
 
         if (NULL != ino->extents) {
+
+            /* allocate an array to track local clients to which we should
+             * send an unlink callback */
+            size_t n_clients = 0;
+            size_t max_clients = (size_t) ino->extents->count;
+            int* local_clients = calloc(max_clients, sizeof(int));
+            int last_client;
+            int cb_app_id = -1;
+
             /* iterate over extents and release local logio allocations */
             unifyfs_inode_rdlock(ino);
             {
+                last_client = -1;
                 struct extent_tree* tree = ino->extents;
                 struct extent_tree_node* curr = NULL;
                 while (NULL != (curr = extent_tree_iter(tree, curr))) {
@@ -150,6 +168,19 @@ int unifyfs_inode_destroy(struct unifyfs_inode* ino)
                                    "client[%d:%d] log_offset=%zu nbytes=%zu",
                                    app_id, client_id, (size_t)log_off, nbytes);
                         }
+
+                        if (NULL != local_clients) {
+                            if (-1 == cb_app_id) {
+                                cb_app_id = app_id;
+                            }
+                            /* add client id to local clients array */
+                            if (last_client != client_id) {
+                                assert(n_clients < max_clients);
+                                local_clients[n_clients] = client_id;
+                                n_clients++;
+                            }
+                            last_client = client_id;
+                        }
                     }
                 }
             }
@@ -157,6 +188,35 @@ int unifyfs_inode_destroy(struct unifyfs_inode* ino)
 
             extent_tree_destroy(ino->extents);
             free(ino->extents);
+
+            if (NULL != local_clients) {
+                qsort(local_clients, n_clients, sizeof(int), int_cmp_fn);
+                last_client = -1;
+                for (size_t i = 0; i < n_clients; i++) {
+                    int cb_client_id = local_clients[i];
+                    if (cb_client_id == last_client) {
+                        continue;
+                    }
+                    last_client = cb_client_id;
+
+                    /* submit a request to the client's reqmgr thread
+                     * to cleanup client state */
+                    client_callback_req* cb = malloc(sizeof(*cb));
+                    if (NULL != cb) {
+                        cb->req_type  = UNIFYFS_CLIENT_CALLBACK_UNLINK;
+                        cb->app_id    = cb_app_id;
+                        cb->client_id = cb_client_id;
+                        cb->gfid      = ino->gfid;
+                        int rc = rm_submit_client_callback_request(cb);
+                        if (UNIFYFS_SUCCESS != rc) {
+                            LOGERR("failed to submit unlink callback "
+                                   "req to client[%d:%d]",
+                                   cb_app_id, cb_client_id);
+                        }
+                    }
+                }
+                free(local_clients);
+            }
         }
 
         pthread_rwlock_destroy(&(ino->rwlock));
