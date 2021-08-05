@@ -297,3 +297,30 @@ unifyfs_rc unifyfs_finalize(unifyfs_handle fshdl)
 
     return ret;
 }
+
+/* Retrieve client's UnifyFS configuration for the given handle. */
+unifyfs_rc unifyfs_get_config(unifyfs_handle fshdl,
+                              int* n_opts,
+                              unifyfs_cfg_option** options)
+{
+    if ((UNIFYFS_INVALID_HANDLE == fshdl) ||
+        (NULL == n_opts) ||
+        (NULL == options)) {
+        return EINVAL;
+    }
+    unifyfs_client* client = fshdl;
+
+    int num_options;
+    unifyfs_cfg_option* options_array;
+    int ret = unifyfs_config_get_options(&(client->cfg),
+                                         &num_options,
+                                         &options_array);
+    if (UNIFYFS_SUCCESS == ret) {
+        *n_opts = num_options;
+        *options = options_array;
+    } else {
+        *n_opts = 0;
+        *options = NULL;
+    }
+    return ret;
+}

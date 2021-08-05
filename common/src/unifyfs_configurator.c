@@ -133,29 +133,9 @@ int unifyfs_config_fini(unifyfs_cfg_t* cfg)
         cfg->sec##_##key = NULL;                                \
     }
 
-#define UNIFYFS_CFG_MULTI(sec, key, typ, desc, vfn, me) \
-    for (u = 0; u < me; u++) {                          \
-        if (cfg->sec##_##key[u] != NULL) {              \
-            free(cfg->sec##_##key[u]);                  \
-            cfg->sec##_##key[u] = NULL;                 \
-        }                                               \
-    }                                                   \
-    cfg->n_##sec##_##key = 0;
-
-#define UNIFYFS_CFG_MULTI_CLI(sec, key, typ, desc, vfn, me, opt, use)   \
-    for (u = 0; u < me; u++) {                                          \
-        if (cfg->sec##_##key[u] != NULL) {                              \
-            free(cfg->sec##_##key[u]);                                  \
-            cfg->sec##_##key[u] = NULL;                                 \
-        }                                                               \
-    }                                                                   \
-    cfg->n_##sec##_##key = 0;
-
-    UNIFYFS_CONFIGS;
+    UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
-#undef UNIFYFS_CFG_MULTI
-#undef UNIFYFS_CFG_MULTI_CLI
 
     return (int)UNIFYFS_SUCCESS;
 }
@@ -184,29 +164,9 @@ void unifyfs_config_print(unifyfs_cfg_t* cfg,
         fprintf(fp, "%s\n", msg);                                       \
     }
 
-#define UNIFYFS_CFG_MULTI(sec, key, typ, desc, vfn, me)                 \
-    for (u = 0; u < me; u++) {                                          \
-        if (cfg->sec##_##key[u] != NULL) {                              \
-            snprintf(msg, sizeof(msg), "UNIFYFS CONFIG: %s.%s[%u] = %s", \
-                     #sec, #key, u+1, cfg->sec##_##key[u]);             \
-            fprintf(fp, "%s\n", msg);                                   \
-        }                                                               \
-    }
-
-#define UNIFYFS_CFG_MULTI_CLI(sec, key, typ, desc, vfn, me, opt, use)   \
-    for (u = 0; u < me; u++) {                                          \
-        if (cfg->sec##_##key[u] != NULL) {                              \
-            snprintf(msg, sizeof(msg), "UNIFYFS CONFIG: %s.%s[%u] = %s", \
-                     #sec, #key, u+1, cfg->sec##_##key[u]);             \
-            fprintf(fp, "%s\n", msg);                                   \
-        }                                                               \
-    }
-
-    UNIFYFS_CONFIGS;
+    UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
-#undef UNIFYFS_CFG_MULTI
-#undef UNIFYFS_CFG_MULTI_CLI
 
     fflush(fp);
 }
@@ -239,35 +199,9 @@ void unifyfs_config_print_ini(unifyfs_cfg_t* cfg,
         last_sec = curr_sec;                                            \
     }
 
-#define UNIFYFS_CFG_MULTI(sec, key, typ, desc, vfn, me)                 \
-    for (u = 0; u < me; u++) {                                          \
-        if (cfg->sec##_##key[u] != NULL) {                              \
-            curr_sec = #sec;                                            \
-            if ((last_sec == NULL) || (strcmp(curr_sec, last_sec) != 0)) \
-                fprintf(inifp, "\n[%s]\n", curr_sec);                   \
-            fprintf(inifp, "%s = %s ; (instance %u)\n",                 \
-                    #key, cfg->sec##_##key[u], u+1);                    \
-            last_sec = curr_sec;                                        \
-        }                                                               \
-    }
-
-#define UNIFYFS_CFG_MULTI_CLI(sec, key, typ, desc, vfn, me, opt, use)   \
-    for (u = 0; u < me; u++) {                                          \
-        if (cfg->sec##_##key[u] != NULL) {                              \
-            curr_sec = #sec;                                            \
-            if ((last_sec == NULL) || (strcmp(curr_sec, last_sec) != 0)) \
-                fprintf(inifp, "\n[%s]\n", curr_sec);                   \
-            fprintf(inifp, "%s = %s ; (instance %u)\n",                 \
-                    #key, cfg->sec##_##key[u], u+1);                    \
-            last_sec = curr_sec;                                        \
-        }                                                               \
-    }
-
-    UNIFYFS_CONFIGS;
+    UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
-#undef UNIFYFS_CFG_MULTI
-#undef UNIFYFS_CFG_MULTI_CLI
 
     fflush(inifp);
 }
@@ -291,19 +225,9 @@ int unifyfs_config_set_defaults(unifyfs_cfg_t* cfg)
     if (0 != strcmp(val, "NULLSTRING"))                         \
         cfg->sec##_##key = strdup(val);
 
-#define UNIFYFS_CFG_MULTI(sec, key, typ, desc, vfn, me)                 \
-    cfg->n_##sec##_##key = 0;                                           \
-    memset((void *)cfg->sec##_##key, 0, sizeof(cfg->sec##_##key));
-
-#define UNIFYFS_CFG_MULTI_CLI(sec, key, typ, desc, vfn, me, opt, use)   \
-    cfg->n_##sec##_##key = 0;                                           \
-    memset((void *)cfg->sec##_##key, 0, sizeof(cfg->sec##_##key));
-
-    UNIFYFS_CONFIGS;
+    UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
-#undef UNIFYFS_CFG_MULTI
-#undef UNIFYFS_CFG_MULTI_CLI
 
     return (int)UNIFYFS_SUCCESS;
 }
@@ -320,17 +244,9 @@ void unifyfs_config_cli_usage(char* arg0)
     fprintf(stderr, "    -%c,--%s-%s <%s>\t%s (default value: %s)\n",   \
             opt, #sec, #key, #typ, use, stringify(dv));
 
-#define UNIFYFS_CFG_MULTI(sec, key, typ, desc, vfn, me)
-
-#define UNIFYFS_CFG_MULTI_CLI(sec, key, typ, desc, vfn, me, opt, use)   \
-    fprintf(stderr, "    -%c,--%s-%s <%s>\t%s (multiple values supported - max %u entries)\n", \
-            opt, #sec, #key, #typ, use, me);
-
-    UNIFYFS_CONFIGS;
+    UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
-#undef UNIFYFS_CFG_MULTI
-#undef UNIFYFS_CFG_MULTI_CLI
 
     fflush(stderr);
 }
@@ -351,14 +267,11 @@ static struct option cli_options[] = {
 #define UNIFYFS_CFG(sec, key, typ, dv, desc, vfn)
 #define UNIFYFS_CFG_CLI(sec, key, typ, dv, desc, vfn, opt, use) \
     { #sec "-" #key, required_argument, NULL, opt },
-#define UNIFYFS_CFG_MULTI(sec, key, typ, desc, vfn, me)
-#define UNIFYFS_CFG_MULTI_CLI(sec, key, typ, desc, vfn, me, opt, use)   \
-    { #sec "-" #key, required_argument, NULL, opt },
+
     UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
-#undef UNIFYFS_CFG_MULTI
-#undef UNIFYFS_CFG_MULTI_CLI
+
     { NULL, 0, NULL, 0 }
 };
 
@@ -397,25 +310,10 @@ int unifyfs_config_process_cli_args(unifyfs_cfg_t* cfg,
         short_opts[sndx++] = ':';                               \
         cli_options[ondx++].has_arg = required_argument;        \
     }
-#define UNIFYFS_CFG_MULTI(sec, key, typ, desc, vfn, me)
 
-#define UNIFYFS_CFG_MULTI_CLI(sec, key, typ, desc, vfn, me, opt, use)   \
-    short_opts[sndx++] = opt;                                           \
-    if (strcmp(#typ, "BOOL") == 0) {                                    \
-        short_opts[sndx++] = ':';                                       \
-        short_opts[sndx++] = ':';                                       \
-        cli_options[ondx++].has_arg = optional_argument;                \
-    }                                                                   \
-    else {                                                              \
-        short_opts[sndx++] = ':';                                       \
-        cli_options[ondx++].has_arg = required_argument;                \
-    }
-
-    UNIFYFS_CONFIGS;
+    UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
-#undef UNIFYFS_CFG_MULTI
-#undef UNIFYFS_CFG_MULTI_CLI
 
     //fprintf(stderr, "UNIFYFS CONFIG DEBUG: short-opts '%s'\n", short_opts);
 
@@ -440,21 +338,10 @@ int unifyfs_config_process_cli_args(unifyfs_cfg_t* cfg,
             break;                                              \
         }
 
-#define UNIFYFS_CFG_MULTI(sec, key, typ, desc, vfn, me)
-
-#define UNIFYFS_CFG_MULTI_CLI(sec, key, typ, desc, vfn, me, opt, use)   \
-        case opt: {                                                     \
-            if (cfg->sec##_##key[cfg->n_##sec##_##key] != NULL)         \
-                free(cfg->sec##_##key[cfg->n_##sec##_##key];            \
-            cfg->sec##_##key[cfg->n_##sec##_##key++] = strdup(optarg);  \
-            break;                                                      \
-        }
-
         UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
-#undef UNIFYFS_CFG_MULTI
-#undef UNIFYFS_CFG_MULTI_CLI
+
 
         case ':':
             usage_err = 1;
@@ -547,33 +434,9 @@ int unifyfs_config_process_environ(unifyfs_cfg_t* cfg)
         cfg->sec##_##key = strdup(envval);                      \
     }
 
-#define UNIFYFS_CFG_MULTI(sec, key, typ, desc, vfn, me) \
-    for (u = 0; u < me; u++) {                          \
-        envval = getenv_helper(#sec, #key, u+1);        \
-        if (envval != NULL) {                           \
-            if (cfg->sec##_##key[u] != NULL)            \
-                free(cfg->sec##_##key[u]);              \
-            cfg->sec##_##key[u] = strdup(envval);       \
-            cfg->n_##sec##_##key++;                     \
-        }                                               \
-    }
-
-#define UNIFYFS_CFG_MULTI_CLI(sec, key, typ, desc, vfn, me, opt, use)   \
-    for (u = 0; u < me; u++) {                                          \
-        envval = getenv_helper(#sec, #key, u+1);                        \
-        if (envval != NULL) {                                           \
-            if (cfg->sec##_##key[u] != NULL)                            \
-                free(cfg->sec##_##key[u]);                              \
-            cfg->sec##_##key[u] = strdup(envval);                       \
-            cfg->n_##sec##_##key++;                                     \
-        }                                                               \
-    }
-
-    UNIFYFS_CONFIGS;
+    UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
-#undef UNIFYFS_CFG_MULTI
-#undef UNIFYFS_CFG_MULTI_CLI
 
     return (int)UNIFYFS_SUCCESS;
 }
@@ -618,21 +481,10 @@ int inih_config_handler(void* user,
         }                                                               \
     }
 
-#define UNIFYFS_CFG_MULTI(sec, key, typ, desc, vfn, me)                 \
-    else if ((strcmp(section, #sec) == 0) && (strcmp(kee, #key) == 0)) { \
-        cfg->sec##_##key[cfg->n_##sec##_##key++] = strdup(val);         \
-    }
-
-#define UNIFYFS_CFG_MULTI_CLI(sec, key, typ, desc, vfn, me, opt, use)   \
-    else if ((strcmp(section, #sec) == 0) && (strcmp(kee, #key) == 0)) { \
-        cfg->sec##_##key[cfg->n_##sec##_##key++] = strdup(val);         \
-    }
-
-UNIFYFS_CONFIGS
+    UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
-#undef UNIFYFS_CFG_MULTI
-#undef UNIFYFS_CFG_MULTI_CLI
+
 
     return 1;
 }
@@ -751,21 +603,9 @@ int unifyfs_config_process_option(unifyfs_cfg_t* cfg,
             }                                                                \
         }
 
-#define UNIFYFS_CFG_MULTI(sec, key, typ, desc, vfn, me)                      \
-        else if ((strcmp(section, #sec) == 0) && (strcmp(kee, #key) == 0)) { \
-            cfg->sec##_##key[cfg->n_##sec##_##key++] = strdup(opt_val);      \
-        }
-
-#define UNIFYFS_CFG_MULTI_CLI(sec, key, typ, desc, vfn, me, opt, use)        \
-        else if ((strcmp(section, #sec) == 0) && (strcmp(kee, #key) == 0)) { \
-            cfg->sec##_##key[cfg->n_##sec##_##key++] = strdup(opt_val);      \
-        }
-
-UNIFYFS_CONFIGS
+        UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
-#undef UNIFYFS_CFG_MULTI
-#undef UNIFYFS_CFG_MULTI_CLI
 
     }
 
@@ -778,7 +618,7 @@ int unifyfs_config_process_options(unifyfs_cfg_t* cfg,
                                    unifyfs_cfg_option* options)
 {
     if (nopt > 0) {
-        if (NULL == options) {
+        if ((NULL == cfg) || (NULL == options)) {
             return EINVAL;
         }
         for (int i = 0; i < nopt; i++) {
@@ -791,6 +631,71 @@ int unifyfs_config_process_options(unifyfs_cfg_t* cfg,
             }
         }
     }
+    return UNIFYFS_SUCCESS;
+}
+
+int unifyfs_config_get_options(unifyfs_cfg_t* cfg,
+                               int* nopt,
+                               unifyfs_cfg_option** options)
+{
+    if ((NULL == cfg) || (NULL == nopt) || (NULL == options)) {
+        return EINVAL;
+    }
+
+    *nopt = 0;
+    *options = NULL;
+
+    /* first, count the non-NULL settings */
+    int num_set = 0;
+
+#define UNIFYFS_CFG(sec, key, typ, dv, desc, vfn)                       \
+    if (cfg->sec##_##key != NULL) {                                     \
+        num_set++;                                                      \
+    }
+
+#define UNIFYFS_CFG_CLI(sec, key, typ, dv, desc, vfn, opt, use)         \
+    if (cfg->sec##_##key != NULL) {                                     \
+        num_set++;                                                      \
+    }
+
+    UNIFYFS_CONFIGS
+#undef UNIFYFS_CFG
+#undef UNIFYFS_CFG_CLI
+
+    /* now, allocate and fill the options array */
+    unifyfs_cfg_option* opts = calloc(num_set, sizeof(unifyfs_cfg_option));
+    if (NULL == opts) {
+        return ENOMEM;
+    }
+
+    int opt_ndx = 0;
+    unifyfs_cfg_option* curr_opt;
+    char kee[256];
+
+#define UNIFYFS_CFG(sec, key, typ, dv, desc, vfn)                       \
+    if (cfg->sec##_##key != NULL) {                                     \
+        curr_opt = opts + opt_ndx;                                      \
+        opt_ndx++;                                                      \
+        snprintf(kee, sizeof(kee), "%s.%s", #sec, #key);                \
+        curr_opt->opt_name = strdup(kee);                               \
+        curr_opt->opt_value = strdup(cfg->sec##_##key);                 \
+    }
+
+#define UNIFYFS_CFG_CLI(sec, key, typ, dv, desc, vfn, opt, use)         \
+    if (cfg->sec##_##key != NULL) {                                     \
+        curr_opt = opts + opt_ndx;                                      \
+        opt_ndx++;                                                      \
+        snprintf(kee, sizeof(kee), "%s.%s", #sec, #key);                \
+        curr_opt->opt_name = strdup(kee);                               \
+        curr_opt->opt_value = strdup(cfg->sec##_##key);                 \
+    }
+
+    UNIFYFS_CONFIGS
+#undef UNIFYFS_CFG
+#undef UNIFYFS_CFG_CLI
+
+    *nopt = num_set;
+    *options = opts;
     return UNIFYFS_SUCCESS;
 }
 
@@ -888,7 +793,7 @@ int unifyfs_config_validate(unifyfs_cfg_t* cfg)
         }                                                               \
     }
 
-    UNIFYFS_CONFIGS;
+    UNIFYFS_CONFIGS
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
 #undef UNIFYFS_CFG_MULTI

@@ -67,7 +67,7 @@
     UNIFYFS_CFG_CLI(unifyfs, cleanup, BOOL, off, "cleanup storage on server exit", NULL, 'C', "on|off") \
     UNIFYFS_CFG_CLI(unifyfs, configfile, STRING, /etc/unifyfs.conf, "path to configuration file", configurator_file_check, 'f', "specify full path to config file") \
     UNIFYFS_CFG_CLI(unifyfs, consistency, STRING, LAMINATED, "consistency model", NULL, 'c', "specify consistency model (NONE | LAMINATED | POSIX)") \
-    UNIFYFS_CFG_CLI(unifyfs, daemonize, BOOL, on, "enable server daemonization", NULL, 'D', "on|off") \
+    UNIFYFS_CFG_CLI(unifyfs, daemonize, BOOL, off, "enable server daemonization", NULL, 'D', "on|off") \
     UNIFYFS_CFG_CLI(unifyfs, mountpoint, STRING, /unifyfs, "mountpoint directory", NULL, 'm', "specify full path to desired mountpoint") \
     UNIFYFS_CFG(client, cwd, STRING, NULLSTRING, "current working directory", NULL) \
     UNIFYFS_CFG(client, fsync_persist, BOOL, on, "persist written data to storage on fsync()", NULL) \
@@ -119,20 +119,10 @@ typedef struct {
 #define UNIFYFS_CFG_CLI(sec, key, typ, dv, desc, vfn, opt, use) \
     char *sec##_##key;
 
-#define UNIFYFS_CFG_MULTI(sec, key, typ, dv, desc, vfn, me) \
-    char *sec##_##key[me]; \
-    unsigned n_##sec##_##key;
-
-#define UNIFYFS_CFG_MULTI_CLI(sec, key, typ, dv, desc, vfn, me, opt, use) \
-    char *sec##_##key[me]; \
-    unsigned n_##sec##_##key;
-
     UNIFYFS_CONFIGS
-
 #undef UNIFYFS_CFG
 #undef UNIFYFS_CFG_CLI
-#undef UNIFYFS_CFG_MULTI
-#undef UNIFYFS_CFG_MULTI_CLI
+
 } unifyfs_cfg_t;
 
 /* initialization and cleanup */
@@ -177,6 +167,9 @@ int unifyfs_config_process_options(unifyfs_cfg_t* cfg,
                                    int nopt,
                                    unifyfs_cfg_option* options);
 
+int unifyfs_config_get_options(unifyfs_cfg_t* cfg,
+                               int* nopt,
+                               unifyfs_cfg_option** options);
 
 int unifyfs_config_validate(unifyfs_cfg_t* cfg);
 
