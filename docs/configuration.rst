@@ -56,7 +56,7 @@ a given section and key.
    cleanup        BOOL    cleanup storage on server exit (default: off)
    configfile     STRING  path to custom configuration file
    consistency    STRING  consistency model [ LAMINATED | POSIX | NONE ]
-   daemonize      BOOL    enable server daemonization (default: on)
+   daemonize      BOOL    enable server daemonization (default: off)
    mountpoint     STRING  mountpoint path prefix (default: /unifyfs)
    =============  ======  ===============================================
 
