@@ -57,6 +57,8 @@ int main(int argc, char* argv[])
 
     rc = api_initialize_test(unifyfs_root, &fshdl);
     if (rc == UNIFYFS_SUCCESS) {
+        api_config_test(unifyfs_root, &fshdl);
+
         api_create_open_remove_test(unifyfs_root, &fshdl);
 
         api_write_read_sync_stat_test(unifyfs_root, &fshdl,
