@@ -1033,6 +1033,9 @@ unifyfs_rc cleanup_app_client(app_config* app, app_client* client)
 
     /* free client structure */
     if (NULL != client->reqmgr) {
+        if (NULL != client->reqmgr->client_reqs) {
+            arraylist_free(client->reqmgr->client_reqs);
+        }
         free(client->reqmgr);
         client->reqmgr = NULL;
     }
