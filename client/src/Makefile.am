@@ -66,7 +66,6 @@ LIBRARY_API_SRC_FILES = \
 
 CLIENT_CORE_SRC_FILES = \
   $(UNIFYFS_COMMON_SRCS) \
-  client_api.c \
   client_read.c \
   client_read.h \
   client_transfer.c \
@@ -82,6 +81,7 @@ CLIENT_CORE_SRC_FILES = \
   utlist.h
 
 POSIX_CLIENT_SRC_FILES = \
+  client_api.c \
   posix_client.c \
   posix_client.h \
   unifyfs-dirops.c \
