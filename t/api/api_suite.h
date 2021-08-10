@@ -35,6 +35,10 @@
 int api_initialize_test(char* unifyfs_root,
                         unifyfs_handle* fshdl);
 
+/* Tests API get-configuration */
+int api_config_test(char* unifyfs_root,
+                    unifyfs_handle* fshdl);
+
 /* Tests API finalization */
 int api_finalize_test(char* unifyfs_root,
                       unifyfs_handle* fshdl);

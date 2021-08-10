@@ -166,6 +166,19 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
 unifyfs_rc unifyfs_finalize(unifyfs_handle fshdl);
 
 /*
+ * Retrieve client's UnifyFS configuration for the given handle.
+ *
+ * @param[in]   fshdl       Client file system handle
+ * @param[out]  n_opts      pointer to size of options array
+ * @param[out]  options     pointer to array of configuration options
+ *
+ * @return      UnifyFS success or failure code
+ */
+unifyfs_rc unifyfs_get_config(unifyfs_handle fshdl,
+                              int* n_opts,
+                              unifyfs_cfg_option** options);
+
+/*
  * Create and open a new file in UnifyFS.
  *
  * @param[in]   fshdl       Client file system handle
