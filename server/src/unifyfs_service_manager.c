@@ -273,6 +273,12 @@ int svcmgr_fini(void)
             arraylist_free(sm->svc_reqs);
         }
 
+        int abt_err = ABT_mutex_free(&(sm->reqs_sync));
+        if (ABT_SUCCESS != abt_err) {
+            /* All we can really do here is log the error */
+            LOGERR("Error code returned from ABT_mutex_free(): %d", abt_err);
+        }
+
         if (sm->initialized) {
             pthread_mutex_destroy(&(sm->thrd_lock));
             pthread_cond_destroy(&(sm->thrd_cond));

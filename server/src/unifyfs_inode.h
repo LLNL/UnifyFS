@@ -55,6 +55,15 @@ struct unifyfs_inode {
 int unifyfs_inode_create(int gfid, unifyfs_file_attr_t* attr);
 
 /**
+ * @brief delete an inode and all its contents
+ *
+ * @param ino inode to destroy
+ *
+ * @return 0 on success, errno otherwise
+ */
+int unifyfs_inode_destroy(struct unifyfs_inode* ino);
+
+/**
  * @brief update the attributes of file with @gfid. The attributes are
  * selectively updated with unifyfs_file_attr_update() function (see
  * common/unifyfs_meta.h).

@@ -239,13 +239,8 @@ unifyfs_rc unifyfs_remove(unifyfs_handle fshdl,
     }
 
     unifyfs_rc ret = UNIFYFS_SUCCESS;
-
-    /* invoke unlink rpc */
     int gfid = unifyfs_generate_gfid(filepath);
-    int rc = invoke_client_unlink_rpc(client, gfid);
-    if (rc != UNIFYFS_SUCCESS) {
-        ret = rc;
-    }
+    int rc;
 
     /* clean up the local state for this file (if any) */
     int fid = unifyfs_fid_from_gfid(client, gfid);
@@ -257,6 +252,12 @@ unifyfs_rc unifyfs_remove(unifyfs_handle fshdl,
              * its file id active */
             ret = rc;
         }
+    }
+
+    /* invoke unlink rpc */
+    rc = invoke_client_unlink_rpc(client, gfid);
+    if (rc != UNIFYFS_SUCCESS) {
+        ret = rc;
     }
 
     return ret;

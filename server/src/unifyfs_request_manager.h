@@ -36,6 +36,13 @@
 #include "unifyfs_metadata_mdhim.h"
 
 typedef struct {
+    client_callback_e req_type;
+    int app_id;
+    int client_id;
+    int gfid;
+} client_callback_req;
+
+typedef struct {
     client_rpc_e req_type;
     hg_handle_t handle;
     void* input;
@@ -86,6 +93,9 @@ typedef struct reqmgr_thrd {
 
     /* list of client rpc requests */
     arraylist_t* client_reqs;
+
+    /* list of client callback requests */
+    arraylist_t* client_callbacks;
 
     /* flag set to indicate request manager thread should exit */
     int exit_flag;
@@ -148,6 +158,15 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
  * @return 0 on success, errno otherwise
  */
 int rm_submit_read_request(server_read_req_t* req);
+
+/**
+ * @brief submit a client callback request to the request manager thread.
+ *
+ * @param req   pointer to client callback request struct
+ *
+ * @return UNIFYFS_SUCCESS, or error code
+ */
+int rm_submit_client_callback_request(client_callback_req* req);
 
 /**
  * @brief submit a client rpc request to the request manager thread.

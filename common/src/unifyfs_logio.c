@@ -40,9 +40,27 @@ typedef struct log_header {
     size_t reserved_sz;        /* reserved data bytes */
     size_t chunk_sz;           /* data chunk size */
     off_t  data_offset;        /* file/memory offset where data chunks start */
+
+    volatile int updating;     /* flag to prevent client/server update races */
 } log_header;
 /* chunk slot_map immediately follows header and occupies rest of the page */
 // slot_map chunk_map;         /* chunk slot_map that tracks reservations */
+
+static inline void LOCK_LOG_HEADER(log_header* hdr)
+{
+    assert(NULL != hdr);
+    while (hdr->updating) {
+        usleep(10);
+    }
+    hdr->updating = 1;
+}
+
+static inline void UNLOCK_LOG_HEADER(log_header* hdr)
+{
+    assert(NULL != hdr);
+    assert(hdr->updating);
+    hdr->updating = 0;
+}
 
 static inline
 slot_map* log_header_to_chunkmap(log_header* hdr)
@@ -548,6 +566,7 @@ int unifyfs_logio_alloc(logio_context* ctx,
     if (NULL != ctx->shmem) {
         /* get shmem log header and chunk slotmap */
         shmem_hdr = (log_header*) ctx->shmem->addr;
+        LOCK_LOG_HEADER(shmem_hdr);
         chunkmap = log_header_to_chunkmap(shmem_hdr);
 
         /* calculate number of chunks needed for requested bytes */
@@ -561,6 +580,7 @@ int unifyfs_logio_alloc(logio_context* ctx,
             /* success, all needed chunks allocated in shmem */
             allocated_bytes = res_chunks * chunk_sz;
             shmem_hdr->reserved_sz += allocated_bytes;
+            UNLOCK_LOG_HEADER(shmem_hdr);
             res_off = (off_t)(res_slot * chunk_sz);
             *log_offset = res_off;
             return UNIFYFS_SUCCESS;
@@ -583,12 +603,15 @@ int unifyfs_logio_alloc(logio_context* ctx,
                 mem_res_nchk = res_chunks;
                 mem_res_at_end = 1;
             }
+        } else {
+            UNLOCK_LOG_HEADER(shmem_hdr);
         }
     }
 
     if (NULL != ctx->spill_hdr) {
         /* get spill log header and chunk slotmap */
         spill_hdr = (log_header*) ctx->spill_hdr;
+        LOCK_LOG_HEADER(spill_hdr);
         chunkmap = log_header_to_chunkmap(spill_hdr);
 
         /* calculate number of chunks needed for remaining bytes */
@@ -603,6 +626,7 @@ int unifyfs_logio_alloc(logio_context* ctx,
             if (0 == mem_res_at_end) {
                 /* success, full reservation in spill */
                 spill_hdr->reserved_sz += allocated_bytes;
+                UNLOCK_LOG_HEADER(spill_hdr);
                 res_off = (off_t)(res_slot * chunk_sz);
                 if (NULL != shmem_hdr) {
                     /* update log offset to account for shmem log size */
@@ -629,6 +653,7 @@ int unifyfs_logio_alloc(logio_context* ctx,
                     if (rc != UNIFYFS_SUCCESS) {
                         LOGERR("slotmap_release() for logio shmem failed");
                     }
+                    UNLOCK_LOG_HEADER(shmem_hdr);
                     mem_res_slot = 0;
                     mem_res_nchk = 0;
                     mem_allocation = 0;
@@ -642,6 +667,7 @@ int unifyfs_logio_alloc(logio_context* ctx,
                         /* success, full reservation in spill */
                         allocated_bytes = res_chunks * chunk_sz;
                         spill_hdr->reserved_sz += allocated_bytes;
+                        UNLOCK_LOG_HEADER(spill_hdr);
                         res_off = (off_t)(res_slot * chunk_sz);
                         if (NULL != shmem_hdr) {
                             /* update log offset to include shmem log size */
@@ -653,11 +679,15 @@ int unifyfs_logio_alloc(logio_context* ctx,
                 } else {
                     /* successful reservation spanning shmem and spill */
                     shmem_hdr->reserved_sz += mem_allocation;
+                    UNLOCK_LOG_HEADER(shmem_hdr);
                     spill_hdr->reserved_sz += allocated_bytes;
+                    UNLOCK_LOG_HEADER(spill_hdr);
                     *log_offset = res_off;
                     return UNIFYFS_SUCCESS;
                 }
             }
+        } else {
+            UNLOCK_LOG_HEADER(spill_hdr);
         }
     }
 
@@ -669,6 +699,7 @@ int unifyfs_logio_alloc(logio_context* ctx,
         if (rc != UNIFYFS_SUCCESS) {
             LOGERR("slotmap_release() for logio shmem failed");
         }
+        UNLOCK_LOG_HEADER(shmem_hdr);
     }
     LOGDBG("returning ENOSPC");
     return ENOSPC;
@@ -699,6 +730,7 @@ int unifyfs_logio_free(logio_context* ctx,
     }
 
     /* determine chunk allocations based on log offset */
+    size_t released_bytes;
     size_t sz_in_mem = 0;
     size_t sz_in_spill = 0;
     off_t spill_offset = 0;
@@ -711,26 +743,34 @@ int unifyfs_logio_free(logio_context* ctx,
     size_t chunk_sz, chunk_slot, num_chunks;
     if (sz_in_mem > 0) {
         /* release shared memory chunks */
+        LOCK_LOG_HEADER(shmem_hdr);
         chunk_sz = shmem_hdr->chunk_sz;
         chunk_slot = log_offset / chunk_sz;
         num_chunks = bytes_to_chunks(sz_in_mem, chunk_sz);
+        released_bytes = chunk_sz * num_chunks;
         chunkmap = log_header_to_chunkmap(shmem_hdr);
         rc = slotmap_release(chunkmap, chunk_slot, num_chunks);
         if (rc != UNIFYFS_SUCCESS) {
             LOGERR("slotmap_release() for logio shmem failed");
         }
+        shmem_hdr->reserved_sz -= released_bytes;
+        UNLOCK_LOG_HEADER(shmem_hdr);
     }
     if (sz_in_spill > 0) {
         /* release spill chunks */
         spill_hdr = (log_header*) ctx->spill_hdr;
+        LOCK_LOG_HEADER(spill_hdr);
         chunk_sz = spill_hdr->chunk_sz;
         chunk_slot = spill_offset / chunk_sz;
         num_chunks = bytes_to_chunks(sz_in_spill, chunk_sz);
+        released_bytes = chunk_sz * num_chunks;
         chunkmap = log_header_to_chunkmap(spill_hdr);
         rc = slotmap_release(chunkmap, chunk_slot, num_chunks);
         if (rc != UNIFYFS_SUCCESS) {
             LOGERR("slotmap_release() for logio spill failed");
         }
+        spill_hdr->reserved_sz -= released_bytes;
+        UNLOCK_LOG_HEADER(spill_hdr);
     }
     return rc;
 }

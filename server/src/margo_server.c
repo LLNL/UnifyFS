@@ -343,6 +343,12 @@ static void register_client_server_rpcs(margo_instance_id mid)
                        unifyfs_transfer_complete_in_t,
                        unifyfs_transfer_complete_out_t,
                        NULL);
+
+    unifyfsd_rpc_context->rpcs.client_unlink_callback_id =
+        MARGO_REGISTER(mid, "unifyfs_unlink_callback_rpc",
+                       unifyfs_unlink_callback_in_t,
+                       unifyfs_unlink_callback_out_t,
+                       NULL);
 }
 
 /* margo_server_rpc_init
@@ -439,6 +445,7 @@ int margo_server_rpc_finalize(void)
                 server->margo_svr_addr_str = NULL;
             }
         }
+        free(server_infos);
 
         /* shut down margo */
         LOGDBG("finalizing server-server margo");
@@ -668,7 +675,8 @@ int invoke_client_heartbeat_rpc(int app_id,
     hg_handle_t handle = create_client_handle(rpc_id, app_id, client_id);
 
     /* call rpc function */
-    LOGDBG("invoking the heartbeat rpc function in client");
+    LOGDBG("invoking the heartbeat rpc function in client[%d:%d]",
+           app_id, client_id);
     double timeout_msec = 500; /* half a second */
     hret = margo_forward_timed(handle, &in, timeout_msec);
     if (hret != HG_SUCCESS) {
@@ -736,7 +744,8 @@ int invoke_client_mread_req_data_rpc(int app_id,
     hg_handle_t handle = create_client_handle(rpc_id, app_id, client_id);
 
     /* call rpc function */
-    LOGDBG("invoking the mread req data rpc function in client");
+    LOGDBG("invoking the mread[%d] req data (index=%d) rpc function in "
+           "client[%d:%d]", mread_id, read_index, app_id, client_id);
     hret = margo_forward(handle, &in);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_forward() failed");
@@ -794,8 +803,8 @@ int invoke_client_mread_req_complete_rpc(int app_id,
     hg_handle_t handle = create_client_handle(rpc_id, app_id, client_id);
 
     /* call rpc function */
-    LOGDBG("invoking the mread[%d] complete rpc function in client",
-            mread_id);
+    LOGDBG("invoking the mread[%d] complete rpc function in client[%d:%d]",
+            mread_id, app_id, client_id);
     hret = margo_forward(handle, &in);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_forward() failed");
@@ -847,8 +856,8 @@ int invoke_client_transfer_complete_rpc(int app_id,
     hg_handle_t handle = create_client_handle(rpc_id, app_id, client_id);
 
     /* call rpc function */
-    LOGDBG("invoking the transfer[%d] complete rpc function in client",
-           transfer_id);
+    LOGDBG("invoking the transfer[%d] complete rpc function in client[%d:%d]",
+           transfer_id, app_id, client_id);
     hret = margo_forward(handle, &in);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_forward() failed");
@@ -859,6 +868,57 @@ int invoke_client_transfer_complete_rpc(int app_id,
     /* decode response */
     int ret;
     unifyfs_transfer_complete_out_t out;
+    hret = margo_get_output(handle, &out);
+    if (hret == HG_SUCCESS) {
+        LOGDBG("Got response ret=%" PRIi32, out.ret);
+        ret = (int) out.ret;
+        margo_free_output(handle, &out);
+    } else {
+        LOGERR("margo_get_output() failed");
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+
+    /* free resources */
+    margo_destroy(handle);
+
+    return ret;
+}
+
+/* invokes the client mread request completion rpc function */
+int invoke_client_unlink_callback_rpc(int app_id,
+                                      int client_id,
+                                      int gfid)
+{
+    hg_return_t hret;
+
+    /* check that we have initialized margo */
+    if (NULL == unifyfsd_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* fill input struct */
+    unifyfs_unlink_callback_in_t in;
+    in.app_id    = (int32_t) app_id;
+    in.client_id = (int32_t) client_id;
+    in.gfid      = (int32_t) gfid;
+
+    /* get handle to rpc function */
+    hg_id_t rpc_id = unifyfsd_rpc_context->rpcs.client_unlink_callback_id;
+    hg_handle_t handle = create_client_handle(rpc_id, app_id, client_id);
+
+    /* call rpc function */
+    LOGDBG("invoking the unlink (gfid=%d) callback rpc function in "
+           "client[%d:%d]", gfid, app_id, client_id);
+    hret = margo_forward(handle, &in);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_forward() failed");
+        margo_destroy(handle);
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    /* decode response */
+    int ret;
+    unifyfs_unlink_callback_out_t out;
     hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
