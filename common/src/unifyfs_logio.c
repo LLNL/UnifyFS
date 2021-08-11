@@ -46,7 +46,7 @@ typedef struct log_header {
 /* chunk slot_map immediately follows header and occupies rest of the page */
 // slot_map chunk_map;         /* chunk slot_map that tracks reservations */
 
-inline void LOCK_LOG_HEADER(log_header* hdr)
+static inline void LOCK_LOG_HEADER(log_header* hdr)
 {
     assert(NULL != hdr);
     while (hdr->updating) {
@@ -55,7 +55,7 @@ inline void LOCK_LOG_HEADER(log_header* hdr)
     hdr->updating = 1;
 }
 
-inline void UNLOCK_LOG_HEADER(log_header* hdr)
+static inline void UNLOCK_LOG_HEADER(log_header* hdr)
 {
     assert(NULL != hdr);
     assert(hdr->updating);
