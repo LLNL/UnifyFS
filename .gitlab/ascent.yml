@@ -21,6 +21,8 @@
   tags: [nobatch]
 
 .ascent-batch-template:
+  variables:
+    JOB_LAUNCH_COMMAND: "jsrun -r1 -n1"
   extends: .ascent-template
   tags: [batch]
 
