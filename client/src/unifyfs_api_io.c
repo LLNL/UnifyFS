@@ -342,6 +342,10 @@ unifyfs_rc unifyfs_dispatch_io(unifyfs_handle fshdl,
             break;
         }
     }
+    if (rd_reqs) free(rd_reqs);
+    if (wr_reqs) free (wr_reqs);
+    if (tr_reqs) free (tr_reqs);
+    if (s_reqs) free(s_reqs);
 
     return UNIFYFS_SUCCESS;
 }
