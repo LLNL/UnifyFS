@@ -8,7 +8,7 @@ AC_LANG([C])
 AC_INIT([unifyfs],
         m4_esyscmd([git describe --always |
                    awk '/.*/{sub(/^v/,""); printf "%s",$1; exit}']),
-        [unifycr@llnl.gov])
+        [ecp-unifyfs@exascaleproject.org])
 AC_PREREQ(2.60)
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
