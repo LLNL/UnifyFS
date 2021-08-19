@@ -125,5 +125,5 @@ anything you notice that needs to be changed.
 
 .. explicit external hyperlink targets
 
-.. _mailing list: ecp-unifycr@exascaleproject.org
+.. _mailing list: ecp-unifyfs@exascaleproject.org
 .. _issue tracker: https://github.com/LLNL/UnifyFS/issues
