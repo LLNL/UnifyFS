@@ -567,7 +567,8 @@ int unifyfs_invoke_find_extents_rpc(int gfid,
     unifyfs_file_attr_t attrs;
     int ret = sm_get_fileattr(gfid, &attrs);
     if (ret == UNIFYFS_SUCCESS) {
-        if (attrs.is_laminated || (owner_rank == glb_pmi_rank)) {
+        if ((owner_rank == glb_pmi_rank) ||
+            (attrs.is_laminated && attrs.is_shared)) {
             /* do local lookup */
             ret = sm_find_extents(gfid, (size_t)num_extents, extents,
                                   num_chunks, chunks);
