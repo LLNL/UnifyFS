@@ -24,7 +24,7 @@ test_expect_success "unifyfsd is still running" '
     process_is_running unifyfsd 10
 '
 
-$UNIFYFS_BIN/unifyfs terminate -d &> ${UNIFYFS_LOG_DIR}/unifyfs.terminate.out
+$UNIFYFS_CLU terminate -d &> ${UNIFYFS_LOG_DIR}/unifyfs.terminate.out
 
 test_expect_success "unifyfsd has stopped" '
     process_is_not_running unifyfsd 10

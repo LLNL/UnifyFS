@@ -97,27 +97,32 @@ source $UNIFYFS_CI_DIR/ci-functions.sh
 
 ########## Locate UnifyFS install and examples ##########
 
-# Check if we have Spack and if UnifyFS is installed.
-# If don't have both, fall back to checking for non-spack install.
-# If neither, fail out.
-# Set UNIFYFS_INSTALL to skip searching.
-echo "$infomsg Looking for UnifyFS install directory..."
-
-# Look for UnifyFS install directory if the user didn't already set
-# $UNIFYFS_INSTALL to the directory containing bin/ and libexec/
-if [[ -z $UNIFYFS_INSTALL ]]; then
+# Check if unifyfs is loaded and recognized command-line utility; if so, use it
+# If not, check if UNIFYFS_INSTALL was set to the install directory and use it
+# If neither, do simple auto-search in $BASE_SEARCH_DIR to check for unifyfsd
+# If none of the above, fail out.
+if [[ -n $(which unifyfs 2>/dev/null) ]]; then
+    # If unifyfs is a loaded module, use it and set UNIFYFS_INSTALL
+    echo "$infomsg Using unifyfs module"
+    unifyfs_bin_dir=$(dirname "$(readlink -fm "$(which unifyfs)")")
+    UNIFYFS_INSTALL=$(dirname "$(readlink -fm $unifyfs_bin_dir)")
+    UNIFYFS_CLU="unifyfs"
+elif [[ -n $UNIFYFS_INSTALL ]]; then
+    # $UNIFYFS_INSTALL directory was provided
+    UNIFYFS_BIN="$UNIFYFS_INSTALL/bin"
+    UNIFYFS_CLU="${UNIFYFS_BIN}/unifyfs"
+elif [[ -z $UNIFYFS_INSTALL ]]; then
+    # Search $BASE_SEARCH_DIR for UnifyFS install directory if envar wasn't set
+    echo "$infomsg Searching for UnifyFS install directory..."
     # Search for unifyfsd starting in $BASE_SEARCH_DIR and omitting SPACK_ROOT
     unifyfsd_exe="$(find_executable $BASE_SEARCH_DIR "*/bin/unifyfsd"\
                     $SPACK_ROOT)"
     if [[ -x $unifyfsd_exe ]]; then
         # Set UNIFYFS_INSTALL to the dir containing bin/ and libexec/
         UNIFYFS_INSTALL="$(dirname "$(dirname "$unifyfsd_exe")")"
-    # Else check for $SPACK_ROOT and if unifyfs is installed
-    elif [[ -n $SPACK_ROOT && -d $(spack location -i unifyfs 2>/dev/null) ]];
-    then
-        # Might have a problem with variants and arch
-        UNIFYFS_INSTALL="$(spack location -i unifyfs)"
-    else
+        UNIFYFS_BIN="$UNIFYFS_INSTALL/bin"
+        UNIFYFS_CLU="${UNIFYFS_BIN}/unifyfs"
+    else # unifyfsd executable not found
         echo >&2 "$errmsg Unable to find UnifyFS install directory"
         echo >&2 "$errmsg Set \$UNIFYFS_INSTALL to the directory containing" \
                  "bin/ and libexec/ or \`spack install unifyfs\`"
@@ -125,34 +130,18 @@ if [[ -z $UNIFYFS_INSTALL ]]; then
     fi
 fi
 
-# Make sure UNIFYFS_INSTALL, bin/, and libexec/ exist
-if [[ -d $UNIFYFS_INSTALL && -d ${UNIFYFS_INSTALL}/bin &&
-      -d ${UNIFYFS_INSTALL}/libexec ]]; then
-    echo "$infomsg Found UnifyFS install directory: $UNIFYFS_INSTALL"
-
-    UNIFYFS_BIN="$UNIFYFS_INSTALL/bin"
+# Make sure UNIFYFS_INSTALL and libexec/ exist
+if [[ -d $UNIFYFS_INSTALL && -d ${UNIFYFS_INSTALL}/libexec ]]; then
     UNIFYFS_EXAMPLES="$UNIFYFS_INSTALL/libexec"
-    echo "$infomsg Found UnifyFS bin directory: $UNIFYFS_BIN"
-    echo "$infomsg Found UnifyFS examples directory: $UNIFYFS_EXAMPLES"
+    echo "$infomsg Using UnifyFS install directory: $UNIFYFS_INSTALL"
+    echo "$infomsg Using UnifyFS command-line utilty: $UNIFYFS_CLU"
+    echo "$infomsg Using UnifyFS examples directory: $UNIFYFS_EXAMPLES"
 else
-    echo >&2 "$errmsg Ensure \$UNIFYFS_INSTALL exists and is the directory" \
+    echo >&2 "$errmsg Load the unifyfs module or" \
+    echo >&2 "$errmsg Ensure \$UNIFYFS_INSTALL is set and is the directory" \
              "containing bin/ and libexec/"
     exit 1
 fi
-
-# Check for necessary Spack modules if Spack is detected
-# Since GitLab Runners don't like this, just warn users running this by hand but
-# don't fail out
-if [[ -n $(which spack 2>/dev/null) ]]; then
-    loaded_modules=$(module list 2>&1)
-    modules="gotcha argobots mercury margo spath"
-    for mod in $modules; do
-        if ! [[ $(echo "$loaded_modules" | fgrep "$mod") ]]; then
-            echo "$errmsg $mod not detected. Please 'spack load $mod'"
-        fi
-    done
-fi
-
 
 ########## Determine job launcher and source associated setup ##########
 
@@ -214,7 +203,7 @@ echo "$infomsg Set UNIFYFS_CI_TEMP_DIR to change both of these to same path"
 
 # storage
 nls=$nlt
-export UNIFYFS_LOGIO_SPILL_SIZE=${UNIFYFS_LOGIO_SPILL_SIZE:-$((5 * GB))}
+export UNIFYFS_LOGIO_SPILL_SIZE=${UNIFYFS_LOGIO_SPILL_SIZE:-$((16 * GB))}
 export UNIFYFS_LOGIO_SPILL_DIR=${UNIFYFS_LOGIO_SPILL_DIR:-$nls}
 echo "$infomsg UNIFYFS_LOGIO_SPILL_SIZE set as $UNIFYFS_LOGIO_SPILL_SIZE"
 echo "$infomsg UNIFYFS_LOGIO_SPILL_DIR set as $UNIFYFS_LOGIO_SPILL_DIR"
