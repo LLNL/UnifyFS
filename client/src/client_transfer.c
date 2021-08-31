@@ -89,10 +89,13 @@ int client_create_transfer(unifyfs_client* client,
         return EINVAL;
     }
 
+    pthread_mutex_lock(&(client->sync));
+
     int active_count = arraylist_size(client->active_transfers);
     if (active_count == arraylist_capacity(client->active_transfers)) {
         /* already at full capacity for outstanding reads */
         LOGWARN("too many outstanding client transfers");
+        pthread_mutex_unlock(&(client->sync));
         return UNIFYFS_FAILURE;
     }
 
@@ -108,6 +111,7 @@ int client_create_transfer(unifyfs_client* client,
     client_transfer_status* transfer = calloc(1, sizeof(*transfer));
     if (NULL == transfer) {
         LOGERR("failed to allocate transfer status struct");
+        pthread_mutex_unlock(&(client->sync));
         return ENOMEM;
     }
     transfer->client = client;
@@ -119,9 +123,14 @@ int client_create_transfer(unifyfs_client* client,
     int rc = arraylist_insert(client->active_transfers,
                               (int)req_ndx, (void*)transfer);
     if (rc != 0) {
+        ABT_mutex_free(&(transfer->sync));
         free(transfer);
+        pthread_mutex_unlock(&(client->sync));
         return rc;
     }
+
+    pthread_mutex_unlock(&(client->sync));
+
     req->_reqid = transfer_id;
     debug_print_transfer_req(req);
 
@@ -137,12 +146,15 @@ client_transfer_status* client_get_transfer(unifyfs_client* client,
         return NULL;
     }
 
+    pthread_mutex_lock(&(client->sync));
+
     int list_index = (int) id_to_list_index(client, transfer_id);
     void* list_item = arraylist_get(client->active_transfers, list_index);
     if (list_item == NULL) {
         LOGERR("client->active_transfers index=%d is NULL", list_index);
-        return NULL;
     }
+
+    pthread_mutex_unlock(&(client->sync));
 
     client_transfer_status* transfer = list_item;
     return transfer;
@@ -206,16 +218,23 @@ int client_cleanup_transfer(unifyfs_client* client,
         }
     }
 
+    int ret = UNIFYFS_SUCCESS;
+
+    pthread_mutex_lock(&(client->sync));
+
     int list_index = (int) id_to_list_index(client, req->_reqid);
     void* list_item = arraylist_remove(client->active_transfers, list_index);
     if (list_item == (void*)transfer) {
         ABT_mutex_free(&(transfer->sync));
         free(transfer);
-        return UNIFYFS_SUCCESS;
     } else {
         LOGERR("mismatch on client->active_transfers index=%d", list_index);
-        return UNIFYFS_FAILURE;
+        ret = UNIFYFS_FAILURE;
     }
+
+    pthread_mutex_unlock(&(client->sync));
+
+    return ret;
 }
 
 /* Update the transfer status for the client (app_id + client_id)
