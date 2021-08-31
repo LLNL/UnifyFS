@@ -266,6 +266,7 @@ static int init_superblock_structures(unifyfs_client* client)
     for (int i = 0; i < client->max_files; i++) {
         /* indicate that file id is not in use by setting flag to 0 */
         client->unifyfs_filelist[i].in_use = 0;
+        client->unifyfs_filelist[i].filename[0] = 0;
     }
 
     /* initialize stack of free file ids */
@@ -439,6 +440,11 @@ int unifyfs_client_init(unifyfs_client* client)
             return UNIFYFS_FAILURE;
         }
 
+        pthread_mutexattr_t mux_recursive;
+        pthread_mutexattr_init(&mux_recursive);
+        pthread_mutexattr_settype(&mux_recursive, PTHREAD_MUTEX_RECURSIVE);
+        pthread_mutex_init(&(client->sync), &mux_recursive);
+
         /* remember that we've now initialized the library */
         client->state.initialized = 1;
     }
@@ -473,6 +479,8 @@ int unifyfs_client_fini(unifyfs_client* client)
         return UNIFYFS_FAILURE;
     }
 
+    pthread_mutex_lock(&(client->sync));
+
     if (NULL != client->active_mreads) {
         arraylist_free(client->active_mreads);
     }
@@ -480,6 +488,9 @@ int unifyfs_client_fini(unifyfs_client* client)
     if (NULL != client->active_transfers) {
         arraylist_free(client->active_transfers);
     }
+
+    pthread_mutex_unlock(&(client->sync));
+    pthread_mutex_destroy(&(client->sync));
 
     /* close spillover files */
     if (NULL != client->state.logio_ctx) {
@@ -530,6 +541,7 @@ int unifyfs_sync_files(unifyfs_client* client)
     int ret = UNIFYFS_SUCCESS;
 
     /* sync every active file */
+    pthread_mutex_lock(&(client->sync));
     for (int i = 0; i < client->max_files; i++) {
         if (client->unifyfs_filelist[i].in_use) {
             /* got an active file, so sync this file id */
@@ -539,6 +551,7 @@ int unifyfs_sync_files(unifyfs_client* client)
             }
         }
     }
+    pthread_mutex_unlock(&(client->sync));
 
     return ret;
 }
