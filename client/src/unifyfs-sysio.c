@@ -594,9 +594,11 @@ int UNIFYFS_WRAP(rename)(const char* oldpath, const char* newpath)
         }
 
         /* finally overwrite the old name with the new name */
+        pthread_mutex_lock(&(posix_client->sync));
         LOGDBG("Changing %s to %s",
                (char*)posix_client->unifyfs_filelist[fid].filename, new_upath);
         strcpy((void*)posix_client->unifyfs_filelist[fid].filename, new_upath);
+        pthread_mutex_unlock(&(posix_client->sync));
 
         /* success */
         return 0;
