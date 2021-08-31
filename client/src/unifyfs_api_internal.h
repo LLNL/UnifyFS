@@ -53,7 +53,7 @@ typedef struct {
     int in_use;
 
     /* full path and name of file */
-    const char filename[UNIFYFS_MAX_FILENAME];
+    char filename[UNIFYFS_MAX_FILENAME];
 } unifyfs_filename_t;
 
 /* UnifyFS file system client structure */
@@ -76,6 +76,9 @@ typedef struct unifyfs_client {
 
     /* tracks current working directory within namespace */
     char* cwd;
+
+    /* mutex for synchronizing updates to below state */
+    pthread_mutex_t sync;
 
     /* an arraylist to maintain the active mread requests for the client */
     arraylist_t* active_mreads;

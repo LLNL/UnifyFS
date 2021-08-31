@@ -50,8 +50,8 @@ int unifyfs_fid_free(unifyfs_client* client,
  * --------------------------------------- */
 
 /* allocate and initialize data management resource for file */
-static int fid_store_alloc(unifyfs_client* client,
-                           int fid)
+static int fid_storage_alloc(unifyfs_client* client,
+                             int fid)
 {
     /* get meta data for this file */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
@@ -202,9 +202,12 @@ int unifyfs_fid_create_file(unifyfs_client* client,
         return -ENAMETOOLONG;
     }
 
+    pthread_mutex_lock(&(client->sync));
+
     /* allocate an id for this file */
     int fid = unifyfs_fid_alloc(client);
     if (fid < 0)  {
+        pthread_mutex_unlock(&(client->sync));
         return fid;
     }
 
@@ -216,6 +219,8 @@ int unifyfs_fid_create_file(unifyfs_client* client,
             UNIFYFS_MAX_FILENAME);
     LOGDBG("Filename %s got unifyfs fid %d",
            client->unifyfs_filelist[fid].filename, fid);
+
+    pthread_mutex_unlock(&(client->sync));
 
     /* get metadata for this file id */
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
@@ -332,24 +337,31 @@ int unifyfs_fid_create_directory(unifyfs_client* client,
 int unifyfs_fid_delete(unifyfs_client* client,
                        int fid)
 {
+    pthread_mutex_lock(&(client->sync));
+
+    /* set this file id as not in use */
+    client->unifyfs_filelist[fid].in_use = 0;
+    client->unifyfs_filelist[fid].filename[0] = 0;
+
     /* finalize the storage we're using for this file */
     int rc = fid_storage_free(client, fid);
     if (rc != UNIFYFS_SUCCESS) {
         /* failed to release structures tracking storage,
          * bail out to keep its file id active */
+        pthread_mutex_unlock(&(client->sync));
         return rc;
     }
-
-    /* set this file id as not in use */
-    client->unifyfs_filelist[fid].in_use = 0;
 
     /* add this id back to the free stack */
     rc = unifyfs_fid_free(client, fid);
     if (rc != UNIFYFS_SUCCESS) {
         /* storage for the file was released, but we hit
          * an error while freeing the file id */
+        pthread_mutex_unlock(&(client->sync));
         return rc;
     }
+
+    pthread_mutex_unlock(&(client->sync));
 
     return UNIFYFS_SUCCESS;
 }
@@ -432,7 +444,7 @@ int unifyfs_fid_open(
             }
 
             /* initialize local storage for this file */
-            ret = fid_store_alloc(client, fid);
+            ret = fid_storage_alloc(client, fid);
             if (ret != UNIFYFS_SUCCESS) {
                 LOGERR("failed to allocate storage space for file %s (fid=%d)",
                     path, fid);
@@ -513,7 +525,7 @@ int unifyfs_fid_open(
             }
 
             /* initialize local storage for this file */
-            ret = fid_store_alloc(client, fid);
+            ret = fid_storage_alloc(client, fid);
             if (ret != UNIFYFS_SUCCESS) {
                 LOGERR("failed to allocate storage space for file %s (fid=%d)",
                        path, fid);
@@ -645,7 +657,9 @@ unifyfs_filemeta_t* unifyfs_get_meta_from_fid(unifyfs_client* client,
     /* check that the file id is within range of our array */
     if (fid >= 0 && fid < client->max_files) {
         /* get a pointer to the file meta data structure */
+        pthread_mutex_lock(&(client->sync));
         unifyfs_filemeta_t* meta = &(client->unifyfs_filemetas[fid]);
+        pthread_mutex_unlock(&(client->sync));
 
         if (fid == meta->fid) {
             /* before returning metadata, process any pending callbacks */
@@ -656,6 +670,7 @@ unifyfs_filemeta_t* unifyfs_get_meta_from_fid(unifyfs_client* client,
                 if (UNIFYFS_SUCCESS != rc) {
                     LOGERR("fid delete failed");
                 }
+                return NULL; /* we just deleted it */
             }
         }
         return meta;
@@ -696,8 +711,8 @@ int unifyfs_fid_is_dir(unifyfs_client* client,
 int unifyfs_fid_is_dir_empty(unifyfs_client* client,
                              const char* path)
 {
-    int i = 0;
-    while (i < client->max_files) {
+    pthread_mutex_lock(&(client->sync));
+    for (int i = 0; i < client->max_files; i++) {
         /* only check this element if it's active */
         if (client->unifyfs_filelist[i].in_use) {
             /* if the file starts with the path, it is inside of that directory
@@ -708,13 +723,12 @@ int unifyfs_fid_is_dir_empty(unifyfs_client* client,
                 /* found a child item in path */
                 LOGDBG("File found: unifyfs_filelist[%d].filename = %s",
                        i, (char*)&client->unifyfs_filelist[i].filename);
+                pthread_mutex_unlock(&(client->sync));
                 return 0;
             }
         }
-
-        /* go on to next file */
-        i++;
     }
+    pthread_mutex_unlock(&(client->sync));
 
     /* couldn't find any files with this prefix, dir must be empty */
     return 1;
@@ -742,15 +756,17 @@ int unifyfs_gfid_from_fid(unifyfs_client* client,
 int unifyfs_fid_from_gfid(unifyfs_client* client,
                           int gfid)
 {
-    int i;
-    for (i = 0; i < client->max_files; i++) {
+    pthread_mutex_lock(&(client->sync));
+    for (int i = 0; i < client->max_files; i++) {
         if (client->unifyfs_filelist[i].in_use &&
             client->unifyfs_filemetas[i].attrs.gfid == gfid) {
             /* found a file id that's in use and it matches
              * the target fid, this is the one */
+            pthread_mutex_unlock(&(client->sync));
             return i;
         }
     }
+    pthread_mutex_unlock(&(client->sync));
     return -1;
 }
 
@@ -758,10 +774,13 @@ int unifyfs_fid_from_gfid(unifyfs_client* client,
 const char* unifyfs_path_from_fid(unifyfs_client* client,
                                   int fid)
 {
+    pthread_mutex_lock(&(client->sync));
     unifyfs_filename_t* fname = &client->unifyfs_filelist[fid];
     if (fname->in_use) {
+        pthread_mutex_unlock(&(client->sync));
         return fname->filename;
     }
+    pthread_mutex_unlock(&(client->sync));
     return NULL;
 }
 
@@ -771,16 +790,19 @@ int unifyfs_fid_from_path(unifyfs_client* client,
 {
     /* scan through active entries in filelist array looking
      * for a match of path */
-    int i = 0;
-    while (i < client->max_files && client->unifyfs_filelist[i].in_use) {
-        const char* filename = client->unifyfs_filelist[i].filename;
-        if (0 == strcmp(filename, path)) {
-            LOGDBG("File found: unifyfs_filelist[%d].filename = %s",
-                   i, (char*)filename);
-            return i;
+    pthread_mutex_lock(&(client->sync));
+    for (int i = 0; i < client->max_files; i++) {
+        if (client->unifyfs_filelist[i].in_use) {
+            const char* filename = client->unifyfs_filelist[i].filename;
+            if (0 == strcmp(filename, path)) {
+                LOGDBG("File found: unifyfs_filelist[%d].filename = %s",
+                       i, (char*)filename);
+                pthread_mutex_unlock(&(client->sync));
+                return i;
+            }
         }
-        i++;
     }
+    pthread_mutex_unlock(&(client->sync));
 
     /* couldn't find specified path */
     return -1;
@@ -1048,15 +1070,18 @@ int unifyfs_fid_sync_data(unifyfs_client* client,
 int unifyfs_fid_sync_extents(unifyfs_client* client,
                              int fid)
 {
-    /* assume we'll succeed */
-    int ret = UNIFYFS_SUCCESS;
-
     unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
-    if ((NULL == meta) || (meta->fid != fid)) {
+    if (NULL == meta) {
+        LOGDBG("no filemeta for fid=%d", fid);
+        return UNIFYFS_SUCCESS;
+    } else if(meta->fid != fid) {
         /* bail out with an error if we fail to find it */
         LOGERR("missing filemeta for fid=%d", fid);
         return UNIFYFS_FAILURE;
     }
+
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
 
     /* sync with server if we need to */
     if (meta->needs_sync) {

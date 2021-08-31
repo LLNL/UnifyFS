@@ -50,10 +50,13 @@ client_mread_status* client_create_mread_request(unifyfs_client* client,
         return NULL;
     }
 
+    pthread_mutex_lock(&(client->sync));
+
     int active_count = arraylist_size(client->active_mreads);
     if (active_count == arraylist_capacity(client->active_mreads)) {
         /* already at full capacity for outstanding reads */
         LOGWARN("too many outstanding client reads");
+        pthread_mutex_unlock(&(client->sync));
         return NULL;
     }
 
@@ -69,20 +72,23 @@ client_mread_status* client_create_mread_request(unifyfs_client* client,
     client_mread_status* mread = calloc(1, sizeof(client_mread_status));
     if (NULL == mread) {
         LOGERR("failed to allocate client mread status");
-        return NULL;
-    }
-    mread->client = client;
-    mread->id = mread_id;
-    mread->reqs = read_reqs;
-    mread->n_reads = (unsigned int) n_reads;
-    ABT_mutex_create(&(mread->sync));
+    } else {
+        mread->client = client;
+        mread->id = mread_id;
+        mread->reqs = read_reqs;
+        mread->n_reads = (unsigned int) n_reads;
+        ABT_mutex_create(&(mread->sync));
 
-    int rc = arraylist_insert(client->active_mreads,
-                              (int)req_ndx, (void*)mread);
-    if (rc != 0) {
-        free(mread);
-        return NULL;
+        int rc = arraylist_insert(client->active_mreads,
+                                (int)req_ndx, (void*)mread);
+        if (rc != 0) {
+            ABT_mutex_free(&(mread->sync));
+            free(mread);
+            mread = NULL;
+        }
     }
+
+    pthread_mutex_unlock(&(client->sync));
 
     return mread;
 }
@@ -101,16 +107,23 @@ int client_remove_mread_request(client_mread_status* mread)
         return EINVAL;
     }
 
+    int ret = UNIFYFS_SUCCESS;
+
+    pthread_mutex_lock(&(client->sync));
+
     int list_index = (int) id_to_list_index(client, mread->id);
     void* list_item = arraylist_remove(client->active_mreads, list_index);
     if (list_item == (void*)mread) {
         ABT_mutex_free(&(mread->sync));
         free(mread);
-        return UNIFYFS_SUCCESS;
     } else {
         LOGERR("mismatch on client->active_mreads index=%d", list_index);
-        return UNIFYFS_FAILURE;
+        ret = UNIFYFS_FAILURE;
     }
+
+    pthread_mutex_unlock(&(client->sync));
+
+    return ret;
 }
 
 /* Retrieve the mread request corresponding to the given mread_id. */
@@ -121,6 +134,8 @@ client_mread_status* client_get_mread_status(unifyfs_client* client,
         LOGERR("client->active_mreads is NULL");
         return NULL;
     }
+
+    pthread_mutex_lock(&(client->sync));
 
     int list_index = (int) id_to_list_index(client, mread_id);
     void* list_item = arraylist_get(client->active_mreads, list_index);
@@ -134,6 +149,9 @@ client_mread_status* client_get_mread_status(unifyfs_client* client,
     } else {
         LOGERR("lookup of mread status for id=%u failed", mread_id);
     }
+
+    pthread_mutex_unlock(&(client->sync));
+
     return status;
 }
 
