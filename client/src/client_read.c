@@ -161,8 +161,6 @@ int client_update_mread_request(client_mread_status* mread,
                 mread->n_error++;
                 rdreq->nread = 0;
                 rdreq->errcode = req_error;
-            } else {
-                rdreq->nread = rdreq->cover_end_offset + 1;
             }
             LOGINFO("updating mread[%u] status for request %u of %u "
                     "(n_complete=%u, n_error=%u)",
@@ -270,6 +268,7 @@ void update_read_req_coverage(read_req_t* req,
     if ((req->cover_end_offset == (size_t)-1) ||
         (end_byte_offset > req->cover_end_offset)) {
         req->cover_end_offset = end_byte_offset;
+        req->nread = req->cover_end_offset + 1;
     }
 }
 
@@ -455,6 +454,83 @@ int compare_read_req(const void* a, const void* b)
     }
 }
 
+static void update_read_req_result(unifyfs_client* client,
+                                   read_req_t* req)
+{
+    debug_print_read_req(req);
+
+    /* no error message was set, assume success */
+    if (req->errcode == EINPROGRESS) {
+        req->errcode = UNIFYFS_SUCCESS;
+    }
+
+    /* if we hit an error on our read, nothing else to do */
+    if ((req->errcode != UNIFYFS_SUCCESS) &&
+        (req->errcode != ENODATA)) {
+        return;
+    }
+
+    /* if we read all of the bytes, request is satisfied */
+    if (req->nread == req->length) {
+        /* check for read hole at beginning of request */
+        if (req->cover_begin_offset != 0) {
+            /* fill read hole at beginning of request */
+            LOGDBG("zero-filling hole at offset %zu of length %zu",
+                   req->offset, req->cover_begin_offset);
+            memset(req->buf, 0, req->cover_begin_offset);
+            req->errcode = UNIFYFS_SUCCESS;
+        }
+        return;
+    }
+
+    /* get file size for this file */
+    off_t filesize_offt = unifyfs_gfid_filesize(client, req->gfid);
+    if (filesize_offt == (off_t)-1) {
+        /* failed to get file size */
+        req->errcode = ENOENT;
+        return;
+    }
+    size_t filesize = (size_t) filesize_offt;
+
+    if (filesize <= req->offset) {
+        /* request start offset is at or after EOF */
+        req->nread = 0;
+        req->errcode = UNIFYFS_SUCCESS;
+    } else {
+        /* otherwise, we have a short read, check whether there
+         * would be a hole after us, in which case we fill the
+         * request buffer with zeros */
+
+        /* get offset of where hole starts */
+        size_t gap_start = req->offset + req->nread;
+
+        /* get last offset of the read request */
+        size_t req_end = req->offset + req->length;
+
+        /* if file size is larger than last offset we wrote to in
+         * read request, then there is a hole we can fill */
+        if (filesize > gap_start) {
+            /* assume we can fill the full request with zero */
+            size_t gap_length = req_end - gap_start;
+            if (req_end > filesize) {
+                /* request is trying to read past end of file,
+                 * so only fill zeros up to end of file */
+                gap_length = filesize - gap_start;
+            }
+
+            /* copy zeros into request buffer */
+            LOGDBG("zero-filling hole at offset %zu of length %zu",
+                   gap_start, gap_length);
+            char* req_ptr = req->buf + req->nread;
+            memset(req_ptr, 0, gap_length);
+
+            /* update number of bytes read and request status */
+            req->nread += gap_length;
+            req->errcode = UNIFYFS_SUCCESS;
+        }
+    }
+}
+
 /**
  * Service a list of client read requests using either local
  * data or forwarding requests to the server.
@@ -482,6 +558,7 @@ int process_gfid_reads(unifyfs_client* client,
     int ret = UNIFYFS_SUCCESS;
 
     /* assume we'll service all requests from the server */
+    int local_count = 0;
     int server_count = in_count;
     read_req_t* server_reqs = in_reqs;
     read_req_t* local_reqs = NULL;
@@ -525,6 +602,13 @@ int process_gfid_reads(unifyfs_client* client,
          * to be processed by the server */
         service_local_reqs(client, in_reqs, in_count,
                            local_reqs, server_reqs, &server_count);
+        local_count = in_count - server_count;
+        for (i = 0; i < local_count; i++) {
+            /* get pointer to next read request */
+            read_req_t* req = local_reqs + i;
+            LOGDBG("local request %d:", i);
+            update_read_req_result(client, req);
+        }
 
         /* return early if we satisfied all requests locally */
         if (server_count == 0) {
@@ -635,78 +719,7 @@ int process_gfid_reads(unifyfs_client* client,
         /* get pointer to next read request */
         read_req_t* req = server_reqs + i;
         LOGDBG("mread[%u] server request %d:", mread->id, i);
-        debug_print_read_req(req);
-
-        /* no error message was received from server, assume success */
-        if (req->errcode == EINPROGRESS) {
-            req->errcode = UNIFYFS_SUCCESS;
-        }
-
-        /* if we hit an error on our read, nothing else to do */
-        if ((req->errcode != UNIFYFS_SUCCESS) &&
-            (req->errcode != ENODATA)) {
-            continue;
-        }
-
-        /* if we read all of the bytes, request is satisfied */
-        if (req->nread == req->length) {
-            /* check for read hole at beginning of request */
-            if (req->cover_begin_offset != 0) {
-                /* fill read hole at beginning of request */
-                LOGDBG("zero-filling hole at offset %zu of length %zu",
-                       req->offset, req->cover_begin_offset);
-                memset(req->buf, 0, req->cover_begin_offset);
-                req->errcode = UNIFYFS_SUCCESS;
-            }
-            continue;
-        }
-
-        /* get file size for this file */
-        off_t filesize_offt = unifyfs_gfid_filesize(client, req->gfid);
-        if (filesize_offt == (off_t)-1) {
-            /* failed to get file size */
-            req->errcode = ENOENT;
-            continue;
-        }
-        size_t filesize = (size_t)filesize_offt;
-
-        if (filesize <= req->offset) {
-            /* request start offset is at or after EOF */
-            req->nread = 0;
-            req->errcode = UNIFYFS_SUCCESS;
-        } else {
-            /* otherwise, we have a short read, check whether there
-             * would be a hole after us, in which case we fill the
-             * request buffer with zeros */
-
-            /* get offset of where hole starts */
-            size_t gap_start = req->offset + req->nread;
-
-            /* get last offset of the read request */
-            size_t req_end = req->offset + req->length;
-
-            /* if file size is larger than last offset we wrote to in
-             * read request, then there is a hole we can fill */
-            if (filesize > gap_start) {
-                /* assume we can fill the full request with zero */
-                size_t gap_length = req_end - gap_start;
-                if (req_end > filesize) {
-                    /* request is trying to read past end of file,
-                     * so only fill zeros up to end of file */
-                    gap_length = filesize - gap_start;
-                }
-
-                /* copy zeros into request buffer */
-                LOGDBG("zero-filling hole at offset %zu of length %zu",
-                    gap_start, gap_length);
-                char* req_ptr = req->buf + req->nread;
-                memset(req_ptr, 0, gap_length);
-
-                /* update number of bytes read and request status */
-                req->nread += gap_length;
-                req->errcode = UNIFYFS_SUCCESS;
-            }
-        }
+        update_read_req_result(client, req);
     }
 
     /* if we attempted to service requests from our local extent map,
@@ -717,7 +730,6 @@ int process_gfid_reads(unifyfs_client* client,
          * in which we received them. */
 
         /* copy locally completed requests back into user's array */
-        int local_count = in_count - server_count;
         if (local_count > 0) {
             memcpy(in_reqs, local_reqs, local_count * sizeof(read_req_t));
         }
