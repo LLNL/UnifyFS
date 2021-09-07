@@ -163,6 +163,13 @@ unifyfs_rc unifyfs_dispatch_io(unifyfs_handle fshdl,
     size_t n_sync = 0;
     for (size_t i = 0; i < nreqs; i++) {
         req = reqs + i;
+
+        /* set initial request result and state */
+        req->state = UNIFYFS_IOREQ_STATE_INVALID;
+        req->result.error = UNIFYFS_SUCCESS;
+        req->result.count = 0;
+        req->result.rc = 0;
+
         switch (req->op) {
         case UNIFYFS_IOREQ_NOP:
             break;
@@ -182,6 +189,7 @@ unifyfs_rc unifyfs_dispatch_io(unifyfs_handle fshdl,
             break;
         default:
             LOGERR("invalid ioreq operation");
+            req->result.error = EINVAL;
             return EINVAL;
         }
     }
