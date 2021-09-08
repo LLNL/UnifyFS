@@ -643,6 +643,10 @@ static int find_rank_idx(int my_rank)
 static int unifyfs_exit(void)
 {
     int ret = UNIFYFS_SUCCESS;
+    /* Note: ret could potentially get overwritten a few times.  Since this
+     * is shutdown/cleanup code, we'll do as much cleanup as we can and just
+     * return the most recent value of ret.
+     */
 
     /* iterate over each active application and free resources */
     LOGDBG("cleaning application state");
@@ -670,6 +674,11 @@ static int unifyfs_exit(void)
     LOGDBG("finalizing kvstore service");
     unifyfs_keyval_fini();
 
+    ret = ABT_mutex_free(&app_configs_abt_sync);
+    if (ret != ABT_SUCCESS) {
+        LOGERR("Error returned from ABT_mutex_free(): %d", ret);
+    }
+
     /* shutdown rpc service
      * (note: this needs to happen after app-client cleanup above) */
     LOGDBG("stopping rpc service");
@@ -685,6 +694,13 @@ static int unifyfs_exit(void)
     LOGDBG("finalizing MPI");
     MPI_Finalize();
 #endif
+
+    /* Finalize the config variables */
+    LOGDBG("Finalizing config variables");
+    ret = unifyfs_config_fini(&server_cfg);
+    if (ret != ABT_SUCCESS) {
+        LOGERR("Error returned from unifyfs_config_fini(): %d", ret);
+    }
 
     LOGDBG("all done!");
     unifyfs_log_close();
@@ -1036,6 +1052,15 @@ unifyfs_rc cleanup_app_client(app_config* app, app_client* client)
 
     /* free client structure */
     if (NULL != client->reqmgr) {
+        if (NULL != client->reqmgr->client_reqs) {
+            arraylist_free(client->reqmgr->client_reqs);
+        }
+        if (NULL != client->reqmgr->client_callbacks) {
+            arraylist_free(client->reqmgr->client_callbacks);
+        }
+
+        ABT_mutex_free(&(client->reqmgr->reqs_sync));
+
         free(client->reqmgr);
         client->reqmgr = NULL;
     }
