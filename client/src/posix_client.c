@@ -872,12 +872,24 @@ int unifyfs_transfer_file(const char* src,
         return -EINVAL;
     }
 
-    /* for both serial and parallel transfers, use rank 0 client to
-     * create the destination file using the source file's mode */
+    /* TODO: Fix parallel transfer logic
+     * for both serial and parallel transfers, use rank 0 client to
+     * create the destination file */
     if (0 == client_rank) {
         errno = 0;
         int create_flags = O_CREAT | O_WRONLY | O_TRUNC;
-        int fd = UNIFYFS_WRAP(open)(dst_path, create_flags, sb_src.st_mode);
+        int dst_mode;
+
+        if (unify_src) {
+            /* Destination file needs to be writable; file in UnifyFS may have
+             * been laminated */
+            dst_mode = 0640;
+        } else {
+            /* Use the source file's mode */
+            dst_mode = sb_src.st_mode;
+        }
+
+        int fd = UNIFYFS_WRAP(open)(dst_path, create_flags, dst_mode);
         err = errno;
         if (fd < 0) {
             LOGERR("failed to create destination file %s", dst_path);
