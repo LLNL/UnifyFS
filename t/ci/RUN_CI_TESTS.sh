@@ -76,14 +76,14 @@ done
 
 SECONDS=0
 start_time=$SECONDS
-echo "Started RUN_TESTS.sh @: $(date)"
+echo "Started RUN_CI_TESTS.sh @: $(date)"
 
 # Set up UNIFYFS_CI_DIR if this script is called first
 UNIFYFS_CI_DIR=${UNIFYFS_CI_DIR:-"$(dirname "$(readlink -fm $BASH_SOURCE)")"}
 
 # test_done gets called in 990-stop-server.sh if this is not set.
 # If not set, tests can be run individually
-full_run=true
+UNIFYFS_CI_TESTS_FULL_RUN=true
 
 # setup testing
 source $UNIFYFS_CI_DIR/001-setup.sh
@@ -128,6 +128,10 @@ source $UNIFYFS_CI_DIR/300-producer-consumer-tests.sh
 
 # MPI-IO producer-consumer tests
 source $UNIFYFS_CI_DIR/300-producer-consumer-tests.sh --mpiio
+
+### unifyfs-stage tests
+
+source $UNIFYFS_CI_DIR/800-stage-tests.sh
 
 ##############################################################################
 # DO NOT add additional tests after this point
