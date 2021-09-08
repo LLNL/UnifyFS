@@ -51,8 +51,6 @@ struct unifyfs_inode* unifyfs_inode_alloc(int gfid, unifyfs_file_attr_t* attr)
     return ino;
 }
 
-static int unifyfs_inode_destroy(struct unifyfs_inode* ino);
-
 /**
  * @brief read lock the inode for ro access.
  *
@@ -122,7 +120,6 @@ static int int_cmp_fn(const void* a, const void* b)
     return ai - bi;
 }
 
-static
 int unifyfs_inode_destroy(struct unifyfs_inode* ino)
 {
     int ret = UNIFYFS_SUCCESS;
