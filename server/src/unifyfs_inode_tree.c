@@ -189,19 +189,19 @@ void unifyfs_inode_tree_clear(
     while ((node = unifyfs_inode_tree_iter(tree, node))) {
         if (oldnode) {
             RB_REMOVE(rb_inode_tree, &tree->head, oldnode);
-            if (oldnode->extents != NULL) {
-                extent_tree_destroy(oldnode->extents);
+            int rc = unifyfs_inode_destroy(oldnode);
+            if (rc) {
+                LOGERR("Error %d from unifyfs_inode_destroy()", rc);
             }
-            free(oldnode);
         }
         oldnode = node;
     }
     if (oldnode) {
         RB_REMOVE(rb_inode_tree, &tree->head, oldnode);
-        if (oldnode->extents != NULL) {
-            extent_tree_destroy(oldnode->extents);
+        int rc = unifyfs_inode_destroy(oldnode);
+        if (rc) {
+            LOGERR("Error %d from unifyfs_inode_destroy()", rc);
         }
-        free(oldnode);
     }
 
     unifyfs_inode_tree_unlock(tree);
