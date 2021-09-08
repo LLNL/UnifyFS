@@ -134,6 +134,8 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
         arraylist_create(UNIFYFS_CLIENT_MAX_ACTIVE_REQUESTS);
     if (thrd_ctrl->client_reqs == NULL) {
         LOGERR("failed to allocate request manager client_reqs!");
+        ABT_mutex_free(&(thrd_ctrl->reqs_sync));
+        pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
         pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
         free(thrd_ctrl);
         return NULL;
@@ -144,6 +146,9 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
         arraylist_create(UNIFYFS_CLIENT_MAX_FILES);
     if (thrd_ctrl->client_callbacks == NULL) {
         LOGERR("failed to allocate request manager client_callbacks!");
+        arraylist_free(thrd_ctrl->client_reqs);
+        ABT_mutex_free(&(thrd_ctrl->reqs_sync));
+        pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
         pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
         free(thrd_ctrl);
         return NULL;
@@ -165,6 +170,9 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
         LOGERR("failed to create request manager thread for "
                "app_id=%d client_id=%d - rc=%d (%s)",
                app_id, client_id, rc, strerror(rc));
+        arraylist_free(thrd_ctrl->client_callbacks);
+        arraylist_free(thrd_ctrl->client_reqs);
+        ABT_mutex_free(&(thrd_ctrl->reqs_sync));
         pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
         pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
         free(thrd_ctrl);
@@ -1227,8 +1235,24 @@ static int process_metaset_rpc(reqmgr_thrd_t* reqmgr,
     if (NULL != in->attr.filename) {
         fattr.filename = strdup(in->attr.filename);
     }
+
+    /* This is somewhat ugly: if the input came via a standard Mercury RPC,
+     * then req->handle will exist and margo_free_input() will clean up 'in'
+     * correctly.
+     *
+     * *HOWEVER*, there's one case where we'll end up here without going
+     * through an RPC: the request created by create_mountpoint_dir() is
+     * created locally.  More specifically, margo_get_input() is not used to
+     * create the 'in' struct and thus margo_free_input() should not be
+     * called.  That said, in->attr.filename is allocated with strdup(), and
+     * must therefore be freed before we free 'in'.
+     */
     if (HG_HANDLE_NULL != req->handle) {
         margo_free_input(req->handle, in);
+    } else {
+        if (NULL != in->attr.filename) {
+            free(in->attr.filename);
+        }
     }
     free(in);
 

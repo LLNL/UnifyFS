@@ -446,6 +446,8 @@ int margo_server_rpc_finalize(void)
             }
         }
 
+        free(server_infos);
+
         /* shut down margo */
         LOGDBG("finalizing server-server margo");
         margo_finalize(ctx->svr_mid);
