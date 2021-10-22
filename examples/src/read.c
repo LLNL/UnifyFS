@@ -207,7 +207,7 @@ int main(int argc, char* argv[])
     timer_start_barrier(cfg, &time_check);
     rc = check_read_req_batch(cfg, num_reqs, reqs);
     if (rc) {
-        test_abort(cfg, rc);
+        test_print_once(cfg, "ERROR: data check failed!");
     }
     timer_stop_barrier(cfg, &time_check);
     test_print_verbose_once(cfg, "DEBUG: finished data check");
@@ -236,8 +236,8 @@ int main(int argc, char* argv[])
                         "I/O block size:            %.2lf KiB\n"
                         "I/O request size:          %.2lf KiB\n"
                         "Number of processes:       %d\n"
-                        "Each process wrote:        %.2lf MiB\n"
-                        "Total data written:        %.2lf MiB\n"
+                        "Each process read:         %.2lf MiB\n"
+                        "Total data read:           %.2lf MiB\n"
                         "File stat time:            %.6lf sec\n"
                         "File open time:            %.6lf sec\n"
                         "Maximum read time:         %.6lf sec\n"

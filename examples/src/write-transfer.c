@@ -297,14 +297,16 @@ int main(int argc, char* argv[])
         "DEBUG: finished sync (elapsed=%.6lf sec)",
         time_sync.elapsed_sec_all);
 
-    // laminate
-    test_print_verbose_once(cfg, "DEBUG: laminating target file");
-    rc = write_laminate(cfg, target_file);
-    if (rc) {
-        test_abort(cfg, rc);
+    if (cfg->laminate) {
+        // laminate
+        test_print_verbose_once(cfg, "DEBUG: laminating target file");
+        rc = write_laminate(cfg, target_file);
+        if (rc) {
+            test_abort(cfg, rc);
+        }
     }
 
-    // stat file post-laminate
+    // stat file
     test_print_verbose_once(cfg, "DEBUG: calling stat() on target file");
     stat_cmd(cfg, target_file);
 

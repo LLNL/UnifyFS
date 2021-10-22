@@ -74,9 +74,14 @@ typedef struct {
     int pmi_rank;
 } server_info_t;
 
-extern size_t glb_num_servers; /* number of entries in glb_servers array */
+/* number of entries in glb_servers array */
+extern size_t glb_num_servers;
 
-extern struct unifyfs_inode_tree* global_inode_tree; /* global inode tree */
+/* global inode tree */
+extern struct unifyfs_inode_tree* global_inode_tree;
+
+/* flag to control the use of server local extents for faster local reads */
+extern bool use_server_local_extents;
 
 // NEW READ REQUEST STRUCTURES
 typedef enum {

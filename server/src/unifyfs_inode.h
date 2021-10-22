@@ -170,12 +170,14 @@ int unifyfs_inode_laminate(int gfid);
  *
  * @param[out] n_chunks  number of output chunk locations
  * @param[out] chunks    array of output chunk locations
+ * @param[out] full_coverage  set to 1 if chunks fully cover extent
  *
  * @return UNIFYFS_SUCCESS, or error code
  */
 int unifyfs_inode_get_extent_chunks(unifyfs_inode_extent_t* extent,
                                     unsigned int* n_chunks,
-                                    chunk_read_req_t** chunks);
+                                    chunk_read_req_t** chunks,
+                                    int* full_coverage);
 
 /**
  * @brief Get chunk locations for an array of file extents
@@ -183,15 +185,17 @@ int unifyfs_inode_get_extent_chunks(unifyfs_inode_extent_t* extent,
  * @param n_extents  number of input extents
  * @param extents    array or requested extents
  *
- * @param[out] n_locs     number of output chunk locations
- * @param[out] chunklocs  array of output chunk locations
+ * @param[out] n_locs         number of output chunk locations
+ * @param[out] chunklocs      array of output chunk locations
+ * @param[out] full_coverage  set to 1 if chunks fully cover extents
  *
  * @return UNIFYFS_SUCCESS, or error code
  */
 int unifyfs_inode_resolve_extent_chunks(unsigned int n_extents,
                                         unifyfs_inode_extent_t* extents,
                                         unsigned int* n_locs,
-                                        chunk_read_req_t** chunklocs);
+                                        chunk_read_req_t** chunklocs,
+                                        int* full_coverage);
 
 /**
  * @brief calls extents_tree_span, which will do:
