@@ -511,11 +511,15 @@ int unifyfs_inode_get_extents(int gfid, size_t* n,
 
 int unifyfs_inode_get_extent_chunks(unifyfs_inode_extent_t* extent,
                                     unsigned int* n_chunks,
-                                    chunk_read_req_t** chunks)
+                                    chunk_read_req_t** chunks,
+                                    int* full_coverage)
 {
     int ret = UNIFYFS_SUCCESS;
     struct unifyfs_inode* ino = NULL;
     int gfid = extent->gfid;
+    int covered = 0;
+
+    *full_coverage = 0;
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
     {
@@ -529,7 +533,8 @@ int unifyfs_inode_get_extent_chunks(unifyfs_inode_extent_t* extent,
                     unsigned long offset = extent->offset;
                     unsigned long len = extent->length;
                     ret = extent_tree_get_chunk_list(ino->extents, offset, len,
-                                                     n_chunks, chunks);
+                                                     n_chunks, chunks,
+                                                     &covered);
                     if (ret) {
                         LOGERR("failed to get chunks for gfid:%d, ret=%d",
                                gfid, ret);
@@ -546,6 +551,7 @@ int unifyfs_inode_get_extent_chunks(unifyfs_inode_extent_t* extent,
         for (unsigned int i = 0; i < *n_chunks; i++) {
             (*chunks)[i].gfid = gfid;
         }
+        *full_coverage = covered;
     } else {
         *n_chunks = 0;
         *chunks = NULL;
@@ -578,15 +584,22 @@ int compare_chunk_read_reqs(const void* _c1, const void* _c2)
 int unifyfs_inode_resolve_extent_chunks(unsigned int n_extents,
                                         unifyfs_inode_extent_t* extents,
                                         unsigned int* n_locs,
-                                        chunk_read_req_t** chunklocs)
+                                        chunk_read_req_t** chunklocs,
+                                        int* full_coverage)
 {
     int ret = UNIFYFS_SUCCESS;
+    int fully_covered = 1;
     unsigned int i = 0;
     unsigned int j = 0;
     unsigned int n_chunks = 0;
     chunk_read_req_t* chunks = NULL;
     unsigned int* n_resolved = NULL;
     chunk_read_req_t** resolved = NULL;
+
+    /* set default output parameter values */
+    *n_locs = 0;
+    *chunklocs = NULL;
+    *full_coverage = 0;
 
     void* buf = calloc(n_extents, (sizeof(*n_resolved) + sizeof(*resolved)));
     if (NULL == buf) {
@@ -605,13 +618,18 @@ int unifyfs_inode_resolve_extent_chunks(unsigned int n_extents,
         LOGDBG("resolving extent request [gfid=%d, offset=%lu, length=%lu]",
                current->gfid, current->offset, current->length);
 
+        int covered = 0;
         ret = unifyfs_inode_get_extent_chunks(current,
-                                              &n_resolved[i], &resolved[i]);
+                                              &n_resolved[i], &resolved[i],
+                                              &covered);
         if (ret) {
             LOGERR("failed to resolve extent request "
                    "[gfid=%d, offset=%lu, length=%lu] (ret=%d)",
                    current->gfid, current->offset, current->length, ret);
             goto out_fail;
+        }
+        if (!covered) {
+            fully_covered = 0;
         }
 
         n_chunks += n_resolved[i];
@@ -652,6 +670,7 @@ int unifyfs_inode_resolve_extent_chunks(unsigned int n_extents,
 
     *n_locs = n_chunks;
     *chunklocs = chunks;
+    *full_coverage = fully_covered;
 
 out_fail:
     if (ret != UNIFYFS_SUCCESS) {

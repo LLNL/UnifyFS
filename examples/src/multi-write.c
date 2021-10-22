@@ -61,7 +61,7 @@ int check_file(char* file)
     int fd;
     int rc;
     int matched = 0;
-    fd = open(file, O_RDONLY, 0222);
+    fd = open(file, O_RDONLY);
 
     memset(tmpbuf, 0, sizeof(tmpbuf));
     rc = read(fd, tmpbuf, sizeof(tmpbuf));
@@ -159,12 +159,13 @@ int do_test(test_cfg* cfg)
         }
         close(fds[i]);
 
-        rc = chmod(file[i], 0444);
-        if (rc != 0) {
-            printf("%s failed to chmod, rc = %d\n", file[i], rc);
-            exit(1);
+        if (cfg->laminate) {
+            rc = chmod(file[i], 0444);
+            if (rc != 0) {
+                printf("%s failed to chmod, rc = %d\n", file[i], rc);
+                exit(1);
+            }
         }
-
     }
 
     /* Verify the writes to the files match the values in bigbuf[] */
