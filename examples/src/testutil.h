@@ -131,6 +131,7 @@ typedef struct {
     int io_pattern;    /* N1 or NN */
     int io_check;      /* use lipsum to verify data */
     int io_shuffle;    /* read and write different extents */
+    int laminate;      /* laminate file after writing */
     int pre_wr_trunc;  /* truncate file before writing */
     int post_wr_trunc; /* truncate file after writing */
     int use_aio;       /* use asynchronous IO */
@@ -239,6 +240,7 @@ void test_config_print(test_cfg* cfg)
     fprintf(fp, "\t io_pattern  = %s\n", io_pattern_str(cfg->io_pattern));
     fprintf(fp, "\t io_check    = %d\n", cfg->io_check);
     fprintf(fp, "\t io_shuffle  = %d\n", cfg->io_shuffle);
+    fprintf(fp, "\t laminate    = %d\n", cfg->laminate);
     fprintf(fp, "\t pre_trunc   = %d\n", cfg->pre_wr_trunc);
     fprintf(fp, "\t post_trunc  = %d\n", cfg->post_wr_trunc);
     fprintf(fp, "\t use_aio     = %d\n", cfg->use_aio);
@@ -523,9 +525,10 @@ int test_is_static(const char* program)
 
 // common options for all tests
 
-static const char* test_short_opts = "Ab:c:dD:f:hklLm:Mn:No:p:PrSt:T:uUvVx";
+static const char* test_short_opts = "aAb:c:dD:f:hklLm:Mn:No:p:PrSt:T:uUvVx";
 
 static const struct option test_long_opts[] = {
+    { "library-api", 0, 0, 'a' },
     { "aio", 0, 0, 'A' },
     { "blocksize", 1, 0, 'b' },
     { "chunksize", 1, 0, 'c' },
@@ -534,7 +537,7 @@ static const struct option test_long_opts[] = {
     { "file", 1, 0, 'f' },
     { "help", 0, 0, 'h' },
     { "check", 0, 0, 'k' },
-    { "library-api", 0, 0, 'l' },
+    { "laminate", 0, 0, 'l' },
     { "listio", 0, 0, 'L' },
     { "mount", 1, 0, 'm' },
     { "mpiio", 0, 0, 'M' },
@@ -560,6 +563,8 @@ static const char* test_usage_str =
     "Usage: %s [options...]\n"
     "\n"
     "Available options:\n"
+    " -a, --library-api                use UnifyFS library API instead of POSIX I/O\n"
+    "                                  (default: off)\n"
     " -A, --aio                        use asynchronous I/O instead of read|write\n"
     "                                  (default: off)\n"
     " -b, --blocksize=<bytes>          I/O block size\n"
@@ -574,7 +579,7 @@ static const char* test_usage_str =
     "                                  (default: 'testfile')\n"
     " -k, --check                      check data contents upon read\n"
     "                                  (default: off)\n"
-    " -l, --library-api                use UnifyFS library API instead of POSIX I/O\n"
+    " -l, --laminate                   laminate file after writing all data\n"
     "                                  (default: off)\n"
     " -L, --listio                     use lio_listio instead of read|write\n"
     "                                  (default: off)\n"

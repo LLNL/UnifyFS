@@ -1,1 +1,1 @@
-SUBDIRS = scripts unifyfs unifyfs-stage
+SUBDIRS = scripts unifyfs unifyfs-api-client unifyfs-stage

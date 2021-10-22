@@ -522,30 +522,24 @@ int sm_find_extents(int gfid,
                     size_t num_extents,
                     unifyfs_inode_extent_t* extents,
                     unsigned int* out_num_chunks,
-                    chunk_read_req_t** out_chunks)
+                    chunk_read_req_t** out_chunks,
+                    int* full_coverage)
 {
-    int owner_rank = hash_gfid_to_server(gfid);
-    int is_owner = (owner_rank == glb_pmi_rank);
-
-    /* do local inode metadata lookup to check for laminated */
+    /* do local inode metadata lookup */
     unifyfs_file_attr_t attrs;
     int ret = unifyfs_inode_metaget(gfid, &attrs);
     if (ret == UNIFYFS_SUCCESS) {
-        /* do local lookup */
-        if (is_owner || attrs.is_laminated) {
-            unsigned int n_extents = (unsigned int)num_extents;
-            ret = unifyfs_inode_resolve_extent_chunks(n_extents, extents,
-                                                      out_num_chunks,
-                                                      out_chunks);
-            if (ret) {
-                LOGERR("failed to find extents for gfid=%d (rc=%d)",
-                    gfid, ret);
-            } else if (*out_num_chunks == 0) {
-                LOGDBG("extent lookup found no matching chunks");
-            }
-        } else {
-            LOGWARN("cannot find extents for unlaminated file at non-owner");
-            ret = UNIFYFS_FAILURE;
+        /* do inode extent lookup */
+        unsigned int n_extents = (unsigned int)num_extents;
+        ret = unifyfs_inode_resolve_extent_chunks(n_extents, extents,
+                                                  out_num_chunks,
+                                                  out_chunks,
+                                                  full_coverage);
+        if (ret) {
+            LOGERR("failed to find extents for gfid=%d (rc=%d)",
+                   gfid, ret);
+        } else if (*out_num_chunks == 0) {
+            LOGDBG("extent lookup for gfid=%d found no matching chunks", gfid);
         }
     }
     return ret;
@@ -860,10 +854,11 @@ static int process_find_extents_rpc(server_rpc_req_t* req)
            num_extents, gfid, sender);
 
     /* find chunks for given extents */
+    int full_coverage = 0;
     unsigned int num_chunks = 0;
     chunk_read_req_t* chunk_locs = NULL;
     int ret = sm_find_extents(gfid, num_extents, extents,
-                              &num_chunks, &chunk_locs);
+                              &num_chunks, &chunk_locs, &full_coverage);
 
     margo_free_input(req->handle, in);
     free(in);

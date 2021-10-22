@@ -53,6 +53,8 @@ size_t glb_num_servers;     // size of glb_servers array
 
 unifyfs_cfg_t server_cfg;
 
+bool use_server_local_extents; // = false
+
 /* arraylist to track failed clients */
 arraylist_t* failed_clients; // = NULL
 
@@ -314,6 +316,14 @@ int main(int argc, char* argv[])
         rc = configurator_bool_val(server_cfg.log_on_error, &enable);
         if ((0 == rc) && enable) {
             unifyfs_set_log_on_error();
+        }
+    }
+
+    if (server_cfg.server_local_extents != NULL) {
+        bool enable = false;
+        rc = configurator_bool_val(server_cfg.server_local_extents, &enable);
+        if ((0 == rc) && enable) {
+            use_server_local_extents = true;
         }
     }
 

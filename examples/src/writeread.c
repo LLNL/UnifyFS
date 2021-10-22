@@ -308,24 +308,26 @@ int main(int argc, char* argv[])
             time_stat_pre2.elapsed_sec_all);
     }
 
-    // laminate
-    timer_start_barrier(cfg, &time_laminate);
-    rc = write_laminate(cfg, target_file);
-    if (rc) {
-        test_abort(cfg, rc);
-    }
-    timer_stop_barrier(cfg, &time_laminate);
-    test_print_verbose_once(cfg,
-        "DEBUG: finished laminate (elapsed=%.6lf sec)",
-        time_laminate.elapsed_sec_all);
+    if (cfg->laminate) {
+        // laminate
+        timer_start_barrier(cfg, &time_laminate);
+        rc = write_laminate(cfg, target_file);
+        if (rc) {
+            test_abort(cfg, rc);
+        }
+        timer_stop_barrier(cfg, &time_laminate);
+        test_print_verbose_once(cfg,
+            "DEBUG: finished laminate (elapsed=%.6lf sec)",
+            time_laminate.elapsed_sec_all);
 
-    // stat file post-laminate
-    timer_start_barrier(cfg, &time_stat_post);
-    stat_cmd(cfg, target_file);
-    timer_stop_barrier(cfg, &time_stat_post);
-    test_print_verbose_once(cfg,
-        "DEBUG: finished stat post-laminate (elapsed=%.6lf sec)",
-        time_stat_post.elapsed_sec_all);
+        // stat file post-laminate
+        timer_start_barrier(cfg, &time_stat_post);
+        stat_cmd(cfg, target_file);
+        timer_stop_barrier(cfg, &time_stat_post);
+        test_print_verbose_once(cfg,
+            "DEBUG: finished stat post-laminate (elapsed=%.6lf sec)",
+            time_stat_post.elapsed_sec_all);
+    }
 
     // post-write cleanup
     free(wr_buf);

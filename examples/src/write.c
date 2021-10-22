@@ -221,14 +221,16 @@ int main(int argc, char* argv[])
     free(reqs);
     reqs = NULL;
 
-    // laminate
-    timer_start_barrier(cfg, &time_laminate);
-    rc = write_laminate(cfg, target_file);
-    if (rc) {
-        test_abort(cfg, rc);
+    if (cfg->laminate) {
+        // laminate
+        timer_start_barrier(cfg, &time_laminate);
+        rc = write_laminate(cfg, target_file);
+        if (rc) {
+            test_abort(cfg, rc);
+        }
+        timer_stop_barrier(cfg, &time_laminate);
+        test_print_verbose_once(cfg, "DEBUG: finished laminate");
     }
-    timer_stop_barrier(cfg, &time_laminate);
-    test_print_verbose_once(cfg, "DEBUG: finished laminate");
 
     // timer to wrap all parts of write operation
     timer_stop_barrier(cfg, &time_create2laminate);

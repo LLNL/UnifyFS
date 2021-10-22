@@ -646,16 +646,22 @@ int extent_tree_get_chunk_list(
     struct extent_tree* extent_tree, /* extent tree to search */
     unsigned long offset,            /* starting logical offset */
     unsigned long len,               /* length of extent */
-    unsigned int* n_chunks,          /* [out] number of extents returned */
-    chunk_read_req_t** chunks)       /* [out] extent array */
+    unsigned int* n_chunks,          /* [out] number of chunks returned */
+    chunk_read_req_t** chunks,       /* [out] chunk array */
+    int* extent_covered)             /* [out] set=1 if extent fully covered */
 {
     int ret = 0;
     unsigned int count = 0;
     unsigned long end = offset + len - 1;
     struct extent_tree_node* first = NULL;
+    struct extent_tree_node* last = NULL;
     struct extent_tree_node* next = NULL;
     chunk_read_req_t* out_chunks = NULL;
     chunk_read_req_t* current = NULL;
+    unsigned long prev_end = 0;
+    bool gap_found = false;
+
+    *extent_covered = 0;
 
     extent_tree_rdlock(extent_tree);
 
@@ -663,12 +669,31 @@ int extent_tree_get_chunk_list(
     next = first;
     while (next && next->start <= end) {
         count++;
+
+        if (!gap_found) {
+            unsigned long curr_start = next->start;
+            if (next != first) {
+                /* check for a gap between current and previous extent */
+                if ((prev_end + 1) != curr_start) {
+                    gap_found = true;
+                }
+            }
+            prev_end = next->end;
+        }
+
+        /* iterate to next extent */
+        last = next;
         next = extent_tree_iter(extent_tree, next);
     }
 
     *n_chunks = count;
     if (0 == count) {
+        gap_found = true;
         goto out_unlock;
+    } else {
+        if ((first->start > offset) || (last->end < end)) {
+            gap_found = true;
+        }
     }
 
     out_chunks = calloc(count, sizeof(*out_chunks));
@@ -692,6 +717,10 @@ int extent_tree_get_chunk_list(
 
 out_unlock:
     extent_tree_unlock(extent_tree);
+
+    if (!gap_found) {
+        *extent_covered = 1;
+    }
 
     return ret;
 }
