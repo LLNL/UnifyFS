@@ -402,6 +402,8 @@ AC_CONFIG_FILES([Makefile
                  util/scripts/lsfcsm/Makefile
                  util/unifyfs/Makefile
                  util/unifyfs/src/Makefile
+                 util/unifyfs-api-client/Makefile
+                 util/unifyfs-api-client/src/Makefile
                  util/unifyfs-stage/Makefile
                  util/unifyfs-stage/src/Makefile])
 

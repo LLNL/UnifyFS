@@ -562,23 +562,40 @@ int unifyfs_invoke_find_extents_rpc(int gfid,
     *chunks = NULL;
 
     int owner_rank = hash_gfid_to_server(gfid);
+    int is_owner = (owner_rank == glb_pmi_rank);
 
-    /* do local inode metadata lookup to check for laminated */
+    /* do local inode metadata lookup */
     unifyfs_file_attr_t attrs;
     int ret = sm_get_fileattr(gfid, &attrs);
     if (ret == UNIFYFS_SUCCESS) {
-        if ((owner_rank == glb_pmi_rank) ||
-            (attrs.is_laminated && attrs.is_shared)) {
-            /* do local lookup */
+        int file_laminated = (attrs.is_shared && attrs.is_laminated);
+        if (is_owner || use_server_local_extents || file_laminated) {
+            /* try local lookup */
+            int full_coverage = 0;
             ret = sm_find_extents(gfid, (size_t)num_extents, extents,
-                                  num_chunks, chunks);
+                                  num_chunks, chunks, &full_coverage);
             if (ret) {
                 LOGERR("failed to find extents for gfid=%d (ret=%d)",
                        gfid, ret);
-            } else if (*num_chunks == 0) {
-                LOGDBG("extent lookup found no matching chunks");
+            } else if (0 == *num_chunks) { /* found no data */
+                LOGDBG("local lookup found no matching chunks");
+            } else { /* found some chunks */
+                if (full_coverage) {
+                    LOGDBG("local lookup found chunks with full coverage");
+                } else {
+                    LOGDBG("local lookup found chunks with partial coverage");
+                }
             }
-            return ret;
+            if (is_owner || file_laminated || full_coverage) {
+                return ret;
+            }
+            /* else, fall through to owner lookup */
+            if (*num_chunks > 0) {
+                /* release local results */
+                *num_chunks = 0;
+                free(*chunks);
+                *chunks = NULL;
+            }
         }
     }
 
@@ -633,11 +650,10 @@ int unifyfs_invoke_find_extents_rpc(int gfid,
             /* get number of chunks */
             unsigned int n_chks = (unsigned int) out.num_locations;
             if (n_chks > 0) {
-                /* got some chunks to read, get bulk buffer
-                 * holding chunk location data */
+                /* get bulk buffer with chunk locations */
                 buf_sz = (size_t)n_chks * sizeof(chunk_read_req_t);
                 buf = pull_margo_bulk_buffer(preq.handle, out.locations, buf_sz,
-                                            NULL);
+                                             NULL);
                 if (NULL == buf) {
                     LOGERR("failed to get bulk chunk locations");
                     ret = UNIFYFS_ERROR_MARGO;
