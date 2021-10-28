@@ -814,6 +814,16 @@ int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
  * instead of using the absolute value 3.
  */
 
+/*
+ * NOTE 2: As of glibc-2.33, _STAT_VER is no longer defined in bits/stat.h.
+ * __xstat is also no longer declared in stat.h, but it still exists in the
+ * library, so HAVE___XSTAT will be true.  (The same goes for __lxstat &
+ * __fxstat.)  In such a case, we have to define _STAT_VER ourselves.
+ */
+#ifndef _STAT_VER
+  #define _STAT_VER 3
+#endif
+
 #ifdef HAVE___XSTAT
 int UNIFYFS_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
 {
