@@ -113,6 +113,15 @@ files.
    spill_dir    STRING  path to spillover data directory
    ===========  ======  ============================================================
 
+.. table:: ``[margo]`` section - margo server NA settings
+   :widths: auto
+
+   ===  ====  =================================================================================
+   Key  Type  Description
+   ===  ====  =================================================================================
+   tcp  BOOL  Use TCP for server-to-server rpcs (default: on, turn off to enable libfabric RMA)
+   ===  ====  =================================================================================
+
 .. table:: ``[runstate]`` section - server runstate settings
    :widths: auto
 
@@ -125,21 +134,13 @@ files.
 .. table:: ``[server]`` section - server settings
    :widths: auto
 
-   ============  ======  =============================================================================
-   Key           Type    Description
-   ============  ======  =============================================================================
-   hostfile      STRING  path to server hostfile
-   init_timeout  INT     timeout in seconds to wait for servers to be ready for clients (default: 120)
-   ============  ======  =============================================================================
-
-.. table:: ``[margo]`` section - margo server NA settings
-   :widths: auto
-
-   ===  ====  =================================================================================
-   Key  Type  Description
-   ===  ====  =================================================================================
-   tcp  BOOL  Use TCP for server-to-server rpcs (default: on, turn off to enable libfabric RMA)
-   ===  ====  =================================================================================
+   =============  ======  =============================================================================
+   Key            Type    Description
+   =============  ======  =============================================================================
+   hostfile       STRING  path to server hostfile
+   init_timeout   INT     timeout in seconds to wait for servers to be ready for clients (default: 120)
+   local_extents  BOOL    use server extents to service local reads without consulting file owner
+   =============  ======  =============================================================================
 
 .. table:: ``[sharedfs]`` section - server shared files settings
    :widths: auto

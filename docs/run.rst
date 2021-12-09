@@ -200,8 +200,8 @@ The ``start``/``terminate`` transfer API stage functionality can also be used
 via the stand-alone application ``unifyfs-stage``.
 
 This application can be run at any time within a job to transfer new data into
- or results out of UnifyFS.
-A manifest file (see :ref:`above <manifest_file_label>`_) needs to be provided
+or results out of UnifyFS.
+A manifest file (see :ref:`above <manifest_file_label>`) needs to be provided
 as an argument to use this approach.
 
 .. code-block:: Bash
@@ -290,6 +290,6 @@ Examples of using ``transfer-static``:
 .. code-block:: Bash
     :caption: Parallel Transfer
 
-    $ srun -N 4 -n 8 /path/to/libexec/transfer-static -parallel /path/on/parallelfs/file.dat /unifyfs/file.dat
+    $ srun -N 4 -n 8 /path/to/libexec/transfer-static --parallel /path/on/parallelfs/file.dat /unifyfs/file.dat
 
-    $ srun -N 4 -n 8 /path/to/libexec/transfer-static -parallel /unifyfs/output.dat /scratch/my_output/output.dat
+    $ srun -N 4 -n 8 /path/to/libexec/transfer-static --parallel /unifyfs/output.dat /scratch/my_output/output.dat
