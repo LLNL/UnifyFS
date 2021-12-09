@@ -64,6 +64,9 @@ do
             $ci_dir/001-setup.sh -h
             exit
             ;;
+        -l|--laminate)
+            write_laminate=yes
+            ;;
         -M|--mpiio)
             [ -n "$write_io_type" ] &&
                 { echo "ERROR: mutually exclusive options provided"; \
@@ -142,10 +145,14 @@ fi
 # Reset additional behavior to default
 behavior=""
 
+# Laminate after writing all data
+if [ -n "$write_laminate" ]; then
+    behavior="$behavior -l"
+fi
+
 # Set I/O type
 if [ -n "$write_io_type" ]; then
     behavior="$behavior $write_io_type"
-    unset write_io_type # prevent option being picked up by subsequent runs
 fi
 
 # For each io_size, test with each io_pattern and for each io_pattern, test each
@@ -158,3 +165,6 @@ for io_size in "${io_sizes[@]}"; do
         done
     done
 done
+
+unset write_io_type
+unset write_laminate
