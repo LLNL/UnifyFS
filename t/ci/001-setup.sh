@@ -196,10 +196,7 @@ nlt=${TMPDIR}/unifyfs.${USER}.${SYSTEM_NAME}.${JOB_ID}
 export UNIFYFS_CI_TEMP_DIR=${UNIFYFS_CI_TEMP_DIR:-$nlt}
 $JOB_RUN_ONCE_PER_NODE mkdir -p $UNIFYFS_CI_TEMP_DIR
 export UNIFYFS_RUNSTATE_DIR=${UNIFYFS_RUNSTATE_DIR:-$UNIFYFS_CI_TEMP_DIR}
-export UNIFYFS_META_DB_PATH=${UNIFYFS_META_DB_PATH:-$UNIFYFS_CI_TEMP_DIR}
 echo "$infomsg UNIFYFS_RUNSTATE_DIR set as $UNIFYFS_RUNSTATE_DIR"
-echo "$infomsg UNIFYFS_META_DB_PATH set as $UNIFYFS_META_DB_PATH"
-echo "$infomsg Set UNIFYFS_CI_TEMP_DIR to change both of these to same path"
 
 # storage
 nls=$nlt
@@ -208,6 +205,7 @@ export UNIFYFS_LOGIO_SPILL_DIR=${UNIFYFS_LOGIO_SPILL_DIR:-$nls}
 echo "$infomsg UNIFYFS_LOGIO_SPILL_SIZE set as $UNIFYFS_LOGIO_SPILL_SIZE"
 echo "$infomsg UNIFYFS_LOGIO_SPILL_DIR set as $UNIFYFS_LOGIO_SPILL_DIR"
 
+export UNIFYFS_SERVER_MAX_APP_CLIENTS=${UNIFYFS_SERVER_MAX_APP_CLIENTS:-512}
 
 ########## Set up mountpoints and sharness testing prereqs ##########
 

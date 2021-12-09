@@ -67,6 +67,9 @@ do
             $ci_dir/001-setup.sh -h
             exit
             ;;
+        -l|--laminate)
+            read_laminate=yes
+            ;;
         -M|--mpiio)
             [ -n "$read_io_type" ] &&
                 { echo "ERROR: mutually exclusive options provided"; \
@@ -129,10 +132,14 @@ fi
 # Reset additional behavior to default
 behavior=""
 
+# Put "-l" in filename to ensure reading correct file
+if [ -n "$read_laminate" ]; then
+    behavior="$behavior -l"
+fi
+
 # Set I/O type
 if [ -n "$read_io_type" ]; then
     behavior="$behavior $read_io_type"
-    unset read_io_type # prevent option being picked up by subsequent runs
 fi
 
 # For each io_size, test with each io_pattern and for each io_pattern, test each
@@ -145,3 +152,6 @@ for io_size in "${io_sizes[@]}"; do
         done
     done
 done
+
+unset read_io_type
+unset read_laminate

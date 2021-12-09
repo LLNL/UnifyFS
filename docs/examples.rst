@@ -96,8 +96,8 @@ to aid in this process.
     Usage: write-static [options...]
 
     Available options:
-     -a, --appid=<id>            use given application id
-                                 (default: 0)
+     -a, --library-api           use UnifyFS library API instead of POSIX I/O
+                                 (default: off)
      -A, --aio                   use asynchronous I/O instead of read|write
                                  (default: off)
      -b, --blocksize=<bytes>     I/O block size
@@ -106,9 +106,13 @@ to aid in this process.
                                  (default: 1 MiB)
      -d, --debug                 for debugging, wait for input (at rank 0) at start
                                  (default: off)
+     -D, --destfile=<filename>   transfer destination file name (or path) outside mountpoint
+                                 (default: none)
      -f, --file=<filename>       target file name (or path) under mountpoint
                                  (default: 'testfile')
      -k, --check                 check data contents upon read
+                                 (default: off)
+     -l, --laminate              laminate file after writing all data
                                  (default: off)
      -L, --listio                use lio_listio instead of read|write
                                  (default: off)
@@ -126,11 +130,15 @@ to aid in this process.
                                  (default: 'n1')
      -P, --prdwr                 use pread|pwrite instead of read|write
                                  (default: off)
+     -r, --reuse-filename        remove and reuse the same target file name
+                                 (default: off)
      -S, --stdio                 use fread|fwrite instead of read|write
                                  (default: off)
      -t, --pre-truncate=<size>   truncate file to size (B) before writing
                                  (default: off)
      -T, --post-truncate=<size>  truncate file to size (B) after writing
+                                 (default: off)
+     -u, --unlink                unlink target file
                                  (default: off)
      -U, --disable-unifyfs       do not use UnifyFS
                                  (default: enable UnifyFS)

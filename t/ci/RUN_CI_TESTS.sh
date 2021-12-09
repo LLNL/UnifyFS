@@ -100,36 +100,73 @@ echo "Setup time -- $(elapsed_time start_time setup_time)"
 # 990-stop-server.sh) in the desired order to run them.
 ##############################################################################
 
+### POSIX-IO tests ###
+
 # POSIX-IO writeread example tests
-source $UNIFYFS_CI_DIR/100-writeread-tests.sh
+source $UNIFYFS_CI_DIR/100-writeread-tests.sh --laminate
 
 # POSIX-IO writeread example with I/O shuffle tests
+source $UNIFYFS_CI_DIR/100-writeread-tests.sh --laminate --shuffle
+
+# POSIX-IO writeread example w/out laminate tests
+source $UNIFYFS_CI_DIR/100-writeread-tests.sh
+
+# POSIX-IO writeread example w/out laminate tests
 source $UNIFYFS_CI_DIR/100-writeread-tests.sh --shuffle
 
 # POSIX-IO write example tests
-source $UNIFYFS_CI_DIR/110-write-tests.sh
+source $UNIFYFS_CI_DIR/110-write-tests.sh --laminate
 
 # POSIX-IO read example tests
+source $UNIFYFS_CI_DIR/120-read-tests.sh --laminate
+
+# POSIX-IO write example w/out laminate tests
+source $UNIFYFS_CI_DIR/110-write-tests.sh
+
+# POSIX-IO read example w/out laminate tests
 source $UNIFYFS_CI_DIR/120-read-tests.sh
 
+### MPI-IO tests ###
+
 # MPI-IO writeread example tests
+source $UNIFYFS_CI_DIR/100-writeread-tests.sh --laminate --mpiio
+
+# MPI-IO writeread example with I/O shuffle tests
+source $UNIFYFS_CI_DIR/100-writeread-tests.sh --laminate --shuffle --mpiio
+
+# MPI-IO writeread example w/out laminate tests
 source $UNIFYFS_CI_DIR/100-writeread-tests.sh --mpiio
 
+# MPI-IO writeread example w/out laminate tests
+source $UNIFYFS_CI_DIR/100-writeread-tests.sh --shuffle --mpiio
+
 # MPI-IO write example tests
-source $UNIFYFS_CI_DIR/110-write-tests.sh --mpiio
+source $UNIFYFS_CI_DIR/110-write-tests.sh --laminate --mpiio
 
 # MPI-IO read example tests
+source $UNIFYFS_CI_DIR/120-read-tests.sh --laminate --mpiio
+
+# MPI-IO write example w/out laminate tests
+source $UNIFYFS_CI_DIR/110-write-tests.sh --mpiio
+
+# MPI-IO read example w/out laminate tests
 source $UNIFYFS_CI_DIR/120-read-tests.sh --mpiio
 
-### Producer-Consumer workload tests
+### Producer-Consumer workload tests ###
 
 # POSIX-IO producer-consumer tests
+source $UNIFYFS_CI_DIR/300-producer-consumer-tests.sh --laminate
+
+# POSIX-IO producer-consumer w/out laminate tests
 source $UNIFYFS_CI_DIR/300-producer-consumer-tests.sh
 
 # MPI-IO producer-consumer tests
+source $UNIFYFS_CI_DIR/300-producer-consumer-tests.sh --laminate --mpiio
+
+# MPI-IO producer-consumer w/out laminate tests
 source $UNIFYFS_CI_DIR/300-producer-consumer-tests.sh --mpiio
 
-### unifyfs-stage tests
+### unifyfs-stage tests ###
 
 source $UNIFYFS_CI_DIR/800-stage-tests.sh
 
