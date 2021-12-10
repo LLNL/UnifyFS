@@ -328,7 +328,7 @@ int write_sync(test_cfg* cfg)
         return ENOTSUP;
 #else
         unifyfs_rc urc = unifyfs_sync(cfg->fshdl, cfg->gfid);
-        if (UNIFYFS_SUCCESS != rc) {
+        if (UNIFYFS_SUCCESS != urc) {
             test_print(cfg, "unifyfs_sync(%s, gfid=%d) failed - %s",
                        cfg->filename, cfg->gfid,
                        unifyfs_rc_enum_description(urc));
@@ -372,7 +372,7 @@ int write_laminate(test_cfg* cfg, const char* filepath)
             return ENOTSUP;
 #else
             unifyfs_rc urc = unifyfs_laminate(cfg->fshdl, filepath);
-            if (UNIFYFS_SUCCESS != rc) {
+            if (UNIFYFS_SUCCESS != urc) {
                 test_print(cfg, "unifyfs_laminate(%s) failed - %s",
                            cfg->filename, unifyfs_rc_enum_description(urc));
                 rc = -1;
@@ -405,7 +405,7 @@ int stat_file(test_cfg* cfg, const char* filepath)
 #else
             unifyfs_status us;
             unifyfs_rc urc = unifyfs_stat(cfg->fshdl, cfg->gfid, &us);
-            if (UNIFYFS_SUCCESS != rc) {
+            if (UNIFYFS_SUCCESS != urc) {
                 test_print(cfg, "unifyfs_stat(%s, gfid=%d) failed - %s",
                            cfg->filename, cfg->gfid,
                            unifyfs_rc_enum_description(urc));
