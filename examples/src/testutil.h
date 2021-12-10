@@ -638,6 +638,10 @@ int test_process_argv(test_cfg* cfg,
     while ((ch = getopt_long(argc, argv, test_short_opts,
                              test_long_opts, NULL)) != -1) {
         switch (ch) {
+        case 'a':
+            cfg->use_api = 1;
+            break;
+
         case 'A':
             cfg->use_aio = 1;
             break;
@@ -667,7 +671,7 @@ int test_process_argv(test_cfg* cfg,
             break;
 
         case 'l':
-            cfg->use_api = 1;
+            cfg->laminate = 1;
             break;
 
         case 'L':
@@ -1097,11 +1101,11 @@ int test_open_file(test_cfg* cfg, const char* filepath, int access)
 
     if (cfg->use_api) {
 #ifndef DISABLE_UNIFYFS
-        unifyfs_rc rc = unifyfs_open(cfg->fshdl, access, filepath,
-                                     &(cfg->gfid));
-        if (UNIFYFS_SUCCESS != rc) {
+        unifyfs_rc urc = unifyfs_open(cfg->fshdl, access, filepath,
+                                      &(cfg->gfid));
+        if (UNIFYFS_SUCCESS != urc) {
             test_print(cfg, "ERROR: unifyfs_open(%s) failed - %s",
-                       filepath, unifyfs_rc_enum_description(rc));
+                       filepath, unifyfs_rc_enum_description(urc));
             return -1;
         }
 #endif
