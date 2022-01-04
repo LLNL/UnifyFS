@@ -61,7 +61,7 @@ typedef struct {
     int num_server_reads;      /* size of remote_reads array */
     chunk_read_req_t* chunks;  /* array of chunk-reads */
     server_chunk_reads_t* remote_reads; /* per-server remote reads array */
-    unifyfs_inode_extent_t extent; /* the requested extent */
+    unifyfs_extent_t extent;   /* the requested extent */
 } server_read_req_t;
 
 /* Request manager state structure - created by main thread for each request

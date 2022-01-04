@@ -35,7 +35,7 @@ typedef struct transfer_thread_args {
     int transfer_id;   /* transfer request id at originating client */
 
     /* local extents to transfer to destination file */
-    struct extent_tree_node* local_extents;
+    extent_metadata* local_extents;
     size_t n_extents;
 
     size_t local_data_sz;         /* total size of local data */

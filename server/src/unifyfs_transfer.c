@@ -65,20 +65,20 @@ static int write_transfer_chunk(int fd,
     return UNIFYFS_SUCCESS;
 }
 
-static int read_local_extent(struct extent_tree_node* ext,
+static int read_local_extent(extent_metadata* ext,
                              transfer_chunk* chk)
 {
     int ret = UNIFYFS_SUCCESS;
 
     char* buf = chk->chunk_data;
-    chk->chunk_sz = extent_tree_node_length(ext);
-    chk->file_offset = extent_tree_node_offset(ext);
+    chk->chunk_sz = extent_length(ext);
+    chk->file_offset = extent_offset(ext);
 
     /* read data from client log */
     app_client* app_clnt = NULL;
     int app_id = ext->app_id;
     int cli_id = ext->cli_id;
-    off_t log_offset = (off_t) ext->pos;
+    off_t log_offset = (off_t) ext->log_pos;
     app_clnt = get_app_client(app_id, cli_id);
     if (NULL != app_clnt) {
         logio_context* logio_ctx = app_clnt->state.logio_ctx;
@@ -114,7 +114,7 @@ int create_local_transfers(int gfid,
     }
 
     size_t n_extents = 0;
-    struct extent_tree_node* extents = NULL;
+    extent_metadata* extents = NULL;
     int rc = unifyfs_inode_get_extents(gfid, &n_extents, &extents);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("failed to get extents from inode for gfid=%d", gfid);
@@ -124,27 +124,27 @@ int create_local_transfers(int gfid,
     }
 
     /* determine local extents */
-    struct extent_tree_node* ext;
+    extent_metadata* ext;
     size_t n_local_extents = 0;
     size_t total_local_data_sz = 0;
     for (size_t i = 0; i < n_extents; i++) {
         ext = extents + i;
         if (glb_pmi_rank == ext->svr_rank) {
-            total_local_data_sz += extent_tree_node_length(ext);
+            total_local_data_sz += extent_length(ext);
             n_local_extents++;
         }
     }
 
     /* make an array of local extents */
-    struct extent_tree_node* local_extents = (struct extent_tree_node*)
-        calloc(n_local_extents, sizeof(struct extent_tree_node));
+    extent_metadata* local_extents = (extent_metadata*)
+        calloc(n_local_extents, sizeof(extent_metadata));
     if (NULL == local_extents) {
         LOGERR("failed to allocate local extents for gfid=%d", gfid);
         free(extents);
         return ENOMEM;
     }
 
-    struct extent_tree_node* dst_ext;
+    extent_metadata* dst_ext;
     size_t ext_ndx = 0;
     for (size_t i = 0; i < n_extents; i++) {
         ext = extents + i;
@@ -188,7 +188,7 @@ void* transfer_helper_thread(void* arg)
     int ret = UNIFYFS_SUCCESS;
     char* data_copy_buf = NULL;
     transfer_chunk* chunks = NULL;
-    struct extent_tree_node* ext;
+    extent_metadata* ext;
     transfer_chunk* chk;
 
     LOGDBG("I am transfer thread for gfid=%d file=%s",
@@ -226,7 +226,7 @@ void* transfer_helper_thread(void* arg)
         /* make sure longest extent will fit in copy buffer */
         for (size_t i = 0; i < n_extents; i++) {
             ext = tta->local_extents + i;
-            size_t ext_sz = extent_tree_node_length(ext);
+            size_t ext_sz = extent_length(ext);
             if (ext_sz > buf_sz) {
                 buf_sz = ext_sz;
             }
@@ -248,7 +248,7 @@ void* transfer_helper_thread(void* arg)
         size_t copy_sz = 0;
         for (size_t i = ext_ndx; i < n_extents; i++) {
             ext = tta->local_extents + i;
-            size_t ext_sz = extent_tree_node_length(ext);
+            size_t ext_sz = extent_length(ext);
             if ((copy_sz + ext_sz) <= buf_sz) {
                 chk = chunks + chk_ndx;
                 chk_ndx++;

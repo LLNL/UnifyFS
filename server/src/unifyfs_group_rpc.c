@@ -19,7 +19,6 @@
 # define UNIFYFS_BCAST_K_ARY 2
 #endif
 
-
 /* helper method to initialize collective request rpc handle for child peer */
 static int get_child_request_handle(hg_id_t request_hgid,
                                     int peer_rank,
@@ -37,8 +36,8 @@ static int get_child_request_handle(hg_id_t request_hgid,
         hg_return_t hret = margo_create(unifyfsd_rpc_context->svr_mid, addr,
                                         request_hgid, chdl);
         if (hret != HG_SUCCESS) {
-            LOGERR("failed to get handle for child request to server %d",
-                peer_rank);
+            LOGERR("failed to get handle for child request to server %d - %s",
+                   peer_rank, HG_Error_to_string(hret));
             ret = UNIFYFS_ERROR_MARGO;
         }
     }
@@ -54,26 +53,165 @@ static int forward_child_request(void* input_ptr,
     int ret = UNIFYFS_SUCCESS;
 
     /* call rpc function */
-    hg_return_t hret = margo_iforward(chdl, input_ptr, creq);
+    double timeout_ms = UNIFYFS_MARGO_SERVER_SERVER_TIMEOUT_MSEC;
+    hg_return_t hret = margo_iforward_timed(chdl, input_ptr, timeout_ms, creq);
     if (hret != HG_SUCCESS) {
-        LOGERR("failed to forward request(%p)", creq);
+        LOGERR("failed to forward request(%p) - %s", creq,
+               HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
     return ret;
 }
 
-/* helper method to wait for collective rpc child request completion */
-static int wait_for_child_request(margo_request* creq)
+static int get_child_response(coll_request* coll_req,
+                              hg_handle_t chdl)
 {
     int ret = UNIFYFS_SUCCESS;
+    void* out = calloc(1, coll_req->output_sz);
+    if (NULL == out) {
+        ret = ENOMEM;
+    } else {
+        hg_return_t hret = margo_get_output(chdl, out);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
+            ret = UNIFYFS_ERROR_MARGO;
+        } else {
+            /* update collective return value using child response */
+            int child_ret = UNIFYFS_SUCCESS;
+            void* output = coll_req->output;
 
-    /* call rpc function */
-    hg_return_t hret = margo_wait(*creq);
-    if (hret != HG_SUCCESS) {
-        LOGERR("wait on request(%p) failed", creq);
-        ret = UNIFYFS_ERROR_MARGO;
+            switch (coll_req->req_type) {
+            case UNIFYFS_SERVER_BCAST_RPC_EXTENTS: {
+                extent_bcast_out_t* cebo = (extent_bcast_out_t*) out;
+                extent_bcast_out_t* ebo  = (extent_bcast_out_t*) output;
+                child_ret = cebo->ret;
+                if ((NULL != ebo) && (child_ret != UNIFYFS_SUCCESS)) {
+                    ebo->ret = child_ret;
+                }
+                break;
+            }
+            case UNIFYFS_SERVER_BCAST_RPC_FILEATTR: {
+                fileattr_bcast_out_t* cfbo = (fileattr_bcast_out_t*) out;
+                fileattr_bcast_out_t* fbo  = (fileattr_bcast_out_t*) output;
+                child_ret = cfbo->ret;
+                if ((NULL != fbo) && (child_ret != UNIFYFS_SUCCESS)) {
+                    fbo->ret = child_ret;
+                }
+                break;
+            }
+            case UNIFYFS_SERVER_BCAST_RPC_LAMINATE: {
+                laminate_bcast_out_t* clbo = (laminate_bcast_out_t*) out;
+                laminate_bcast_out_t* lbo  = (laminate_bcast_out_t*) output;
+                child_ret = clbo->ret;
+                if ((NULL != lbo) && (child_ret != UNIFYFS_SUCCESS)) {
+                    lbo->ret = child_ret;
+                }
+                break;
+            }
+            case UNIFYFS_SERVER_BCAST_RPC_TRANSFER: {
+                transfer_bcast_out_t* ctbo = (transfer_bcast_out_t*) out;
+                transfer_bcast_out_t* tbo  = (transfer_bcast_out_t*) output;
+                child_ret = ctbo->ret;
+                if ((NULL != tbo) && (child_ret != UNIFYFS_SUCCESS)) {
+                    tbo->ret = child_ret;
+                }
+                break;
+            }
+            case UNIFYFS_SERVER_BCAST_RPC_TRUNCATE: {
+                truncate_bcast_out_t* ctbo = (truncate_bcast_out_t*) out;
+                truncate_bcast_out_t* tbo  = (truncate_bcast_out_t*) output;
+                child_ret = ctbo->ret;
+                if ((NULL != tbo) && (child_ret != UNIFYFS_SUCCESS)) {
+                    tbo->ret = child_ret;
+                }
+                break;
+            }
+            case UNIFYFS_SERVER_BCAST_RPC_UNLINK: {
+                unlink_bcast_out_t* cubo = (unlink_bcast_out_t*) out;
+                unlink_bcast_out_t* ubo  = (unlink_bcast_out_t*) output;
+                child_ret = cubo->ret;
+                if ((NULL != ubo) && (child_ret != UNIFYFS_SUCCESS)) {
+                    ubo->ret = child_ret;
+                }
+                break;
+            }
+            default:
+                child_ret = UNIFYFS_FAILURE;
+                LOGERR("invalid collective request type %d",
+                       coll_req->req_type);
+                break;
+            }
+
+            ret = child_ret;
+
+            margo_free_output(chdl, out);
+        }
     }
+
+    return ret;
+}
+
+static int wait_for_all_child_requests(coll_request* coll_req,
+                                       int n_children)
+{
+    if (NULL == coll_req) {
+        return EINVAL;
+    }
+
+    if (n_children == 0) {
+        return UNIFYFS_SUCCESS;
+    } else if (NULL == coll_req->child_reqs) {
+        LOGERR("collective(%p) has %d children, but NULL child_reqs array",
+               coll_req, n_children);
+        return EINVAL;
+    }
+
+    int ret = UNIFYFS_SUCCESS;
+    int n_complete = 0;
+
+    /* use margo_wait_any() until all requests completed/errored */
+    do {
+        size_t complete_ndx;
+        hg_return_t hret = margo_wait_any((size_t)n_children,
+                                          coll_req->child_reqs,
+                                          &complete_ndx);
+        if (HG_SUCCESS == hret) {
+            n_complete++;
+            hg_handle_t* chdl   = coll_req->child_hdls + complete_ndx;
+            margo_request* creq = coll_req->child_reqs + complete_ndx;
+
+            /* get the output of the rpc */
+            int child_ret = get_child_response(coll_req, *chdl);
+            LOGDBG("BCAST_RPC: collective(%p) child[%zu] resp=%d",
+                   coll_req, complete_ndx, child_ret);
+            if (child_ret != UNIFYFS_SUCCESS) {
+                ret = child_ret;
+            }
+
+            /* set request to MARGO_REQUEST_NULL so that the next call to
+             * margo_wait_any() will ignore it */
+            *creq = MARGO_REQUEST_NULL;
+
+            /* release the handle for the completed request */
+            margo_destroy(*chdl);
+            *chdl = HG_HANDLE_NULL;
+        } else {
+            LOGERR("margo_wait_any() failed with error code=%s",
+                   HG_Error_to_string(hret));
+            ret = UNIFYFS_ERROR_MARGO;
+
+            for (int i = 0; i < n_children; i++) {
+                hg_handle_t* chdl = coll_req->child_hdls + i;
+                if (HG_HANDLE_NULL != *chdl) {
+                    margo_destroy(*chdl);
+                    *chdl = HG_HANDLE_NULL;
+                }
+            }
+
+            break; /* out of do/while loop */
+        }
+    } while (n_complete < n_children);
 
     return ret;
 }
@@ -275,140 +413,25 @@ void collective_set_local_retval(coll_request* coll_req, int val)
     }
 }
 
-static int coll_get_child_response(coll_request* coll_req,
-                                   hg_handle_t chdl)
-{
-    int ret = UNIFYFS_SUCCESS;
-    void* out = calloc(1, coll_req->output_sz);
-    if (NULL == out) {
-        ret = ENOMEM;
-    } else {
-        hg_return_t hret = margo_get_output(chdl, out);
-        if (hret != HG_SUCCESS) {
-            LOGERR("margo_get_output() failed");
-            ret = UNIFYFS_ERROR_MARGO;
-        } else {
-            /* update collective return value using child response */
-            int child_ret = UNIFYFS_SUCCESS;
-            void* output = coll_req->output;
-
-            switch (coll_req->req_type) {
-            case UNIFYFS_SERVER_BCAST_RPC_EXTENTS: {
-                extent_bcast_out_t* cebo = (extent_bcast_out_t*) out;
-                extent_bcast_out_t* ebo  = (extent_bcast_out_t*) output;
-                child_ret = cebo->ret;
-                if (child_ret != UNIFYFS_SUCCESS) {
-                    ebo->ret = child_ret;
-                }
-                break;
-            }
-            case UNIFYFS_SERVER_BCAST_RPC_FILEATTR: {
-                fileattr_bcast_out_t* cfbo = (fileattr_bcast_out_t*) out;
-                fileattr_bcast_out_t* fbo  = (fileattr_bcast_out_t*) output;
-                child_ret = cfbo->ret;
-                if (child_ret != UNIFYFS_SUCCESS) {
-                    fbo->ret = child_ret;
-                }
-                break;
-            }
-            case UNIFYFS_SERVER_BCAST_RPC_LAMINATE: {
-                laminate_bcast_out_t* clbo = (laminate_bcast_out_t*) out;
-                laminate_bcast_out_t* lbo  = (laminate_bcast_out_t*) output;
-                child_ret = clbo->ret;
-                if (child_ret != UNIFYFS_SUCCESS) {
-                    lbo->ret = child_ret;
-                }
-                break;
-            }
-            case UNIFYFS_SERVER_BCAST_RPC_TRANSFER: {
-                transfer_bcast_out_t* ctbo = (transfer_bcast_out_t*) out;
-                transfer_bcast_out_t* tbo  = (transfer_bcast_out_t*) output;
-                child_ret = ctbo->ret;
-                if (child_ret != UNIFYFS_SUCCESS) {
-                    tbo->ret = child_ret;
-                }
-                break;
-            }
-            case UNIFYFS_SERVER_BCAST_RPC_TRUNCATE: {
-                truncate_bcast_out_t* ctbo = (truncate_bcast_out_t*) out;
-                truncate_bcast_out_t* tbo  = (truncate_bcast_out_t*) output;
-                child_ret = ctbo->ret;
-                if (child_ret != UNIFYFS_SUCCESS) {
-                    tbo->ret = child_ret;
-                }
-                break;
-            }
-            case UNIFYFS_SERVER_BCAST_RPC_UNLINK: {
-                unlink_bcast_out_t* cubo = (unlink_bcast_out_t*) out;
-                unlink_bcast_out_t* ubo  = (unlink_bcast_out_t*) output;
-                child_ret = cubo->ret;
-                if (child_ret != UNIFYFS_SUCCESS) {
-                    ubo->ret = child_ret;
-                }
-                break;
-            }
-            default:
-                child_ret = UNIFYFS_FAILURE;
-                LOGERR("invalid collective request type %d",
-                       coll_req->req_type);
-                break;
-            }
-
-            ret = child_ret;
-
-            margo_free_output(chdl, out);
-        }
-    }
-
-    return ret;
-}
-
 /* Forward the collective request to any children */
 static int collective_finish(coll_request* coll_req)
 {
     int ret = UNIFYFS_SUCCESS;
 
-    /* get info for tree */
-    int child_count = coll_req->tree.child_count;
-
     LOGDBG("BCAST_RPC: collective(%p) finish", coll_req);
 
-    if (child_count) {
-        /* wait for child requests to finish */
-        int i, rc;
-        if (NULL != coll_req->child_reqs) {
-            margo_request* creq;
-            hg_handle_t* chdl;
-            /* TODO: use margo_wait_any() instead of our own loop */
-            for (i = 0; i < child_count; i++) {
-                chdl = coll_req->child_hdls + i;
-                creq = coll_req->child_reqs + i;
-                rc = wait_for_child_request(creq);
-                if (rc == UNIFYFS_SUCCESS) {
-                    /* get the output of the rpc */
-                    int child_ret = coll_get_child_response(coll_req, *chdl);
-                    LOGDBG("BCAST_RPC: collective(%p) child[%d] resp=%d",
-                        coll_req, i, child_ret);
-                    if (child_ret != UNIFYFS_SUCCESS) {
-                        ret = child_ret;
-                    }
-                } else {
-                    ret = rc;
-                }
-                margo_destroy(*chdl);
-            }
-        } else {
-            LOGERR("child count is %d, but NULL child reqs array",
-                   child_count);
-            ret = UNIFYFS_FAILURE;
-        }
+    /* wait for responses from children */
+    int child_count = coll_req->tree.child_count;
+    int rc = wait_for_all_child_requests(coll_req, child_count);
+    if (rc != UNIFYFS_SUCCESS) {
+        ret = rc;
     }
 
     if (NULL != coll_req->output) {
         /* send output back to caller */
         hg_return_t hret = margo_respond(coll_req->resp_hdl, coll_req->output);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_respond() failed");
+            LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
         }
 
         LOGDBG("BCAST_RPC: collective(%p, op=%d) responded",
@@ -442,15 +465,18 @@ int invoke_bcast_progress_rpc(coll_request* coll_req)
     hg_return_t hret = margo_create(unifyfsd_rpc_context->svr_mid, addr,
                                     hgid, &handle);
     if (hret != HG_SUCCESS) {
-        LOGERR("failed to get handle for bcast progress");
+        LOGERR("failed to get handle for bcast progress  - %s",
+               HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
-        /* call rpc function */
+        /* call local rpc function, which allows progress to be handled
+         * by a ULT */
         bcast_progress_in_t in;
         in.coll_req = (hg_ptr_t) coll_req;
         hret = margo_forward(handle, &in);
         if (hret != HG_SUCCESS) {
-            LOGERR("failed to forward bcast progress for coll(%p)", coll_req);
+            LOGERR("failed to forward bcast progress for coll(%p) - %s",
+                   HG_Error_to_string(hret), coll_req);
             ret = UNIFYFS_ERROR_MARGO;
         }
     }
@@ -467,7 +493,7 @@ static void bcast_progress_rpc(hg_handle_t handle)
     bcast_progress_in_t in;
     hg_return_t hret = margo_get_input(handle, &in);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_input() failed");
+        LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
         /* call collective_finish() to progress bcast operation */
@@ -485,7 +511,7 @@ static void bcast_progress_rpc(hg_handle_t handle)
     out.ret = ret;
     hret = margo_respond(handle, &out);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_respond() failed");
+        LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
     }
 
     /* free margo resources */
@@ -517,11 +543,11 @@ static void extent_bcast_rpc(hg_handle_t handle)
         /* get input params */
         hg_return_t hret = margo_get_input(handle, in);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_get_input() failed");
+            LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
             ret = UNIFYFS_ERROR_MARGO;
         } else {
             size_t num_extents = (size_t) in->num_extents;
-            size_t bulk_sz = num_extents * sizeof(struct extent_tree_node);
+            size_t bulk_sz = num_extents * sizeof(struct extent_metadata);
             hg_bulk_t local_bulk = HG_BULK_NULL;
             void* extents_buf = pull_margo_bulk_buffer(handle, in->extents,
                                                        bulk_sz, &local_bulk);
@@ -564,7 +590,7 @@ static void extent_bcast_rpc(hg_handle_t handle)
         ebo.ret = (int32_t)ret;
         hg_return_t hret = margo_respond(handle, &ebo);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_respond() failed");
+            LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
         }
 
         if (NULL != coll) {
@@ -585,7 +611,7 @@ int unifyfs_invoke_broadcast_extents_rpc(int gfid)
     LOGDBG("BCAST_RPC: starting extents for gfid=%d", gfid);
 
     size_t n_extents;
-    struct extent_tree_node* extents;
+    struct extent_metadata* extents;
     ret = unifyfs_inode_get_extents(gfid, &n_extents, &extents);
     if (ret != UNIFYFS_SUCCESS) {
         LOGERR("failed to get extents for gfid=%d", gfid);
@@ -606,7 +632,7 @@ int unifyfs_invoke_broadcast_extents_rpc(int gfid)
                                          &buf, &buf_size,
                                          HG_BULK_READ_ONLY, &extents_bulk);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_bulk_create() failed");
+        LOGERR("margo_bulk_create() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
         coll_request* coll = NULL;
@@ -668,11 +694,11 @@ static void laminate_bcast_rpc(hg_handle_t handle)
         /* get input params */
         hg_return_t hret = margo_get_input(handle, in);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_get_input() failed");
+            LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
             ret = UNIFYFS_ERROR_MARGO;
         } else {
             size_t n_extents = (size_t) in->num_extents;
-            size_t bulk_sz = n_extents * sizeof(struct extent_tree_node);
+            size_t bulk_sz = n_extents * sizeof(struct extent_metadata);
             hg_bulk_t local_bulk = HG_BULK_NULL;
             void* extents_buf = pull_margo_bulk_buffer(handle, in->extents,
                                                       bulk_sz, &local_bulk);
@@ -715,7 +741,7 @@ static void laminate_bcast_rpc(hg_handle_t handle)
         lbo.ret = (int32_t)ret;
         hg_return_t hret = margo_respond(handle, &lbo);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_respond() failed");
+            LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
         }
 
         if (NULL != coll) {
@@ -750,7 +776,7 @@ int unifyfs_invoke_broadcast_laminate(int gfid)
     LOGDBG("BCAST_RPC: starting laminate for gfid=%d", gfid);
 
     size_t n_extents;
-    struct extent_tree_node* extents;
+    struct extent_metadata* extents;
     ret = unifyfs_inode_get_extents(gfid, &n_extents, &extents);
     if (ret != UNIFYFS_SUCCESS) {
         LOGERR("failed to get extents for gfid=%d", gfid);
@@ -767,7 +793,8 @@ int unifyfs_invoke_broadcast_laminate(int gfid)
                                              &buf, &buf_size,
                                              HG_BULK_READ_ONLY, &extents_bulk);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_bulk_create() failed");
+            LOGERR("margo_bulk_create() failed - %s",
+                   HG_Error_to_string(hret));
             free(buf);
             return UNIFYFS_ERROR_MARGO;
         }
@@ -833,7 +860,7 @@ static void transfer_bcast_rpc(hg_handle_t handle)
         /* get input params */
         hg_return_t hret = margo_get_input(handle, in);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_get_input() failed");
+            LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
             ret = UNIFYFS_ERROR_MARGO;
         } else {
             hg_id_t op_hgid = unifyfsd_rpc_context->rpcs.transfer_bcast_id;
@@ -867,7 +894,7 @@ static void transfer_bcast_rpc(hg_handle_t handle)
         tbo.ret = (int32_t)ret;
         hg_return_t hret = margo_respond(handle, &tbo);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_respond() failed");
+            LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
         }
 
         if (NULL != coll) {
@@ -967,7 +994,7 @@ static void truncate_bcast_rpc(hg_handle_t handle)
         /* get input params */
         hg_return_t hret = margo_get_input(handle, in);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_get_input() failed");
+            LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
             ret = UNIFYFS_ERROR_MARGO;
         } else {
             hg_id_t op_hgid = unifyfsd_rpc_context->rpcs.truncate_bcast_id;
@@ -1001,7 +1028,7 @@ static void truncate_bcast_rpc(hg_handle_t handle)
         tbo.ret = (int32_t)ret;
         hg_return_t hret = margo_respond(handle, &tbo);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_respond() failed");
+            LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
         }
 
         if (NULL != coll) {
@@ -1073,7 +1100,7 @@ static void fileattr_bcast_rpc(hg_handle_t handle)
         /* get input params */
         hg_return_t hret = margo_get_input(handle, in);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_get_input() failed");
+            LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
             ret = UNIFYFS_ERROR_MARGO;
         } else {
             hg_id_t op_hgid = unifyfsd_rpc_context->rpcs.fileattr_bcast_id;
@@ -1107,7 +1134,7 @@ static void fileattr_bcast_rpc(hg_handle_t handle)
         fbo.ret = (int32_t)ret;
         hg_return_t hret = margo_respond(handle, &fbo);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_respond() failed");
+            LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
         }
 
         if (NULL != coll) {
@@ -1180,7 +1207,7 @@ static void unlink_bcast_rpc(hg_handle_t handle)
         /* get input params */
         hg_return_t hret = margo_get_input(handle, in);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_get_input() failed");
+            LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
             ret = UNIFYFS_ERROR_MARGO;
         } else {
             hg_id_t op_hgid = unifyfsd_rpc_context->rpcs.unlink_bcast_id;
@@ -1214,7 +1241,7 @@ static void unlink_bcast_rpc(hg_handle_t handle)
         ubo.ret = (int32_t)ret;
         hg_return_t hret = margo_respond(handle, &ubo);
         if (hret != HG_SUCCESS) {
-            LOGERR("margo_respond() failed");
+            LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
         }
 
         if (NULL != coll) {
