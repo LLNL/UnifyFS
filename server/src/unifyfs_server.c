@@ -282,6 +282,8 @@ int main(int argc, char* argv[])
 {
     int rc;
     int kv_rank, kv_nranks;
+    long l;
+    bool b;
     bool daemon = true;
     struct sigaction sa;
     char dbg_fname[UNIFYFS_MAX_FILENAME] = {0};
@@ -304,7 +306,6 @@ int main(int argc, char* argv[])
     server_pid = getpid();
 
     if (server_cfg.log_verbosity != NULL) {
-        long l;
         rc = configurator_int_val(server_cfg.log_verbosity, &l);
         if (0 == rc) {
             unifyfs_set_log_level((unifyfs_log_level_t)l);
@@ -337,7 +338,6 @@ int main(int argc, char* argv[])
 
     // update clients_per_app based on configuration
     if (server_cfg.server_max_app_clients != NULL) {
-        long l;
         rc = configurator_int_val(server_cfg.server_max_app_clients, &l);
         if (0 == rc) {
             clients_per_app = l;
@@ -414,14 +414,31 @@ int main(int argc, char* argv[])
         glb_pmi_size = kv_nranks;
     }
 
-    LOGDBG("initializing rpc service");
-    rc = configurator_bool_val(server_cfg.margo_lazy_connect,
-                               &margo_lazy_connect);
-    rc = configurator_bool_val(server_cfg.margo_tcp,
-                               &margo_use_tcp);
+    LOGDBG("initializing RPC service");
+
+    rc = configurator_int_val(server_cfg.margo_client_pool_size, &l);
+    if (0 == rc) {
+        margo_client_server_pool_sz = l;
+    }
+
+    rc = configurator_int_val(server_cfg.margo_server_pool_size, &l);
+    if (0 == rc) {
+        margo_server_server_pool_sz = l;
+    }
+
+    rc = configurator_bool_val(server_cfg.margo_lazy_connect, &b);
+    if (0 == rc) {
+        margo_lazy_connect = b;
+    }
+
+    rc = configurator_bool_val(server_cfg.margo_tcp, &b);
+    if (0 == rc) {
+        margo_use_tcp = b;
+    }
+
     rc = margo_server_rpc_init();
     if (rc != UNIFYFS_SUCCESS) {
-        LOGERR("%s", unifyfs_rc_enum_description(rc));
+        LOGERR("RPC init failed - %s", unifyfs_rc_enum_description(rc));
         exit(1);
     }
 

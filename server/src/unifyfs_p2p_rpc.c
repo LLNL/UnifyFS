@@ -44,8 +44,8 @@ int get_p2p_request_handle(hg_id_t request_hgid,
     hg_return_t hret = margo_create(unifyfsd_rpc_context->svr_mid, req->peer,
                                     request_hgid, &(req->handle));
     if (hret != HG_SUCCESS) {
-        LOGERR("failed to get handle for p2p request(%p) to server %d",
-               req, peer_rank);
+        LOGERR("failed to get handle for p2p request(%p) to server %d - %s",
+               req, peer_rank, HG_Error_to_string(hret));
         rc = UNIFYFS_ERROR_MARGO;
     }
 
@@ -59,10 +59,12 @@ int forward_p2p_request(void* input_ptr,
     int rc = UNIFYFS_SUCCESS;
 
     /* call rpc function */
-    hg_return_t hret = margo_iforward(req->handle, input_ptr,
-                                      &(req->request));
+    double timeout_ms = UNIFYFS_MARGO_SERVER_SERVER_TIMEOUT_MSEC;
+    hg_return_t hret = margo_iforward_timed(req->handle, input_ptr,
+                                            timeout_ms, &(req->request));
     if (hret != HG_SUCCESS) {
-        LOGERR("failed to forward p2p request(%p)", req);
+        LOGERR("failed to forward p2p request(%p) - %s",
+               req, HG_Error_to_string(hret));
         rc = UNIFYFS_ERROR_MARGO;
     }
 
@@ -77,7 +79,8 @@ int wait_for_p2p_request(p2p_request* req)
     /* call rpc function */
     hg_return_t hret = margo_wait(req->request);
     if (hret != HG_SUCCESS) {
-        LOGERR("wait on p2p request(%p) failed", req);
+        LOGERR("wait on p2p request(%p) failed - %s",
+               req, HG_Error_to_string(hret));
         rc = UNIFYFS_ERROR_MARGO;
     }
 
@@ -107,35 +110,26 @@ int invoke_chunk_read_request_rpc(int dst_srvr_rank,
     }
 
     int ret = UNIFYFS_SUCCESS;
-    hg_handle_t handle;
     chunk_read_request_in_t in;
     chunk_read_request_out_t out;
     hg_return_t hret;
-    hg_addr_t dst_srvr_addr;
     hg_size_t bulk_sz = (hg_size_t)num_chunks * sizeof(chunk_read_req_t);
 
-    assert(dst_srvr_rank < (int)glb_num_servers);
-    dst_srvr_addr = get_margo_server_address(dst_srvr_rank);
-    if (HG_ADDR_NULL == dst_srvr_addr) {
-        LOGERR("missing margo address for rank=%d", dst_srvr_rank);
-        return UNIFYFS_ERROR_MARGO;
+    /* forward request to file owner */
+    p2p_request preq;
+    hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.chunk_read_request_id;
+    int rc = get_p2p_request_handle(req_hgid, dst_srvr_rank, &preq);
+    if (rc != UNIFYFS_SUCCESS) {
+        return rc;
     }
 
-    hret = margo_create(unifyfsd_rpc_context->svr_mid, dst_srvr_addr,
-                        unifyfsd_rpc_context->rpcs.chunk_read_request_id,
-                        &handle);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_create() failed");
-        return UNIFYFS_ERROR_MARGO;
-    }
-
-    /* fill in input struct */
-    in.src_rank        = (int32_t)glb_pmi_rank;
-    in.app_id          = (int32_t)rdreq->app_id;
-    in.client_id       = (int32_t)rdreq->client_id;
-    in.req_id          = (int32_t)rdreq->req_ndx;
-    in.num_chks        = (int32_t)num_chunks;
-    in.total_data_size = (hg_size_t)remote_reads->total_sz;
+    /* fill input struct */
+    in.src_rank        = (int32_t) glb_pmi_rank;
+    in.app_id          = (int32_t) rdreq->app_id;
+    in.client_id       = (int32_t) rdreq->client_id;
+    in.req_id          = (int32_t) rdreq->req_ndx;
+    in.num_chks        = (int32_t) num_chunks;
+    in.total_data_size = (hg_size_t) remote_reads->total_sz;
     in.bulk_size       = bulk_sz;
 
     /* register request buffer for bulk remote access */
@@ -144,31 +138,41 @@ int invoke_chunk_read_request_rpc(int dst_srvr_rank,
                              &data_buf, &bulk_sz,
                              HG_BULK_READ_ONLY, &in.bulk_handle);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_bulk_create() failed");
+        LOGERR("margo_bulk_create() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
         LOGDBG("invoking the chunk-read-request rpc function");
-        hret = margo_forward(handle, &in);
-        if (hret != HG_SUCCESS) {
-            LOGERR("margo_forward() failed");
-            ret = UNIFYFS_ERROR_MARGO;
+        rc = forward_p2p_request((void*)&in, &preq);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("forward of chunk-read request rpc to server[%d] failed",
+                   dst_srvr_rank);
+            margo_bulk_free(in.bulk_handle);
+            margo_destroy(preq.handle);
+            return UNIFYFS_ERROR_MARGO;
+        }
+
+        /* wait for request completion */
+        rc = wait_for_p2p_request(&preq);
+        if (rc != UNIFYFS_SUCCESS) {
+            ret = rc;
         } else {
             /* decode response */
-            hret = margo_get_output(handle, &out);
+            hret = margo_get_output(preq.handle, &out);
             if (hret == HG_SUCCESS) {
                 ret = (int)out.ret;
-                LOGDBG("Got request rpc response from %d - ret=%d",
-                    dst_srvr_rank, ret);
-                margo_free_output(handle, &out);
+                LOGDBG("Got chunk-read response from server[%d] - ret=%d",
+                       dst_srvr_rank, ret);
+                margo_free_output(preq.handle, &out);
             } else {
-                LOGERR("margo_get_output() failed");
+                LOGERR("margo_get_output() failed - %s",
+                       HG_Error_to_string(hret));
                 ret = UNIFYFS_ERROR_MARGO;
             }
         }
 
         margo_bulk_free(in.bulk_handle);
     }
-    margo_destroy(handle);
+    margo_destroy(preq.handle);
 
     return ret;
 }
@@ -249,84 +253,78 @@ DEFINE_MARGO_RPC_HANDLER(chunk_read_request_rpc)
 int invoke_chunk_read_response_rpc(server_chunk_reads_t* scr)
 {
     /* assume we'll succeed */
-    int rc = UNIFYFS_SUCCESS;
+    int ret = UNIFYFS_SUCCESS;
 
     /* rank of destination server */
     int dst_rank = scr->rank;
     assert(dst_rank < (int)glb_num_servers);
 
-    /* get address of destinaton server */
-    hg_addr_t dst_addr = get_margo_server_address(dst_rank);
-    if (HG_ADDR_NULL == dst_addr) {
-        LOGERR("missing margo address for rank=%d", dst_rank);
-        return UNIFYFS_ERROR_MARGO;
-    }
-
-    /* pointer to struct containing rpc context info,
-     * shorter name for convience */
-    ServerRpcContext_t* ctx = unifyfsd_rpc_context;
-
-    /* get handle to read response rpc on destination server */
-    hg_handle_t handle;
-    hg_id_t resp_id = ctx->rpcs.chunk_read_response_id;
-    hg_return_t hret = margo_create(ctx->svr_mid, dst_addr,
-                                    resp_id, &handle);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_create() failed");
-        return UNIFYFS_ERROR_MARGO;
+    /* forward response to requesting server */
+    p2p_request preq;
+    hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.chunk_read_response_id;
+    int rc = get_p2p_request_handle(req_hgid, dst_rank, &preq);
+    if (rc != UNIFYFS_SUCCESS) {
+        return rc;
     }
 
     /* get address and size of our response buffer */
-    void* data_buf    = (void*)scr->resp;
+    void* data_buf = (void*) scr->resp;
     hg_size_t bulk_sz = scr->total_sz;
 
     /* register our response buffer for bulk remote read access */
     chunk_read_response_in_t in;
-    hret = margo_bulk_create(ctx->svr_mid, 1, &data_buf, &bulk_sz,
-                             HG_BULK_READ_ONLY, &in.bulk_handle);
+    hg_return_t hret = margo_bulk_create(unifyfsd_rpc_context->svr_mid,
+                                         1, &data_buf, &bulk_sz,
+                                         HG_BULK_READ_ONLY, &in.bulk_handle);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_bulk_create() failed");
+        LOGERR("margo_bulk_create() failed - %s", HG_Error_to_string(hret));
+        margo_destroy(preq.handle);
         return UNIFYFS_ERROR_MARGO;
     }
 
-    /* fill in input struct */
-    in.src_rank  = (int32_t)glb_pmi_rank;
-    in.app_id    = (int32_t)scr->app_id;
-    in.client_id = (int32_t)scr->client_id;
-    in.req_id    = (int32_t)scr->rdreq_id;
-    in.num_chks  = (int32_t)scr->num_chunks;
+    /* fill input struct */
+    in.src_rank  = (int32_t) glb_pmi_rank;
+    in.app_id    = (int32_t) scr->app_id;
+    in.client_id = (int32_t) scr->client_id;
+    in.req_id    = (int32_t) scr->rdreq_id;
+    in.num_chks  = (int32_t) scr->num_chunks;
     in.bulk_size = bulk_sz;
 
     /* call the read response rpc */
     LOGDBG("invoking the chunk-read-response rpc function");
-    hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
-        rc = UNIFYFS_ERROR_MARGO;
+    rc = forward_p2p_request((void*)&in, &preq);
+    if (rc != UNIFYFS_SUCCESS) {
+        ret = rc;
     } else {
-        /* rpc executed, now decode response */
-        chunk_read_response_out_t out;
-        hret = margo_get_output(handle, &out);
-        if (hret == HG_SUCCESS) {
-            rc = (int)out.ret;
-            LOGDBG("chunk-read-response rpc to server[%d] - ret=%d",
-                   dst_rank, rc);
-            margo_free_output(handle, &out);
+        rc = wait_for_p2p_request(&preq);
+        if (rc != UNIFYFS_SUCCESS) {
+            ret = rc;
         } else {
-            LOGERR("margo_get_output() failed");
-            rc = UNIFYFS_ERROR_MARGO;
+            /* rpc executed, now decode response */
+            chunk_read_response_out_t out;
+            hret = margo_get_output(preq.handle, &out);
+            if (hret == HG_SUCCESS) {
+                ret = (int)out.ret;
+                LOGDBG("chunk-read-response rpc to server[%d] - ret=%d",
+                       dst_rank, rc);
+                margo_free_output(preq.handle, &out);
+            } else {
+                LOGERR("margo_get_output() failed - %s",
+                       HG_Error_to_string(hret));
+                ret = UNIFYFS_ERROR_MARGO;
+            }
         }
     }
 
     /* free resources allocated for executing margo rpc */
     margo_bulk_free(in.bulk_handle);
-    margo_destroy(handle);
+    margo_destroy(preq.handle);
 
     /* free response data buffer */
     free(data_buf);
     scr->resp = NULL;
 
-    return rc;
+    return ret;
 }
 
 /* handler for server-server chunk read response */
@@ -413,7 +411,7 @@ DEFINE_MARGO_RPC_HANDLER(chunk_read_response_rpc)
 /* Add extents to target file */
 int unifyfs_invoke_add_extents_rpc(int gfid,
                                    unsigned int num_extents,
-                                   struct extent_tree_node* extents)
+                                   extent_metadata* extents)
 {
     int owner_rank = hash_gfid_to_server(gfid);
     if (owner_rank == glb_pmi_rank) {
@@ -432,45 +430,50 @@ int unifyfs_invoke_add_extents_rpc(int gfid,
     /* create a margo bulk transfer handle for extents array */
     hg_bulk_t bulk_handle;
     void* buf = (void*) extents;
-    size_t buf_sz = (size_t)num_extents * sizeof(struct extent_tree_node);
+    size_t buf_sz = (size_t)num_extents * sizeof(extent_metadata);
     hg_return_t hret = margo_bulk_create(unifyfsd_rpc_context->svr_mid,
                                          1, &buf, &buf_sz,
                                          HG_BULK_READ_ONLY, &bulk_handle);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_bulk_create() failed");
+        LOGERR("margo_bulk_create() failed - %s", HG_Error_to_string(hret));
+        margo_destroy(preq.handle);
         return UNIFYFS_ERROR_MARGO;
     }
 
     /* fill rpc input struct and forward request */
     add_extents_in_t in;
-    in.src_rank = (int32_t) glb_pmi_rank;
-    in.gfid = (int32_t) gfid;
+    in.src_rank    = (int32_t) glb_pmi_rank;
+    in.gfid        = (int32_t) gfid;
     in.num_extents = (int32_t) num_extents;
-    in.extents = bulk_handle;
+    in.extents     = bulk_handle;
+    LOGDBG("forwarding add_extents(gfid=%d) to server[%d]", gfid, owner_rank);
     rc = forward_p2p_request((void*)&in, &preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_bulk_free(bulk_handle);
+        margo_destroy(preq.handle);
         return rc;
     }
-    margo_bulk_free(bulk_handle);
 
     /* wait for request completion */
+    int ret = UNIFYFS_SUCCESS;
     rc = wait_for_p2p_request(&preq);
     if (rc != UNIFYFS_SUCCESS) {
-        return rc;
+        ret = rc;
+    } else {
+        /* get the output of the rpc */
+        add_extents_out_t out;
+        hret = margo_get_output(preq.handle, &out);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
+            ret = UNIFYFS_ERROR_MARGO;
+        } else {
+            /* set return value */
+            ret = out.ret;
+            margo_free_output(preq.handle, &out);
+        }
     }
 
-    /* get the output of the rpc */
-    int ret;
-    add_extents_out_t out;
-    hret = margo_get_output(preq.handle, &out);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_output() failed");
-        ret = UNIFYFS_ERROR_MARGO;
-    } else {
-        /* set return value */
-        ret = out.ret;
-        margo_free_output(preq.handle, &out);
-    }
+    margo_bulk_free(bulk_handle);
     margo_destroy(preq.handle);
 
     return ret;
@@ -495,7 +498,7 @@ static void add_extents_rpc(hg_handle_t handle)
             ret = UNIFYFS_ERROR_MARGO;
         } else {
             size_t num_extents = (size_t) in->num_extents;
-            size_t bulk_sz = num_extents * sizeof(struct extent_tree_node);
+            size_t bulk_sz = num_extents * sizeof(extent_metadata);
 
             /* allocate memory for extents */
             void* extents_buf = pull_margo_bulk_buffer(handle, in->extents,
@@ -551,7 +554,7 @@ DEFINE_MARGO_RPC_HANDLER(add_extents_rpc)
 /* Lookup extent locations for target file */
 int unifyfs_invoke_find_extents_rpc(int gfid,
                                     unsigned int num_extents,
-                                    unifyfs_inode_extent_t* extents,
+                                    unifyfs_extent_t* extents,
                                     unsigned int* num_chunks,
                                     chunk_read_req_t** chunks)
 {
@@ -611,22 +614,24 @@ int unifyfs_invoke_find_extents_rpc(int gfid,
     /* create a margo bulk transfer handle for extents array */
     hg_bulk_t bulk_req_handle;
     void* buf = (void*) extents;
-    size_t buf_sz = (size_t)num_extents * sizeof(unifyfs_inode_extent_t);
+    size_t buf_sz = (size_t)num_extents * sizeof(unifyfs_extent_t);
     hg_return_t hret = margo_bulk_create(mid, 1, &buf, &buf_sz,
                                          HG_BULK_READ_ONLY, &bulk_req_handle);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_bulk_create() failed");
+        LOGERR("margo_bulk_create() failed - %s", HG_Error_to_string(hret));
+        margo_destroy(preq.handle);
         return UNIFYFS_ERROR_MARGO;
     }
 
     /* fill rpc input struct and forward request */
     find_extents_in_t in;
-    in.src_rank = (int32_t) glb_pmi_rank;
-    in.gfid = (int32_t) gfid;
+    in.src_rank    = (int32_t) glb_pmi_rank;
+    in.gfid        = (int32_t) gfid;
     in.num_extents = (int32_t) num_extents;
-    in.extents = bulk_req_handle;
+    in.extents     = bulk_req_handle;
     rc = forward_p2p_request((void*)&in, &preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
     margo_bulk_free(bulk_req_handle);
@@ -634,6 +639,7 @@ int unifyfs_invoke_find_extents_rpc(int gfid,
     /* wait for request completion */
     rc = wait_for_p2p_request(&preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
@@ -641,7 +647,7 @@ int unifyfs_invoke_find_extents_rpc(int gfid,
     find_extents_out_t out;
     hret = margo_get_output(preq.handle, &out);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
         /* set return value */
@@ -652,8 +658,8 @@ int unifyfs_invoke_find_extents_rpc(int gfid,
             if (n_chks > 0) {
                 /* get bulk buffer with chunk locations */
                 buf_sz = (size_t)n_chks * sizeof(chunk_read_req_t);
-                buf = pull_margo_bulk_buffer(preq.handle, out.locations, buf_sz,
-                                             NULL);
+                buf = pull_margo_bulk_buffer(preq.handle, out.locations,
+                                             buf_sz, NULL);
                 if (NULL == buf) {
                     LOGERR("failed to get bulk chunk locations");
                     ret = UNIFYFS_ERROR_MARGO;
@@ -692,7 +698,7 @@ static void find_extents_rpc(hg_handle_t handle)
             ret = UNIFYFS_ERROR_MARGO;
         } else {
             size_t num_extents = (size_t) in->num_extents;
-            size_t bulk_sz = num_extents * sizeof(unifyfs_inode_extent_t);
+            size_t bulk_sz = num_extents * sizeof(unifyfs_extent_t);
 
             /* allocate memory for extents */
             void* extents_buf = pull_margo_bulk_buffer(handle, in->extents,
@@ -778,7 +784,7 @@ int unifyfs_invoke_metaget_rpc(int gfid,
             LOGINFO("using cached attributes for gfid=%d", gfid);
             return UNIFYFS_SUCCESS;
         } else {
-            LOGINFO("cached attributes have expired");
+            LOGINFO("cached attributes for gfid=%d have expired", gfid);
         }
     } else if (rc == ENOENT) {
         /* metaget above failed with ENOENT, need to create inode */
@@ -795,15 +801,17 @@ int unifyfs_invoke_metaget_rpc(int gfid,
 
     /* fill rpc input struct and forward request */
     metaget_in_t in;
-    in.gfid = (int32_t)gfid;
+    in.gfid = (int32_t) gfid;
     rc = forward_p2p_request((void*)&in, &preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
     /* wait for request completion */
     rc = wait_for_p2p_request(&preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
@@ -812,7 +820,7 @@ int unifyfs_invoke_metaget_rpc(int gfid,
     metaget_out_t out;
     hg_return_t hret = margo_get_output(preq.handle, &out);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
         /* set return value */
@@ -928,12 +936,14 @@ int unifyfs_invoke_filesize_rpc(int gfid,
     in.gfid = (int32_t)gfid;
     rc = forward_p2p_request((void*)&in, &preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
     /* wait for request completion */
     rc = wait_for_p2p_request(&preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
@@ -942,7 +952,7 @@ int unifyfs_invoke_filesize_rpc(int gfid,
     filesize_out_t out;
     hg_return_t hret = margo_get_output(preq.handle, &out);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
         /* set return value */
@@ -1046,17 +1056,19 @@ int unifyfs_invoke_metaset_rpc(int gfid,
 
     /* fill rpc input struct and forward request */
     metaset_in_t in;
-    in.gfid = (int32_t) gfid;
+    in.gfid   = (int32_t) gfid;
     in.fileop = (int32_t) attr_op;
-    in.attr = *attrs;
+    in.attr   = *attrs;
     rc = forward_p2p_request((void*)&in, &preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
     /* wait for request completion */
     rc = wait_for_p2p_request(&preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
@@ -1064,7 +1076,7 @@ int unifyfs_invoke_metaset_rpc(int gfid,
     metaset_out_t out;
     hg_return_t hret = margo_get_output(preq.handle, &out);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
         /* set return value */
@@ -1154,15 +1166,17 @@ int unifyfs_invoke_laminate_rpc(int gfid)
 
     /* fill rpc input struct and forward request */
     laminate_in_t in;
-    in.gfid = (int32_t)gfid;
+    in.gfid = (int32_t) gfid;
     rc = forward_p2p_request((void*)&in, &preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
     /* wait for request completion */
     rc = wait_for_p2p_request(&preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
@@ -1170,7 +1184,7 @@ int unifyfs_invoke_laminate_rpc(int gfid)
     laminate_out_t out;
     hg_return_t hret = margo_get_output(preq.handle, &out);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
         /* set return value */
@@ -1273,12 +1287,14 @@ int unifyfs_invoke_transfer_rpc(int client_app,
     in.dst_file    = (hg_const_string_t) dest_file;
     rc = forward_p2p_request((void*)&in, &preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
     /* wait for request completion */
     rc = wait_for_p2p_request(&preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
@@ -1287,7 +1303,7 @@ int unifyfs_invoke_transfer_rpc(int client_app,
     transfer_out_t out;
     hg_return_t hret = margo_get_output(preq.handle, &out);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
         /* set return value */
@@ -1376,16 +1392,18 @@ int unifyfs_invoke_truncate_rpc(int gfid,
 
     /* fill rpc input struct and forward request */
     truncate_in_t in;
-    in.gfid = (int32_t) gfid;
+    in.gfid     = (int32_t) gfid;
     in.filesize = (hg_size_t) filesize;
     rc = forward_p2p_request((void*)&in, &preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
     /* wait for request completion */
     rc = wait_for_p2p_request(&preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
@@ -1394,7 +1412,7 @@ int unifyfs_invoke_truncate_rpc(int gfid,
     truncate_out_t out;
     hg_return_t hret = margo_get_output(preq.handle, &out);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
         /* set return value */
@@ -1479,12 +1497,14 @@ int unifyfs_invoke_server_pid_rpc(void)
     in.pid = server_pid;
     rc = forward_p2p_request((void*)&in, &preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
     /* wait for request completion */
     rc = wait_for_p2p_request(&preq);
     if (rc != UNIFYFS_SUCCESS) {
+        margo_destroy(preq.handle);
         return rc;
     }
 
@@ -1493,7 +1513,7 @@ int unifyfs_invoke_server_pid_rpc(void)
     server_pid_out_t out;
     hg_return_t hret = margo_get_output(preq.handle, &out);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
         /* set return value */

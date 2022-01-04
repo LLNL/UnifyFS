@@ -504,7 +504,7 @@ int sm_set_fileattr(int gfid,
 
 int sm_add_extents(int gfid,
                    size_t num_extents,
-                   struct extent_tree_node* extents)
+                   extent_metadata* extents)
 {
     int owner_rank = hash_gfid_to_server(gfid);
     int is_owner = (owner_rank == glb_pmi_rank);
@@ -520,7 +520,7 @@ int sm_add_extents(int gfid,
 
 int sm_find_extents(int gfid,
                     size_t num_extents,
-                    unifyfs_inode_extent_t* extents,
+                    unifyfs_extent_t* extents,
                     unsigned int* out_num_chunks,
                     chunk_read_req_t** out_chunks,
                     int* full_coverage)
@@ -530,14 +530,13 @@ int sm_find_extents(int gfid,
     int ret = unifyfs_inode_metaget(gfid, &attrs);
     if (ret == UNIFYFS_SUCCESS) {
         /* do inode extent lookup */
-        unsigned int n_extents = (unsigned int)num_extents;
+        unsigned int n_extents = (unsigned int) num_extents;
         ret = unifyfs_inode_resolve_extent_chunks(n_extents, extents,
                                                   out_num_chunks,
                                                   out_chunks,
                                                   full_coverage);
         if (ret) {
-            LOGERR("failed to find extents for gfid=%d (rc=%d)",
-                   gfid, ret);
+            LOGERR("failed to find extents for gfid=%d (rc=%d)", gfid, ret);
         } else if (*out_num_chunks == 0) {
             LOGDBG("extent lookup for gfid=%d found no matching chunks", gfid);
         }
@@ -813,7 +812,7 @@ static int process_add_extents_rpc(server_rpc_req_t* req)
     int sender = (int) in->src_rank;
     int gfid = (int) in->gfid;
     size_t num_extents = (size_t) in->num_extents;
-    struct extent_tree_node* extents = req->bulk_buf;
+    extent_metadata* extents = req->bulk_buf;
 
     /* add extents */
     LOGDBG("adding %zu extents to gfid=%d from server[%d]",
@@ -848,7 +847,7 @@ static int process_find_extents_rpc(server_rpc_req_t* req)
     int sender = (int) in->src_rank;
     int gfid = (int) in->gfid;
     size_t num_extents = (size_t) in->num_extents;
-    unifyfs_inode_extent_t* extents = req->bulk_buf;
+    unifyfs_extent_t* extents = req->bulk_buf;
 
     LOGDBG("received %zu extent lookups for gfid=%d from server[%d]",
            num_extents, gfid, sender);
@@ -1105,7 +1104,7 @@ static int process_extents_bcast_rpc(server_rpc_req_t* req)
     extent_bcast_in_t* in = req->input;
     int gfid = (int) in->gfid;
     size_t num_extents = (size_t) in->num_extents;
-    struct extent_tree_node* extents = req->bulk_buf;
+    extent_metadata* extents = req->bulk_buf;
 
     LOGDBG("gfid=%d num_extents=%zu", gfid, num_extents);
 
@@ -1153,7 +1152,7 @@ static int process_laminate_bcast_rpc(server_rpc_req_t* req)
     int gfid = (int) in->gfid;
     size_t num_extents = (size_t) in->num_extents;
     unifyfs_file_attr_t* fattr = &(in->attr);
-    struct extent_tree_node* extents = req->bulk_buf;
+    extent_metadata* extents = req->bulk_buf;
 
     LOGDBG("gfid=%d num_extents=%zu", gfid, num_extents);
 

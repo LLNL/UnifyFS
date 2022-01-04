@@ -28,8 +28,8 @@
 ServerRpcContext_t* unifyfsd_rpc_context;
 bool margo_use_tcp = true;
 bool margo_lazy_connect; // = false
-int  margo_client_server_pool_sz = 4;
-int  margo_server_server_pool_sz = 4;
+int  margo_client_server_pool_sz = UNIFYFS_MARGO_POOL_SZ;
+int  margo_server_server_pool_sz = UNIFYFS_MARGO_POOL_SZ;
 int  margo_use_progress_thread = 1;
 
 // records pmi rank, server address string, and server address
@@ -655,6 +655,17 @@ static hg_handle_t create_client_handle(hg_id_t id,
     return handle;
 }
 
+static int forward_to_client(hg_handle_t hdl, void* input_ptr)
+{
+    double timeout_msec = UNIFYFS_MARGO_CLIENT_SERVER_TIMEOUT_MSEC;
+    hg_return_t hret = margo_forward_timed(hdl, input_ptr, timeout_msec);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_forward_timed() failed - %s", HG_Error_to_string(hret));
+        return UNIFYFS_ERROR_MARGO;
+    }
+    return UNIFYFS_SUCCESS;
+}
+
 /* invokes the heartbeat rpc function */
 int invoke_client_heartbeat_rpc(int app_id,
                                 int client_id)
@@ -678,12 +689,11 @@ int invoke_client_heartbeat_rpc(int app_id,
     /* call rpc function */
     LOGDBG("invoking the heartbeat rpc function in client[%d:%d]",
            app_id, client_id);
-    double timeout_msec = 500; /* half a second */
-    hret = margo_forward_timed(handle, &in, timeout_msec);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward_timed() failed");
+    int rc = forward_to_client(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of heartbeat rpc to client failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
@@ -747,11 +757,11 @@ int invoke_client_mread_req_data_rpc(int app_id,
     /* call rpc function */
     LOGDBG("invoking the mread[%d] req data (index=%d) rpc function in "
            "client[%d:%d]", mread_id, read_index, app_id, client_id);
-    hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_client(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of mread-req-data rpc to client failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
@@ -806,11 +816,11 @@ int invoke_client_mread_req_complete_rpc(int app_id,
     /* call rpc function */
     LOGDBG("invoking the mread[%d] complete rpc function in client[%d:%d]",
             mread_id, app_id, client_id);
-    hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_client(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of mread-complete rpc to client failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
@@ -859,11 +869,11 @@ int invoke_client_transfer_complete_rpc(int app_id,
     /* call rpc function */
     LOGDBG("invoking the transfer[%d] complete rpc function in client[%d:%d]",
            transfer_id, app_id, client_id);
-    hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_client(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of transfer-complete rpc to client failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */

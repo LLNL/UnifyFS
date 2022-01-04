@@ -79,7 +79,7 @@ int invoke_chunk_read_response_rpc(server_chunk_reads_t* scr);
  */
 int unifyfs_invoke_add_extents_rpc(int gfid,
                                    unsigned int num_extents,
-                                   struct extent_tree_node* extents);
+                                   extent_metadata* extents);
 
 /**
  * @brief Find location of extents for target file
@@ -95,7 +95,7 @@ int unifyfs_invoke_add_extents_rpc(int gfid,
  */
 int unifyfs_invoke_find_extents_rpc(int gfid,
                                     unsigned int num_extents,
-                                    unifyfs_inode_extent_t* extents,
+                                    unifyfs_extent_t* extents,
                                     unsigned int* num_chunks,
                                     chunk_read_req_t** chunks);
 

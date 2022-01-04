@@ -47,10 +47,10 @@ if [ $use_old_margo -eq 1 ]; then
     mercury_version="v1.0.1"
     margo_version="v0.4.3"
 else
-    argobots_version="v1.0.1"
-    libfabric_version="v1.11.1"
-    mercury_version="v2.0.0"
-    margo_version="v0.9.1"
+    argobots_version="v1.1"
+    libfabric_version="v1.12.1"
+    mercury_version="v2.0.1"
+    margo_version="v0.9.6"
     repos+=(https://github.com/json-c/json-c.git)
 fi
 
@@ -120,7 +120,7 @@ if [ "$automake_sub_version" -lt "15" ]; then
     popd
 
     # build automake
-    echo "### building automake v1.15 ###"
+    echo "### building automake ###"
     pushd automake-1.15
         ./configure --prefix=$INSTALL_DIR
         make
@@ -148,8 +148,9 @@ else
 fi
 
 echo "### building GOTCHA ###"
+gotcha_version="1.0.3"
 cd GOTCHA
-git checkout 1.0.3
+git checkout $gotcha_version
 mkdir -p build && cd build
 cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" ..
 make -j $make_nproc && make install

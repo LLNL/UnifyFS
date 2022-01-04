@@ -68,6 +68,8 @@ extern ServerRpcContext_t* unifyfsd_rpc_context;
 
 extern bool margo_use_tcp;
 extern bool margo_lazy_connect;
+extern int  margo_client_server_pool_sz;
+extern int  margo_server_server_pool_sz;
 
 int margo_server_rpc_init(void);
 int margo_server_rpc_finalize(void);

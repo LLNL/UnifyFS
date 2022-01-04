@@ -130,7 +130,7 @@ before_install:
 install:
   - . $HOME/spack/share/spack/setup-env.sh
   - spack install gotcha@1.0.3 && spack load gotcha@1.0.3
-  - spack install mochi-margo ^mercury~boostsys ^libfabric fabrics=rxm,sockets,tcp && spack load argobots && spack load mercury && spack load mochi-margo
+  - spack install mochi-margo@0.9.6 ^mercury~boostsys ^libfabric fabrics=rxm,sockets,tcp && spack load argobots && spack load mercury && spack load mochi-margo
   - spack install spath~mpi && spack load spath
   # prepare build environment
   - GOTCHA_INSTALL=$(spack location -i gotcha)

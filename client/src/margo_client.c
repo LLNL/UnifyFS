@@ -117,7 +117,10 @@ int unifyfs_client_rpc_init(void)
     }
 
     /* initialize margo */
-    ctx->mid = margo_init(proto, MARGO_SERVER_MODE, 1, 1);
+    int use_progress_thread = 1;
+    int ult_pool_sz = 1;
+    ctx->mid = margo_init(proto, MARGO_SERVER_MODE, use_progress_thread,
+                          ult_pool_sz);
     assert(ctx->mid);
 
     /* get server margo address */
@@ -216,6 +219,17 @@ static hg_handle_t create_handle(hg_id_t id)
     return handle;
 }
 
+static int forward_to_server(hg_handle_t hdl, void* input_ptr)
+{
+    double timeout_msec = UNIFYFS_MARGO_CLIENT_SERVER_TIMEOUT_MSEC;
+    hg_return_t hret = margo_forward_timed(hdl, input_ptr, timeout_msec);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_forward_timed() failed - %s", HG_Error_to_string(hret));
+        return UNIFYFS_ERROR_MARGO;
+    }
+    return UNIFYFS_SUCCESS;
+}
+
 /* invokes the mount rpc function */
 int invoke_client_mount_rpc(unifyfs_client* client)
 {
@@ -237,11 +251,11 @@ int invoke_client_mount_rpc(unifyfs_client* client)
 
     /* call rpc function */
     LOGDBG("invoking the mount rpc function in client");
-    hg_return_t hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of mount rpc to server failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* free memory on input struct */
@@ -251,7 +265,7 @@ int invoke_client_mount_rpc(unifyfs_client* client)
     /* decode response */
     int ret;
     unifyfs_mount_out_t out;
-    hret = margo_get_output(handle, &out);
+    hg_return_t hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
         ret = (int) out.ret;
@@ -267,7 +281,7 @@ int invoke_client_mount_rpc(unifyfs_client* client)
         }
         margo_free_output(handle, &out);
     } else {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
@@ -319,23 +333,23 @@ int invoke_client_attach_rpc(unifyfs_client* client)
 
     /* call rpc function */
     LOGDBG("invoking the attach rpc function in client");
-    hg_return_t hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of attach rpc to server failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
     int ret;
     unifyfs_attach_out_t out;
-    hret = margo_get_output(handle, &out);
+    hg_return_t hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
         ret = (int) out.ret;
         margo_free_output(handle, &out);
     } else {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
@@ -366,23 +380,23 @@ int invoke_client_unmount_rpc(unifyfs_client* client)
 
     /* call rpc function */
     LOGDBG("invoking the unmount rpc function in client");
-    hg_return_t hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of unmount rpc to server failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
     int ret;
     unifyfs_unmount_out_t out;
-    hret = margo_get_output(handle, &out);
+    hg_return_t hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
         ret = (int) out.ret;
         margo_free_output(handle, &out);
     } else {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
@@ -425,23 +439,23 @@ int invoke_client_metaset_rpc(unifyfs_client* client,
     /* call rpc function */
     LOGDBG("invoking the metaset rpc function in client - gfid:%d file:%s",
            in.attr.gfid, in.attr.filename);
-    hg_return_t hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of metaset rpc to server failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
     int ret;
     unifyfs_metaset_out_t out;
-    hret = margo_get_output(handle, &out);
+    hg_return_t hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
         ret = (int) out.ret;
         margo_free_output(handle, &out);
     } else {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
@@ -472,17 +486,17 @@ int invoke_client_metaget_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the metaget rpc function in client");
-    hg_return_t hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of metaget rpc to server failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
     int ret;
     unifyfs_metaget_out_t out;
-    hret = margo_get_output(handle, &out);
+    hg_return_t hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
         ret = (int) out.ret;
@@ -496,7 +510,7 @@ int invoke_client_metaget_rpc(unifyfs_client* client,
         }
         margo_free_output(handle, &out);
     } else {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
@@ -527,17 +541,17 @@ int invoke_client_filesize_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the filesize rpc function in client");
-    hg_return_t hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of filesize rpc to server failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
     int ret;
     unifyfs_filesize_out_t out;
-    hret = margo_get_output(handle, &out);
+    hg_return_t hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
         ret = (int) out.ret;
@@ -546,7 +560,7 @@ int invoke_client_filesize_rpc(unifyfs_client* client,
         }
         margo_free_output(handle, &out);
     } else {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
@@ -582,23 +596,23 @@ int invoke_client_transfer_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the transfer rpc function in client");
-    hg_return_t hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of transfer rpc to server failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
     int ret;
     unifyfs_transfer_out_t out;
-    hret = margo_get_output(handle, &out);
+    hg_return_t hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
         ret = (int) out.ret;
         margo_free_output(handle, &out);
     } else {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
@@ -630,23 +644,23 @@ int invoke_client_truncate_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the truncate rpc function in client");
-    hg_return_t hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of truncate rpc to server failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
     int ret;
     unifyfs_truncate_out_t out;
-    hret = margo_get_output(handle, &out);
+    hg_return_t hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
         ret = (int) out.ret;
         margo_free_output(handle, &out);
     } else {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
@@ -676,23 +690,23 @@ int invoke_client_unlink_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the unlink rpc function in client");
-    hg_return_t hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of unlink rpc to server failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
     int ret;
     unifyfs_unlink_out_t out;
-    hret = margo_get_output(handle, &out);
+    hg_return_t hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
         ret = (int) out.ret;
         margo_free_output(handle, &out);
     } else {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
@@ -722,23 +736,23 @@ int invoke_client_laminate_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the laminate rpc function in client");
-    hg_return_t hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of laminate rpc to server failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
     int ret;
     unifyfs_laminate_out_t out;
-    hret = margo_get_output(handle, &out);
+    hg_return_t hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
         ret = (int) out.ret;
         margo_free_output(handle, &out);
     } else {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
@@ -768,23 +782,23 @@ int invoke_client_sync_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGINFO("invoking the sync rpc function in client");
-    hg_return_t hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of sync rpc to server failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
     int ret;
     unifyfs_fsync_out_t out;
-    hret = margo_get_output(handle, &out);
+    hg_return_t hret = margo_get_output(handle, &out);
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
         ret = (int) out.ret;
         margo_free_output(handle, &out);
     } else {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
@@ -827,11 +841,11 @@ int invoke_client_mread_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the mread rpc function in client");
-    hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of mread rpc to server failed");
         margo_destroy(handle);
-        return UNIFYFS_ERROR_MARGO;
+        return rc;
     }
 
     /* decode response */
@@ -843,7 +857,7 @@ int invoke_client_mread_rpc(unifyfs_client* client,
         ret = (int) out.ret;
         margo_free_output(handle, &out);
     } else {
-        LOGERR("margo_get_output() failed");
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     }
 
