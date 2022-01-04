@@ -71,7 +71,7 @@
     UNIFYFS_CFG_CLI(unifyfs, mountpoint, STRING, /unifyfs, "mountpoint directory", NULL, 'm', "specify full path to desired mountpoint") \
     UNIFYFS_CFG(client, cwd, STRING, NULLSTRING, "current working directory", NULL) \
     UNIFYFS_CFG(client, fsync_persist, BOOL, on, "persist written data to storage on fsync()", NULL) \
-    UNIFYFS_CFG(client, local_extents, BOOL, off, "cache extents within client to service local reads without consulting local server", NULL) \
+    UNIFYFS_CFG(client, local_extents, BOOL, off, "use client-cached extents to service local reads without consulting local server", NULL) \
     UNIFYFS_CFG(client, max_files, INT, UNIFYFS_CLIENT_MAX_FILES, "client max file count", NULL) \
     UNIFYFS_CFG(client, write_index_size, INT, UNIFYFS_CLIENT_WRITE_INDEX_SIZE, "write metadata index buffer size", NULL) \
     UNIFYFS_CFG(client, write_sync, BOOL, off, "sync every write to server", NULL) \
@@ -84,13 +84,15 @@
     UNIFYFS_CFG(logio, shmem_size, INT, UNIFYFS_LOGIO_SHMEM_SIZE, "log-based I/O shared memory region size", NULL) \
     UNIFYFS_CFG(logio, spill_size, INT, UNIFYFS_LOGIO_SPILL_SIZE, "log-based I/O spillover file size", NULL) \
     UNIFYFS_CFG(logio, spill_dir, STRING, NULLSTRING, "spillover directory", configurator_directory_check) \
-    UNIFYFS_CFG(margo, lazy_connect, BOOL, off, "wait until first communication with server to resolve its connection address", NULL) \
+    UNIFYFS_CFG(margo, client_pool_size, INT, UNIFYFS_MARGO_POOL_SZ, "size of server's ULT pool for client-server RPCs", NULL) \
+    UNIFYFS_CFG(margo, lazy_connect, BOOL, on, "wait until first communication with server to resolve its connection address", NULL) \
+    UNIFYFS_CFG(margo, server_pool_size, INT, UNIFYFS_MARGO_POOL_SZ, "size of server's ULT pool for server-server RPCs", NULL) \
     UNIFYFS_CFG(margo, tcp, BOOL, on, "use TCP for server-to-server margo RPCs", NULL) \
     UNIFYFS_CFG(meta, range_size, INT, UNIFYFS_META_DEFAULT_SLICE_SZ, "metadata range size", NULL) \
     UNIFYFS_CFG_CLI(runstate, dir, STRING, RUNDIR, "runstate file directory", configurator_directory_check, 'R', "specify full path to directory to contain server-local state") \
     UNIFYFS_CFG_CLI(server, hostfile, STRING, NULLSTRING, "server hostfile name", NULL, 'H', "specify full path to server hostfile") \
     UNIFYFS_CFG_CLI(server, init_timeout, INT, UNIFYFS_DEFAULT_INIT_TIMEOUT, "timeout of waiting for server initialization", NULL, 't', "timeout in seconds to wait for servers to be ready for clients") \
-    UNIFYFS_CFG(server, local_extents, BOOL, off, "use server extents to service local reads without consulting file owner", NULL) \
+    UNIFYFS_CFG(server, local_extents, BOOL, off, "use server-cached extents to service local reads without consulting file owner", NULL) \
     UNIFYFS_CFG(server, max_app_clients, INT, UNIFYFS_SERVER_MAX_APP_CLIENTS, "maximum number of clients per application", NULL) \
     UNIFYFS_CFG_CLI(sharedfs, dir, STRING, NULLSTRING, "shared file system directory", configurator_directory_check, 'S', "specify full path to directory to contain server shared files") \
 
