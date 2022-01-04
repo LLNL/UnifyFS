@@ -80,11 +80,11 @@ int sm_set_fileattr(int gfid,
 
 int sm_add_extents(int gfid,
                    size_t num_extents,
-                   struct extent_tree_node* extents);
+                   extent_metadata* extents);
 
 int sm_find_extents(int gfid,
                     size_t num_extents,
-                    unifyfs_inode_extent_t* extents,
+                    unifyfs_extent_t* extents,
                     unsigned int* out_num_chunks,
                     chunk_read_req_t** out_chunks,
                     int* full_coverage);

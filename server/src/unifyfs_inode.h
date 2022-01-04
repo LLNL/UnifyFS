@@ -123,25 +123,28 @@ int unifyfs_inode_truncate(int gfid, unsigned long size);
 /**
  * @brief get the local extent array from the target inode
  *
- * @param gfid   the global file identifier
- * @param n      the number of extents, set by this function
- * @param nodes  the pointer to the array of extents, caller should free this
+ * @param gfid     the global file identifier
+ * @param n        pointer to size of the extents array
+ * @param extents  pointer to extents array (caller should free)
  *
  * @return 0 on success, errno otherwise
  */
-int unifyfs_inode_get_extents(int gfid, size_t* n,
-                              struct extent_tree_node** nodes);
+int unifyfs_inode_get_extents(int gfid,
+                              size_t* n,
+                              extent_metadata** extents);
 
 /**
  * @brief add new extents to the inode
  *
- * @param gfid   the global file identifier
- * @param n      the number of new extents in @nodes
- * @param nodes  an array of extents to be added
+ * @param gfid               the global file identifier
+ * @param num_extents        the number of new extents in @nodes
+ * @param extents            an array of extents to be added
  *
  * @return
  */
-int unifyfs_inode_add_extents(int gfid, int n, struct extent_tree_node* nodes);
+int unifyfs_inode_add_extents(int gfid,
+                              int num_extents,
+                              extent_metadata* extents);
 
 /**
  * @brief get the maximum file size from the local extent tree of given file
@@ -166,15 +169,15 @@ int unifyfs_inode_laminate(int gfid);
 /**
  * @brief Get chunks for given file extent
  *
- * @param extent  target file extent
+ * @param extent              target file extent
  *
- * @param[out] n_chunks  number of output chunk locations
- * @param[out] chunks    array of output chunk locations
+ * @param[out] n_chunks       number of output chunk locations
+ * @param[out] chunks         array of output chunk locations
  * @param[out] full_coverage  set to 1 if chunks fully cover extent
  *
  * @return UNIFYFS_SUCCESS, or error code
  */
-int unifyfs_inode_get_extent_chunks(unifyfs_inode_extent_t* extent,
+int unifyfs_inode_get_extent_chunks(unifyfs_extent_t* extent,
                                     unsigned int* n_chunks,
                                     chunk_read_req_t** chunks,
                                     int* full_coverage);
@@ -192,7 +195,7 @@ int unifyfs_inode_get_extent_chunks(unifyfs_inode_extent_t* extent,
  * @return UNIFYFS_SUCCESS, or error code
  */
 int unifyfs_inode_resolve_extent_chunks(unsigned int n_extents,
-                                        unifyfs_inode_extent_t* extents,
+                                        unifyfs_extent_t* extents,
                                         unsigned int* n_locs,
                                         chunk_read_req_t** chunklocs,
                                         int* full_coverage);
