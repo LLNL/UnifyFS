@@ -56,10 +56,10 @@ if [ -f /proc/sys/kernel/yama/ptrace_scope ]; then
     scope_val=`cat /proc/sys/kernel/yama/ptrace_scope`
     if [ $scope_val -ne 0 ]; then
         if [ $UID -eq 0 ]; then
-            echo 0 > /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || \
+            echo 0 > /proc/sys/kernel/yama/ptrace_scope 2>/dev/null ||
               echo >&2 "Failed to enable cross-memory attach for Mercury shmem"
         else
-            sudo echo 0 > /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || \
+            echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope 2>/dev/null ||
               echo >&2 "Failed to enable cross-memory attach for Mercury shmem"
         fi
     fi
