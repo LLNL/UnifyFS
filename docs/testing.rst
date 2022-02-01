@@ -335,7 +335,7 @@ normally be run first to start the UnifyFS daemon. E.g., to run just the
         ``make check``
 
 The tests in https://github.com/LLNL/UnifyFS/tree/dev/t are run automatically
-by `Travis CI`_ along with the :ref:`style checks <style-check-label>` when a
+using `GitHub Actions`_ along with the :ref:`style checks <style-check-label>` when a
 pull request is created or updated. All pull requests must pass these tests
 before they will be accepted.
 
@@ -349,7 +349,7 @@ Interpreting the Results
 
 After a test runs, its result is printed out consisting of its status followed
 by its description and potentially a TODO/SKIP message. Once all the tests
-have completed (either from being run manually or by `Travis CI`_), the overall
+have completed (either from being run manually or by `GitHub Actions`_), the overall
 results are printed out, as shown in the image on the right.
 
 
@@ -1002,6 +1002,7 @@ comments in `t/ci/ci-functions.sh`_.
 .. explicit external hyperlink targets
 
 .. _Bamboo: https://www.atlassian.com/software/bamboo
+.. _GitHub Actions: https://docs.github.com/en/actions
 .. _GitLab CI: https://about.gitlab.com
 .. _examples: https://github.com/LLNL/UnifyFS/tree/dev/examples/src
 .. _libtap library: https://github.com/zorgnax/libtap
@@ -1021,4 +1022,3 @@ comments in `t/ci/ci-functions.sh`_.
 .. _t/ci/ci-functions.sh: https://github.com/LLNL/UnifyFS/blob/dev/t/ci/ci-functions.sh
 .. _t/ci/RUN_CI_TESTS.sh: https://github.com/LLNL/UnifyFS/blob/dev/t/ci/RUN_CI_TESTS.sh
 .. _Test Anything Protocol: https://testanything.org
-.. _Travis CI: https://docs.travis-ci.com
