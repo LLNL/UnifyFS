@@ -872,10 +872,8 @@ int unifyfs_transfer_file(const char* src,
         return -EINVAL;
     }
 
-    /* TODO: Fix parallel transfer logic
-     * for both serial and parallel transfers, use rank 0 client to
-     * create the destination file */
-    if (0 == client_rank) {
+    /* create the destination file */
+    if ((UNIFYFS_TRANSFER_SERIAL == mode) || (0 == client_rank)) {
         errno = 0;
         int create_flags = O_CREAT | O_WRONLY | O_TRUNC;
         int dst_mode;
