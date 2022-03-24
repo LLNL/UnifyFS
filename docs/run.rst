@@ -194,10 +194,9 @@ and/or transferring results out to be verified before the job terminates.
 UnifyFS Stage Executable
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-``$UNIFYFS_INSTALL/libexec/unifyfs-stage``
-
 The ``start``/``terminate`` transfer API stage functionality can also be used
-via the stand-alone application ``unifyfs-stage``.
+via the stand-alone application ``unifyfs-stage``.  This application is installed
+in the same directory as the ``unifyfs`` utility (``$UNIFYFS_INSTALL/bin``).
 
 This application can be run at any time within a job to transfer new data into
 or results out of UnifyFS.
@@ -206,7 +205,7 @@ as an argument to use this approach.
 
 .. code-block:: Bash
 
-    [prompt]$ ./unifyfs-stage --help
+    [prompt]$ unifyfs-stage --help
 
     Usage: unifyfs-stage [OPTION]... <manifest file>
 
@@ -241,12 +240,12 @@ Examples:
 .. code-block:: Bash
     :caption: Serial Transfer
 
-    $ srun -N 1 -n 1 $UNIFYFS_INSTALL/libexec/unifyfs-stage $MY_MANIFEST_FILE
+    $ srun -N 1 -n 1 unifyfs-stage $MY_MANIFEST_FILE
 
 .. code-block:: Bash
     :caption: Parallel Transfer
 
-    $ srun -N 4 -n 8 $UNIFYFS_INSTALL/libexec/unifyfs-stage --parallel $MY_MANIFEST_FILE
+    $ srun -N 4 -n 8 unifyfs-stage --parallel $MY_MANIFEST_FILE
 
 Transfer Executable
 ^^^^^^^^^^^^^^^^^^^
