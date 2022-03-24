@@ -1,4 +1,4 @@
-libexec_PROGRAMS = unifyfs-stage
+bin_PROGRAMS = unifyfs-stage
 
 noinst_HEADERS = unifyfs-stage.h
 
