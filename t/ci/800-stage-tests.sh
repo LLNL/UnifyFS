@@ -28,7 +28,7 @@
 test_description="UnifyFS Stage-in+Stage-out tests"
 
 # utility checking to make sure everything's in place.
-STAGE_EXE=${UNIFYFS_EXAMPLES}/unifyfs-stage
+STAGE_EXE=${UNIFYFS_BIN}/unifyfs-stage
 test_expect_success "unify-stage executable exists" '
      test_path_is_file $STAGE_EXE
 '
