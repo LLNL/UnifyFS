@@ -368,17 +368,18 @@ int unifyfs_pmix_init(void)
     kv_max_keylen = PMIX_MAX_KEYLEN;
     kv_max_vallen = PMIX_MAX_VALLEN;
 
-    /* get PMIx universe size */
+    /* get PMIx job size */
     PMIX_PROC_CONSTRUCT(&proc);
-    (void)strncpy(proc.nspace, pmix_myproc.nspace, PMIX_MAX_NSLEN);
+    strlcpy(proc.nspace, pmix_myproc.nspace, PMIX_MAX_NSLEN);
     proc.rank = PMIX_RANK_WILDCARD;
-    rc = PMIx_Get(&proc, PMIX_UNIV_SIZE, NULL, 0, &valp);
+    rc = PMIx_Get(&proc, PMIX_JOB_SIZE, NULL, 0, &valp);
     if (rc != PMIX_SUCCESS) {
-        LOGERR("PMIx rank %d: PMIx_Get(UNIV_SIZE) failed: %s",
+        LOGERR("PMIx rank %d: PMIx_Get(JOB_SIZE) failed: %s",
                pmix_myproc.rank, PMIx_Error_string(rc));
         return (int)UNIFYFS_ERROR_PMI;
     }
     pmix_univ_nprocs = (size_t) valp->data.uint32;
+    LOGDBG("PMIX_JOB_SIZE: %d", pmix_univ_nprocs);
 
     kv_myrank = pmix_myproc.rank;
     kv_nranks = (int)pmix_univ_nprocs;
@@ -447,7 +448,7 @@ static int unifyfs_pmix_lookup(const char* key,
     }
 
     /* set key to lookup */
-    strncpy(pmix_key, key, sizeof(pmix_key));
+    strlcpy(pmix_key, key, sizeof(pmix_key));
     PMIX_PDATA_CREATE(pdata, 1);
     PMIX_PDATA_LOAD(&pdata[0], &pmix_myproc, pmix_key, NULL, PMIX_STRING);
 
@@ -498,7 +499,7 @@ static int unifyfs_pmix_publish(const char* key,
     }
 
     /* set key-val and modify publish behavior */
-    strncpy(pmix_key, key, sizeof(pmix_key));
+    strlcpy(pmix_key, key, sizeof(pmix_key));
     range = PMIX_RANGE_GLOBAL;
     ninfo = 2;
     PMIX_INFO_CREATE(info, ninfo);
