@@ -38,7 +38,7 @@ C
 .. code-block:: Bash
 
     $ mpicc -o test_write test_write.c \
-        -I<unifyfs>/include -L<unifyfs>/lib -lunifyfs_gotcha \
+        -I<unifyfs>/include -L<unifyfs>/lib -lunifyfs_mpi_gotcha \
         -L<gotcha>/lib64 -lgotcha
 
 Fortran
@@ -47,4 +47,4 @@ Fortran
 .. code-block:: Bash
 
     $ mpif90 -o test_write test_write.F \
-        -I<unifyfs>/include -L<unifyfs>/lib -lunifyfsf -lunifyfs_gotcha
+        -I<unifyfs>/include -L<unifyfs>/lib -lunifyfsf -lunifyfs_mpi_gotcha
