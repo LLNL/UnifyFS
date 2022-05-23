@@ -66,6 +66,7 @@ int UNIFYFS_WRAP(access)(const char* path, int mode)
 
         /* currently a no-op */
         LOGDBG("access: path intercepted, returning 0, %s", upath);
+        errno = 0;
         return 0;
     } else {
         LOGDBG("access: calling MAP_OR_FAIL, %s", path);
@@ -102,6 +103,7 @@ int UNIFYFS_WRAP(mkdir)(const char* path, mode_t mode)
         }
 
         /* success */
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(mkdir);
@@ -120,8 +122,7 @@ static int _unifyfs_remove(const char* upath, mode_t mask)
 {
     /* check if the mount point itself is being deleted */
     if (!strcmp(upath, unifyfs_mount_prefix)) {
-        errno = EBUSY;
-        return -1;
+        return EBUSY;
     }
 
     /* check if path exists locally */
@@ -136,8 +137,7 @@ static int _unifyfs_remove(const char* upath, mode_t mask)
             if (mask & S_IFREG) {
                 /* ERROR: unlink likely made this request but path is a dir */
                 LOGDBG("Attempting to unlink a directory %s in UNIFYFS", upath);
-                errno = EISDIR;
-                return -1;
+                return EISDIR;
             }
             /* remove/rmdir likely made this request (mask & (0 | S_IFDIR)) */
 
@@ -146,16 +146,14 @@ static int _unifyfs_remove(const char* upath, mode_t mask)
                 /* ERROR: is a directory, but isn't empty */
                 LOGDBG("Attempting to remove non-empty dir %s in UNIFYFS",
                         upath);
-                errno = ENOTEMPTY;
-                return -1;
+                return ENOTEMPTY;
             }
         } else { /* not a directory */
             /* check if remove request was for a directory */
             if (mask & S_IFDIR) {
                 /* ERROR: rmdir likely made this request but path not a dir */
                 LOGDBG("Attempting to rmdir a non-dir %s in UNIFYFS", upath);
-                errno = ENOTDIR;
-                return -1;
+                return ENOTDIR;
             }
         }
 
@@ -165,8 +163,7 @@ static int _unifyfs_remove(const char* upath, mode_t mask)
             /* failed to remove the target,
              * set errno and return */
             LOGDBG("remove failed on %s in UNIFYFS", upath);
-            errno = unifyfs_rc_errno(ret);
-            return -1;
+            return unifyfs_rc_errno(ret);
         }
     } else {
         /* path doesn't exist locally, but may exist globally */
@@ -177,8 +174,7 @@ static int _unifyfs_remove(const char* upath, mode_t mask)
         if (ret != UNIFYFS_SUCCESS) {
             /* ERROR: path doesn't exist locally or globally */
             LOGDBG("Couldn't find entry for %s in UNIFYFS", upath);
-            errno = ENOENT;
-            return -1;
+            return ENOENT;
         }
 
         /* is it a directory? */
@@ -187,8 +183,7 @@ static int _unifyfs_remove(const char* upath, mode_t mask)
             if (mask & S_IFREG) {
                 /* ERROR: unlink likely made this request but path is a dir */
                 LOGDBG("Attempting to unlink a directory %s in UNIFYFS", upath);
-                errno = EISDIR;
-                return -1;
+                return EISDIR;
             }
 
             /* Current directory structure assumes all directories are empty.
@@ -201,8 +196,7 @@ static int _unifyfs_remove(const char* upath, mode_t mask)
             /* check if remove request was for a directory */
             if ((mask & S_IFDIR)) {
                 LOGDBG("Attempting to rmdir a non-dir %s in UNIFYFS", upath);
-                errno = ENOTDIR;
-                return -1;
+                return ENOTDIR;
             }
         }
 
@@ -210,8 +204,7 @@ static int _unifyfs_remove(const char* upath, mode_t mask)
         ret = invoke_client_unlink_rpc(posix_client, gfid);
         if (ret != UNIFYFS_SUCCESS) {
             LOGDBG("unlink rpc failed on %s in UNIFYFS", upath);
-            errno = unifyfs_rc_errno(ret);
-            return -1;
+            return unifyfs_rc_errno(ret);
         }
     }
 
@@ -226,12 +219,14 @@ int UNIFYFS_WRAP(rmdir)(const char* path)
     if (unifyfs_intercept_path(path, upath)) {
         /* call shared logic function with S_IFDIR mask */
         int ret = _unifyfs_remove(upath, S_IFDIR);
-        if (ret != UNIFYFS_SUCCESS) {
+        if (ret) {
             LOGDBG("rmdir() failed on %s in UNIFYFS", upath);
+            errno = ret;
             return -1;
         }
 
         /* success */
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(rmdir);
@@ -247,10 +242,16 @@ int UNIFYFS_WRAP(chdir)(const char* path)
     if (unifyfs_intercept_path(path, upath)) {
         /* TODO: check that path is not a file? */
         /* we're happy to change into any directory in unifyfs */
+        char* upath_copy = strdup(upath);
+        if (upath_copy == NULL) {
+            errno = ENOMEM;
+            return -1;
+        }
         if (posix_client->cwd != NULL) {
             free(posix_client->cwd);
         }
-        posix_client->cwd = strdup(upath);
+        posix_client->cwd = upath_copy;
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(chdir);
@@ -315,6 +316,7 @@ static char* _getcwd_impl(char* path, size_t size)
                 buf = (char*) malloc(size);
                 if (buf != NULL) {
                     strncpy(buf, posix_client->cwd, size);
+                    errno = 0;
                 } else {
                     errno = ENOMEM;
                 }
@@ -331,6 +333,7 @@ static char* _getcwd_impl(char* path, size_t size)
         buf = (char*) malloc(len);
         if (buf != NULL) {
             strlcpy(buf, posix_client->cwd, len);
+            errno = 0;
         } else {
             errno = ENOMEM;
         }
@@ -342,6 +345,7 @@ static char* _getcwd_impl(char* path, size_t size)
     if (len <= size) {
         /* current working dir fits, copy and return */
         strncpy(path, posix_client->cwd, size);
+        errno = 0;
         return path;
     } else {
         /* user's buffer is too small */
@@ -470,6 +474,7 @@ char* UNIFYFS_WRAP(getwd)(char* path)
             size_t len = strlen(posix_client->cwd) + 1;
             if (len <= PATH_MAX) {
                 strncpy(path, posix_client->cwd, PATH_MAX);
+                errno = 0;
                 return path;
             } else {
                 /* user's buffer is too small */
@@ -521,6 +526,8 @@ char* UNIFYFS_WRAP(get_current_dir_name)(void)
             char* ret = strdup(posix_client->cwd);
             if (ret == NULL) {
                 errno = ENOMEM;
+            } else {
+                errno = 0;
             }
             return ret;
         } else {
@@ -601,6 +608,7 @@ int UNIFYFS_WRAP(rename)(const char* oldpath, const char* newpath)
         pthread_mutex_unlock(&(posix_client->sync));
 
         /* success */
+        errno = 0;
         return 0;
     } else {
         /* for now, we can only rename within our file system */
@@ -647,6 +655,7 @@ int UNIFYFS_WRAP(truncate)(const char* path, off_t length)
         }
 
         /* success */
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(truncate);
@@ -662,12 +671,14 @@ int UNIFYFS_WRAP(unlink)(const char* path)
     if (unifyfs_intercept_path(path, upath)) {
         /* call shared logic function with S_IFREG mask */
         int ret = _unifyfs_remove(upath, S_IFREG);
-        if (ret != UNIFYFS_SUCCESS) {
+        if (ret) {
             LOGDBG("unlink() failed on %s in UNIFYFS", upath);
+            errno = ret;
             return -1;
         }
 
         /* success */
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(unlink);
@@ -683,12 +694,14 @@ int UNIFYFS_WRAP(remove)(const char* path)
     if (unifyfs_intercept_path(path, upath)) {
         /* call shared logic function with 0 mask */
         int ret = _unifyfs_remove(upath, 0);
-        if (ret != UNIFYFS_SUCCESS) {
+        if (ret) {
             LOGDBG("remove() failed on %s in UNIFYFS", upath);
+            errno = ret;
             return -1;
         }
 
         /* success */
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(remove);
@@ -770,7 +783,7 @@ static int __stat(const char* path, struct stat* buf)
 
     /* copy attributes to stat struct */
     unifyfs_file_attr_to_stat(&fattr, buf);
-
+    errno = 0;
     return 0;
 }
 
@@ -938,6 +951,8 @@ int UNIFYFS_WRAP(statfs)(const char* path, struct statfs* fsbuf)
         if (ret) {
             errno = ret;
             ret = -1;
+        } else {
+            errno = 0;
         }
     } else {
         MAP_OR_FAIL(statfs);
@@ -959,6 +974,8 @@ int UNIFYFS_WRAP(fstatfs)(int fd, struct statfs* fsbuf)
         if (ret) {
             errno = ret;
             ret = -1;
+        } else {
+            errno = 0;
         }
     } else {
         MAP_OR_FAIL(fstatfs);
@@ -1123,6 +1140,7 @@ static int posix_create(char* upath, mode_t mode)
     int ret = fd + unifyfs_fd_limit;
     LOGDBG("using fds (internal=%d, external=%d) for fid %d file %s",
            fd, ret, fid, upath);
+    errno = 0;
     return ret;
 }
 
@@ -1203,6 +1221,7 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
         ret = fd + unifyfs_fd_limit;
         LOGDBG("using fds (internal=%d, external=%d) for fid %d file %s",
                fd, ret, fid, upath);
+        errno = 0;
         return ret;
     } else {
         MAP_OR_FAIL(open);
@@ -1375,6 +1394,7 @@ off_t UNIFYFS_WRAP(lseek)(int fd, off_t offset, int whence)
 
         /* set and return final file position */
         filedesc->pos = current_pos;
+        errno = 0;
         return current_pos;
     } else {
         MAP_OR_FAIL(lseek);
@@ -1492,6 +1512,7 @@ ssize_t UNIFYFS_WRAP(read)(int fd, void* buf, size_t count)
         filedesc->pos += (off_t)bytes;
 
         /* return number of bytes read */
+        errno = 0;
         return (ssize_t)bytes;
     } else {
         MAP_OR_FAIL(read);
@@ -1540,6 +1561,7 @@ ssize_t UNIFYFS_WRAP(write)(int fd, const void* buf, size_t count)
         filedesc->pos = pos + bytes;
 
         /* return number of bytes written */
+        errno = 0;
         return (ssize_t)bytes;
     } else {
         MAP_OR_FAIL(write);
@@ -1569,6 +1591,7 @@ ssize_t UNIFYFS_WRAP(readv)(int fd, const struct iovec* iov, int iovcnt)
                 ret += rret;
             }
         }
+        errno = 0;
         return ret;
     } else {
         MAP_OR_FAIL(readv);
@@ -1599,6 +1622,7 @@ ssize_t UNIFYFS_WRAP(writev)(int fd, const struct iovec* iov, int iovcnt)
                 }
             }
         }
+        errno = 0;
         return ret;
     } else {
         MAP_OR_FAIL(writev);
@@ -1717,6 +1741,8 @@ int UNIFYFS_WRAP(lio_listio)(int mode, struct aiocb* const aiocb_list[],
     if (ret) {
         errno = unifyfs_rc_errno(ret);
         ret = -1;
+    } else {
+        errno = 0;
     }
     return ret;
 }
@@ -1770,6 +1796,7 @@ ssize_t UNIFYFS_WRAP(pread)(int fd, void* buf, size_t count, off_t offset)
         }
 
         /* return number of bytes read */
+        errno = 0;
         return retcount;
     } else {
         MAP_OR_FAIL(pread);
@@ -1817,6 +1844,7 @@ ssize_t UNIFYFS_WRAP(pwrite)(int fd, const void* buf, size_t count,
         }
 
         /* return number of bytes written */
+        errno = 0;
         return (ssize_t)bytes;
     } else {
         MAP_OR_FAIL(pwrite);
@@ -1861,6 +1889,7 @@ int UNIFYFS_WRAP(fchdir)(int fd)
             free(posix_client->cwd);
         }
         posix_client->cwd = strdup(path);
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(fchdir);
@@ -1924,6 +1953,7 @@ int UNIFYFS_WRAP(ftruncate)(int fd, off_t length)
             return -1;
         }
 
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(ftruncate);
@@ -1959,6 +1989,8 @@ int UNIFYFS_WRAP(fsync)(int fd)
                 return -1;
             }
         }
+
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(fsync);
@@ -1990,6 +2022,7 @@ int UNIFYFS_WRAP(flock)(int fd, int operation)
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
         // KMM I removed the locking code because it was causing hangs
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(flock);
@@ -2157,6 +2190,7 @@ int UNIFYFS_WRAP(close)(int fd)
         /* add file descriptor back to free stack */
         unifyfs_stack_push(posix_fd_stack, fd);
 
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(close);
@@ -2239,6 +2273,7 @@ static int __chmod(int fid, mode_t mode)
     /* update global size of file from global metadata */
     unifyfs_fid_update_file_meta(posix_client, fid, &attr);
 
+    errno = 0;
     return 0;
 }
 

@@ -846,6 +846,9 @@ int invoke_client_mread_req_complete_rpc(int app_id,
 int invoke_client_transfer_complete_rpc(int app_id,
                                         int client_id,
                                         int transfer_id,
+                                        size_t transfer_sz_bytes,
+                                        int transfer_time_sec,
+                                        int transfer_time_usec,
                                         int error_code)
 {
     hg_return_t hret;
@@ -857,10 +860,13 @@ int invoke_client_transfer_complete_rpc(int app_id,
 
     /* fill input struct */
     unifyfs_transfer_complete_in_t in;
-    in.app_id      = (int32_t) app_id;
-    in.client_id   = (int32_t) client_id;
-    in.transfer_id = (int32_t) transfer_id;
-    in.error_code  = (int32_t) error_code;
+    in.app_id              = (int32_t) app_id;
+    in.client_id           = (int32_t) client_id;
+    in.transfer_id         = (int32_t) transfer_id;
+    in.transfer_size_bytes = (hg_size_t) transfer_sz_bytes;
+    in.transfer_time_sec   = (uint32_t) transfer_time_sec;
+    in.transfer_time_usec  = (uint32_t) transfer_time_usec;
+    in.error_code          = (int32_t) error_code;
 
     /* get handle to rpc function */
     hg_id_t rpc_id = unifyfsd_rpc_context->rpcs.client_transfer_complete_id;

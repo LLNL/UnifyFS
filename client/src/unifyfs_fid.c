@@ -449,7 +449,7 @@ int unifyfs_fid_open(
                 LOGERR("failed to allocate storage space for file %s (fid=%d)",
                     path, fid);
                 unifyfs_fid_delete(client, fid);
-                return ret;
+                return ENOMEM;
             }
 
             /* TODO: set meta->mode bits to mode variable */

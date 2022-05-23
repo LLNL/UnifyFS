@@ -16,12 +16,8 @@
 #define UNIFYFS_TRANSFER_H
 
 #include "unifyfs_global.h"
+#include "unifyfs_group_rpc.h"
 
-/* server transfer modes */
-typedef enum {
-    TRANSFER_MODE_OWNER = 0, /* owner transfers all data */
-    TRANSFER_MODE_LOCAL = 1  /* each server transfers local data */
-} transfer_mode_e;
 
 /* transfer helper thread arguments structure */
 typedef struct transfer_thread_args {
@@ -38,9 +34,12 @@ typedef struct transfer_thread_args {
     extent_metadata* local_extents;
     size_t n_extents;
 
-    size_t local_data_sz;         /* total size of local data */
+    size_t local_data_sz;         /* total size of local data in bytes */
+    size_t file_sz;               /* source file size in bytes */
 
-    server_rpc_req_t* bcast_req;  /* bcast rpc req state */
+    struct timeval transfer_time; /* elapsed transfer time */
+
+    coll_request* bcast_coll;     /* bcast rpc collective req state */
 
     int status;                   /* status for entire set of transfers */
     pthread_t thrd;               /* pthread id for transfer helper thread */
@@ -51,7 +50,6 @@ void release_transfer_thread_args(transfer_thread_args* tta);
 /* find local extents for the given gfid and initialize transfer helper
  * thread state */
 int create_local_transfers(int gfid,
-                           const char* dest_file,
                            transfer_thread_args* tta);
 
 /**

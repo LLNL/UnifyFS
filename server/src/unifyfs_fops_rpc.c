@@ -136,11 +136,11 @@ int rpc_transfer(unifyfs_fops_ctx_t* ctx,
                  int transfer_mode,
                  const char* dest_file)
 {
-    if (TRANSFER_MODE_OWNER == transfer_mode) {
+    if (SERVER_TRANSFER_MODE_OWNER == transfer_mode) {
         return unifyfs_invoke_transfer_rpc(ctx->app_id, ctx->client_id,
                                            transfer_id, gfid, transfer_mode,
                                            dest_file);
-    } else if (TRANSFER_MODE_LOCAL == transfer_mode) {
+    } else if (SERVER_TRANSFER_MODE_LOCAL == transfer_mode) {
         return unifyfs_invoke_broadcast_transfer(ctx->app_id, ctx->client_id,
                                                  transfer_id, gfid,
                                                  transfer_mode, dest_file);

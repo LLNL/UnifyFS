@@ -128,8 +128,4 @@ int unifyfs_sync_files(unifyfs_client* client);
 off_t unifyfs_gfid_filesize(unifyfs_client* client,
                             int gfid);
 
-/* check if client mountpoint is prefix of given filepath */
-bool is_unifyfs_path(unifyfs_client* client,
-                     const char* filepath);
-
 #endif // UNIFYFS_API_INTERNAL_H

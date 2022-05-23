@@ -34,7 +34,7 @@ static int process_gfid_writes(unifyfs_client* client,
 
         int fid = unifyfs_fid_from_gfid(client, req->gfid);
         if (-1 == fid) {
-            req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
+            req->state = UNIFYFS_REQ_STATE_COMPLETED;
             req->result.error = EINVAL;
             continue;
         }
@@ -54,7 +54,7 @@ static int process_gfid_writes(unifyfs_client* client,
         if (rc != UNIFYFS_SUCCESS) {
             req->result.error = rc;
         }
-        req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
+        req->state = UNIFYFS_REQ_STATE_COMPLETED;
 
         if (req->op == UNIFYFS_IOREQ_OP_ZERO) {
             /* cleanup allocated OP_ZERO buffer */
@@ -78,7 +78,7 @@ static int process_gfid_truncates(unifyfs_client* client,
 
         int fid = unifyfs_fid_from_gfid(client, req->gfid);
         if (-1 == fid) {
-            req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
+            req->state = UNIFYFS_REQ_STATE_COMPLETED;
             req->result.error = EINVAL;
         }
 
@@ -86,7 +86,7 @@ static int process_gfid_truncates(unifyfs_client* client,
         if (rc != UNIFYFS_SUCCESS) {
             req->result.error = rc;
         }
-        req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
+        req->state = UNIFYFS_REQ_STATE_COMPLETED;
     }
 
     return ret;
@@ -106,7 +106,7 @@ static int process_gfid_syncs(unifyfs_client* client,
         if (req->op == UNIFYFS_IOREQ_OP_SYNC_META) {
             int fid = unifyfs_fid_from_gfid(client, req->gfid);
             if (-1 == fid) {
-                req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
+                req->state = UNIFYFS_REQ_STATE_COMPLETED;
                 req->result.error = EINVAL;
             }
 
@@ -114,7 +114,7 @@ static int process_gfid_syncs(unifyfs_client* client,
             if (rc != UNIFYFS_SUCCESS) {
                 req->result.error = rc;
             }
-            req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
+            req->state = UNIFYFS_REQ_STATE_COMPLETED;
         } else if (req->op == UNIFYFS_IOREQ_OP_SYNC_DATA) {
             /* logio_sync covers all files' data - only do it once */
             if (!data_sync_completed) {
@@ -125,7 +125,7 @@ static int process_gfid_syncs(unifyfs_client* client,
                     data_sync_completed = 1;
                 }
             }
-            req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
+            req->state = UNIFYFS_REQ_STATE_COMPLETED;
         }
     }
 
@@ -165,7 +165,7 @@ unifyfs_rc unifyfs_dispatch_io(unifyfs_handle fshdl,
         req = reqs + i;
 
         /* set initial request result and state */
-        req->state = UNIFYFS_IOREQ_STATE_INVALID;
+        req->state = UNIFYFS_REQ_STATE_INVALID;
         req->result.error = UNIFYFS_SUCCESS;
         req->result.count = 0;
         req->result.rc = 0;
@@ -234,7 +234,7 @@ unifyfs_rc unifyfs_dispatch_io(unifyfs_handle fshdl,
     size_t s_ndx = 0;
     for (i = 0; i < nreqs; i++) {
         req = reqs + i;
-        req->state = UNIFYFS_IOREQ_STATE_IN_PROGRESS;
+        req->state = UNIFYFS_REQ_STATE_IN_PROGRESS;
         switch (req->op) {
         case UNIFYFS_IOREQ_NOP:
             break;
@@ -319,7 +319,7 @@ unifyfs_rc unifyfs_dispatch_io(unifyfs_handle fshdl,
     s_ndx = 0;
     for (i = 0; i < nreqs; i++) {
         req = reqs + i;
-        req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
+        req->state = UNIFYFS_REQ_STATE_COMPLETED;
         switch (req->op) {
         case UNIFYFS_IOREQ_NOP:
             break;
@@ -397,8 +397,8 @@ unifyfs_rc unifyfs_wait_io(unifyfs_handle fshdl,
         n_done = 0;
         for (i = 0; i < nreqs; i++) {
             unifyfs_io_request* req = reqs + i;
-            if ((req->state == UNIFYFS_IOREQ_STATE_CANCELED) ||
-                (req->state == UNIFYFS_IOREQ_STATE_COMPLETED)) {
+            if ((req->state == UNIFYFS_REQ_STATE_CANCELED) ||
+                (req->state == UNIFYFS_REQ_STATE_COMPLETED)) {
                 n_done++;
             }
         }

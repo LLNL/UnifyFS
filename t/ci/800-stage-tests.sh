@@ -109,15 +109,18 @@ test_expect_success "config directory now has manifest files" '
 STAGE_IN_ERR=${STAGE_LOG_DIR}/stage_IN_800_${STAGE_FILE_CFG}.err
 STAGE_OUT_ERR=${STAGE_LOG_DIR}/stage_OUT_800_${STAGE_FILE_CFG}.err
 
+STAGE_IN_STATUS=${STAGE_LOG_DIR}/stage_IN_800_${STAGE_FILE_CFG}.status
+STAGE_OUT_STATUS=${STAGE_LOG_DIR}/stage_OUT_800_${STAGE_FILE_CFG}.status
+
 # run and time the stage-in operation.
-STAGEIN_COMMAND="${JOB_RUN_COMMAND} $app_err $STAGE_IN_ERR $STAGE_EXE -m ${UNIFYFS_MP} -v -c  ${MAN_IN}"
+STAGEIN_COMMAND="${JOB_RUN_COMMAND} $app_err $STAGE_IN_ERR $STAGE_EXE -S ${STAGE_IN_STATUS} -m ${UNIFYFS_MP} -v -c  ${MAN_IN}"
 echo "stagein_command: ${STAGEIN_COMMAND}"
 TIME_IN_START=`date +%s`
 my_stagein_output="$($STAGEIN_COMMAND)"
 TIME_IN_END=`date +%s`
 
 # run and time the stage-out operation.
-STAGEOUT_COMMAND="${JOB_RUN_COMMAND} $app_err $STAGE_OUT_ERR $STAGE_EXE -m ${UNIFYFS_MP} -v -c ${MAN_OUT}"
+STAGEOUT_COMMAND="${JOB_RUN_COMMAND} $app_err $STAGE_OUT_ERR $STAGE_EXE -S ${STAGE_OUT_STATUS} -m ${UNIFYFS_MP} -v -c ${MAN_OUT}"
 echo "stageOUT_command: ${STAGEOUT_COMMAND}"
 TIME_OUT_START=`date +%s`
 my_stageout_output="$($STAGEOUT_COMMAND)"
@@ -166,84 +169,84 @@ fi
 
 ##### Parallel unifyfs-stage tests #####
 
-# TODO: Remove if block once parallel transfer logic is working
-if test_have_prereq PARALLEL_TRANSFER_FIXED; then
-    # set up what the intermediate filename will be within UnifyFS and also
-    # the final file name after copying it back out.  Then use those
-    # filenames to create the two manifest files, one for copying the
-    # file in, and one for copying the file out.
-    STAGE_IM_FILE=${UNIFYFS_MP}/intermediate_parallel_${STAGE_FILE_CFG}.file
-    STAGE_P_DST_FILE=${STAGE_DST_DIR}/destination_parallel_800_${STAGE_FILE_CFG}.file
-    MAN_IN=${STAGE_CFG_DIR}/stage_IN_parallel_${STAGE_FILE_CFG}.manifest
-    MAN_OUT=${STAGE_CFG_DIR}/stage_OUT_parallel_${STAGE_FILE_CFG}.manifest
-    echo "\"${STAGE_SRC_FILE}\" \"${STAGE_IM_FILE}\"" > ${MAN_IN}
-    echo "\"${STAGE_IM_FILE}\" \"${STAGE_P_DST_FILE}\"" > ${MAN_OUT}
+# set up what the intermediate filename will be within UnifyFS and also
+# the final file name after copying it back out.  Then use those
+# filenames to create the two manifest files, one for copying the
+# file in, and one for copying the file out.
+STAGE_P_IM_FILE=${UNIFYFS_MP}/intermediate_parallel_${STAGE_FILE_CFG}.file
+STAGE_P_DST_FILE=${STAGE_DST_DIR}/destination_parallel_800_${STAGE_FILE_CFG}.file
+MAN_IN=${STAGE_CFG_DIR}/stage_IN_parallel_${STAGE_FILE_CFG}.manifest
+MAN_OUT=${STAGE_CFG_DIR}/stage_OUT_parallel_${STAGE_FILE_CFG}.manifest
+echo "\"${STAGE_SRC_FILE}\" \"${STAGE_P_IM_FILE}\"" > ${MAN_IN}
+echo "\"${STAGE_P_IM_FILE}\" \"${STAGE_P_DST_FILE}\"" > ${MAN_OUT}
 
-    test_expect_success "config directory now has parallel manifest files" '
-        test_path_is_file  $MAN_IN &&
-        test_path_is_file  $MAN_OUT
-    '
+test_expect_success "config directory now has parallel manifest files" '
+    test_path_is_file  $MAN_IN &&
+    test_path_is_file  $MAN_OUT
+'
 
-    STAGE_IN_ERR=${STAGE_LOG_DIR}/stage_IN_parallel_800_${STAGE_FILE_CFG}.err
-    STAGE_OUT_ERR=${STAGE_LOG_DIR}/stage_OUT_parallel_800_${STAGE_FILE_CFG}.err
+STAGE_IN_ERR=${STAGE_LOG_DIR}/stage_IN_parallel_800_${STAGE_FILE_CFG}.err
+STAGE_OUT_ERR=${STAGE_LOG_DIR}/stage_OUT_parallel_800_${STAGE_FILE_CFG}.err
 
-    # run and time the stage-in operation.
-    STAGEIN_COMMAND="${JOB_RUN_COMMAND} $app_err $STAGE_IN_ERR $STAGE_EXE -m ${UNIFYFS_MP} -v -c -p ${MAN_IN}"
-    echo "stagein_command: ${STAGEIN_COMMAND}"
-    TIME_IN_START=`date +%s`
-    my_stagein_output="$($STAGEIN_COMMAND)"
-    TIME_IN_END=`date +%s`
+STAGE_IN_STATUS=${STAGE_LOG_DIR}/stage_IN_parallel_800_${STAGE_FILE_CFG}.status
+STAGE_OUT_STATUS=${STAGE_LOG_DIR}/stage_OUT_parallel_800_${STAGE_FILE_CFG}.status
 
-    # run and time the stage-out operation.
-    STAGEOUT_COMMAND="${JOB_RUN_COMMAND} $app_err $STAGE_OUT_ERR $STAGE_EXE -m ${UNIFYFS_MP} -v -c -p ${MAN_OUT}"
-    echo "stageOUT_command: ${STAGEOUT_COMMAND}"
-    TIME_OUT_START=`date +%s`
-    my_stageout_output="$($STAGEOUT_COMMAND)"
-    TIME_OUT_END=`date +%s`
+# run and time the stage-in operation.
+STAGEIN_COMMAND="${JOB_RUN_COMMAND} $app_err $STAGE_IN_ERR $STAGE_EXE -S ${STAGE_IN_STATUS} -m ${UNIFYFS_MP} -v -c -p ${MAN_IN}"
+echo "stagein_command: ${STAGEIN_COMMAND}"
+TIME_IN_START=`date +%s`
+my_stagein_output="$($STAGEIN_COMMAND)"
+TIME_IN_END=`date +%s`
 
-    STAGE_IN_LOG=${STAGE_LOG_DIR}/stage_IN_parallel_800_${STAGE_FILE_CFG}.out
-    STAGE_OUT_LOG=${STAGE_LOG_DIR}/stage_OUT_parallel_800_${STAGE_FILE_CFG}.out
-    echo $my_stagein_output > $STAGE_IN_LOG
-    echo $my_stageout_output > $STAGE_OUT_LOG
+# run and time the stage-out operation.
+STAGEOUT_COMMAND="${JOB_RUN_COMMAND} $app_err $STAGE_OUT_ERR $STAGE_EXE -S ${STAGE_OUT_STATUS} -m ${UNIFYFS_MP} -v -c -p ${MAN_OUT}"
+echo "stageOUT_command: ${STAGEOUT_COMMAND}"
+TIME_OUT_START=`date +%s`
+my_stageout_output="$($STAGEOUT_COMMAND)"
+TIME_OUT_END=`date +%s`
 
-    ELAPSED_TIME_IN=$(( ${TIME_IN_END} - ${TIME_IN_START} ))
-    ELAPSED_TIME_OUT=$(( ${TIME_OUT_END} - ${TIME_OUT_START} ))
-    echo "time to stage in parallel: $ELAPSED_TIME_IN s"
-    echo "time to stage out parallel: $ELAPSED_TIME_OUT s"
+STAGE_IN_LOG=${STAGE_LOG_DIR}/stage_IN_parallel_800_${STAGE_FILE_CFG}.out
+STAGE_OUT_LOG=${STAGE_LOG_DIR}/stage_OUT_parallel_800_${STAGE_FILE_CFG}.out
+echo $my_stagein_output > $STAGE_IN_LOG
+echo $my_stageout_output > $STAGE_OUT_LOG
 
-    test_expect_success "parallel: input file has been staged to output" '
-        test_path_is_file $STAGE_P_DST_FILE
-    '
+ELAPSED_TIME_IN=$(( ${TIME_IN_END} - ${TIME_IN_START} ))
+ELAPSED_TIME_OUT=$(( ${TIME_OUT_END} - ${TIME_OUT_START} ))
+echo "time to stage in parallel: $ELAPSED_TIME_IN s"
+echo "time to stage out parallel: $ELAPSED_TIME_OUT s"
 
-    # This block is used to indirectly get the test result back to us
-    # of whether the file comparison failed, so that we can put
-    # that result in the line of the timing file.
-    SUCCESS_TOTAL_BEFORE=${test_success}
-    test_expect_success "parallel: final output is identical to initial input" '
-        test_cmp $STAGE_P_DST_FILE $STAGE_SRC_FILE
-    '
-    SUCCESS_TOTAL_AFTER=${test_success}
+test_expect_success "parallel: input file has been staged to output" '
+    test_path_is_file $STAGE_P_DST_FILE
+'
 
-    # If the success total is *different*, then the final test
-    # (the file comparison after to before) passed.
-    # If they're the same, then it failed.
-    if [ ${SUCCESS_TOTAL_BEFORE} == ${SUCCESS_TOTAL_AFTER} ]; then
-        echo "${STAGE_TEST_INDEX} ${STAGE_FILE_SIZE_IN_MB} \
-          ${ELAPSED_TIME_IN} ${ELAPSED_TIME_OUT}          \
-          ^${STAGE_TEST_OVERALL_CONFIG}^                  \
-          @${STAGE_TEST_SPECIFIC_CONFIG}@ %FAIL%"         \
-          >> ${STAGE_LOG_DIR}/timings_parallel_${JOB_ID}.dat
-    else
-        echo "${STAGE_TEST_INDEX} ${STAGE_FILE_SIZE_IN_MB} \
-          ${ELAPSED_TIME_IN} ${ELAPSED_TIME_OUT}          \
-          ^${STAGE_TEST_OVERALL_CONFIG}^                  \
-          @${STAGE_TEST_SPECIFIC_CONFIG}@ %GOOD%"         \
-          >> ${STAGE_LOG_DIR}/timings_parallel_${JOB_ID}.dat
-    fi
+# This block is used to indirectly get the test result back to us
+# of whether the file comparison failed, so that we can put
+# that result in the line of the timing file.
+SUCCESS_TOTAL_BEFORE=${test_success}
+test_expect_success "parallel: final output is identical to initial input" '
+    test_cmp $STAGE_P_DST_FILE $STAGE_SRC_FILE
+'
+SUCCESS_TOTAL_AFTER=${test_success}
 
-    test_expect_success "serial output is identical to parallel output" '
-        test_cmp $STAGE_DST_FILE $STAGE_P_DST_FILE
-    '
+# If the success total is *different*, then the final test
+# (the file comparison after to before) passed.
+# If they're the same, then it failed.
+if [ ${SUCCESS_TOTAL_BEFORE} == ${SUCCESS_TOTAL_AFTER} ]; then
+    echo "${STAGE_TEST_INDEX} ${STAGE_FILE_SIZE_IN_MB} \
+      ${ELAPSED_TIME_IN} ${ELAPSED_TIME_OUT}          \
+      ^${STAGE_TEST_OVERALL_CONFIG}^                  \
+      @${STAGE_TEST_SPECIFIC_CONFIG}@ %FAIL%"         \
+      >> ${STAGE_LOG_DIR}/timings_parallel_${JOB_ID}.dat
+else
+    echo "${STAGE_TEST_INDEX} ${STAGE_FILE_SIZE_IN_MB} \
+      ${ELAPSED_TIME_IN} ${ELAPSED_TIME_OUT}          \
+      ^${STAGE_TEST_OVERALL_CONFIG}^                  \
+      @${STAGE_TEST_SPECIFIC_CONFIG}@ %GOOD%"         \
+      >> ${STAGE_LOG_DIR}/timings_parallel_${JOB_ID}.dat
 fi
+
+test_expect_success "serial output is identical to parallel output" '
+    test_cmp $STAGE_DST_FILE $STAGE_P_DST_FILE
+'
 
 rm -f $STAGE_SRC_FILE

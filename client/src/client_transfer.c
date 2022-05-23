@@ -35,14 +35,14 @@ static const char* transfer_mode_str(unifyfs_transfer_mode mode)
 static const char* state_canceled_str = "CANCELED";
 static const char* state_completed_str = "COMPLETED";
 static const char* state_inprogress_str = "IN-PROGRESS";
-static const char* transfer_state_str(unifyfs_ioreq_state state)
+static const char* transfer_state_str(unifyfs_req_state state)
 {
     switch (state) {
-    case UNIFYFS_IOREQ_STATE_IN_PROGRESS:
+    case UNIFYFS_REQ_STATE_IN_PROGRESS:
         return state_inprogress_str;
-    case UNIFYFS_IOREQ_STATE_CANCELED:
+    case UNIFYFS_REQ_STATE_CANCELED:
         return state_canceled_str;
-    case UNIFYFS_IOREQ_STATE_COMPLETED:
+    case UNIFYFS_REQ_STATE_COMPLETED:
         return state_completed_str;
     default:
         return invalid_str;
@@ -174,13 +174,13 @@ bool client_check_transfer_complete(client_transfer_status* transfer)
     bool is_complete = false;
 
     switch (req->state) {
-    case UNIFYFS_IOREQ_STATE_IN_PROGRESS:
+    case UNIFYFS_REQ_STATE_IN_PROGRESS:
         ABT_mutex_lock(transfer->sync);
         is_complete = (transfer->complete == 1);
         ABT_mutex_unlock(transfer->sync);
         break;
-    case UNIFYFS_IOREQ_STATE_CANCELED:
-    case UNIFYFS_IOREQ_STATE_COMPLETED:
+    case UNIFYFS_REQ_STATE_CANCELED:
+    case UNIFYFS_REQ_STATE_COMPLETED:
         is_complete = true;
         break;
     default:
@@ -207,7 +207,7 @@ int client_cleanup_transfer(unifyfs_client* client,
     unifyfs_transfer_request* req = transfer->req;
     debug_print_transfer_req(req);
 
-    if ((req->state == UNIFYFS_IOREQ_STATE_COMPLETED) &&
+    if ((req->state == UNIFYFS_REQ_STATE_COMPLETED) &&
         (req->mode == UNIFYFS_TRANSFER_MODE_MOVE)) {
         /* successful copy, now remove source */
         if (transfer->src_in_unify) {
@@ -238,10 +238,13 @@ int client_cleanup_transfer(unifyfs_client* client,
 }
 
 /* Update the transfer status for the client (app_id + client_id)
- * transfer request (transfer_id) using the given error_code */
+ * transfer request (transfer_id) using the given error_code, transfer
+ * size, and transfer time */
 int client_complete_transfer(unifyfs_client* client,
                              int transfer_id,
-                             int error_code)
+                             int error_code,
+                             size_t transfer_size_bytes,
+                             double transfer_time_seconds)
 {
     if (NULL == client) {
         LOGERR("NULL client");
@@ -264,7 +267,9 @@ int client_complete_transfer(unifyfs_client* client,
     /* update the request status */
     ABT_mutex_lock(transfer->sync);
     req->result.error = error_code;
-    req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
+    req->result.file_size_bytes = transfer_size_bytes;
+    req->result.transfer_time_seconds = transfer_time_seconds;
+    req->state = UNIFYFS_REQ_STATE_COMPLETED;
     transfer->complete = 1;
     ABT_mutex_unlock(transfer->sync);
 
@@ -289,7 +294,9 @@ int client_submit_transfers(unifyfs_client* client,
         default:
             req->result.error = EINVAL;
             req->result.rc = UNIFYFS_FAILURE;
-            req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
+            req->result.file_size_bytes = 0;
+            req->result.transfer_time_seconds = 0.0;
+            req->state = UNIFYFS_REQ_STATE_COMPLETED;
             continue;
         }
 
@@ -305,7 +312,7 @@ int client_submit_transfers(unifyfs_client* client,
             (src_in_unify && dst_in_unify)) {
             rc = EINVAL;
         } else {
-            req->state = UNIFYFS_IOREQ_STATE_IN_PROGRESS;
+            req->state = UNIFYFS_REQ_STATE_IN_PROGRESS;
             rc = client_create_transfer(client, req, src_in_unify);
             if (UNIFYFS_SUCCESS == rc) {
                 if (src_in_unify) {
@@ -322,8 +329,10 @@ int client_submit_transfers(unifyfs_client* client,
         if (rc != UNIFYFS_SUCCESS) {
             req->result.error = rc;
             req->result.rc = UNIFYFS_FAILURE;
+            req->result.file_size_bytes = 0;
+            req->result.transfer_time_seconds = 0.0;
+            req->state = UNIFYFS_REQ_STATE_COMPLETED;
             ret = UNIFYFS_FAILURE;
-            req->state = UNIFYFS_IOREQ_STATE_COMPLETED;
         }
     }
 

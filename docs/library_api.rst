@@ -77,7 +77,7 @@ I/O requests take the form of a ``unifyfs_io_request`` structure that includes
 the target file gfid, the specific I/O operation (``unifyfs_ioreq_op``) to be
 applied, and associated operation parameters such as the file offset or user
 buffer and size. The structure also contains fields used for tracking the
-status of the request (``unifyfs_ioreq_state``) and operation results
+status of the request (``unifyfs_req_state``) and operation results
 (``unifyfs_ioreq_result``).
 
 .. code-block:: C
@@ -93,11 +93,11 @@ status of the request (``unifyfs_ioreq_state``) and operation results
         unifyfs_ioreq_op op;
 
         /* status/result fields */
-        unifyfs_ioreq_state state;
+        unifyfs_req_state state;
         unifyfs_ioreq_result result;
     } unifyfs_io_request;
 
-    /* enumeration of supported I/O request operations */
+    /* Enumeration of supported I/O request operations */
     typedef enum unifyfs_ioreq_op {
         UNIFYFS_IOREQ_NOP = 0,
         UNIFYFS_IOREQ_OP_READ,
@@ -108,15 +108,15 @@ status of the request (``unifyfs_ioreq_state``) and operation results
         UNIFYFS_IOREQ_OP_ZERO,
     } unifyfs_ioreq_op;
 
-    /* enumeration of I/O request states */
-    typedef enum unifyfs_ioreq_state {
-        UNIFYFS_IOREQ_STATE_INVALID = 0,
-        UNIFYFS_IOREQ_STATE_IN_PROGRESS,
-        UNIFYFS_IOREQ_STATE_CANCELED,
-        UNIFYFS_IOREQ_STATE_COMPLETED
-    } unifyfs_ioreq_state;
+    /* Enumeration of API request states */
+    typedef enum unifyfs_req_state {
+        UNIFYFS_REQ_STATE_INVALID = 0,
+        UNIFYFS_REQ_STATE_IN_PROGRESS,
+        UNIFYFS_REQ_STATE_CANCELED,
+        UNIFYFS_REQ_STATE_COMPLETED
+    } unifyfs_req_state;
 
-    /* structure to hold I/O request result values */
+    /* Structure containing I/O request result values */
     typedef struct unifyfs_ioreq_result {
         int error;
         int rc;
@@ -127,7 +127,7 @@ For the ``unifyfs_ioreq_result`` structure, successful operations will set the
 ``rc`` and ``count`` fields as applicable to the specific operation type. All
 operational failures are reported by setting the ``error`` field to a non-zero
 value corresponding the the operation failure code, which is often a POSIX
-errno value.
+``errno`` value.
 
 File transfer requests use a ``unifyfs_transfer_request`` structure that
 includes the source and destination file paths, transfer mode, and a flag
@@ -147,16 +147,24 @@ status and transfer operation result.
         int use_parallel;
 
         /* status/result fields */
-        unifyfs_ioreq_state state;
-        unifyfs_ioreq_result result;
+        unifyfs_req_state state;
+        unifyfs_transfer_result result;
     } unifyfs_transfer_request;
 
-    /* enumeration of supported I/O request operations */
+    /* Enumeration of supported I/O request operations */
     typedef enum unifyfs_transfer_mode {
         UNIFYFS_TRANSFER_MODE_INVALID = 0,
         UNIFYFS_TRANSFER_MODE_COPY, // simple copy to destination
         UNIFYFS_TRANSFER_MODE_MOVE  // copy, then remove source
     } unifyfs_transfer_mode;
+
+    /* File transfer result structure */
+    typedef struct unifyfs_transfer_result {
+        int error;
+        int rc;
+        size_t file_size_bytes;
+        double transfer_time_seconds;
+    } unifyfs_transfer_result;
 
 -------------------------
 Example Library API Usage

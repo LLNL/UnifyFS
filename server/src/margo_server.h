@@ -109,6 +109,9 @@ int invoke_client_mread_req_complete_rpc(int app_id,
 int invoke_client_transfer_complete_rpc(int app_id,
                                         int client_id,
                                         int transfer_id,
+                                        size_t transfer_sz_bytes,
+                                        int transfer_time_sec,
+                                        int transfer_time_usec,
                                         int error_code);
 
 /* invokes the client unlink callback rpc function */
