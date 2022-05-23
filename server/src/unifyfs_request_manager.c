@@ -1334,7 +1334,8 @@ static int process_transfer_rpc(reqmgr_thrd_t* reqmgr,
     assert(in != NULL);
     int transfer_id = in->transfer_id;
     int gfid = in->gfid;
-    int mode = in->mode;
+    int mode = (in->mode == 1 ? SERVER_TRANSFER_MODE_LOCAL
+                              : SERVER_TRANSFER_MODE_OWNER);
     const char* dest_file = strdup(in->dst_file);
     margo_free_input(req->handle, in);
     free(in);
@@ -1349,6 +1350,8 @@ static int process_transfer_rpc(reqmgr_thrd_t* reqmgr,
     if (ret != UNIFYFS_SUCCESS) {
         LOGERR("unifyfs_fops_transfer() failed");
     }
+
+    LOGDBG("responding - ret=%d", ret);
 
     /* send rpc response */
     unifyfs_transfer_out_t out;

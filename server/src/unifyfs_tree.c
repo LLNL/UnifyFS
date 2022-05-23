@@ -130,8 +130,11 @@ int unifyfs_tree_init(
 void unifyfs_tree_free(unifyfs_tree_t* t)
 {
     /* free child rank list */
-    free(t->child_ranks);
-    t->child_ranks = NULL;
+    if (NULL != t->child_ranks) {
+        free(t->child_ranks);
+        t->child_ranks = NULL;
+    }
+    memset(t, 0, sizeof(unifyfs_tree_t));
 
     return;
 }

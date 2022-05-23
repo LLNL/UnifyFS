@@ -261,7 +261,7 @@ static int unifyfs_fopen_parse_mode(
         }
     }
 
-    return UNIFYFS_SUCCESS;
+    return 0;
 }
 
 /*
@@ -269,10 +269,9 @@ static int unifyfs_fopen_parse_mode(
  * fopen mode semantics, initializes outstream and returns UNIFYFS_SUCCESS if
  * successful.  Returns some other UNIFYFS/errno error otherwise.
  */
-static int unifyfs_fopen(
-    const char* path,
-    const char* mode,
-    FILE** outstream)
+static int unifyfs_fopen(const char* path,
+                         const char* mode,
+                         FILE** outstream)
 {
     /* assume that we'll fail */
     *outstream = NULL;
@@ -280,7 +279,7 @@ static int unifyfs_fopen(
     /* parse the fopen mode string */
     int read, write, append, plus;
     int parse_rc = unifyfs_fopen_parse_mode(mode, &read, &write, &append, &plus);
-    if (parse_rc != UNIFYFS_SUCCESS) {
+    if (parse_rc) {
         return parse_rc;
     }
 
@@ -541,17 +540,16 @@ static int unifyfs_stream_read(
     if (filedesc == NULL) {
         /* ERROR: invalid file descriptor */
         s->err = 1;
-        errno = EBADF;
         LOGDBG("Invalid file descriptor");
+        errno = EBADF;
         return EBADF;
     }
 
     /* bail with error if stream not open for reading */
     if (!filedesc->read) {
         s->err = 1;
-        errno = EBADF;
         LOGDBG("Stream not open for reading");
-
+        errno = EBADF;
         return EBADF;
     }
 
@@ -562,8 +560,8 @@ static int unifyfs_stream_read(
         if (setvbuf_rc != UNIFYFS_SUCCESS) {
             /* ERROR: failed to associate buffer */
             s->err = 1;
-            errno = unifyfs_rc_errno(setvbuf_rc);
             LOGDBG("Couldn't setvbuf");
+            errno = unifyfs_rc_errno(setvbuf_rc);
             return setvbuf_rc;
         }
     }
@@ -976,7 +974,7 @@ static int unifyfs_fseek(FILE* stream, off_t offset, int whence)
 
     /* clear end-of-file indicator */
     s->eof = 0;
-
+    errno = 0;
     return 0;
 }
 
@@ -991,6 +989,7 @@ FILE* UNIFYFS_WRAP(fopen)(const char* path, const char* mode)
             errno = unifyfs_rc_errno(rc);
             return NULL;
         }
+        errno = 0;
         return stream;
     } else {
         MAP_OR_FAIL(fopen);
@@ -1004,8 +1003,8 @@ FILE* UNIFYFS_WRAP(freopen)(const char* path, const char* mode, FILE* stream)
     /* check whether we should intercept this path */
     if (unifyfs_intercept_stream(stream)) {
         /* return file descriptor associated with stream */
-        unifyfs_unsupported_stream(stream, __func__, __FILE__, __LINE__, "new file %s",
-                                   path);
+        unifyfs_unsupported_stream(stream, __func__, __FILE__, __LINE__,
+                                   "new file %s", path);
 
         /* lookup stream */
         unifyfs_stream_t* s = (unifyfs_stream_t*) stream;
@@ -1028,6 +1027,7 @@ int UNIFYFS_WRAP(setvbuf)(FILE* stream, char* buf, int type, size_t size)
             errno = unifyfs_rc_errno(rc);
             return 1;
         }
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(setvbuf);
@@ -1179,6 +1179,7 @@ int UNIFYFS_WRAP(fputc)(int c, FILE* stream)
         }
 
         /* return value written */
+        errno = 0;
         return (int) charbuf;
     } else {
         MAP_OR_FAIL(fputc);
@@ -1203,6 +1204,7 @@ int UNIFYFS_WRAP(getc)(FILE* stream)
         }
 
         /* return byte read cast as an int */
+        errno = 0;
         return (int) charbuf;
     } else {
         MAP_OR_FAIL(getc);
@@ -1226,6 +1228,7 @@ int UNIFYFS_WRAP(putc)(int c, FILE* stream)
         }
 
         /* return value written */
+        errno = 0;
         return (int) charbuf;
     } else {
         MAP_OR_FAIL(putc);
@@ -1287,7 +1290,7 @@ char* UNIFYFS_WRAP(fgets)(char* s, int n, FILE* stream)
 
         /* terminate string with a NUL */
         s[limit] = '\0';
-
+        errno = 0;
         return s;
     } else {
         MAP_OR_FAIL(fgets);
@@ -1314,6 +1317,7 @@ int UNIFYFS_WRAP(fputs)(const char* s, FILE* stream)
         }
 
         /* return success */
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(fputs);
@@ -1345,6 +1349,7 @@ size_t UNIFYFS_WRAP(fread)(void* ptr, size_t size, size_t nitems, FILE* stream)
         }
 
         /* return number of items read */
+        errno = 0;
         if (retcount < count) {
             /* adjust return value if read less data than requested */
             size_t nitems_read = retcount / size;
@@ -1382,6 +1387,7 @@ size_t UNIFYFS_WRAP(fwrite)(const void* ptr, size_t size, size_t nitems,
         }
 
         /* return number of items written */
+        errno = 0;
         return nitems;
     } else {
         MAP_OR_FAIL(fwrite);
@@ -1438,6 +1444,7 @@ int UNIFYFS_WRAP(vfprintf)(FILE* stream, const char* format, va_list ap)
         free(str);
 
         /* return number of bytes written */
+        errno = 0;
         return chars;
     } else {
         va_list ap2;
@@ -1520,8 +1527,7 @@ int UNIFYFS_WRAP(fseek)(FILE* stream, long offset, int whence)
     /* check whether we should intercept this stream */
     if (unifyfs_intercept_stream(stream)) {
         off_t offset_offt = (off_t) offset;
-        int rc = unifyfs_fseek(stream, offset_offt, whence);
-        return rc;
+        return unifyfs_fseek(stream, offset_offt, whence);
     } else {
         MAP_OR_FAIL(fseek);
         int ret = UNIFYFS_REAL(fseek)(stream, offset, whence);
@@ -1533,8 +1539,7 @@ int UNIFYFS_WRAP(fseeko)(FILE* stream, off_t offset, int whence)
 {
     /* check whether we should intercept this stream */
     if (unifyfs_intercept_stream(stream)) {
-        int rc = unifyfs_fseek(stream, offset, whence);
-        return rc;
+        return unifyfs_fseek(stream, offset, whence);
     } else {
         MAP_OR_FAIL(fseeko);
         int ret = UNIFYFS_REAL(fseeko)(stream, offset, whence);
@@ -1561,6 +1566,7 @@ long UNIFYFS_WRAP(ftell)(FILE* stream)
 
         /* get current position */
         off_t current_pos = filedesc->pos;
+        errno = 0;
         return (long)current_pos;
     } else {
         MAP_OR_FAIL(ftell);
@@ -1587,6 +1593,7 @@ off_t UNIFYFS_WRAP(ftello)(FILE* stream)
 
         /* get current position */
         off_t current_pos = filedesc->pos;
+        errno = 0;
         return current_pos;
     } else {
         MAP_OR_FAIL(ftello);
@@ -1613,14 +1620,13 @@ void UNIFYFS_WRAP(rewind)(FILE* stream)
         /* seek to front of file */
         int rc = unifyfs_fseek(stream, (off_t) 0L, SEEK_SET);
 
-        /* set errno */
-        errno = unifyfs_rc_errno(rc);
-
         /* clear error indicator if seek successful */
         if (rc == 0) {
             s->err = 0;
         }
 
+        /* set errno and return */
+        errno = unifyfs_rc_errno(rc);
         return;
     } else {
         MAP_OR_FAIL(rewind);
@@ -1669,7 +1675,7 @@ int UNIFYFS_WRAP(fgetpos)(FILE* stream, fpos_t* pos)
         /* save pointer to state in output parameter */
         void** ptr = (void**) pos;
         *ptr = (void*) state;
-
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(fgetpos);
@@ -1741,6 +1747,9 @@ int UNIFYFS_WRAP(fflush)(FILE* stream)
             }
         }
 
+        if (!ret) {
+            errno = 0;
+        }
         return ret;
     }
 
@@ -1753,7 +1762,7 @@ int UNIFYFS_WRAP(fflush)(FILE* stream)
             /* ERROR: flush sets error indicator and errno */
             return EOF;
         }
-
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(fflush);
@@ -1763,7 +1772,7 @@ int UNIFYFS_WRAP(fflush)(FILE* stream)
 }
 
 /* return non-zero if and only if end-of-file indicator is set
- * for stream */
+ * for stream (does not set errno) */
 int UNIFYFS_WRAP(feof)(FILE* stream)
 {
     /* check whether we should intercept this stream */
@@ -1839,6 +1848,7 @@ int UNIFYFS_WRAP(fileno)(FILE* stream)
         /* return file descriptor associated with stream but don't conflict
          * with active system fds that range from 0 - (fd_limit) */
         ret = fd + unifyfs_fd_limit;
+        errno = 0;
         return ret;
     } else {
         MAP_OR_FAIL(fileno);
@@ -1903,6 +1913,7 @@ int UNIFYFS_WRAP(fclose)(FILE* stream)
         unifyfs_stack_push(posix_stream_stack, s->sid);
 
         /* currently a no-op */
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(fclose);

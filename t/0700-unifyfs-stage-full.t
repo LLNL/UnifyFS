@@ -60,9 +60,9 @@ stage_in_log=$stage_cfg_dir/stage_IN.log
 stage_out_log=$stage_cfg_dir/stage_OUT.log
 stage_exe=${UNIFYFS_BUILD_DIR}/util/unifyfs-stage/src/unifyfs-stage
 
-$JOB_RUN_COMMAND $stage_exe -v -m ${UNIFYFS_TEST_MOUNT} $stage_in_manifest &> $stage_in_log
+$JOB_RUN_COMMAND $stage_exe -v -m ${UNIFYFS_TEST_MOUNT} -S $stage_cfg_dir $stage_in_manifest &> $stage_in_log
 
-$JOB_RUN_COMMAND $stage_exe -v -m ${UNIFYFS_TEST_MOUNT} $stage_out_manifest &> $stage_out_log
+$JOB_RUN_COMMAND $stage_exe -v -m ${UNIFYFS_TEST_MOUNT} -S $stage_cfg_dir $stage_out_manifest &> $stage_out_log
 
 test_expect_success "input file has been staged to output" '
     test_path_is_file $stage_dst_file

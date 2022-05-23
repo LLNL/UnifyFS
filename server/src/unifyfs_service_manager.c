@@ -551,43 +551,60 @@ int sm_transfer(int client_server,
                 int gfid,
                 int transfer_mode,
                 const char* dest_file,
-                server_rpc_req_t* bcast_req)
+                void* bcast_coll)
 {
+    int rc;
+    int ret = UNIFYFS_SUCCESS;
+
     int owner_rank = hash_gfid_to_server(gfid);
     int is_owner = (owner_rank == glb_pmi_rank);
 
-    unifyfs_file_attr_t attrs;
-    int ret = unifyfs_inode_metaget(gfid, &attrs);
-    if (ret == UNIFYFS_SUCCESS) {
-        /* we have local file state */
-        LOGDBG("transfer - gfid=%d mode=%d file=%s",
-               gfid, transfer_mode, dest_file);
-        transfer_thread_args* tta = calloc(1, sizeof(*tta));
-        if (transfer_mode == TRANSFER_MODE_LOCAL) {
-            /* each server transfers local data to the destination file */
-            int rc = create_local_transfers(gfid, dest_file, tta);
-            if (rc != UNIFYFS_SUCCESS) {
-                ret = rc;
-            } else {
-                /* submit transfer request for processing */
-                tta->bcast_req = bcast_req;
-                tta->client_server = client_server;
-                tta->client_app = client_app;
-                tta->client_id = client_id;
-                tta->transfer_id = transfer_id;
-                rc = sm_submit_transfer_request(tta);
-                if (rc != UNIFYFS_SUCCESS) {
-                    ret = rc;
-                }
-            }
-        } else if (is_owner && (transfer_mode == TRANSFER_MODE_OWNER)) {
-            // TODO: support TRANSFER_MODE_OWNER
-            ret = UNIFYFS_ERROR_NYI;
+    transfer_thread_args* tta = calloc(1, sizeof(*tta));
+    if (NULL == tta) {
+        LOGERR("failed to allocate transfer_thread_args for gfid=%d", gfid);
+        return ENOMEM;
+    }
+    tta->dst_file = strdup(dest_file);
+    tta->gfid = gfid;
+    tta->bcast_coll = bcast_coll;
+    tta->client_server = client_server;
+    tta->client_app = client_app;
+    tta->client_id = client_id;
+    tta->transfer_id = transfer_id;
+
+    if (glb_pmi_rank == client_server) {
+        unifyfs_file_attr_t attrs;
+        rc = unifyfs_invoke_metaget_rpc(gfid, &attrs);
+        if (rc == UNIFYFS_SUCCESS) {
+            tta->file_sz = (size_t) attrs.size;
         }
-        if (ret != UNIFYFS_SUCCESS) {
-            LOGERR("transfer(gfid=%d, mode=%d, file=%s) failed",
-                   gfid, transfer_mode, dest_file);
+    }
+
+    LOGDBG("transfer - gfid=%d mode=%d file=%s",
+           gfid, transfer_mode, dest_file);
+
+    if (transfer_mode == SERVER_TRANSFER_MODE_LOCAL) {
+        /* each server transfers local data to the destination file */
+        rc = create_local_transfers(gfid, tta);
+        if ((rc != UNIFYFS_SUCCESS) && (rc != ENOENT)) {
+            LOGERR("failed to create local transfers - %s",
+                   unifyfs_rc_enum_description(rc));
         }
+
+        /* submit transfer request for processing */
+        rc = sm_submit_transfer_request(tta);
+        if (rc != UNIFYFS_SUCCESS) {
+            ret = rc;
+        }
+    } else if (is_owner && (transfer_mode == SERVER_TRANSFER_MODE_OWNER)) {
+        // TODO: support SERVER_TRANSFER_MODE_OWNER
+        ret = UNIFYFS_ERROR_NYI;
+    }
+
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("transfer(gfid=%d, mode=%d, file=%s) failed - %s",
+               gfid, transfer_mode, dest_file,
+               unifyfs_rc_enum_description(ret));
     }
     return ret;
 }
@@ -615,7 +632,11 @@ int sm_truncate(int gfid, size_t filesize)
                 LOGERR("truncate broadcast failed");
             }
         }
+    } else if (!is_owner && (ENOENT == ret)) {
+        /* non-owner is not guaranteed to have local metadata for gfid */
+        ret = UNIFYFS_SUCCESS;
     }
+
     return ret;
 }
 
@@ -696,6 +717,11 @@ static int spawn_local_transfers(void)
         /* get next transfer */
         tta = (transfer_thread_args*) arraylist_remove(transfers, i);
 
+        /* record transfer start time on initiator */
+        if (glb_pmi_rank == tta->client_server) {
+            gettimeofday(&(tta->transfer_time), NULL);
+        }
+
         /* spawn transfer helper thread */
         int rc = pthread_create(&(tta->thrd), NULL,
                                 transfer_helper_thread, (void*)tta);
@@ -741,7 +767,7 @@ static int complete_local_transfers(void)
         /* get next transfer */
         tta = (transfer_thread_args*) arraylist_remove(transfers, i);
 
-        /* spawn transfer helper thread */
+        /* join transfer helper thread */
         int rc = pthread_join(tta->thrd, NULL);
         if (rc != 0) {
             LOGERR("failed to join transfer helper thread for tta=%p", tta);
@@ -749,9 +775,22 @@ static int complete_local_transfers(void)
         }
 
         if (glb_pmi_rank == tta->client_server) {
+            struct timeval s_time = tta->transfer_time;
+            struct timeval e_time;
+            gettimeofday(&e_time, NULL);
+            int tv_sec = e_time.tv_sec - s_time.tv_sec;
+            if (e_time.tv_usec < s_time.tv_usec) {
+                tv_sec -= 1;
+                e_time.tv_usec += 1000000;
+            }
+            int tv_usec = e_time.tv_usec - s_time.tv_usec;
+
             rc = invoke_client_transfer_complete_rpc(tta->client_app,
                                                      tta->client_id,
                                                      tta->transfer_id,
+                                                     tta->file_sz,
+                                                     tv_sec,
+                                                     tv_usec,
                                                      tta->status);
             if (rc != 0) {
                 LOGERR("failed transfer(id=%d) complete rpc to client[%d:%d]",
@@ -1204,18 +1243,23 @@ static int process_transfer_bcast_rpc(server_rpc_req_t* req)
     int transfer_mode = (int) in->mode;
     const char* dest_file = (const char*) in->dst_file;
 
-    LOGDBG("gfid=%d file=%s", gfid, dest_file);
+    LOGDBG("gfid=%d dest_file=%s", gfid, dest_file);
 
     /* do file transfer */
     int ret = sm_transfer(src_rank, -1, -1, -1, gfid, transfer_mode,
-                          dest_file, req);
+                          dest_file, req->coll);
     if (UNIFYFS_SUCCESS != ret) {
         /* submission of transfer request failed */
+        LOGERR("sm_transfer() failed for gfid=%d - rc=%d",
+               gfid, ret);
         collective_set_local_retval(req->coll, ret);
 
-         /* create a ULT to finish broadcast operation */
-        ret = invoke_bcast_progress_rpc(req->coll);
+        /* create a ULT to finish broadcast operation */
+        invoke_bcast_progress_rpc(req->coll);
     }
+    /* when sm_transfer() returns SUCCESS, we assume a transfer thread will
+     * be spawned, and that it will progress the broadcast collective after
+     * completing its data transfers */
 
     return ret;
 }

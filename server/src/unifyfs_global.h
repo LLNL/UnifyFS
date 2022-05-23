@@ -57,6 +57,12 @@
 #include "unifyfs_server_rpcs.h"
 
 
+/* server transfer modes */
+typedef enum {
+    SERVER_TRANSFER_MODE_OWNER = 0, /* owner transfers all data */
+    SERVER_TRANSFER_MODE_LOCAL = 1  /* each server transfers local data */
+} transfer_mode_e;
+
 /* Some global variables/structures used throughout the server code */
 
 /* PMI server rank and server count */

@@ -13,6 +13,7 @@
  */
 
 #include "unifyfs_group_rpc.h"
+#include "unifyfs_p2p_rpc.h"
 
 
 #ifndef UNIFYFS_BCAST_K_ARY
@@ -147,6 +148,7 @@ static int get_child_response(coll_request* coll_req,
 
             margo_free_output(chdl, out);
         }
+        free(out);
     }
 
     return ret;
@@ -229,20 +231,29 @@ static coll_request* collective_create(server_rpc_e req_type,
 {
     coll_request* coll_req = calloc(1, sizeof(*coll_req));
     if (NULL != coll_req) {
-        LOGDBG("BCAST_RPC: collective(%p) create (type=%d)",
-               coll_req, req_type);
-        coll_req->req_type     = req_type;
-        coll_req->resp_hdl     = handle;
-        coll_req->input        = input_struct;
-        coll_req->output       = output_struct;
-        coll_req->output_sz    = output_size;
-        coll_req->bulk_in      = bulk_in;
-        coll_req->bulk_forward = bulk_forward;
-        coll_req->bulk_buf     = bulk_buf;
+        LOGDBG("BCAST_RPC: collective(%p) create (type=%d, root=%d)",
+               coll_req, req_type, tree_root_rank);
+        coll_req->resp_hdl      = handle;
+        coll_req->req_type      = req_type;
+        coll_req->output        = output_struct;
+        coll_req->input         = input_struct;
+        coll_req->bulk_in       = bulk_in;
+        coll_req->output_sz     = output_size;
+        coll_req->bulk_buf      = bulk_buf;
+        coll_req->bulk_forward  = bulk_forward;
+        coll_req->progress_req  = MARGO_REQUEST_NULL;
+        coll_req->progress_hdl  = HG_HANDLE_NULL;
+        coll_req->app_id        = -1;
+        coll_req->client_id     = -1;
+        coll_req->client_req_id = -1;
 
-        unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, tree_root_rank,
-                          UNIFYFS_BCAST_K_ARY, &(coll_req->tree));
-
+        int rc = unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, tree_root_rank,
+                                   UNIFYFS_BCAST_K_ARY, &(coll_req->tree));
+        if (rc) {
+            LOGERR("unifyfs_tree_init() failed");
+            free(coll_req);
+            return NULL;
+        }
         size_t n_children = (size_t) coll_req->tree.child_count;
         if (n_children) {
             coll_req->child_hdls = calloc(n_children, sizeof(hg_handle_t));
@@ -257,6 +268,8 @@ static coll_request* collective_create(server_rpc_e req_type,
             int* ranks = coll_req->tree.child_ranks;
             for (int i = 0; i < coll_req->tree.child_count; i++) {
                 /* allocate child request handle */
+                LOGDBG("collective(%p) - child[%d] is rank=%d",
+                        coll_req, i, ranks[i]);
                 hg_handle_t* chdl = coll_req->child_hdls + i;
                 int rc = get_child_request_handle(op_hgid, ranks[i], chdl);
                 if (rc != UNIFYFS_SUCCESS) {
@@ -296,7 +309,7 @@ static void coll_restore_input_bulk(coll_request* coll_req)
     }
 }
 
-static void collective_cleanup(coll_request* coll_req)
+void collective_cleanup(coll_request* coll_req)
 {
     if (NULL == coll_req) {
         return;
@@ -304,10 +317,14 @@ static void collective_cleanup(coll_request* coll_req)
 
     LOGDBG("BCAST_RPC: collective(%p) cleanup", coll_req);
 
-    /* release communication tree resources */
-    unifyfs_tree_free(&(coll_req->tree));
-
     /* release margo resources */
+    if (HG_HANDLE_NULL != coll_req->progress_hdl) {
+        if (MARGO_REQUEST_NULL != coll_req->progress_req) {
+            margo_wait(coll_req->progress_req);
+        }
+        margo_destroy(coll_req->progress_hdl);
+    }
+
     if (HG_HANDLE_NULL != coll_req->resp_hdl) {
         if (NULL != coll_req->input) {
             coll_restore_input_bulk(coll_req);
@@ -315,6 +332,7 @@ static void collective_cleanup(coll_request* coll_req)
         }
         margo_destroy(coll_req->resp_hdl);
     }
+
     if (HG_BULK_NULL != coll_req->bulk_forward) {
         margo_bulk_free(coll_req->bulk_forward);
     }
@@ -335,6 +353,10 @@ static void collective_cleanup(coll_request* coll_req)
     if (NULL != coll_req->bulk_buf) {
         free(coll_req->bulk_buf);
     }
+
+    /* release communication tree resources */
+    unifyfs_tree_free(&(coll_req->tree));
+    memset(coll_req, 0, sizeof(*coll_req));
     free(coll_req);
 }
 
@@ -364,8 +386,6 @@ static int collective_forward(coll_request* coll_req)
 
     return ret;
 }
-
-
 
 /* set collective output return value to local result value */
 void collective_set_local_retval(coll_request* coll_req, int val)
@@ -413,8 +433,9 @@ void collective_set_local_retval(coll_request* coll_req, int val)
     }
 }
 
-/* Forward the collective request to any children */
-static int collective_finish(coll_request* coll_req)
+/* finish collective process by waiting for any child responses and
+ * sending parent response (if applicable) */
+int collective_finish(coll_request* coll_req)
 {
     int ret = UNIFYFS_SUCCESS;
 
@@ -438,8 +459,6 @@ static int collective_finish(coll_request* coll_req)
                coll_req, (int)(coll_req->req_type));
     }
 
-    collective_cleanup(coll_req);
-
     return ret;
 }
 
@@ -460,10 +479,9 @@ int invoke_bcast_progress_rpc(coll_request* coll_req)
     }
 
     /* get handle to local rpc function */
-    hg_handle_t handle;
     hg_id_t hgid = unifyfsd_rpc_context->rpcs.bcast_progress_id;
     hg_return_t hret = margo_create(unifyfsd_rpc_context->svr_mid, addr,
-                                    hgid, &handle);
+                                    hgid, &(coll_req->progress_hdl));
     if (hret != HG_SUCCESS) {
         LOGERR("failed to get handle for bcast progress  - %s",
                HG_Error_to_string(hret));
@@ -473,7 +491,8 @@ int invoke_bcast_progress_rpc(coll_request* coll_req)
          * by a ULT */
         bcast_progress_in_t in;
         in.coll_req = (hg_ptr_t) coll_req;
-        hret = margo_forward(handle, &in);
+        hret = margo_iforward(coll_req->progress_hdl, &in,
+                              &(coll_req->progress_req));
         if (hret != HG_SUCCESS) {
             LOGERR("failed to forward bcast progress for coll(%p) - %s",
                    HG_Error_to_string(hret), coll_req);
@@ -489,6 +508,7 @@ static void bcast_progress_rpc(hg_handle_t handle)
 {
     /* assume we'll succeed */
     int32_t ret = UNIFYFS_SUCCESS;
+    coll_request* coll = NULL;
 
     bcast_progress_in_t in;
     hg_return_t hret = margo_get_input(handle, &in);
@@ -497,7 +517,7 @@ static void bcast_progress_rpc(hg_handle_t handle)
         ret = UNIFYFS_ERROR_MARGO;
     } else {
         /* call collective_finish() to progress bcast operation */
-        coll_request* coll = (coll_request*) in.coll_req;
+        coll = (coll_request*) in.coll_req;
         LOGDBG("BCAST_RPC: bcast progress collective(%p)", coll);
         ret = collective_finish(coll);
         if (ret != UNIFYFS_SUCCESS) {
@@ -512,6 +532,10 @@ static void bcast_progress_rpc(hg_handle_t handle)
     hret = margo_respond(handle, &out);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
+    }
+
+    if (NULL != coll) {
+        collective_cleanup(coll);
     }
 
     /* free margo resources */
@@ -917,40 +941,20 @@ int unifyfs_invoke_broadcast_transfer(int client_app,
     /* assuming success */
     int ret = UNIFYFS_SUCCESS;
 
-    /* get attributes and extents metadata */
-    unifyfs_file_attr_t attrs;
-    ret = unifyfs_inode_metaget(gfid, &attrs);
-    if (ret != UNIFYFS_SUCCESS) {
-        LOGERR("failed to get file attributes for gfid=%d", gfid);
-        return ret;
-    }
-
-    if (!attrs.is_shared) {
-        /* no need to broadcast for private files */
-        LOGDBG("gfid=%d is private, not broadcasting", gfid);
-        return UNIFYFS_SUCCESS;
-    }
-
-    ret = sm_transfer(glb_pmi_rank, client_app, client_id, transfer_id, gfid,
-                      transfer_mode, dest_file, NULL);
-    if (ret != UNIFYFS_SUCCESS) {
-        LOGERR("sm_transfer() at root failed for gfid=%d", gfid);
-        return ret;
-    }
-
     LOGDBG("BCAST_RPC: starting transfer(mode=%d) for gfid=%d to file %s",
            transfer_mode, gfid, dest_file);
 
     coll_request* coll = NULL;
     transfer_bcast_in_t* in = calloc(1, sizeof(*in));
-    if (NULL == in) {
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
+    if ((NULL == in) || (NULL == req)) {
         ret = ENOMEM;
     } else {
         /* set input params */
         in->root        = (int32_t) glb_pmi_rank;
         in->gfid        = (int32_t) gfid;
         in->mode        = (int32_t) transfer_mode;
-        in->dst_file    = (hg_const_string_t) dest_file;
+        in->dst_file    = (hg_const_string_t) strdup(dest_file);
 
         hg_id_t op_hgid = unifyfsd_rpc_context->rpcs.transfer_bcast_id;
         server_rpc_e rpc = UNIFYFS_SERVER_BCAST_RPC_TRANSFER;
@@ -961,9 +965,21 @@ int unifyfs_invoke_broadcast_transfer(int client_app,
         if (NULL == coll) {
             ret = ENOMEM;
         } else {
-            ret = collective_forward(coll);
-            if (ret == UNIFYFS_SUCCESS) {
-                ret = invoke_bcast_progress_rpc(coll);
+            int rc = collective_forward(coll);
+            if (rc == UNIFYFS_SUCCESS) {
+                coll->app_id = client_app;
+                coll->client_id = client_id;
+                coll->client_req_id = transfer_id;
+                req->req_type = rpc;
+                req->coll = coll;
+                req->handle = HG_HANDLE_NULL;
+                req->input = (void*) in;
+                req->bulk_buf = NULL;
+                req->bulk_sz = 0;
+                ret = sm_submit_service_request(req);
+                if (ret != UNIFYFS_SUCCESS) {
+                    LOGERR("failed to submit coll request to svcmgr");
+                }
             }
         }
     }

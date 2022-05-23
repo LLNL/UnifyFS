@@ -21,9 +21,14 @@
  * Internal Methods
  */
 
-bool is_unifyfs_path(unifyfs_client* client,
+bool is_unifyfs_path(unifyfs_handle fshdl,
                      const char* filepath)
 {
+    if ((UNIFYFS_INVALID_HANDLE == fshdl) || (NULL == filepath)) {
+        return false;
+    }
+    unifyfs_client* client = fshdl;
+
     /* the library API expects absolute paths without relative components,
      * so we don't do any path normalization here */
 
@@ -143,7 +148,7 @@ unifyfs_rc unifyfs_sync(unifyfs_handle fshdl,
 /* Get global file status */
 unifyfs_rc unifyfs_stat(unifyfs_handle fshdl,
                         const unifyfs_gfid gfid,
-                        unifyfs_status* st)
+                        unifyfs_file_status* st)
 {
     if ((UNIFYFS_INVALID_HANDLE == fshdl)
         || (UNIFYFS_INVALID_GFID == gfid)

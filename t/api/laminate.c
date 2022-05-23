@@ -85,7 +85,7 @@ int api_laminate_test(char* unifyfs_root,
            __FILE__, __LINE__, testfile, rc, unifyfs_rc_enum_description(rc));
 
         /* (2) stat testfile, should report not laminated */
-        unifyfs_status status;
+        unifyfs_file_status status;
         memset(&status, 0, sizeof(status));
         rc = unifyfs_stat(*fshdl, gfid, &status);
 
