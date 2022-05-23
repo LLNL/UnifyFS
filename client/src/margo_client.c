@@ -1106,17 +1106,23 @@ static void unifyfs_transfer_complete_rpc(hg_handle_t handle)
     } else {
         /* lookup client transfer request */
         unifyfs_client* client;
-        int client_app   = (int) in.app_id;
-        int client_id    = (int) in.client_id;
-        int transfer_id  = (int) in.transfer_id;
-        int error_code   = (int) in.error_code;
+        int client_app     = (int) in.app_id;
+        int client_id      = (int) in.client_id;
+        int transfer_id    = (int) in.transfer_id;
+        size_t transfer_sz = (size_t) in.transfer_size_bytes;
+        uint32_t xfer_sec  = (uint32_t) in.transfer_time_sec;
+        uint32_t xfer_usec = (uint32_t) in.transfer_time_usec;
+        int error_code     = (int) in.error_code;
         client = unifyfs_find_client(client_app, client_id, NULL);
         if (NULL == client) {
             /* unknown client */
             ret = EINVAL;
         } else {
             /* Update the transfer state */
-            ret = client_complete_transfer(client, transfer_id, error_code);
+            double transfer_time = (double) xfer_sec;
+            transfer_time += (double) xfer_usec / 1000000.0;
+            ret = client_complete_transfer(client, transfer_id, error_code,
+                                           transfer_sz, transfer_time);
         }
         margo_free_input(handle, &in);
     }

@@ -48,6 +48,14 @@ typedef uint32_t unifyfs_gfid;
 /* a valid gfid generated via MD5 hash will never be zero */
 #define UNIFYFS_INVALID_GFID ((unifyfs_gfid)0)
 
+/* enumeration of request states */
+typedef enum unifyfs_req_state {
+    UNIFYFS_REQ_STATE_INVALID = 0,
+    UNIFYFS_REQ_STATE_IN_PROGRESS,
+    UNIFYFS_REQ_STATE_CANCELED,
+    UNIFYFS_REQ_STATE_COMPLETED
+} unifyfs_req_state;
+
 /* enumeration of supported I/O request operations */
 typedef enum unifyfs_ioreq_op {
     UNIFYFS_IOREQ_NOP = 0,
@@ -58,14 +66,6 @@ typedef enum unifyfs_ioreq_op {
     UNIFYFS_IOREQ_OP_TRUNC,
     UNIFYFS_IOREQ_OP_ZERO,
 } unifyfs_ioreq_op;
-
-/* enumeration of I/O request states */
-typedef enum unifyfs_ioreq_state {
-    UNIFYFS_IOREQ_STATE_INVALID = 0,
-    UNIFYFS_IOREQ_STATE_IN_PROGRESS,
-    UNIFYFS_IOREQ_STATE_CANCELED,
-    UNIFYFS_IOREQ_STATE_COMPLETED
-} unifyfs_ioreq_state;
 
 /* structure to hold I/O request result values */
 typedef struct unifyfs_ioreq_result {
@@ -90,7 +90,7 @@ typedef struct unifyfs_io_request {
      */
 
     /* status/result fields */
-    unifyfs_ioreq_state state;
+    unifyfs_req_state state;
     unifyfs_ioreq_result result;
 
     /* internal fields */
@@ -103,6 +103,14 @@ typedef enum unifyfs_transfer_mode {
     UNIFYFS_TRANSFER_MODE_COPY, // simple copy to destination
     UNIFYFS_TRANSFER_MODE_MOVE  // copy, then remove source
 } unifyfs_transfer_mode;
+
+/* structure to hold transfer request result values */
+typedef struct unifyfs_transfer_result {
+    int error;
+    int rc;
+    size_t file_size_bytes;
+    double transfer_time_seconds;
+} unifyfs_transfer_result;
 
 /* File transfer request structure */
 typedef struct unifyfs_transfer_request {
@@ -119,21 +127,21 @@ typedef struct unifyfs_transfer_request {
      */
 
     /* status/result fields */
-    unifyfs_ioreq_state state;
-    unifyfs_ioreq_result result;
+    unifyfs_req_state state;
+    unifyfs_transfer_result result;
 
     /* internal fields */
     int _reqid;
 } unifyfs_transfer_request;
 
 /* Global file status struct */
-typedef struct unifyfs_status {
+typedef struct unifyfs_file_status {
     int laminated;
     int mode;
     off_t local_file_size;
     off_t global_file_size;
     size_t local_write_nbytes;
-} unifyfs_status;
+} unifyfs_file_status;
 
 
 /*
@@ -219,7 +227,7 @@ unifyfs_rc unifyfs_open(unifyfs_handle fshdl,
  */
 unifyfs_rc unifyfs_stat(unifyfs_handle fshdl,
                         const unifyfs_gfid gfid,
-                        unifyfs_status* st);
+                        unifyfs_file_status* st);
 
 /*
  * Synchronize client writes with global metadata. After successful
@@ -347,6 +355,11 @@ unifyfs_rc unifyfs_wait_transfer(unifyfs_handle fshdl,
                                  const size_t nreqs,
                                  unifyfs_transfer_request* reqs,
                                  const int waitall);
+
+
+/* check if client mountpoint is prefix of given filepath */
+bool is_unifyfs_path(unifyfs_handle fshdl,
+                     const char* filepath);
 
 
 #ifdef __cplusplus

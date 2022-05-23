@@ -48,10 +48,13 @@ int client_cleanup_transfer(unifyfs_client* client,
                            client_transfer_status* transfer);
 
 /* Update the transfer status for the client (app_id + client_id)
- * transfer request (transfer_id) using the given error_code */
+ * transfer request (transfer_id) using the given error_code, transfer
+ * size, and transfer time */
 int client_complete_transfer(unifyfs_client* client,
                              int transfer_id,
-                             int error_code);
+                             int error_code,
+                             size_t transfer_size_bytes,
+                             double transfer_time_seconds);
 
 /* Given an array of transfer requests, submit each request after
  * creating a transfer status structure for the request and storing it

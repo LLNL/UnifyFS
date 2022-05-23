@@ -13,12 +13,7 @@ stage_cppflags = $(AM_CPPFLAGS) $(MPI_CFLAGS) \
    -I$(top_srcdir)/client/src \
    -I$(top_srcdir)/common/src
 
-if USE_PMPI_WRAPPERS
-stage_cppflags += -DENABLE_MPI_MOUNT
-stage_unify_lib = $(top_builddir)/client/src/libunifyfs_mpi.la
-else
-stage_unify_lib = $(top_builddir)/client/src/libunifyfs.la
-endif
+stage_unify_lib = $(top_builddir)/client/src/libunifyfs_api.la
 
 stage_ldadd = \
   $(stage_unify_lib) \
@@ -28,7 +23,6 @@ stage_ldadd = \
 
 stage_ldflags = \
   $(AM_LDFLAGS) \
-  $(CP_WRAPPERS) \
   -static
 
 # Per-target flags begin here

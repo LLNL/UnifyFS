@@ -107,7 +107,7 @@ int api_transfer_test(char* unifyfs_root,
 
     /* (3) stat source file to verify size */
 
-    unifyfs_status t1_status = {0};
+    unifyfs_file_status t1_status = {0};
     rc = unifyfs_stat(*fshdl, t1_gfid, &t1_status);
     /* expected size=filesize since writes have been synced */
     ok((rc == UNIFYFS_SUCCESS) && (t1_status.global_file_size == filesize),

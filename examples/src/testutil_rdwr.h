@@ -403,7 +403,7 @@ int stat_file(test_cfg* cfg, const char* filepath)
 #ifdef DISABLE_UNIFYFS
             return ENOTSUP;
 #else
-            unifyfs_status us;
+            unifyfs_file_status us;
             unifyfs_rc urc = unifyfs_stat(cfg->fshdl, cfg->gfid, &us);
             if (UNIFYFS_SUCCESS != urc) {
                 test_print(cfg, "unifyfs_stat(%s, gfid=%d) failed - %s",

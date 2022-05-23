@@ -58,8 +58,8 @@ unifyfs_rc unifyfs_cancel_transfer(unifyfs_handle fshdl,
 
     for (size_t i = 0; i < nreqs; i++) {
         unifyfs_transfer_request* req = reqs + i;
-        if (req->state != UNIFYFS_IOREQ_STATE_COMPLETED) {
-            req->state = UNIFYFS_IOREQ_STATE_CANCELED;
+        if (req->state != UNIFYFS_REQ_STATE_COMPLETED) {
+            req->state = UNIFYFS_REQ_STATE_CANCELED;
 
             /* TODO: cancel the transfer */
         }
@@ -89,7 +89,7 @@ unifyfs_rc unifyfs_wait_transfer(unifyfs_handle fshdl,
     unifyfs_transfer_request* req;
     client_transfer_status* transfer;
     size_t i, n_done;
-    int max_loop = 30000;
+    int max_loop = 6000;
     int loop_cnt = 0;
     do {
         n_done = 0;
@@ -101,8 +101,8 @@ unifyfs_rc unifyfs_wait_transfer(unifyfs_handle fshdl,
                 LOGDBG("checked - complete");
                 n_done++;
                 client_cleanup_transfer(client, transfer);
-            } else if ((req->state == UNIFYFS_IOREQ_STATE_CANCELED) ||
-                       (req->state == UNIFYFS_IOREQ_STATE_COMPLETED)) {
+            } else if ((req->state == UNIFYFS_REQ_STATE_CANCELED) ||
+                       (req->state == UNIFYFS_REQ_STATE_COMPLETED)) {
                 /* this handles the case where we have already cleaned the
                  * transfer status in a prior loop iteration */
                 n_done++;
@@ -122,9 +122,9 @@ unifyfs_rc unifyfs_wait_transfer(unifyfs_handle fshdl,
         /* TODO: we probably need a timeout mechanism to prevent an infinite
          *       loop when something goes wrong and the transfer status never
          *       gets updated. For now, just using a hardcoded maximum loop
-         *       iteration count that roughly equates to 30 sec */
+         *       iteration count that roughly equates to 10 min (6000 sec) */
         loop_cnt++;
-        usleep(1000); /* sleep 1 ms */
+        usleep(100000); /* sleep 100 ms */
     } while (loop_cnt < max_loop);
 
     if (loop_cnt == max_loop) {

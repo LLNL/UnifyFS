@@ -159,7 +159,7 @@ int api_write_read_sync_stat_test(char* unifyfs_root,
            __FILE__, __LINE__, testfile3, rc, unifyfs_rc_enum_description(rc));
 
         /* (4) stat all files */
-        unifyfs_status t1_status, t2_status, t3_status;
+        unifyfs_file_status t1_status, t2_status, t3_status;
 
         rc = unifyfs_stat(*fshdl, t1_gfid, &t1_status);
         /* expected size=filesize since writes have been synced */
