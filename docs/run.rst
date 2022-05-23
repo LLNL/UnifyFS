@@ -137,23 +137,23 @@ The transfer subsystem within UnifyFS can be invoked by providing the
 
     $ unifyfs start --stage-in=/path/to/input/manifest/file --share-dir=/path/to/shared/file/system
 
-and/or by providing the ``-o|--stage-out``, and consequently required
-``-S|--share-dir``, option to ``unifyfs terminate`` to transfer files out of
-UnifyFS:
+and/or by providing the ``-o|--stage-out`` option to ``unifyfs terminate``
+to transfer files out of UnifyFS:
 
 .. code-block:: Bash
 
     $ unifyfs terminate --stage-out=/path/to/output/manifest/file --share-dir=/path/to/shared/file/system
 
-A manifest file needs to be provided to the ``start``/``terminate`` commands in
-order to specify the desired transfers.
+The argument to both staging options is the path to a manifest file that contains
+the source and destination file pairs. Both stage-in and stage-out also require
+passing the ``-S|--share-dir=<path>`` option.
 
 .. _manifest_file_label:
 
 Manifest File
 ^^^^^^^^^^^^^
 
-UnifyFS's stage functionality requires a manifest file in order to move data.
+UnifyFS's file staging functionality requires a manifest file in order to move data.
 
 The manifest file contains one or more file copy requests. Each line in the
 manifest corresponds to one transfer request, and it contains both the source
@@ -166,10 +166,11 @@ If either of the filenames contain whitespace or special characters, then both
 filenames should be surrounded by double-quote characters (") (ASCII character
 34 decimal).
 The double-quote and linefeed end-of-line characters are not supported in any
-filenames used in a unifyfs manifest file. Any other characters are allowed,
+filenames used in a manifest file. Any other characters are allowed,
 including control characters.  If a filename contains any characters that might
-be misinterpreted, then enclosing the filename in double-quotes is always a safe
-thing to do.
+be misinterpreted, we suggest enclosing the filename in double-quotes.
+Comment lines are also allowed, and are indicated by beginning a line with the
+``#`` character.
 
 Here is an example of a valid stage-in manifest file:
 
@@ -178,28 +179,27 @@ Here is an example of a valid stage-in manifest file:
     $ [prompt] cat example_stage_in.manifest
 
     /scratch/users/me/input_data/input_1.dat /unifyfs/input/input_1.dat
+    # example comment line
     /home/users/me/configuration/run_12345.conf /unifyfs/config/run_12345.conf
     "/home/users/me/file with space.dat" "/unifyfs/file with space.dat"
 
 Transfer During Job
 *******************
 
-Data can also be transferred in/out of UnifyFS using one of two stand-alone
-applications.
+Data can also be transferred in/out of UnifyFS using the ``unifyfs-stage``
+helper program. This is the same program used internally by ``unifyfs`` to
+provide file staging during server startup and termination.
 
-The stand-alone applications can be invoked at any time while the UnifyFS
-servers are up and responding to requests. This allows for bringing in new input
+The helper program can be invoked at any time while the UnifyFS servers
+are up and responding to requests. This allows for bringing in new input
 and/or transferring results out to be verified before the job terminates.
 
 UnifyFS Stage Executable
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-The ``start``/``terminate`` transfer API stage functionality can also be used
-via the stand-alone application ``unifyfs-stage``.  This application is installed
-in the same directory as the ``unifyfs`` utility (``$UNIFYFS_INSTALL/bin``).
+The ``unifyfs-stage`` program is installed in the same directory as the
+``unifyfs`` utility (i.e., ``$UNIFYFS_INSTALL/bin``).
 
-This application can be run at any time within a job to transfer new data into
-or results out of UnifyFS.
 A manifest file (see :ref:`above <manifest_file_label>`) needs to be provided
 as an argument to use this approach.
 
@@ -219,76 +219,37 @@ as an argument to use this approach.
 
       "/source/file/path" "/destination/file/path"
 
-    One file per line; Specifying directories is not supported.
+    One file per line; Specifying directories is not currently supported.
 
     Available options:
-      -c, --checksum           verify md5 checksum for each transfer
-      -h, --help               print this usage
-      -m, --mountpoint=<mnt>   use <mnt> as unifyfs mountpoint
+      -c, --checksum           Verify md5 checksum for each transfer
+                               (default: off)
+      -h, --help               Print usage information
+      -m, --mountpoint=<mnt>   Use <mnt> as UnifyFS mountpoint
                                (default: /unifyfs)
-      -p, --parallel           transfer each file in parallel
-                               (experimental)
-      -s, --share-dir=<path>   directory path for creating status file
-      -v, --verbose            print noisy outputs
+      -p, --parallel           Transfer all files concurrently
+                               (default: off, use sequential transfers)
+      -s, --skewed             Use skewed data distribution for stage-in
+                               (default: off, use balanced distribution)
+      -S, --status-file=<path> Create stage status file at <path>
+      -v, --verbose            Print verbose information
+                               (default: off)
 
-    Without the '-p, --parallel' option, a file is transferred by a single
-    process. If the '-p, --parallel' option is specified, each file will be
-    divided by multiple processes and transferred in parallel.
+    By default, each file in the manifest will be transferred in sequence (i.e.,
+    only a single file will be in transfer at any given time). If the
+    '-p, --parallel' option is specified, files in the manifest will be
+    transferred concurrently. The number of concurrent transfers is limited by
+    the number of parallel ranks used to execute unifyfs-stage.
 
 Examples:
 
 .. code-block:: Bash
-    :caption: Serial Transfer
+    :caption: Sequential Transfer using a Single Client
 
     $ srun -N 1 -n 1 unifyfs-stage $MY_MANIFEST_FILE
 
 .. code-block:: Bash
-    :caption: Parallel Transfer
+    :caption: Parallel Transfer using 8 Clients (up to 8 concurrent file transfers)
 
     $ srun -N 4 -n 8 unifyfs-stage --parallel $MY_MANIFEST_FILE
 
-Transfer Executable
-^^^^^^^^^^^^^^^^^^^
-
-``$UNIFYFS_INSTALL/libexec/transfer-static``
-
-.. note::
-
-    The ``transfer-gotcha`` executable is currently unusable due to an issue
-    that is being tracked.
-
-The transfer API can also be used during the job by invoking the stand-alone
-``transfer`` application. It works similarly to the Unix ``cp`` command, with
-source and destination, except being aware that it is copying files between an
-external file system and internal UnifyFS.
-
-.. code-block:: Bash
-
-    [prompt]$ transfer-static --help
-
-    Usage: transfer-static [options...] <source path> <destination path>
-
-    Available options:
-     -d, --debug                  pause before running test
-                                  (handy for attaching in debugger)
-     -h, --help                   help message
-     -m, --mount=<mountpoint>     use <mountpoint> for unifyfs
-                                  (default: /unifyfs)
-     -p, --parallel               parallel transfer
-     -r, --rank=<rank>            use <rank> for transfer (default: 0)
-
-Examples of using ``transfer-static``:
-
-.. code-block:: Bash
-    :caption: Serial Transfer
-
-    $ srun -N 1 -n 1 $UNIFYFS_INSTALL/libexec/transfer-static /path/on/parallelfs/file.dat /unifyfs/file.dat
-
-    $ srun -N 1 -n 1 $UNIFYFS_INSTALL/libexec/transfer-static /unifyfs/output.dat /scratch/my_output/output.dat
-
-.. code-block:: Bash
-    :caption: Parallel Transfer
-
-    $ srun -N 4 -n 8 /path/to/libexec/transfer-static --parallel /path/on/parallelfs/file.dat /unifyfs/file.dat
-
-    $ srun -N 4 -n 8 /path/to/libexec/transfer-static --parallel /unifyfs/output.dat /scratch/my_output/output.dat

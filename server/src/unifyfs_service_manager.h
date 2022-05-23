@@ -96,7 +96,7 @@ int sm_transfer(int client_server,
                 int gfid,
                 int transfer_mode,
                 const char* dest_file,
-                server_rpc_req_t* bcast_req);
+                void* bcast_coll);
 
 int sm_truncate(int gfid,
                 size_t filesize);

@@ -895,7 +895,7 @@ int unifyfs_transfer_file(const char* src,
             free(dst_path);
             return -err;
         }
-        close(fd);
+        UNIFYFS_WRAP(close)(fd);
     }
 
     if (mode == UNIFYFS_TRANSFER_PARALLEL) {

@@ -24,7 +24,6 @@ TESTS += \
   9020-mountpoint-empty.t \
   9200-seg-tree-test.t \
   9201-slotmap-test.t \
-  9300-unifyfs-stage-isolated.t \
   9999-cleanup.t
 
 check_SCRIPTS = $(TESTS)

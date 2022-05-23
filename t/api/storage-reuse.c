@@ -104,7 +104,7 @@ int api_storage_test(char* unifyfs_root,
 
     /* (3) stat testfile1 to verify size */
 
-    unifyfs_status t1_status = {0};
+    unifyfs_file_status t1_status = {0};
     rc = unifyfs_stat(*fshdl, t1_gfid, &t1_status);
     /* expected size=filesize since writes have been synced */
     ok((rc == UNIFYFS_SUCCESS) && (t1_status.global_file_size == filesize),
@@ -210,7 +210,7 @@ int api_storage_test(char* unifyfs_root,
 
     /* (8) stat testfile2 to verify size */
 
-    unifyfs_status t2_status = {0};
+    unifyfs_file_status t2_status = {0};
     rc = unifyfs_stat(*fshdl, t2_gfid, &t2_status);
     /* expected size=filesize since writes have been synced */
     ok((rc == UNIFYFS_SUCCESS) && (t2_status.global_file_size == filesize),
