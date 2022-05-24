@@ -252,7 +252,7 @@ cd ..
 
 echo "### building spath ###"
 cd spath
-git checkout master
+git checkout main
 mkdir -p build && cd build
 cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DMPI=OFF ..
 make -j $make_nproc && make install
