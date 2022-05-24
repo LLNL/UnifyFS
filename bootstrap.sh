@@ -3,6 +3,13 @@
 # This is an easy-bake script to download and build all UnifyFS's dependencies.
 #
 
+# Abort the script if we have any errors
+err_report() {
+        echo "!!!! Previous command failed!  (Line number $1) Aborting. !!!!"
+        exit 1
+}
+trap 'err_report $LINENO' ERR
+
 make_nproc=4
 
 ROOT="$(pwd)"
