@@ -379,7 +379,7 @@ int unifyfs_pmix_init(void)
     // (at least) 64 bytes.
     pmix_key_t key;
     strcpy(key, PMIX_JOB_SIZE);
-    rc = PMIx_Get(&proc, PMIX_JOB_SIZE, NULL, 0, &valp);
+    rc = PMIx_Get(&proc, key, NULL, 0, &valp);
 
     if (rc != PMIX_SUCCESS) {
         LOGERR("PMIx rank %d: PMIx_Get(JOB_SIZE) failed: %s",
