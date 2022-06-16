@@ -373,23 +373,13 @@ int unifyfs_pmix_init(void)
     strlcpy(proc.nspace, pmix_myproc.nspace, PMIX_MAX_NSLEN);
     proc.rank = PMIX_RANK_WILDCARD;
 
-// This is a kludge for working around a bug in the version of PMIx installed
-// on Summit (which is part of Spectrum MPI 10.4.0.3).  Specifically, gcc 11
-// complains that the 2nd parameter - which is type 'const pmix_key_t', which
-// in turn is 'char [512]' - is longer than the const string that actually gets
-// passed in (which is itself defined in pmix_common.h).
-// It would be nice to limit this to just Summit, but there doesn't seem to be
-// an easy way to do that (no pre-defined macro we can check, for example).
-// Once the bug is fixed and the version on Summit is updated, we can get rid
-// of this test and just use the line in the 'else' clause
-#if (__GNUC__ >= 11)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstringop-overread"
+    // Note: we do an extra copy because passing PMIX_JOB_SIZE directly to
+    // PMIx_Get() causes gcc 11 to generate a warning due to the fact that
+    // PMIX_JOB_SIZE evaluates to a 14 byte char array while pmix_key_t is
+    // (at least) 64 bytes.
+    pmix_key_t key;
+    strcpy(key, PMIX_JOB_SIZE);
     rc = PMIx_Get(&proc, PMIX_JOB_SIZE, NULL, 0, &valp);
-#pragma GCC diagnostic pop
-#else
-    rc = PMIx_Get(&proc, PMIX_JOB_SIZE, NULL, 0, &valp);
-#endif
 
     if (rc != PMIX_SUCCESS) {
         LOGERR("PMIx rank %d: PMIx_Get(JOB_SIZE) failed: %s",
