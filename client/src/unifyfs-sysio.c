@@ -1115,6 +1115,11 @@ static int posix_create(char* upath, mode_t mode)
     int flags = O_WRONLY | O_CREAT | O_TRUNC;
     off_t pos;
     int rc = unifyfs_fid_open(posix_client, upath, flags, mode, &fid, &pos);
+    if (rc == EEXIST) {
+        /* POSIX allows O_CREAT on existing file */
+        flags = O_WRONLY | O_TRUNC;
+        rc = unifyfs_fid_open(posix_client, upath, flags, mode, &fid, &pos);
+    }
     if (rc != UNIFYFS_SUCCESS) {
         errno = unifyfs_rc_errno(rc);
         return -1;
@@ -1189,11 +1194,19 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
     if (unifyfs_intercept_path(path, upath)) {
         /* TODO: handle relative paths using current working directory */
 
-        /* create the file */
+        /* open the file */
         int fid;
         off_t pos;
         int rc = unifyfs_fid_open(posix_client, upath, flags, mode,
                                   &fid, &pos);
+        if (rc == EEXIST) {
+            /* POSIX allows O_CREAT on existing file */
+            if ((flags & O_CREAT) && !(flags & O_EXCL)) {
+                flags -= O_CREAT;
+                rc = unifyfs_fid_open(posix_client, upath, flags, mode,
+                                      &fid, &pos);
+            }
+        }
         if (rc != UNIFYFS_SUCCESS) {
             errno = unifyfs_rc_errno(rc);
             return -1;

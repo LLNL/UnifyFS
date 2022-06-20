@@ -35,7 +35,7 @@ int unifyfs_fid_free(unifyfs_client* client,
  * Returns the new fid, or negative error value */
 int unifyfs_fid_create_file(unifyfs_client* client,
                             const char* path,
-                            int exclusive);
+                            int private);
 
 /* Add a new directory and initialize metadata.
  * Returns the new fid, or a negative error value */
