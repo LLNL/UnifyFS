@@ -383,14 +383,16 @@ int unifyfs_client_init(unifyfs_client* client)
         // print log messages to stderr
         unifyfs_log_open(NULL);
 
-        // initialize configuration
+        // initialize configuration (if not already done)
         unifyfs_cfg_t* client_cfg = &(client->cfg);
-        rc = unifyfs_config_init(client_cfg, 0, NULL, 0, NULL);
-        if (rc) {
-            LOGERR("failed to initialize configuration.");
-            return UNIFYFS_FAILURE;
+        if (client_cfg->ptype != UNIFYFS_CLIENT) {
+            rc = unifyfs_config_init(client_cfg, 0, NULL, 0, NULL);
+            if (rc) {
+                LOGERR("failed to initialize configuration.");
+                return UNIFYFS_FAILURE;
+            }
+            client_cfg->ptype = UNIFYFS_CLIENT;
         }
-        client_cfg->ptype = UNIFYFS_CLIENT;
 
         // set log level from config
         char* cfgval = client_cfg->log_verbosity;
