@@ -982,11 +982,11 @@ unifyfs_rc attach_app_client(app_client* client,
     int failure = 0;
 
     /* initialize server-side logio for this client */
-    int rc = unifyfs_logio_init_server(app_id, client_id,
-                                       logio_shmem_size,
-                                       logio_spill_size,
-                                       logio_spill_dir,
-                                       &(client->state.logio_ctx));
+    int rc = unifyfs_logio_init(app_id, client_id,
+                                logio_shmem_size,
+                                logio_spill_size,
+                                logio_spill_dir,
+                                &(client->state.logio_ctx));
     if (rc != UNIFYFS_SUCCESS) {
         failure = 1;
     }

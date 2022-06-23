@@ -49,6 +49,7 @@ typedef struct ServerRpcIds {
     hg_id_t truncate_id;
     hg_id_t truncate_bcast_id;
     hg_id_t unlink_bcast_id;
+    hg_id_t node_local_extents_get_id;
 
     /* client-server rpcs */
     hg_id_t client_heartbeat_id;
@@ -81,12 +82,7 @@ int margo_connect_servers(void);
 
 hg_addr_t get_margo_server_address(int rank);
 
-/* use passed bulk handle to pull data into a newly allocated buffer.
- * returns buffer, or NULL on failure. */
-void* pull_margo_bulk_buffer(hg_handle_t rpc_hdl,
-                             hg_bulk_t bulk_in,
-                             hg_size_t bulk_sz,
-                             hg_bulk_t* local_bulk);
+
 
 /* invokes the client heartbeat rpc function */
 int invoke_client_heartbeat_rpc(int app_id, int client_id);

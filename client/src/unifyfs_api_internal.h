@@ -36,7 +36,8 @@ typedef struct {
 
     int pending_unlink;           /* received unlink callback */
 
-    int needs_sync;               /* have unsynced writes */
+    int needs_writes_sync;               /* have unsynced writes */
+    int needs_reads_sync;       /* have unsynced read extents from server */
     struct seg_tree extents_sync; /* Segment tree containing our coalesced
                                    * writes between sync operations */
 
@@ -60,11 +61,14 @@ typedef struct {
 typedef struct unifyfs_client {
     unifyfs_client_state state;
 
+
     /* mountpoint configuration */
     unifyfs_cfg_t cfg;               /* user-provided configuration */
 
     bool use_fsync_persist;          /* persist data to storage on fsync() */
     bool use_local_extents;          /* enable tracking of local extents */
+    bool use_node_local_extents;     /* enable tracking of extents within
+                                      * node only for laminate files */
     bool use_write_sync;             /* sync for every write operation */
     bool use_unifyfs_magic;          /* return UNIFYFS (true) or TMPFS (false)
                                       * magic value from statfs() */
@@ -92,6 +96,9 @@ typedef struct unifyfs_client {
     void* free_fid_stack;
     unifyfs_filename_t* unifyfs_filelist;
     unifyfs_filemeta_t* unifyfs_filemetas;
+
+    /* Other clients log-io context */
+    logio_context* logio_ctx_ptrs[UNIFYFS_SERVER_MAX_APP_CLIENTS];
 
 } unifyfs_client;
 

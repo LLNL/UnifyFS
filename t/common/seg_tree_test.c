@@ -53,26 +53,26 @@ int main(int argc, char** argv)
     seg_tree_init(&seg_tree);
 
     /* Initial insert */
-    seg_tree_add(&seg_tree, 5, 10, 0);
+    seg_tree_add(&seg_tree, 5, 10, 0, 0);
     is("[5-10:0]", print_tree(tmp, &seg_tree), "Initial insert works");
 
     /* Non-overlapping insert */
-    seg_tree_add(&seg_tree, 100, 150, 100);
+    seg_tree_add(&seg_tree, 100, 150, 100, 0);
     is("[5-10:0][100-150:100]", print_tree(tmp, &seg_tree),
         "Non-overlapping works");
 
     /* Add range overlapping part of the left size */
-    seg_tree_add(&seg_tree, 2, 7, 200);
+    seg_tree_add(&seg_tree, 2, 7, 200, 0);
     is("[2-7:200][8-10:3][100-150:100]", print_tree(tmp, &seg_tree),
         "Left size overlap works");
 
     /* Add range overlapping part of the right size */
-    seg_tree_add(&seg_tree, 9, 12, 300);
+    seg_tree_add(&seg_tree, 9, 12, 300, 0);
     is("[2-7:200][8-8:3][9-12:300][100-150:100]", print_tree(tmp, &seg_tree),
         "Right size overlap works");
 
     /* Add range totally within another range */
-    seg_tree_add(&seg_tree, 3, 4, 400);
+    seg_tree_add(&seg_tree, 3, 4, 400, 0);
     is("[2-2:200][3-4:400][5-7:203][8-8:3][9-12:300][100-150:100]",
         print_tree(tmp, &seg_tree), "Inside range works");
 
@@ -83,7 +83,7 @@ int main(int argc, char** argv)
     ok(count == 6, "count is 6 (got %lu)", count);
 
     /* Add a range that blows away multiple ranges, and overlaps */
-    seg_tree_add(&seg_tree, 4, 120, 500);
+    seg_tree_add(&seg_tree, 4, 120, 500, 0);
     is("[2-2:200][3-3:400][4-120:500][121-150:121]", print_tree(tmp, &seg_tree),
         "Blow away multiple ranges works");
 
@@ -105,11 +105,11 @@ int main(int argc, char** argv)
      * Now let's write a long extent, and then sawtooth over it with 1 byte
      * extents.
      */
-    seg_tree_add(&seg_tree, 0, 50, 50);
-    seg_tree_add(&seg_tree, 0, 0, 0);
-    seg_tree_add(&seg_tree, 2, 2, 2);
-    seg_tree_add(&seg_tree, 4, 4, 4);
-    seg_tree_add(&seg_tree, 6, 6, 6);
+    seg_tree_add(&seg_tree, 0, 50, 50, 0);
+    seg_tree_add(&seg_tree, 0, 0, 0, 0);
+    seg_tree_add(&seg_tree, 2, 2, 2, 0);
+    seg_tree_add(&seg_tree, 4, 4, 4, 0);
+    seg_tree_add(&seg_tree, 6, 6, 6, 0);
     is("[0-0:0][1-1:51][2-2:2][3-3:53][4-4:4][5-5:55][6-6:6][7-50:57]",
         print_tree(tmp, &seg_tree), "Sawtooth extents works");
 
@@ -126,7 +126,7 @@ int main(int argc, char** argv)
     ok(node->start == 2 && node->end == 2, "seg_tree_find found correct node");
 
     /* Test finding a segment that partially overlaps our range */
-    seg_tree_add(&seg_tree, 100, 200, 100);
+    seg_tree_add(&seg_tree, 100, 200, 100, 0);
     node = seg_tree_find(&seg_tree, 90, 120);
     ok(node->start == 100 && node->end == 200,
         "seg_tree_find found partial overlapping node");
@@ -140,19 +140,19 @@ int main(int argc, char** argv)
      * same range.  Use a different buf value to verify it changed.
      */
     seg_tree_clear(&seg_tree);
-    seg_tree_add(&seg_tree, 20, 30, 0);
+    seg_tree_add(&seg_tree, 20, 30, 0, 0);
     is("[20-30:0]", print_tree(tmp, &seg_tree), "Initial [20-30] write works");
 
-    seg_tree_add(&seg_tree, 20, 30, 8);
+    seg_tree_add(&seg_tree, 20, 30, 8, 0);
     is("[20-30:8]", print_tree(tmp, &seg_tree), "Same range overwrite works");
 
     /* Test coalescing */
     seg_tree_clear(&seg_tree);
-    seg_tree_add(&seg_tree, 5, 10, 105);
+    seg_tree_add(&seg_tree, 5, 10, 105, 0);
     is("[5-10:105]", print_tree(tmp, &seg_tree), "Initial insert works");
 
     /* Non-overlapping insert */
-    seg_tree_add(&seg_tree, 100, 150, 200);
+    seg_tree_add(&seg_tree, 100, 150, 200, 0);
     is("[5-10:105][100-150:200]", print_tree(tmp, &seg_tree),
         "Non-overlapping works");
 
@@ -160,7 +160,7 @@ int main(int argc, char** argv)
      * Add range overlapping part of the left size.
      * Check that it coalesces
      */
-    seg_tree_add(&seg_tree, 2, 7, 102);
+    seg_tree_add(&seg_tree, 2, 7, 102, 0);
     is("[2-10:102][100-150:200]", print_tree(tmp, &seg_tree),
         "Left size overlap works");
 
@@ -168,7 +168,7 @@ int main(int argc, char** argv)
      * Add range overlapping part of the right size.
      * Check that is coalesces.
      */
-    seg_tree_add(&seg_tree, 9, 12, 109);
+    seg_tree_add(&seg_tree, 9, 12, 109, 0);
     is("[2-12:102][100-150:200]", print_tree(tmp, &seg_tree),
         "Right size overlap works");
 
@@ -176,7 +176,7 @@ int main(int argc, char** argv)
      * Add range totally within another range.
      * Check that it is consumed.
      */
-    seg_tree_add(&seg_tree, 3, 4, 103);
+    seg_tree_add(&seg_tree, 3, 4, 103, 0);
     is("[2-12:102][100-150:200]",
         print_tree(tmp, &seg_tree), "Inside range works");
 
@@ -187,7 +187,7 @@ int main(int argc, char** argv)
     ok(count == 2, "count is 2 (got %lu)", count);
 
     /* Add a range that connects two other ranges. */
-    seg_tree_add(&seg_tree, 4, 120, 104);
+    seg_tree_add(&seg_tree, 4, 120, 104, 0);
     is("[2-150:102]", print_tree(tmp, &seg_tree),
         "Connect two ranges works");
 
@@ -198,10 +198,10 @@ int main(int argc, char** argv)
     ok(count == 1, "count is 1 (got %lu)", count);
 
     seg_tree_clear(&seg_tree);
-    seg_tree_add(&seg_tree, 0, 0, 0);
-    seg_tree_add(&seg_tree, 1, 10, 101);
-    seg_tree_add(&seg_tree, 20, 30, 20);
-    seg_tree_add(&seg_tree, 31, 40, 131);
+    seg_tree_add(&seg_tree, 0, 0, 0, 0);
+    seg_tree_add(&seg_tree, 1, 10, 101, 0);
+    seg_tree_add(&seg_tree, 20, 30, 20, 0);
+    seg_tree_add(&seg_tree, 31, 40, 131, 0);
 
     /* Remove a single entry */
     seg_tree_remove(&seg_tree, 0, 0);

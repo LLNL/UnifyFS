@@ -111,18 +111,17 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
             client->max_files = (int)l;
         }
     }
-
-    /* Determine if we should track all write extents and use them
-     * to service read requests if all data is local */
-    client->use_local_extents = 0;
-    cfgval = client_cfg->client_local_extents;
+    /* Determine if we should track all extents on the node-local clients
+     * for laminated files only and use them to service read requests
+     * if all data is local */
+    client->use_node_local_extents = 0;
+    cfgval = client_cfg->client_node_local_extents;
     if (cfgval != NULL) {
         rc = configurator_bool_val(cfgval, &b);
         if (rc == 0) {
-            client->use_local_extents = (bool)b;
+            client->use_node_local_extents = (bool)b;
         }
     }
-
     /* Determine whether we persist data to storage device on fsync().
      * Turning this setting off speeds up fsync() by only syncing the
      * extent metadata, but it violates POSIX semanatics. */

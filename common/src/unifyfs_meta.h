@@ -64,6 +64,24 @@ typedef struct {
     int gfid;       /* global file id */
 } unifyfs_index_t;
 
+/* client specific write-log metadata index structures */
+typedef struct {
+    off_t file_pos; /* start offset of data in file */
+    off_t log_pos;  /* start offset of data in write log */
+    size_t length;  /* length of data */
+    int gfid;       /* global file id */
+    int log_app_id; /* app id associated with log */
+    int log_client_id; /* client id associated with log */
+} unifyfs_client_index_t;
+
+/* array list for dynamic extents for read requests*/
+typedef struct extents_list {
+    unifyfs_client_index_t value;
+    struct extents_list* next;
+} extents_list_t;
+
+typedef struct extents_list extents_list;
+
 typedef struct {
     size_t  index_size;    /* size of index metadata region in bytes */
     size_t  index_offset;  /* superblock offset of index metadata region */

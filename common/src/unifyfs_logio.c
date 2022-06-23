@@ -192,12 +192,12 @@ static void* map_spillfile(int spill_fd,
 }
 
 /* Initialize logio context for server */
-int unifyfs_logio_init_server(const int app_id,
-                              const int client_id,
-                              const size_t mem_size,
-                              const size_t spill_size,
-                              const char* spill_dir,
-                              logio_context** pctx)
+int unifyfs_logio_init(const int app_id,
+                       const int client_id,
+                       const size_t mem_size,
+                       const size_t spill_size,
+                       const char* spill_dir,
+                       logio_context** pctx)
 {
     if (NULL == pctx) {
         return EINVAL;

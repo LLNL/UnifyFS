@@ -134,7 +134,7 @@ void* request_manager_thread(void* arg);
 
 /* function called by main thread to instruct
  * Request Manager thread to exit */
-void rm_request_exit(reqmgr_thrd_t* thrd_ctrl);
+int rm_request_exit(reqmgr_thrd_t* thrd_ctrl);
 
 /* update state for remote chunk reads with received response data */
 int rm_post_chunk_read_responses(int app_id,

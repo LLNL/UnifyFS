@@ -15,6 +15,7 @@
 #include "unifyfs_global.h"
 #include "unifyfs_p2p_rpc.h"
 #include "unifyfs_group_rpc.h"
+#include "unifyfs_rpc_util.h"
 
 /*************************************************************************
  * Peer-to-peer RPC helper methods
