@@ -25,7 +25,7 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
                               unifyfs_cfg_option* options, int n_opts,
                               unifyfs_handle* fshdl)
 {
-    if ((NULL == mountpoint) || (NULL == fshdl)) {
+    if ((NULL == mountpoint)) {
         return EINVAL;
     }
     *fshdl = UNIFYFS_INVALID_HANDLE;
