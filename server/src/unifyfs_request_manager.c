@@ -159,9 +159,9 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
     thrd_ctrl->client_id = client_id;
 
     /* initialize flow control flags */
-    thrd_ctrl->exit_flag              = 0;
-    thrd_ctrl->exited                 = 0;
-    thrd_ctrl->waiting_for_work       = 0;
+    thrd_ctrl->exit_flag = 0;
+    thrd_ctrl->exited = 0;
+    thrd_ctrl->waiting_for_work = 0;
 
     /* launch request manager thread */
     rc = pthread_create(&(thrd_ctrl->thrd), NULL,
@@ -262,7 +262,7 @@ int rm_release_read_req(reqmgr_thrd_t* thrd_ctrl,
 static void signal_new_requests(reqmgr_thrd_t* reqmgr)
 {
     pid_t this_thread = unifyfs_gettid();
-    if (this_thread != reqmgr->tid) {
+    if ((!reqmgr->exit_flag) && (this_thread != reqmgr->tid)) {
         /* signal reqmgr to begin processing the requests we just added */
         LOGDBG("signaling new requests");
         pthread_cond_signal(&reqmgr->thrd_cond);
@@ -1637,11 +1637,11 @@ void* request_manager_thread(void* arg)
         rc = rm_heartbeat(thrd_ctrl);
         if (rc != UNIFYFS_SUCCESS) {
             /* detected failure of our client, time to exit */
-            break;
+            thrd_ctrl->exit_flag = 1;
         }
 
         /* bail out if we've been told to exit */
-        if (thrd_ctrl->exit_flag == 1) {
+        if (thrd_ctrl->exit_flag) {
             break;
         }
     }
