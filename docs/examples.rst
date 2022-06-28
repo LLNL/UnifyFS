@@ -1,14 +1,14 @@
-********
-Examples
-********
+****************
+Example Programs
+****************
 
 There are several examples_ available on ways to use UnifyFS. These examples
 build into static, GOTCHA, and pure POSIX (not linked with UnifyFS) versions
 depending on how they are linked. Several of the example programs are also used
 in the UnifyFS :doc:`intregraton testing <testing>`.
 
-Examples Locations
-==================
+Locations of Examples
+=====================
 
 The example programs can be found in two locations, where UnifyFS is built and
 where UnifyFS is installed.

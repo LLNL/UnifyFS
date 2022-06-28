@@ -14,13 +14,21 @@ UnifyFS: A file system for burst buffers
    overview
    definitions
    assumptions
+   limitations
    build
    api
    link
    configuration
    run
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Reference
+
    examples
    library_api
+   dependencies
+   verifyio
 
 .. toctree::
    :maxdepth: 2
@@ -31,16 +39,6 @@ UnifyFS: A file system for burst buffers
    testing
    wrappers
    add-rpcs
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Dependencies
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Reference
-
-   dependencies
 
 ==================
 Indices and tables
