@@ -1,13 +1,13 @@
-================
+=========================
 Assumptions and Semantics
-================
+=========================
 
 In this section, we provide assumptions we make about the behavior of
 applications that use UnifyFS and about the file system semantics of UnifyFS.
 
----------------------------
+-------------------
 System Requirements
----------------------------
+-------------------
 
 The system requirements to run UnifyFS are:
 
@@ -17,9 +17,11 @@ The system requirements to run UnifyFS are:
     - The system must support the ability for UnifyFS user-level server processes
       to run concurrently with user application processes on compute nodes.
 
----------------------------
+----------
+
+--------------------
 Application Behavior
----------------------------
+--------------------
 
 UnifyFS is specifically designed to support the bulk synchronous I/O pattern
 that is typical in HPC applications, e.g., checkpoint/restart or output dumps.
@@ -40,12 +42,13 @@ the performance might be slower and the user may
 have to take additional steps to ensure correct execution of the application
 with UnifyFS.
 For more information on this topic, refer to the section on
-:ref:`commit consistency semantics in UnifyFS <commit_consistency_label>`_.
+:ref:`commit consistency semantics in UnifyFS <commit_consistency_label>`.
 
+----------
 
----------------------------
+-----------------
 Consistency Model
----------------------------
+-----------------
 
 The UnifyFS file system does not support strict POSIX consistency semantics.
 (Please see
@@ -58,10 +61,10 @@ modified by the application.
 These two consistency models provide opportunities for UnifyFS to
 provide better performance for the I/O operations of HPC applications.
 
-'''''''''''''''''''''''''''
-Commit Consistency Semantics in UnifyFS
-'''''''''''''''''''''''''''
 .. _commit_consistency_label:
+'''''''''''''''''''''''''''''''''''''''
+Commit Consistency Semantics in UnifyFS
+'''''''''''''''''''''''''''''''''''''''
 
 Commit consistency semantics require
 explicit "commit" operations to be performed before updates to a file
@@ -153,11 +156,12 @@ and multiple processes write concurrently to the same file offset or to an
 overlapping region, the result is undefined and may
 reflect the result of a mixture of the processes' operations to that offset or region.
 
-.. How can users check that their application is correctly synchronized? Will we have the checker scripts ready?
+The :doc:`VerifyIO <verifyio>` tool can be used to determine whether an
+application is correctly synchronized.
 
-'''''''''''''''''''''''''''
+'''''''''''''''''''''''''''''''''''''''''''
 Lamination Consistency Semantics in UnifyFS
-'''''''''''''''''''''''''''
+'''''''''''''''''''''''''''''''''''''''''''
 
 The other consistency model that UnifyFS employs is called "lamination
 semantics" which is intended to be applied once a file is done being modified
@@ -202,9 +206,11 @@ metadata and file data between compute nodes on every write.
 Also, since file contents cannot change after lamination,
 aggressive caching may be used during the read phase with minimal locking.
 
----------------------------
+----------
+
+--------------------
 File System Behavior
----------------------------
+--------------------
 
 The following summarize the behavior of UnifyFS under our
 consistency model.
