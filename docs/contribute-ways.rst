@@ -1,5 +1,5 @@
 ******************
-Ways to Contribute
+Contributing Guide
 ******************
 
 *First of all, thank you for taking the time to contribute!*
@@ -102,6 +102,18 @@ able to quickly identify and resolve issues.
 Documentation
 =============
 
+As UnifyFS is continually improved and updated, it is easy for documentation to
+become out-of-date. Any contributions to the documentation, no matter how
+small, is always greatly appreciated. If you are not in a position to update
+the documentation yourself, please notify us via the `mailing list`_ of
+anything you notice that is missing or needs to be changed.
+
+---------------
+
+***********************
+Developer Documentation
+***********************
+
 Here is our current documentation of how the internals of UnifyFS function for
 several basic operations.
 
@@ -113,15 +125,9 @@ several basic operations.
    :align: left
    :alt: UnifyFS Developer's Documentation
 
-:download:`Download slides <slides/UnifyFS-developers-documentation.pdf>`.
+:download:`Download PDF <slides/UnifyFS-developers-documentation.pdf>`.
 
 |
-
-As UnifyFS is continually improved and updated, it is easy for documentation to
-become out-of-date. Any contributions to the documentation, no matter how
-small, is always greatly appreciated. If you are not in a position to update
-the documentation yourself, please notify us via the `mailing list`_ of
-anything you notice that needs to be changed.
 
 .. explicit external hyperlink targets
 

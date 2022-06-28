@@ -1,26 +1,34 @@
-========================
+=============
 Build UnifyFS
-========================
+=============
 
 This section describes how to build UnifyFS and its dependencies.
 There are three options:
 
-* build both UnifyFS and its dependencies with Spack,
+* build both UnifyFS and dependencies with Spack,
 * build the dependencies with Spack, but build UnifyFS with autotools
 * build the dependencies with a bootstrap script, and build UnifyFS with autotools
 
----------------------------
+----------
 
----------------------------------------------
-Build UnifyFS and its dependencies with Spack
----------------------------------------------
+-----------------------------------------
+Build UnifyFS and Dependencies with Spack
+-----------------------------------------
 
 One may install UnifyFS and its dependencies with Spack_.
 If you already have Spack, make sure you have the latest release.
 If you use a clone of the Spack develop branch, be sure to pull the latest changes.
 
-.. _build-label:
+.. warning:: **Thallium, Mochi Suite, and SDS Repo Users**
 
+    The available and UnifyFS-compatible Mochi-Margo versions that are in the
+    ``mochi-margo`` Spack package do not match up with the latest/default
+    versions in the Mochi Suite, SDS Repo, and ``mochi-thallium`` Spack
+    packages. It is likely that a different version of ``mochi-margo`` will need
+    to be specified in the install command of UnifyFS (E.g.: ``spack install
+    unifyfs ^mochi-margo@0.9.6``).
+
+.. _build-label:
 Install Spack
 *************
 
@@ -33,8 +41,8 @@ Install Spack
 Use `Spack's shell support`_ to add Spack to your ``PATH`` and enable use of the
 ``spack`` command.
 
-Build UnifyFS and its dependencies
-**********************************
+Build and Install UnifyFS
+*************************
 
 .. code-block:: Bash
 
@@ -44,11 +52,9 @@ Build UnifyFS and its dependencies
 If the most recent changes on the development branch ('dev') of UnifyFS are
 desired, then do ``spack install unifyfs@develop``.
 
-.. Edit the following admonition if the default of variants are changed or when
-   new variants are added.
-
 Include or remove variants with Spack when installing UnifyFS when a custom
-build is desired. Run ``spack info unifyfs`` for more info.
+build is desired. Run ``spack info unifyfs`` for more information on available
+variants.
 
 .. table:: UnifyFS Build Variants
    :widths: auto
@@ -58,9 +64,6 @@ build is desired. Run ``spack info unifyfs`` for more info.
                (``spack install <package>``)
    ==========  =============================  =======  ===========================
    Auto-mount  ``unifyfs+auto-mount``         True     Enable transparent mounting
-   HDF5        ``unifyfs+hdf5``               False    Build with parallel HDF5
-
-               ``unifyfs+hdf5 ^hdf5~mpi``     False    Build with serial HDF5
    Fortran     ``unifyfs+fortran``            False    Enable Fortran support
    PMI         ``unifyfs+pmi``                False    Enable PMI2 support
    PMIx        ``unifyfs+pmix``               False    Enable PMIx support
@@ -78,10 +81,10 @@ build is desired. Run ``spack info unifyfs`` for more info.
     Run ``spack spec -I unifyfs`` before installing to see what Spack is going
     to do.
 
----------------------------
+----------
 
 -----------------------------------------------------------
-Build dependencies with Spack, build UnifyFS with autotools
+Build Dependencies with Spack, Build UnifyFS with Autotools
 -----------------------------------------------------------
 
 One can install the UnifyFS dependencies with Spack and build UnifyFS
@@ -92,7 +95,7 @@ Take advantage of `Spack Environments`_ to streamline this process.
 
 .. _spack-build-label:
 
-Build the dependencies
+Build the Dependencies
 **********************
 
 Once Spack is installed on your system (see :ref:`above <build-label>`),
@@ -101,13 +104,13 @@ the UnifyFS dependencies can then be installed.
 .. code-block:: Bash
 
     $ spack install gotcha
-    $ spack install mochi-margo ^libfabric fabrics=rxm,sockets,tcp
+    $ spack install mochi-margo@0.9.6 ^libfabric fabrics=rxm,sockets,tcp
     $ spack install spath~mpi
 
 .. tip::
 
-    You can run ``spack install --only=dependencies unifyfs`` to install all
-    UnifyFS dependencies without installing UnifyFS.
+    Run ``spack install --only=dependencies unifyfs`` to install all UnifyFS
+    dependencies without installing UnifyFS itself.
 
     Keep in mind this will also install all the build dependencies and
     dependencies of dependencies if you haven't already installed them through
@@ -118,7 +121,7 @@ Build UnifyFS
 *************
 
 Download the latest UnifyFS release from the Releases_ page or clone the develop
-branch from the UnifyFS repository
+branch ('dev') from the UnifyFS repository
 `https://github.com/LLNL/UnifyFS <https://github.com/LLNL/UnifyFS>`_.
 
 Load the dependencies into your environment and then
@@ -149,21 +152,21 @@ Alternatively, UnifyFS can be configured using ``CPPFLAGS`` and ``LDFLAGS``:
 To see all available build configuration options, run ``./configure --help``
 after ``./autogen.sh`` has been run.
 
----------------------------
+----------
 
 ------------------------------------------------------------------
-Build dependencies with bootstrap and build UnifyFS with autotools
+Build Dependencies with Bootstrap and Build UnifyFS with Autotools
 ------------------------------------------------------------------
 
 Download the latest UnifyFS release from the Releases_ page or clone the develop
-branch from the UnifyFS repository
+branch ('dev') from the UnifyFS repository
 `https://github.com/LLNL/UnifyFS <https://github.com/LLNL/UnifyFS>`_.
 
 Build the Dependencies
 **********************
 
 UnifyFS requires MPI, GOTCHA, Margo and OpenSSL.
-References to these dependencies can be found on our :doc:`dependencies` page.
+References to these dependencies can be found on the :doc:`dependencies` page.
 
 A bootstrap.sh_ script in the UnifyFS source distribution downloads and installs
 all dependencies.  Simply run the script in the top level directory of the
@@ -212,14 +215,14 @@ after ``./autogen.sh`` has been run.
     On Cray systems, the detection of MPI compiler wrappers requires passing the
     following flags to the configure command: ``MPICC=cc MPIFC=ftn``
 
----------------------------
+----------
 
 -----------------
 Configure Options
 -----------------
 
-When building UnifyFS with autotools,
-a number of options are available to configure its functionality.
+When building UnifyFS with autotools, a number of options are available to
+configure its functionality.
 
 Fortran
 *******
@@ -272,6 +275,7 @@ relative paths within an application. To enable, use the ``--with-spath``
 configure option or provide the appropriate ``CPPFLAGS`` and ``LDFLAGS`` at
 configure time.
 
+.. _auto-mount-label:
 Transparent Mounting for MPI Applications
 *****************************************
 
