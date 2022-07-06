@@ -100,7 +100,7 @@ test_wrap_ldadd = \
 
 test_wrap_ldflags = \
   $(AM_LDFLAGS) \
-  $(CP_WRAPPERS) \
+  $(LINK_WRAPPERS) \
   -static
 
 # Per-target flags begin here

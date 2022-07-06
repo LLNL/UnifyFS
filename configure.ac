@@ -120,35 +120,13 @@ AC_ARG_WITH(pkgconfigdir,
 AC_SUBST(pkgconfigdir)
 
 ## unifyfs options
-AC_ARG_ENABLE([cuserid],[AS_HELP_STRING([--disable-cuserid],[Disables attempted use of cuserid() at run time])],[
-        AS_IF([test "x$enableval" = "xno"],[
-            AC_DEFINE(CRUISE_DISABLE_CUSERID, 1, Define if cuserid() should be disabled),],[])]
-,)
 
-AC_ARG_ENABLE(ld-preload,[AS_HELP_STRING([--disable-ld-preload],[Disables support for LD_PRELOAD library])],[
-        AS_IF([test "x$enableval" = "xno"],[
-            DISABLE_LDPRELOAD="1"
-        ],[])
-    ]
-,[])
-
-AC_ARG_ENABLE(st-dev-workaround,
-    [AS_HELP_STRING([--enable-st-dev-workaround],[Gather device id from parent directory instead of file])],[
-        AS_IF([test "x$enableval" = "xyes"],[
-            AC_DEFINE(__CP_ST_DEV_WORKAROUND, 1, Define if device id should be taken from parent directory rather than file)
-            DISABLE_LDPRELOAD="1"
-        ],[])
-    ]
-,[])
-
-# use mpi for bootstraping unifyfsd
-AC_ARG_ENABLE(unifyfsd-mpi,
-    [AS_HELP_STRING([--enable-unifyfsd-mpi],[Use MPI for bootstrapping unifyfsd])],[
-        AS_IF([test "x$enableval" = "xyes"],[
-            AC_DEFINE(UNIFYFSD_USE_MPI, 1, Define if unifyfsd has to use mpi for bootstrapping)],[])
-    ]
-,[])
-
+AC_ARG_ENABLE(preload,[AS_HELP_STRING([--enable-preload],[Enables support for LD_PRELOAD library])])
+AS_IF([test "x$enable_preload" = "xyes"],[
+    AM_CONDITIONAL([ENABLE_LD_PRELOAD],[true])
+],[
+    AM_CONDITIONAL([ENABLE_LD_PRELOAD],[false])
+])
 
 # look for MPI and set flags
 LX_FIND_MPI
@@ -223,133 +201,141 @@ AM_CONDITIONAL([HAVE_HDF5], [test x$with_hdf5 = xyes])
 
 # libc functions wrapped by unifyfs
 
-CP_WRAPPERS+="-Wl,-wrap,access"
-CP_WRAPPERS+=",-wrap,chmod"
-CP_WRAPPERS+=",-wrap,fchmod"
+LINK_WRAPPERS="-Wl"
+
+# path functions
+LINK_WRAPPERS+=",-wrap,access"
+LINK_WRAPPERS+=",-wrap,chmod"
+LINK_WRAPPERS+=",-wrap,creat"
+LINK_WRAPPERS+=",-wrap,creat64"
+LINK_WRAPPERS+=",-wrap,__open_2"
+LINK_WRAPPERS+=",-wrap,open"
+AC_CHECK_FUNCS(open64, [
+    LINK_WRAPPERS+=",-wrap,open64"
+],[])
+LINK_WRAPPERS+=",-wrap,remove"
+LINK_WRAPPERS+=",-wrap,rename"
+LINK_WRAPPERS+=",-wrap,truncate"
+LINK_WRAPPERS+=",-wrap,unlink"
+
+# file descriptor functions
+LINK_WRAPPERS+=",-wrap,close"
+LINK_WRAPPERS+=",-wrap,dup"
+LINK_WRAPPERS+=",-wrap,dup2"
+LINK_WRAPPERS+=",-wrap,fchmod"
+LINK_WRAPPERS+=",-wrap,fdatasync"
+LINK_WRAPPERS+=",-wrap,flock"
+LINK_WRAPPERS+=",-wrap,fsync"
+LINK_WRAPPERS+=",-wrap,ftruncate"
+LINK_WRAPPERS+=",-wrap,lseek"
+LINK_WRAPPERS+=",-wrap,lseek64"
+LINK_WRAPPERS+=",-wrap,pread"
+LINK_WRAPPERS+=",-wrap,pread64"
+LINK_WRAPPERS+=",-wrap,pwrite"
+LINK_WRAPPERS+=",-wrap,pwrite64"
+LINK_WRAPPERS+=",-wrap,read"
+LINK_WRAPPERS+=",-wrap,readv"
+LINK_WRAPPERS+=",-wrap,write"
+LINK_WRAPPERS+=",-wrap,writev"
 
 OLD_LIBS=$LIBS
 LIBS+=" -lrt"
 AC_CHECK_FUNCS(lio_listio,[
-    CP_WRAPPERS+=",-wrap,lio_listio"
+    LINK_WRAPPERS+=",-wrap,lio_listio"
 ], [])
 LIBS=$OLD_LIBS
 
-CP_WRAPPERS+=",-wrap,mkdir"
-CP_WRAPPERS+=",-wrap,rmdir"
-CP_WRAPPERS+=",-wrap,chdir"
-CP_WRAPPERS+=",-wrap,__getcwd_chk"
-CP_WRAPPERS+=",-wrap,getcwd"
-CP_WRAPPERS+=",-wrap,getwd"
-CP_WRAPPERS+=",-wrap,get_current_dir_name"
-CP_WRAPPERS+=",-wrap,unlink"
-CP_WRAPPERS+=",-wrap,remove"
-CP_WRAPPERS+=",-wrap,rename"
-CP_WRAPPERS+=",-wrap,truncate"
-CP_WRAPPERS+=",-wrap,stat"
-CP_WRAPPERS+=",-wrap,fstat"
+# memory-mapped files
+LINK_WRAPPERS+=",-wrap,mmap"
+LINK_WRAPPERS+=",-wrap,mmap64"
+LINK_WRAPPERS+=",-wrap,msync"
+LINK_WRAPPERS+=",-wrap,munmap"
 
-
+# status functions
+LINK_WRAPPERS+=",-wrap,fstat"
+LINK_WRAPPERS+=",-wrap,stat"
 AC_CHECK_FUNCS(statfs,[
-    CP_WRAPPERS+=",-wrap,statfs"
+    LINK_WRAPPERS+=",-wrap,statfs"
 ],[])
 AC_CHECK_FUNCS(fstatfs,[
-    CP_WRAPPERS+=",-wrap,fstatfs"
+    LINK_WRAPPERS+=",-wrap,fstatfs"
 ],[])
 
 AC_CHECK_FUNCS(__lxstat,[
-    CP_WRAPPERS+=",-wrap,__lxstat"
+    LINK_WRAPPERS+=",-wrap,__lxstat"
 ],[])
 AC_CHECK_FUNCS(__xstat,[
-    CP_WRAPPERS+=",-wrap,__xstat"
+    LINK_WRAPPERS+=",-wrap,__xstat"
 ],[])
 AC_CHECK_FUNCS(__fxstat,[
-    CP_WRAPPERS+=",-wrap,__fxstat"
+    LINK_WRAPPERS+=",-wrap,__fxstat"
 ],[])
 
-CP_WRAPPERS+=",-wrap,creat"
-CP_WRAPPERS+=",-wrap,creat64"
-CP_WRAPPERS+=",-wrap,open"
-AC_CHECK_FUNCS(open64, [
-    CP_WRAPPERS+=",-wrap,open64"
-],[])
-CP_WRAPPERS+=",-wrap,__open_2"
-CP_WRAPPERS+=",-wrap,read"
-CP_WRAPPERS+=",-wrap,write"
-CP_WRAPPERS+=",-wrap,readv"
-CP_WRAPPERS+=",-wrap,writev"
-CP_WRAPPERS+=",-wrap,pread"
-CP_WRAPPERS+=",-wrap,pread64"
-CP_WRAPPERS+=",-wrap,pwrite"
-CP_WRAPPERS+=",-wrap,pwrite64"
 AC_CHECK_FUNCS(posix_fadvise, [
-    CP_WRAPPERS+=",-wrap,posix_fadvise"
+    LINK_WRAPPERS+=",-wrap,posix_fadvise"
 ],[])
-CP_WRAPPERS+=",-wrap,lseek"
-CP_WRAPPERS+=",-wrap,lseek64"
-CP_WRAPPERS+=",-wrap,fchdir"
-CP_WRAPPERS+=",-wrap,ftruncate"
-CP_WRAPPERS+=",-wrap,fsync"
-CP_WRAPPERS+=",-wrap,fdatasync"
-CP_WRAPPERS+=",-wrap,flock"
-CP_WRAPPERS+=",-wrap,mmap"
-CP_WRAPPERS+=",-wrap,mmap64"
-CP_WRAPPERS+=",-wrap,munmap"
-CP_WRAPPERS+=",-wrap,msync"
-CP_WRAPPERS+=",-wrap,close"
+
+# directory functions
+LINK_WRAPPERS+=",-wrap,chdir"
+LINK_WRAPPERS+=",-wrap,fchdir"
+LINK_WRAPPERS+=",-wrap,__getcwd_chk"
+LINK_WRAPPERS+=",-wrap,getcwd"
+LINK_WRAPPERS+=",-wrap,getwd"
+LINK_WRAPPERS+=",-wrap,get_current_dir_name"
+LINK_WRAPPERS+=",-wrap,mkdir"
+LINK_WRAPPERS+=",-wrap,rmdir"
 
 # FILE* functions
-CP_WRAPPERS+=",-wrap,fclose"
-CP_WRAPPERS+=",-wrap,fflush"
-CP_WRAPPERS+=",-wrap,fopen"
-CP_WRAPPERS+=",-wrap,freopen"
-CP_WRAPPERS+=",-wrap,setbuf"
-CP_WRAPPERS+=",-wrap,setvbuf"
+LINK_WRAPPERS+=",-wrap,fclose"
+LINK_WRAPPERS+=",-wrap,fflush"
+LINK_WRAPPERS+=",-wrap,fopen"
+LINK_WRAPPERS+=",-wrap,freopen"
+LINK_WRAPPERS+=",-wrap,setbuf"
+LINK_WRAPPERS+=",-wrap,setvbuf"
 
-CP_WRAPPERS+=",-wrap,fprintf"
-CP_WRAPPERS+=",-wrap,fscanf"
-CP_WRAPPERS+=",-wrap,vfprintf"
-CP_WRAPPERS+=",-wrap,vfscanf"
+LINK_WRAPPERS+=",-wrap,fprintf"
+LINK_WRAPPERS+=",-wrap,fscanf"
+LINK_WRAPPERS+=",-wrap,vfprintf"
+LINK_WRAPPERS+=",-wrap,vfscanf"
 
-CP_WRAPPERS+=",-wrap,fgetc"
-CP_WRAPPERS+=",-wrap,fgets"
-CP_WRAPPERS+=",-wrap,fputc"
-CP_WRAPPERS+=",-wrap,fputs"
-CP_WRAPPERS+=",-wrap,getc"
-CP_WRAPPERS+=",-wrap,putc"
-CP_WRAPPERS+=",-wrap,ungetc"
+LINK_WRAPPERS+=",-wrap,fgetc"
+LINK_WRAPPERS+=",-wrap,fgets"
+LINK_WRAPPERS+=",-wrap,fputc"
+LINK_WRAPPERS+=",-wrap,fputs"
+LINK_WRAPPERS+=",-wrap,getc"
+LINK_WRAPPERS+=",-wrap,putc"
+LINK_WRAPPERS+=",-wrap,ungetc"
 
-CP_WRAPPERS+=",-wrap,fread"
-CP_WRAPPERS+=",-wrap,fwrite"
+LINK_WRAPPERS+=",-wrap,fread"
+LINK_WRAPPERS+=",-wrap,fwrite"
 
-CP_WRAPPERS+=",-wrap,fgetpos"
-CP_WRAPPERS+=",-wrap,fseek"
-CP_WRAPPERS+=",-wrap,fsetpos"
-CP_WRAPPERS+=",-wrap,ftell"
-CP_WRAPPERS+=",-wrap,rewind"
+LINK_WRAPPERS+=",-wrap,fgetpos"
+LINK_WRAPPERS+=",-wrap,fseek"
+LINK_WRAPPERS+=",-wrap,fsetpos"
+LINK_WRAPPERS+=",-wrap,ftell"
+LINK_WRAPPERS+=",-wrap,rewind"
 
-CP_WRAPPERS+=",-wrap,clearerr"
-CP_WRAPPERS+=",-wrap,feof"
-CP_WRAPPERS+=",-wrap,ferror"
+LINK_WRAPPERS+=",-wrap,clearerr"
+LINK_WRAPPERS+=",-wrap,feof"
+LINK_WRAPPERS+=",-wrap,ferror"
 
-CP_WRAPPERS+=",-wrap,fseeko"
-CP_WRAPPERS+=",-wrap,ftello"
-CP_WRAPPERS+=",-wrap,fileno"
+LINK_WRAPPERS+=",-wrap,fseeko"
+LINK_WRAPPERS+=",-wrap,ftello"
+LINK_WRAPPERS+=",-wrap,fileno"
 
 # wide character FILE* functions
-CP_WRAPPERS+=",-wrap,fwprintf"
-CP_WRAPPERS+=",-wrap,fwscanf"
-CP_WRAPPERS+=",-wrap,vfwprintf"
-CP_WRAPPERS+=",-wrap,vfwscanf"
-CP_WRAPPERS+=",-wrap,fgetwc"
-CP_WRAPPERS+=",-wrap,fgetws"
-CP_WRAPPERS+=",-wrap,fputwc"
-CP_WRAPPERS+=",-wrap,fputws"
-CP_WRAPPERS+=",-wrap,fwide"
-CP_WRAPPERS+=",-wrap,getwc"
-CP_WRAPPERS+=",-wrap,putwc"
-CP_WRAPPERS+=",-wrap,ungetwc"
-
-# ,-u,__wrap___fxstat64,-u,pthread_mutex_lock,-u,pthread_mutex_unlock
+LINK_WRAPPERS+=",-wrap,fwprintf"
+LINK_WRAPPERS+=",-wrap,fwscanf"
+LINK_WRAPPERS+=",-wrap,vfwprintf"
+LINK_WRAPPERS+=",-wrap,vfwscanf"
+LINK_WRAPPERS+=",-wrap,fgetwc"
+LINK_WRAPPERS+=",-wrap,fgetws"
+LINK_WRAPPERS+=",-wrap,fputwc"
+LINK_WRAPPERS+=",-wrap,fputws"
+LINK_WRAPPERS+=",-wrap,fwide"
+LINK_WRAPPERS+=",-wrap,getwc"
+LINK_WRAPPERS+=",-wrap,putwc"
+LINK_WRAPPERS+=",-wrap,ungetwc"
 
 # We need to know the value of the $libdir and $bindir variables so that
 # we can reference the correct path in the unifyfs compiler wrappers.
@@ -377,10 +363,7 @@ fi
 
 AC_SUBST(unifyfs_lib_path)
 AC_SUBST(unifyfs_bin_path)
-AC_SUBST(LDFLAGS)
-AC_SUBST(__CP_LOG_PATH)
-AC_SUBST(CP_WRAPPERS)
-AC_SUBST(DISABLE_LDPRELOAD)
+AC_SUBST(LINK_WRAPPERS)
 
 AC_CONFIG_FILES([Makefile
                  meta/Makefile
@@ -431,8 +414,8 @@ AC_MSG_RESULT([
     CFLAGS      ${CFLAGS}
     ==========================
 
-    Supported POSIX wrappers:
+    Supported I/O wrappers:
 
-    ${CP_WRAPPERS}
+    ${LINK_WRAPPERS}
 
 ])

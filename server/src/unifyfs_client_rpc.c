@@ -267,6 +267,7 @@ static void unifyfs_unmount_rpc(hg_handle_t handle)
         /* disconnect app client */
         app_client* clnt = get_app_client(app_id, client_id);
         if (NULL != clnt) {
+            LOGDBG("disconnecting app client [%d:%d]", app_id, client_id);
             ret = disconnect_app_client(clnt);
         } else {
             LOGERR("application client not found");
