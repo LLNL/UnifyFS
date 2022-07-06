@@ -115,7 +115,7 @@ ex_posix_mpi_ldadd = $(ex_posix_ldadd) $(MPI_CLDFLAGS)
 
 ex_static_ldadd     = $(ex_static_lib) -lrt -lm
 ex_static_mpi_ldadd = $(ex_static_ldadd) $(MPI_CLDFLAGS)
-ex_static_ldflags   = $(AM_LDFLAGS) -static $(CP_WRAPPERS)
+ex_static_ldflags   = $(AM_LDFLAGS) $(LINK_WRAPPERS) -static
 
 # Per-target flags begin here
 
