@@ -144,6 +144,12 @@ UNIFYFS_DEF(pwrite64, ssize_t,
 UNIFYFS_DEF(close, int,
             (int fd),
             (fd))
+UNIFYFS_DEF(dup, int,
+            (int fd),
+            (fd))
+UNIFYFS_DEF(dup2, int,
+            (int fd, int desired_fd),
+            (fd, desired_fd))
 UNIFYFS_DEF(fchdir, int,
             (int fd),
             (fd))
@@ -386,6 +392,8 @@ struct gotcha_binding_t unifyfs_wrappers[] = {
     { "munmap", UNIFYFS_WRAP(munmap), &wrappee_handle_munmap },
     { "mmap64", UNIFYFS_WRAP(mmap64), &wrappee_handle_mmap64 },
     { "close", UNIFYFS_WRAP(close), &wrappee_handle_close },
+    { "dup", UNIFYFS_WRAP(dup), &wrappee_handle_dup },
+    { "dup2", UNIFYFS_WRAP(dup2), &wrappee_handle_dup2 },
     { "opendir", UNIFYFS_WRAP(opendir), &wrappee_handle_opendir },
     { "fdopendir", UNIFYFS_WRAP(fdopendir), &wrappee_handle_fdopendir },
     { "closedir", UNIFYFS_WRAP(closedir), &wrappee_handle_closedir },

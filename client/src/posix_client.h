@@ -25,11 +25,12 @@
 
 /* structure to represent file descriptors */
 typedef struct {
-    int   fid;   /* local file id associated with fd */
-    off_t pos;   /* current file pointer */
-    int   read;  /* whether file is opened for read */
-    int   write; /* whether file is opened for write */
-    int   append; /* whether file is opened for append */
+    off_t pos;       /* current file pointer */
+    int   read;      /* whether file is opened for read */
+    int   write;     /* whether file is opened for write */
+    int   append;    /* whether file is opened for append */
+    int   fid;       /* local file id associated with fd */
+    int   use_count; /* how many exposed fds refer to this */
 } unifyfs_fd_t;
 
 enum unifyfs_stream_orientation {
@@ -100,7 +101,8 @@ extern int unifyfs_mount_id; /* gfid of mountpoint */
 /* whether we can use fgetpos/fsetpos */
 extern int unifyfs_fpos_enabled;
 
-/* array of file descriptors */
+/* arrays of file descriptors */
+extern int unifyfs_dup_fds[UNIFYFS_CLIENT_MAX_FILES];
 extern unifyfs_fd_t unifyfs_fds[UNIFYFS_CLIENT_MAX_FILES];
 extern rlim_t unifyfs_fd_limit;
 
@@ -174,6 +176,9 @@ int unifyfs_get_fid_from_fd(int fd);
 
 /* initialze file descriptor structure corresponding to fd value */
 int unifyfs_fd_init(int fd);
+
+/* initialize unifyfs_dup_fds[] entry corresponding to fd value */
+int unifyfs_dup_fd_init(int fd);
 
 /* initialze file stream structure corresponding to id value */
 int unifyfs_stream_init(int sid);
