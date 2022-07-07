@@ -378,7 +378,7 @@ int unifyfs_pmix_init(void)
     // PMIX_JOB_SIZE evaluates to a 14 byte char array while pmix_key_t is
     // (at least) 64 bytes.
     pmix_key_t key;
-    strcpy(key, PMIX_JOB_SIZE);
+    strlcpy(key, PMIX_JOB_SIZE, sizeof(pmix_key_t));
     rc = PMIx_Get(&proc, key, NULL, 0, &valp);
 
     if (rc != PMIX_SUCCESS) {
