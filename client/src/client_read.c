@@ -621,6 +621,7 @@ int process_gfid_reads(unifyfs_client* client,
         service_local_reqs(client, in_reqs, in_count,
                            local_reqs, server_reqs, &server_count);
         local_count = in_count - server_count;
+        //LOGERR("locally read %d requests\n", local_count);
         for (i = 0; i < local_count; i++) {
             /* get pointer to next read request */
             read_req_t* req = local_reqs + i;
@@ -639,6 +640,7 @@ int process_gfid_reads(unifyfs_client* client,
         }
     }
 
+     //LOGERR("need to read %d requests from server\n", server_count);
     /* check that we have enough slots for all read requests */
     if (server_count > UNIFYFS_CLIENT_MAX_READ_COUNT) {
         /* TODO: When the number of read requests exceeds the
