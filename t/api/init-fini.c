@@ -19,11 +19,14 @@ int api_initialize_test(char* unifyfs_root,
 {
     diag("Starting API initialization test");
 
-    int n_configs = 1;
-    unifyfs_cfg_option chk_size = { .opt_name = "logio.chunk_size",
-                                    .opt_value = "32768" };
+    int n_configs = 2;
+    unifyfs_cfg_option options[2];
+    options[0].opt_name = "logio.chunk_size";
+    options[0].opt_value = "32768";
+    options[1].opt_name = "client.node_local_extents";
+    options[1].opt_value = "on";
 
-    int rc = unifyfs_initialize(unifyfs_root, &chk_size, n_configs, fshdl);
+    int rc = unifyfs_initialize(unifyfs_root, options, n_configs, fshdl);
     ok(rc == UNIFYFS_SUCCESS,
        "%s:%d unifyfs_initialize() is successful: rc=%d (%s)",
        __FILE__, __LINE__, rc, unifyfs_rc_enum_description(rc));

@@ -72,6 +72,7 @@
     UNIFYFS_CFG(client, cwd, STRING, NULLSTRING, "current working directory", NULL) \
     UNIFYFS_CFG(client, fsync_persist, BOOL, on, "persist written data to storage on fsync()", NULL) \
     UNIFYFS_CFG(client, local_extents, BOOL, off, "use client-cached extents to service local reads without consulting local server", NULL) \
+    UNIFYFS_CFG(client, node_local_extents, BOOL, off, "use node-local extents to service local reads without consulting local server everytime", NULL) \
     UNIFYFS_CFG(client, max_files, INT, UNIFYFS_CLIENT_MAX_FILES, "client max file count", NULL) \
     UNIFYFS_CFG(client, write_index_size, INT, UNIFYFS_CLIENT_WRITE_INDEX_SIZE, "write metadata index buffer size", NULL) \
     UNIFYFS_CFG(client, write_sync, BOOL, off, "sync every write to server", NULL) \

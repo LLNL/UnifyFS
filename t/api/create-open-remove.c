@@ -32,6 +32,7 @@ int api_create_open_remove_test(char* unifyfs_root,
     int t2_flags = 0;
     unifyfs_gfid t1_gfid = UNIFYFS_INVALID_GFID;
     unifyfs_gfid t2_gfid = UNIFYFS_INVALID_GFID;
+    unifyfs_gfid dummy_gfid = UNIFYFS_INVALID_GFID;
 
     int rc = unifyfs_create(*fshdl, t1_flags, testfile1, &t1_gfid);
     ok(rc == UNIFYFS_SUCCESS && t1_gfid != UNIFYFS_INVALID_GFID,
@@ -41,6 +42,11 @@ int api_create_open_remove_test(char* unifyfs_root,
     rc = unifyfs_create(*fshdl, t2_flags, testfile2, &t2_gfid);
     ok(rc == UNIFYFS_SUCCESS && t2_gfid != UNIFYFS_INVALID_GFID,
        "%s:%d unifyfs_create(%s) is successful: rc=%d (%s)",
+       __FILE__, __LINE__, testfile2, rc, unifyfs_rc_enum_description(rc));
+
+    rc = unifyfs_create(*fshdl, t2_flags, testfile2, &dummy_gfid);
+    ok(rc != UNIFYFS_SUCCESS && dummy_gfid == UNIFYFS_INVALID_GFID,
+       "%s:%d unifyfs_create(%s) for existing file fails: rc=%d (%s)",
        __FILE__, __LINE__, testfile2, rc, unifyfs_rc_enum_description(rc));
 
     diag("Finished API create tests");

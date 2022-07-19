@@ -372,7 +372,15 @@ int unifyfs_pmix_init(void)
     PMIX_PROC_CONSTRUCT(&proc);
     strlcpy(proc.nspace, pmix_myproc.nspace, PMIX_MAX_NSLEN);
     proc.rank = PMIX_RANK_WILDCARD;
-    rc = PMIx_Get(&proc, PMIX_JOB_SIZE, NULL, 0, &valp);
+
+    // Note: we do an extra copy because passing PMIX_JOB_SIZE directly to
+    // PMIx_Get() causes gcc 11 to generate a warning due to the fact that
+    // PMIX_JOB_SIZE evaluates to a 14 byte char array while pmix_key_t is
+    // (at least) 64 bytes.
+    pmix_key_t key;
+    strlcpy(key, PMIX_JOB_SIZE, sizeof(pmix_key_t));
+    rc = PMIx_Get(&proc, key, NULL, 0, &valp);
+
     if (rc != PMIX_SUCCESS) {
         LOGERR("PMIx rank %d: PMIx_Get(JOB_SIZE) failed: %s",
                pmix_myproc.rank, PMIx_Error_string(rc));

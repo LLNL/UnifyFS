@@ -111,7 +111,16 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
             client->max_files = (int)l;
         }
     }
-
+    /* Determine if we should track all node local extents and use them
+     * to service read requests if all data is node local */
+    client->use_node_local_extents = 0;
+    cfgval = client_cfg->client_node_local_extents;
+    if (cfgval != NULL) {
+        rc = configurator_bool_val(cfgval, &b);
+        if (rc == 0) {
+            client->use_node_local_extents = (bool)b;
+        }
+    }
     /* Determine if we should track all write extents and use them
      * to service read requests if all data is local */
     client->use_local_extents = 0;
