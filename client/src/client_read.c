@@ -606,12 +606,15 @@ int process_gfid_reads(unifyfs_client* client,
             /* get meta for this file id */
             unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
             if (!meta->attrs.is_laminated || !meta->needs_extents_sync) {
-                /* do not proceed for this request as its not a laminated file.*/
+                /* do not proceed for this request as
+                 * it is not a laminated file or has already been synced.*/
                 continue;
             }
             num_request_selected++;
-            cur->value.file_pos = in_reqs[i].offset;
-            cur->value.length = in_reqs[i].length;
+            off_t filesize_offt = unifyfs_gfid_filesize(client,
+                                                        in_reqs[i].gfid);
+            cur->value.file_pos = 0;
+            cur->value.length = filesize_offt - 1;
             cur->value.gfid = in_reqs[i].gfid;
             if (i < in_count - 1) {
                 cur->next = calloc(1, sizeof(struct extents_list));
@@ -620,23 +623,32 @@ int process_gfid_reads(unifyfs_client* client,
             } else {
                 cur->next = NULL;
             }
+            meta->needs_extents_sync = 0;
         }
         if (num_request_selected > 0) {
-            /* There are files which are laminated and require sync of extents */
+            /* There are files which are laminated and
+             * require sync of extents */
             int extent_count = 0;
             extents_list_t extents = NULL;
-            int ret = invoke_client_node_local_extents_get_rpc(client, num_request_selected, &list, &extent_count, &extents);
+            int ret =
+                  invoke_client_node_local_extents_get_rpc(client,
+                                                           num_request_selected,
+                                                           &list,
+                                                           &extent_count,
+                                                           &extents);
             if (ret == UNIFYFS_SUCCESS && extent_count != 0) {
                 extents_list_t fetched_extents_cur = extents;
-                for(int j = 0 ; j < extent_count; ++j) {
-                    int fid = unifyfs_fid_from_gfid(client, fetched_extents_cur->value.gfid);
+                for (int j = 0; j < extent_count; ++j) {
+                    int fid = unifyfs_fid_from_gfid(client,
+                                             fetched_extents_cur->value.gfid);
                     /* get meta for this file id */
-                    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
+                    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client,
+                                                                         fid);
                     seg_tree_add(&meta->extents,
                                  fetched_extents_cur->value.file_pos,
-                                 fetched_extents_cur->value.file_pos + fetched_extents_cur->value.length - 1,
+                                 fetched_extents_cur->value.file_pos +
+                                 fetched_extents_cur->value.length - 1,
                                  fetched_extents_cur->value.log_pos);
-                    meta->needs_extents_sync = 0;
                     fetched_extents_cur = fetched_extents_cur->next;
                 }
             }
@@ -667,7 +679,6 @@ int process_gfid_reads(unifyfs_client* client,
         service_local_reqs(client, in_reqs, in_count,
                            local_reqs, server_reqs, &server_count);
         local_count = in_count - server_count;
-        //LOGERR("locally read %d requests\n", local_count);
         for (i = 0; i < local_count; i++) {
             /* get pointer to next read request */
             read_req_t* req = local_reqs + i;
@@ -686,7 +697,6 @@ int process_gfid_reads(unifyfs_client* client,
         }
     }
 
-     //LOGERR("need to read %d requests from server\n", server_count);
     /* check that we have enough slots for all read requests */
     if (server_count > UNIFYFS_CLIENT_MAX_READ_COUNT) {
         /* TODO: When the number of read requests exceeds the

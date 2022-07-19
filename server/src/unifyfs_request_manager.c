@@ -1457,17 +1457,18 @@ static int process_node_local_extents_get_rpc(reqmgr_thrd_t* reqmgr,
     struct extents_list* out_list_cur = &out_list;
     int total_chunks = 0;
     bool add_node = false;
-    while(cur != NULL) {
+    while (cur != NULL) {
         extents[count].gfid = cur->value.gfid;
         extents[count].offset = cur->value.file_pos;
         extents[count].length = cur->value.length;
         LOGDBG("getting node local extent for gfid=%d", extents[count].gfid);
         unsigned int n_chunks = 0;
         chunk_read_req_t* chunks = NULL;
-        int rc = unifyfs_invoke_find_extents_rpc(extents[count].gfid, 1, &extents[count],
+        int rc = unifyfs_invoke_find_extents_rpc(extents[count].gfid, 1,
+                                                 &extents[count],
                                                  &n_chunks, &chunks);
         if (!rc) {
-            if(add_node) {
+            if (add_node) {
                 out_list_cur->next = calloc(1, sizeof(struct extents_list));
                 out_list_cur = out_list_cur->next;
             }
@@ -1492,13 +1493,11 @@ static int process_node_local_extents_get_rpc(reqmgr_thrd_t* reqmgr,
     margo_free_input(req->handle, in);
     free(in);
 
-
     /* prepare the response for node local extents get */
     unifyfs_node_local_extents_get_out_t out;
     hg_return_t hret = 0;
     out.ret = (int32_t) ret;
     out.extent_count = total_chunks;
-
     out.bulk_data = &out_list;
 
     /* send rpc response */
@@ -1511,8 +1510,6 @@ static int process_node_local_extents_get_rpc(reqmgr_thrd_t* reqmgr,
     }
     /* cleanup req */
     margo_destroy(req->handle);
-//    free(extents);
-//    hret = margo_bulk_free(local_bulk);
     return ret;
 }
 

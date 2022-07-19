@@ -885,11 +885,12 @@ int invoke_client_node_local_extents_get_rpc(unifyfs_client* client,
     }
 
     /* get handle to rpc function */
-    hg_handle_t handle = create_handle(client_rpc_context->rpcs.node_local_extents_get_id);
+    hg_handle_t handle = create_handle(
+            client_rpc_context->rpcs.node_local_extents_get_id);
 
     /* fill in input struct */
     unifyfs_node_local_extents_get_in_t in;
-    in.app_id    = (int32_t) client->state.app_id;
+    in.app_id = (int32_t) client->state.app_id;
     in.client_id = (int32_t) client->state.client_id;
     in.num_req = num_req;
     in.read_req = *read_req;
@@ -910,22 +911,23 @@ int invoke_client_node_local_extents_get_rpc(unifyfs_client* client,
     if (hret == HG_SUCCESS) {
         LOGDBG("Got response ret=%" PRIi32, out.ret);
         ret = (int) out.ret;
-        if (ret == (int)UNIFYFS_SUCCESS) {
+        if (ret == (int) UNIFYFS_SUCCESS) {
             *extent_count = out.extent_count;
             *extents = calloc(1, sizeof(struct extents_list));
             struct extents_list* cur = out.bulk_data;
             struct extents_list* up_cur = *extents;
-            int count =0;
-            while(cur != NULL) {
+            int count = 0;
+            while (cur != NULL) {
                 up_cur->value = cur->value;
                 if (count < out.extent_count - 1) {
                     up_cur->next = calloc(1, sizeof(struct extents_list));
                     up_cur->next->next = NULL;
-                    up_cur = up_cur->next;
-                    cur = cur->next;
                 } else {
                     up_cur->next = NULL;
                 }
+                up_cur = up_cur->next;
+                cur = cur->next;
+                count++;
             }
         }
         margo_free_output(handle, &out);
