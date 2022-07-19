@@ -863,3 +863,65 @@ static void unifyfs_mread_rpc(hg_handle_t handle)
     }
 }
 DEFINE_MARGO_RPC_HANDLER(unifyfs_mread_rpc)
+
+/* returns file extents from node local server
+ * given a global file id */
+static void unifyfs_node_local_extents_get_rpc(hg_handle_t handle)
+{
+    int ret = UNIFYFS_SUCCESS;
+    hg_return_t hret;
+
+    /* get input params */
+    unifyfs_node_local_extents_get_in_t* in = malloc(sizeof(*in));
+    if (NULL == in) {
+        ret = ENOMEM;
+    } else {
+        hret = margo_get_input(handle, in);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_get_input() failed");
+            ret = UNIFYFS_ERROR_MARGO;
+        } else {
+            client_rpc_req_t* req = malloc(sizeof(client_rpc_req_t));
+            if (NULL == req) {
+                ret = ENOMEM;
+            } else {
+                unifyfs_fops_ctx_t ctx = {
+                        .app_id = in->app_id,
+                        .client_id = in->client_id,
+                };
+                req->req_type = UNIFYFS_CLIENT_RPC_NODE_LOCAL_EXTENTS_GET;
+                req->handle = handle;
+                req->input = (void*) in;
+                req->bulk_buf = NULL;
+                req->bulk_sz = 0;
+                ret = rm_submit_client_rpc_request(&ctx, req);
+            }
+
+            if (ret != UNIFYFS_SUCCESS) {
+                if (NULL != req) {
+                    free(req);
+                }
+                margo_free_input(handle, in);
+            }
+        }
+    }
+
+    /* if we hit an error during request submission, respond with the error */
+    if (ret != UNIFYFS_SUCCESS) {
+        if (NULL != in) {
+            free(in);
+        }
+        /* return to caller */
+        unifyfs_node_local_extents_get_out_t out;
+        out.ret = (int32_t) ret;
+        out.extent_count = 0;
+        hret = margo_respond(handle, &out);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_respond() failed");
+        }
+
+        /* free margo resources */
+        margo_destroy(handle);
+    }
+}
+DEFINE_MARGO_RPC_HANDLER(unifyfs_node_local_extents_get_rpc)

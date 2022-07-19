@@ -235,6 +235,11 @@ static void register_server_server_rpcs(margo_instance_id mid)
         MARGO_REGISTER(mid, "unlink_bcast_rpc",
                        unlink_bcast_in_t, unlink_bcast_out_t,
                        unlink_bcast_rpc);
+
+    unifyfsd_rpc_context->rpcs.node_local_extents_get_id =
+       MARGO_REGISTER(mid, "unifyfs_node_local_extents_get_rpc",
+                      unifyfs_node_local_extents_get_in_t, unifyfs_node_local_extents_get_out_t,
+                      unifyfs_node_local_extents_get_rpc);
 }
 
 /* setup_local_target - Initializes the client-server margo target */
@@ -318,6 +323,10 @@ static void register_client_server_rpcs(margo_instance_id mid)
     MARGO_REGISTER(mid, "unifyfs_mread_rpc",
                    unifyfs_mread_in_t, unifyfs_mread_out_t,
                    unifyfs_mread_rpc);
+
+    MARGO_REGISTER(mid, "unifyfs_node_local_extents_get_rpc",
+                   unifyfs_node_local_extents_get_in_t, unifyfs_node_local_extents_get_out_t,
+                   unifyfs_node_local_extents_get_rpc);
 
     /* register the RPCs we call (and capture assigned hg_id_t) */
     unifyfsd_rpc_context->rpcs.client_heartbeat_id =

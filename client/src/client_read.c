@@ -597,9 +597,55 @@ int process_gfid_reads(unifyfs_client* client,
     /* this records the pointer to the temp request array if
      * we allocate one, we should free this later if not NULL */
     read_req_t* reqs = NULL;
+    if (client->use_node_local_extents) {
+        extents_list_t list = calloc(1, sizeof(struct extents_list));
+        struct extents_list* cur = list;
+        int num_request_selected = 0;
+        for (int i = 0; i < in_count; ++i) {
+            int fid = unifyfs_fid_from_gfid(client, in_reqs[i].gfid);
+            /* get meta for this file id */
+            unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
+            if (!meta->attrs.is_laminated || !meta->needs_extents_sync) {
+                /* do not proceed for this request as its not a laminated file.*/
+                continue;
+            }
+            num_request_selected++;
+            cur->value.file_pos = in_reqs[i].offset;
+            cur->value.length = in_reqs[i].length;
+            cur->value.gfid = in_reqs[i].gfid;
+            if (i < in_count - 1) {
+                cur->next = calloc(1, sizeof(struct extents_list));
+                cur->next->next = NULL;
+                cur = cur->next;
+            } else {
+                cur->next = NULL;
+            }
+        }
+        if (num_request_selected > 0) {
+            /* There are files which are laminated and require sync of extents */
+            int extent_count = 0;
+            extents_list_t extents = NULL;
+            int ret = invoke_client_node_local_extents_get_rpc(client, num_request_selected, &list, &extent_count, &extents);
+            if (ret == UNIFYFS_SUCCESS && extent_count != 0) {
+                extents_list_t fetched_extents_cur = extents;
+                for(int j = 0 ; j < extent_count; ++j) {
+                    int fid = unifyfs_fid_from_gfid(client, fetched_extents_cur->value.gfid);
+                    /* get meta for this file id */
+                    unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
+                    seg_tree_add(&meta->extents,
+                                 fetched_extents_cur->value.file_pos,
+                                 fetched_extents_cur->value.file_pos + fetched_extents_cur->value.length - 1,
+                                 fetched_extents_cur->value.log_pos);
+                    meta->needs_extents_sync = 0;
+                    fetched_extents_cur = fetched_extents_cur->next;
+                }
+            }
+            free(extents);
+        }
+    }
 
     /* attempt to complete requests locally if enabled */
-    if (client->use_local_extents) {
+    if (client->use_local_extents || client->use_node_local_extents) {
         /* allocate space to make local and server copies of the requests,
          * each list will be at most in_count long */
         size_t reqs_size = 2 * in_count;
@@ -743,7 +789,7 @@ int process_gfid_reads(unifyfs_client* client,
     /* if we attempted to service requests from our local extent map,
      * then we need to copy the resulting read requests from the local
      * and server arrays back into the user's original array */
-    if (client->use_local_extents) {
+    if (client->use_local_extents || client->use_node_local_extents) {
         /* TODO: would be nice to copy these back into the same order
          * in which we received them. */
 

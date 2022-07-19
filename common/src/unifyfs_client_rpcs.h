@@ -44,7 +44,8 @@ typedef enum {
     UNIFYFS_CLIENT_RPC_TRANSFER,
     UNIFYFS_CLIENT_RPC_TRUNCATE,
     UNIFYFS_CLIENT_RPC_UNLINK,
-    UNIFYFS_CLIENT_RPC_UNMOUNT
+    UNIFYFS_CLIENT_RPC_UNMOUNT,
+    UNIFYFS_CLIENT_RPC_NODE_LOCAL_EXTENTS_GET
 } client_rpc_e;
 
 typedef enum {
@@ -281,6 +282,100 @@ MERCURY_GEN_PROC(unifyfs_heartbeat_in_t,
                  ((int32_t)(client_id)))
 MERCURY_GEN_PROC(unifyfs_heartbeat_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_heartbeat_rpc)
+
+/* unifyfs_node_local_extents_get_rpc (client => server)
+ *
+ * returns node local extents for a file
+ * given a global file id */
+MERCURY_GEN_STRUCT_PROC(unifyfs_index_t,
+                 ((uint32_t)(file_pos))
+                 ((uint32_t)(log_pos))
+                 ((uint32_t)(length))
+                 ((int32_t)(gfid)))
+/* List of extents used in the output of RPC call*/
+typedef struct extents_list {
+    unifyfs_index_t value;
+    struct extents_list* next;
+} *extents_list_t;
+/* Custom serialization of the structure extents_list */
+static inline hg_return_t hg_proc_extents_list_t(hg_proc_t proc, void* data)
+{
+    hg_return_t ret = HG_SUCCESS;
+    extents_list_t* list = (extents_list_t*)data;
+
+    hg_size_t length = 0;
+    extents_list_t tmp   = NULL;
+    extents_list_t prev  = NULL;
+
+    switch(hg_proc_get_op(proc)) {
+
+        case HG_ENCODE:
+            tmp = *list;
+            // find out the length of the list
+            while(tmp != NULL) {
+                tmp = tmp->next;
+                length += 1;
+            }
+            // write the length
+            ret = hg_proc_hg_size_t(proc, &length);
+            if(ret != HG_SUCCESS)
+                break;
+            // write the list
+            tmp = *list;
+            while(tmp != NULL) {
+                ret = hg_proc_unifyfs_index_t(proc, &tmp->value);
+                if(ret != HG_SUCCESS)
+                    break;
+                tmp = tmp->next;
+            }
+            break;
+
+        case HG_DECODE:
+            // find out the length of the list
+            ret = hg_proc_hg_size_t(proc, &length);
+            if(ret != HG_SUCCESS)
+                break;
+            // loop and create list elements
+            *list = NULL;
+            while(length > 0) {
+                tmp = (extents_list_t)calloc(1, sizeof(*tmp));
+                if(*list == NULL) {
+                    *list = tmp;
+                }
+                if(prev != NULL) {
+                    prev->next = tmp;
+                }
+                ret = hg_proc_unifyfs_index_t(proc, &tmp->value);
+                if(ret != HG_SUCCESS)
+                    break;
+                prev = tmp;
+                length -= 1;
+            }
+            break;
+
+        case HG_FREE:
+            tmp = *list;
+            while(tmp != NULL) {
+                prev = tmp;
+                tmp  = prev->next;
+                free(prev);
+            }
+            ret = HG_SUCCESS;
+    }
+    return ret;
+}
+
+MERCURY_GEN_PROC(unifyfs_node_local_extents_get_in_t,
+                 ((int32_t)(app_id))
+                         ((int32_t)(client_id))
+                         ((int32_t)(num_req))
+                         ((extents_list_t)(read_req)))
+
+MERCURY_GEN_PROC(unifyfs_node_local_extents_get_out_t,
+                 ((int32_t)(ret))
+                         ((int32_t)(extent_count))
+                         ((extents_list_t)(bulk_data)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_node_local_extents_get_rpc)
 
 #ifdef __cplusplus
 } // extern "C"

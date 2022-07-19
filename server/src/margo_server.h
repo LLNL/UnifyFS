@@ -49,6 +49,7 @@ typedef struct ServerRpcIds {
     hg_id_t truncate_id;
     hg_id_t truncate_bcast_id;
     hg_id_t unlink_bcast_id;
+    hg_id_t node_local_extents_get_id;
 
     /* client-server rpcs */
     hg_id_t client_heartbeat_id;

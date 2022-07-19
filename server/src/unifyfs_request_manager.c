@@ -41,6 +41,7 @@
 #include "unifyfs_group_rpc.h"
 #include "unifyfs_p2p_rpc.h"
 #include "unifyfs_server_rpcs.h"
+#include "seg_tree.h"
 
 
 #define RM_LOCK(rm) \
@@ -83,6 +84,8 @@ do { \
  * data has been received, the request manager signals the client
  * to process the read replies. It iterates with the client until
  * all incoming read replies have been transferred. */
+
+typedef struct extents_list extents_list;
 
 /* Create a request manager thread for the application client
  * corresponding to the given app_id and client_id.
@@ -1440,6 +1443,80 @@ static int process_unlink_rpc(reqmgr_thrd_t* reqmgr,
     return ret;
 }
 
+static int process_node_local_extents_get_rpc(reqmgr_thrd_t* reqmgr,
+                                              client_rpc_req_t* req)
+{
+    int ret = UNIFYFS_SUCCESS;
+
+    unifyfs_node_local_extents_get_in_t* in = req->input;
+    assert(in != NULL);
+    unifyfs_extent_t* extents = calloc(in->num_req, sizeof(unifyfs_extent_t));
+    struct extents_list* cur = in->read_req;
+    int count = 0;
+    struct extents_list out_list;
+    struct extents_list* out_list_cur = &out_list;
+    int total_chunks = 0;
+    bool add_node = false;
+    while(cur != NULL) {
+        extents[count].gfid = cur->value.gfid;
+        extents[count].offset = cur->value.file_pos;
+        extents[count].length = cur->value.length;
+        LOGDBG("getting node local extent for gfid=%d", extents[count].gfid);
+        unsigned int n_chunks = 0;
+        chunk_read_req_t* chunks = NULL;
+        int rc = unifyfs_invoke_find_extents_rpc(extents[count].gfid, 1, &extents[count],
+                                                 &n_chunks, &chunks);
+        if (!rc) {
+            if(add_node) {
+                out_list_cur->next = calloc(1, sizeof(struct extents_list));
+                out_list_cur = out_list_cur->next;
+            }
+            for (int i = 0; i < n_chunks; ++i) {
+                out_list_cur->value.file_pos = chunks[i].offset;
+                out_list_cur->value.log_pos = chunks[i].log_offset;
+                out_list_cur->value.length = chunks[i].nbytes;
+                out_list_cur->value.gfid = extents[count].gfid;
+                if (i < n_chunks - 1) {
+                    out_list_cur->next = calloc(1, sizeof(struct extents_list));
+                    out_list_cur = out_list_cur->next;
+                } else {
+                    out_list_cur->next = NULL;
+                }
+            }
+            add_node = true;
+            total_chunks += n_chunks;
+            free(chunks);
+        }
+        cur = cur->next;
+    }
+    margo_free_input(req->handle, in);
+    free(in);
+
+
+    /* prepare the response for node local extents get */
+    unifyfs_node_local_extents_get_out_t out;
+    hg_return_t hret = 0;
+    out.ret = (int32_t) ret;
+    out.extent_count = total_chunks;
+
+    out.bulk_data = &out_list;
+
+    /* send rpc response */
+    hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_bulk_free() failed");
+    }
+    /* cleanup req */
+    margo_destroy(req->handle);
+//    free(extents);
+//    hret = margo_bulk_free(local_bulk);
+    return ret;
+}
+
+
 /* iterate over list of chunk reads and send responses */
 static int rm_process_client_requests(reqmgr_thrd_t* reqmgr)
 {
@@ -1504,6 +1581,9 @@ static int rm_process_client_requests(reqmgr_thrd_t* reqmgr)
             break;
         case UNIFYFS_CLIENT_RPC_UNLINK:
             rret = process_unlink_rpc(reqmgr, req);
+            break;
+        case UNIFYFS_CLIENT_RPC_NODE_LOCAL_EXTENTS_GET:
+            rret = process_node_local_extents_get_rpc(reqmgr, req);
             break;
         default:
             LOGERR("unsupported client rpc request type %d", req->req_type);
@@ -1650,4 +1730,5 @@ void* request_manager_thread(void* arg)
 
     return NULL;
 }
+
 

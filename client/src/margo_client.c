@@ -56,6 +56,7 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
     CLIENT_REGISTER_RPC(laminate);
     CLIENT_REGISTER_RPC(fsync);
     CLIENT_REGISTER_RPC(mread);
+    CLIENT_REGISTER_RPC(node_local_extents_get);
 
 #undef CLIENT_REGISTER_RPC
 
@@ -864,6 +865,74 @@ int invoke_client_mread_rpc(unifyfs_client* client,
     /* margo_forward serializes all data before returning, and it's safe to
      * free the rpc params */
     margo_bulk_free(in.bulk_extents);
+
+    /* free resources */
+    margo_destroy(handle);
+
+    return ret;
+}
+
+/* invokes the client metaget rpc function */
+int invoke_client_node_local_extents_get_rpc(unifyfs_client* client,
+                                             int num_req,
+                                             extents_list_t* read_req,
+                                             int* extent_count,
+                                             extents_list_t* extents)
+{
+    /* check that we have initialized margo */
+    if (NULL == client_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* get handle to rpc function */
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.node_local_extents_get_id);
+
+    /* fill in input struct */
+    unifyfs_node_local_extents_get_in_t in;
+    in.app_id    = (int32_t) client->state.app_id;
+    in.client_id = (int32_t) client->state.client_id;
+    in.num_req = num_req;
+    in.read_req = *read_req;
+
+    /* call rpc function */
+    LOGDBG("invoking the node_local_extents_get rpc function in client");
+    int rc = forward_to_server(handle, &in);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of metaget rpc to server failed");
+        margo_destroy(handle);
+        return rc;
+    }
+
+    /* decode response */
+    int ret;
+    unifyfs_node_local_extents_get_out_t out;
+    hg_return_t hret = margo_get_output(handle, &out);
+    if (hret == HG_SUCCESS) {
+        LOGDBG("Got response ret=%" PRIi32, out.ret);
+        ret = (int) out.ret;
+        if (ret == (int)UNIFYFS_SUCCESS) {
+            *extent_count = out.extent_count;
+            *extents = calloc(1, sizeof(struct extents_list));
+            struct extents_list* cur = out.bulk_data;
+            struct extents_list* up_cur = *extents;
+            int count =0;
+            while(cur != NULL) {
+                up_cur->value = cur->value;
+                if (count < out.extent_count - 1) {
+                    up_cur->next = calloc(1, sizeof(struct extents_list));
+                    up_cur->next->next = NULL;
+                    up_cur = up_cur->next;
+                    cur = cur->next;
+                } else {
+                    up_cur->next = NULL;
+                }
+            }
+        }
+        margo_free_output(handle, &out);
+    } else {
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
+        ret = UNIFYFS_ERROR_MARGO;
+    }
 
     /* free resources */
     margo_destroy(handle);
