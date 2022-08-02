@@ -70,6 +70,8 @@ extern bool margo_use_tcp;
 extern bool margo_lazy_connect;
 extern int  margo_client_server_pool_sz;
 extern int  margo_server_server_pool_sz;
+extern double margo_client_server_timeout_msec;
+extern double margo_server_server_timeout_msec;
 
 int margo_server_rpc_init(void);
 int margo_server_rpc_finalize(void);

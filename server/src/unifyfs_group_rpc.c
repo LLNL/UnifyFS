@@ -54,7 +54,7 @@ static int forward_child_request(void* input_ptr,
     int ret = UNIFYFS_SUCCESS;
 
     /* call rpc function */
-    double timeout_ms = UNIFYFS_MARGO_SERVER_SERVER_TIMEOUT_MSEC;
+    double timeout_ms = margo_server_server_timeout_msec;
     hg_return_t hret = margo_iforward_timed(chdl, input_ptr, timeout_ms, creq);
     if (hret != HG_SUCCESS) {
         LOGERR("failed to forward request(%p) - %s", creq,

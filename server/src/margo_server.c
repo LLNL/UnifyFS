@@ -30,6 +30,10 @@ bool margo_use_tcp = true;
 bool margo_lazy_connect; // = false
 int  margo_client_server_pool_sz = UNIFYFS_MARGO_POOL_SZ;
 int  margo_server_server_pool_sz = UNIFYFS_MARGO_POOL_SZ;
+double margo_client_server_timeout_msec =
+    UNIFYFS_MARGO_CLIENT_SERVER_TIMEOUT_MSEC;
+double margo_server_server_timeout_msec =
+    UNIFYFS_MARGO_SERVER_SERVER_TIMEOUT_MSEC;
 int  margo_use_progress_thread = 1;
 
 // records pmi rank, server address string, and server address
@@ -657,7 +661,7 @@ static hg_handle_t create_client_handle(hg_id_t id,
 
 static int forward_to_client(hg_handle_t hdl, void* input_ptr)
 {
-    double timeout_msec = UNIFYFS_MARGO_CLIENT_SERVER_TIMEOUT_MSEC;
+    double timeout_msec = margo_client_server_timeout_msec;
     hg_return_t hret = margo_forward_timed(hdl, input_ptr, timeout_msec);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_forward_timed() failed - %s", HG_Error_to_string(hret));
