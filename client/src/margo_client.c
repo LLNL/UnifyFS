@@ -80,7 +80,7 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
 }
 
 /* initialize margo client-server rpc */
-int unifyfs_client_rpc_init(void)
+int unifyfs_client_rpc_init(double timeout_msecs)
 {
     hg_return_t hret;
 
@@ -115,6 +115,9 @@ int unifyfs_client_rpc_init(void)
         free(svr_addr_string);
         return UNIFYFS_FAILURE;
     }
+
+    /* timeout value to use on rpc operations */
+    ctx->timeout = timeout_msecs;
 
     /* initialize margo */
     int use_progress_thread = 1;
@@ -219,9 +222,11 @@ static hg_handle_t create_handle(hg_id_t id)
     return handle;
 }
 
-static int forward_to_server(hg_handle_t hdl, void* input_ptr)
+static int forward_to_server(
+    hg_handle_t hdl,
+    void* input_ptr,
+    double timeout_msec)
 {
-    double timeout_msec = UNIFYFS_MARGO_CLIENT_SERVER_TIMEOUT_MSEC;
     hg_return_t hret = margo_forward_timed(hdl, input_ptr, timeout_msec);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_forward_timed() failed - %s", HG_Error_to_string(hret));
@@ -251,7 +256,8 @@ int invoke_client_mount_rpc(unifyfs_client* client)
 
     /* call rpc function */
     LOGDBG("invoking the mount rpc function in client");
-    int rc = forward_to_server(handle, &in);
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("forward of mount rpc to server failed");
         margo_destroy(handle);
@@ -333,7 +339,8 @@ int invoke_client_attach_rpc(unifyfs_client* client)
 
     /* call rpc function */
     LOGDBG("invoking the attach rpc function in client");
-    int rc = forward_to_server(handle, &in);
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("forward of attach rpc to server failed");
         margo_destroy(handle);
@@ -380,7 +387,8 @@ int invoke_client_unmount_rpc(unifyfs_client* client)
 
     /* call rpc function */
     LOGDBG("invoking the unmount rpc function in client");
-    int rc = forward_to_server(handle, &in);
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("forward of unmount rpc to server failed");
         margo_destroy(handle);
@@ -439,7 +447,8 @@ int invoke_client_metaset_rpc(unifyfs_client* client,
     /* call rpc function */
     LOGDBG("invoking the metaset rpc function in client - gfid:%d file:%s",
            in.attr.gfid, in.attr.filename);
-    int rc = forward_to_server(handle, &in);
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("forward of metaset rpc to server failed");
         margo_destroy(handle);
@@ -486,7 +495,8 @@ int invoke_client_metaget_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the metaget rpc function in client");
-    int rc = forward_to_server(handle, &in);
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("forward of metaget rpc to server failed");
         margo_destroy(handle);
@@ -541,7 +551,8 @@ int invoke_client_filesize_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the filesize rpc function in client");
-    int rc = forward_to_server(handle, &in);
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("forward of filesize rpc to server failed");
         margo_destroy(handle);
@@ -596,7 +607,8 @@ int invoke_client_transfer_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the transfer rpc function in client");
-    int rc = forward_to_server(handle, &in);
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("forward of transfer rpc to server failed");
         margo_destroy(handle);
@@ -644,7 +656,8 @@ int invoke_client_truncate_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the truncate rpc function in client");
-    int rc = forward_to_server(handle, &in);
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("forward of truncate rpc to server failed");
         margo_destroy(handle);
@@ -690,7 +703,8 @@ int invoke_client_unlink_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the unlink rpc function in client");
-    int rc = forward_to_server(handle, &in);
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("forward of unlink rpc to server failed");
         margo_destroy(handle);
@@ -736,7 +750,8 @@ int invoke_client_laminate_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the laminate rpc function in client");
-    int rc = forward_to_server(handle, &in);
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("forward of laminate rpc to server failed");
         margo_destroy(handle);
@@ -782,7 +797,8 @@ int invoke_client_sync_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGINFO("invoking the sync rpc function in client");
-    int rc = forward_to_server(handle, &in);
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("forward of sync rpc to server failed");
         margo_destroy(handle);
@@ -841,7 +857,8 @@ int invoke_client_mread_rpc(unifyfs_client* client,
 
     /* call rpc function */
     LOGDBG("invoking the mread rpc function in client");
-    int rc = forward_to_server(handle, &in);
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("forward of mread rpc to server failed");
         margo_destroy(handle);

@@ -171,6 +171,16 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
     client->max_write_index_entries =
         client->write_index_size / sizeof(unifyfs_index_t);
 
+    /* Timeout to wait on rpc calls to server, in milliseconds */
+    double timeout_msecs = UNIFYFS_MARGO_CLIENT_SERVER_TIMEOUT_MSEC;
+    cfgval = client_cfg->margo_client_timeout;
+    if (cfgval != NULL) {
+        rc = configurator_int_val(cfgval, &l);
+        if (rc == 0) {
+            timeout_msecs = (double)l;
+        }
+    }
+
     // initialize k-v store access
     int kv_rank = 0;
     int kv_nranks = 1;
@@ -181,7 +191,7 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
     }
 
     /* open rpc connection to server */
-    rc = unifyfs_client_rpc_init();
+    rc = unifyfs_client_rpc_init(timeout_msecs);
     if (rc != UNIFYFS_SUCCESS) {
         LOGERR("failed to initialize client RPC");
         return rc;
