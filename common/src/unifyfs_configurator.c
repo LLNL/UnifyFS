@@ -404,7 +404,8 @@ char* getenv_helper(const char* section,
         ndx += sprintf(envname + ndx, "_%u", mentry);
 
     //fprintf(stderr, "UNIFYFS CONFIG DEBUG: checking env var %s\n", envname);
-    return getenv(envname);
+    char* val = getenv(envname);
+    return val;
 }
 
 
