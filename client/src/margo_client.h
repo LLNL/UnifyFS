@@ -52,10 +52,11 @@ typedef struct ClientRpcContext {
     hg_addr_t client_addr;
     hg_addr_t svr_addr;
     client_rpcs_t rpcs;
+    double timeout; /* timeout to wait on rpc, in millisecs */
 } client_rpc_context_t;
 
 
-int unifyfs_client_rpc_init(void);
+int unifyfs_client_rpc_init(double timeout_msecs);
 
 int unifyfs_client_rpc_finalize(void);
 
