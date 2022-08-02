@@ -59,7 +59,7 @@ int forward_p2p_request(void* input_ptr,
     int rc = UNIFYFS_SUCCESS;
 
     /* call rpc function */
-    double timeout_ms = UNIFYFS_MARGO_SERVER_SERVER_TIMEOUT_MSEC;
+    double timeout_ms = margo_server_server_timeout_msec;
     hg_return_t hret = margo_iforward_timed(req->handle, input_ptr,
                                             timeout_ms, &(req->request));
     if (hret != HG_SUCCESS) {
