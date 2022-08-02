@@ -416,6 +416,16 @@ int main(int argc, char* argv[])
 
     LOGDBG("initializing RPC service");
 
+    rc = configurator_int_val(server_cfg.margo_client_timeout, &l);
+    if (0 == rc) {
+        margo_client_server_timeout_msec = (double) l;
+    }
+
+    rc = configurator_int_val(server_cfg.margo_server_timeout, &l);
+    if (0 == rc) {
+        margo_server_server_timeout_msec = (double) l;
+    }
+
     rc = configurator_int_val(server_cfg.margo_client_pool_size, &l);
     if (0 == rc) {
         margo_client_server_pool_sz = l;
