@@ -64,6 +64,9 @@ UNIFYFS_DECL(rename, int, (const char* oldpath, const char* newpath));
 UNIFYFS_DECL(stat, int, (const char* path, struct stat* buf));
 UNIFYFS_DECL(statfs, int, (const char* path, struct statfs* fsbuf));
 UNIFYFS_DECL(__xstat, int, (int vers, const char* path, struct stat* buf));
+UNIFYFS_DECL(utimensat, int, (int dirfd, const char* pathname,
+                              const struct timespec times[2], int flags));
+UNIFYFS_DECL(futimens, int, (int fd, const struct timespec times[2]));
 
 /* directory operations */
 UNIFYFS_DECL(chdir, int, (const char* path));
