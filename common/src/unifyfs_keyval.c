@@ -188,12 +188,14 @@ int unifyfs_pmi2_init(void)
 
     char pmi_jobid[64];
     memset(pmi_jobid, 0, sizeof(pmi_jobid));
+/*
     rc = PMI2_Job_GetId(pmi_jobid, sizeof(pmi_jobid));
     if (rc != PMI2_SUCCESS) {
         unifyfs_pmi2_errstr(rc);
         LOGERR("PMI2_Job_GetId() failed: %s", pmi2_errstr);
         return (int)UNIFYFS_ERROR_PMI;
     }
+*/
 
     kv_myrank = pmi_world_rank;
     kv_nranks = pmi_world_nprocs;
