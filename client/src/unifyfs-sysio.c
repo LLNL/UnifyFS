@@ -2478,3 +2478,113 @@ int UNIFYFS_WRAP(chmod)(const char* path, mode_t mode)
         return ret;
     }
 }
+
+int UNIFYFS_WRAP(utimensat)(int dirfd, const char* pathname,
+    const struct timespec times[2], int flags)
+{
+    /* determine whether we should intercept this path */
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (pathname == NULL) {
+        /* check whether we should intercept this file descriptor */
+        if (unifyfs_intercept_fd(&dirfd)) {
+            /* TODO: what to do if underlying file has been deleted? */
+
+            /* check that fd is actually in use */
+            int fid = unifyfs_get_fid_from_fd(dirfd);
+            if (fid < 0) {
+                errno = EBADF;
+                return -1;
+            }
+
+            fprintf(stderr, "Function not yet supported @ %s:%d\n",
+                    __FILE__, __LINE__);
+            errno = ENOSYS;
+            return -1;
+        } else {
+            MAP_OR_FAIL(utimensat);
+            int ret = UNIFYFS_REAL(utimensat)(dirfd, pathname, times, flags);
+            return ret;
+        }
+    } else {
+        if (unifyfs_intercept_path(pathname, upath)) {
+            /* check if path exists */
+            int fid = unifyfs_fid_from_path(posix_client, upath);
+            if (fid < 0) {
+                LOGDBG("utimensat: unifyfs_get_id_from path failed,"
+                       " returning -1, %s", upath);
+                errno = ENOENT;
+                return -1;
+            }
+
+            fprintf(stderr, "Function not yet supported @ %s:%d\n",
+                    __FILE__, __LINE__);
+            errno = ENOSYS;
+            return -1;
+        } else {
+            MAP_OR_FAIL(utimensat);
+            int ret = UNIFYFS_REAL(utimensat)(dirfd, pathname, times, flags);
+            return ret;
+        }
+    }
+}
+
+int UNIFYFS_WRAP(futimens)(int fd, const struct timespec times[2])
+{
+    /* check whether we should intercept this file descriptor */
+    if (unifyfs_intercept_fd(&fd)) {
+        /* TODO: what to do if underlying file has been deleted? */
+
+        /* check that fd is actually in use */
+        int fid = unifyfs_get_fid_from_fd(fd);
+        if (fid < 0) {
+            errno = EBADF;
+            return -1;
+        }
+
+        /* lookup meta to update timestamp fields */
+        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(posix_client,
+                                                             fid);
+        if (meta == NULL) {
+            /* bad file descriptor */
+            errno = EBADF;
+            return -1;
+        }
+
+        if (times[0].tv_nsec != UTIME_OMIT) {
+            if (times[0].tv_nsec == UTIME_NOW) {
+                /* use current time */
+                struct timespec tp = {0};
+                clock_gettime(CLOCK_REALTIME, &tp);
+                meta->attrs.atime = tp;
+            } else {
+                meta->attrs.atime = times[0];
+            }
+        }
+        if (times[1].tv_nsec != UTIME_OMIT) {
+            if (times[1].tv_nsec == UTIME_NOW) {
+                /* use current time */
+                struct timespec tp = {0};
+                clock_gettime(CLOCK_REALTIME, &tp);
+                meta->attrs.mtime = tp;
+            } else {
+                meta->attrs.mtime = times[1];
+            }
+        }
+
+        /* update the global meta data to reflect new permissions */
+        unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_UTIME;
+        int ret = unifyfs_set_global_file_meta_from_fid(posix_client, fid, op);
+        if (ret) {
+            //LOGERR("futimens: can't set global meta entry for %s (fid:%d)",
+            //       path, fid);
+            errno = unifyfs_rc_errno(ret);
+            return -1;
+        }
+
+        return 0;
+    } else {
+        MAP_OR_FAIL(futimens);
+        int ret = UNIFYFS_REAL(futimens)(fd, times);
+        return ret;
+    }
+}

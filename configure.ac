@@ -217,6 +217,8 @@ LINK_WRAPPERS+=",-wrap,remove"
 LINK_WRAPPERS+=",-wrap,rename"
 LINK_WRAPPERS+=",-wrap,truncate"
 LINK_WRAPPERS+=",-wrap,unlink"
+LINK_WRAPPERS+=",-wrap,utimensat"
+LINK_WRAPPERS+=",-wrap,futimens"
 
 # file descriptor functions
 LINK_WRAPPERS+=",-wrap,close"
