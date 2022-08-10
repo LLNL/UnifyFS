@@ -79,10 +79,12 @@ The full usage for ``unifyfs`` is as follows:
       -S, --share-dir=<path>     [REQUIRED] shared file system <path> for use by servers
       -c, --cleanup              [OPTIONAL] clean up the UnifyFS storage upon server exit
       -i, --stage-in=<manifest>  [OPTIONAL] stage in file(s) listed in <manifest> file
+      -P, --stage-parallel       [OPTIONAL] use parallel stage-in
       -T, --stage-timeout=<sec>  [OPTIONAL] timeout for stage-in operation
 
     Command options for "terminate":
       -o, --stage-out=<manifest> [OPTIONAL] stage out file(s) listed in <manifest> on termination
+      -P, --stage-parallel       [OPTIONAL] use parallel stage-out
       -T, --stage-timeout=<sec>  [OPTIONAL] timeout for stage-out operation
       -s, --script=<path>        [OPTIONAL] <path> to custom termination script
       -S, --share-dir=<path>     [REQUIRED for --stage-out] shared file system <path> for use by servers
