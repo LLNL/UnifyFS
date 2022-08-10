@@ -1,54 +1,34 @@
 #!/bin/sh
 
-# This script checks for an installation of UnifyFS (either with Spack or in
-# $HOME/UnifyFS/install) and then sets up variables needed for testing.
-#
-# All of this is done in this script so that tests can be run individually if
-# desired. To run all tests simply run the RUN_TESTS.sh script. If Individual
-# tests are desired to be run, source the 001-setup.sh script first, followed by
-# 002-start-server.sh. Then source each desired script after that preceded by
-# `$UNIFYFS_CI_DIR`. When finished, source the 990-stop-server.sh script last.
-#
-# E.g.:
-#      $ . full/path/to/001-setup.sh
-#      $ . $UNIFYFS_CI_DIR/002-start-server.sh
-#      $ . $UNIFYFS_CI_DIR/100-writeread-tests.sh
-#      $ . $UNIFYFS_CI_DIR/990-stop-server.sh
-#
-# To run all of the tests, simply run RUN_CI_TESTS.sh
-#
-# E.g.:
-#     $ ./RUN_CI_TESTS.sh
-#   or
-#     $ prove -v RUN_CI_TESTS.sh
-#
-# Before doing either of these, make sure you have interactively allocated nodes
-# or are submitting a batch job.
+# This script checks for an installation of UnifyFS (module/spack loaded, in the
+# UNIFYFS_INSTALL envar, or in the parent directory of this source code) and
+# then sets up variables needed for testing.
 
 test_description="Set up UnifyFS testing environment"
 
 SETUP_USAGE="$(cat <<EOF
-usage: ./001-setup.sh -h|--help
+usage: ./001-setup.sh [-h|--help]
 
-You can run individually desired test files (i.e., 100-writeread-tests.sh and no
-other tests) by first sourcing 001-setup.sh followed by 002-start-server.sh.
+Run the setup for running smaller subsets of tests manually.
+Before doing so, ensure compute nodes have been interactively allocated or run
+via a batch job submission.
+
+To run, first source 001-setup.sh followed by 002-start-server.sh.
 Then source any desired test files. Lastly, source 990-stop-server.sh.
 
+Any previously set UnifyFS environment variables will take precedence.
+
 E.g.:
-    $ . full/path/to/001-setup.sh
+    $ . ./001-setup.sh
     $ . \$UNIFYFS_CI_DIR/002-start-server.sh
-    $ . \$UNIFYFS_CI_DIR/100-writeread-tests.sh
+    $ . \$UNIFYFS_CI_DIR/100-writeread-tests.sh --laminate --mpiio
     $ . \$UNIFYFS_CI_DIR/990-stop-server.sh
 
-To run all of the tests, simply run RUN_CI_TESTS.sh.
+For information on how to run all or full suites of tests, run
+'./RUN_CI_TESTS.sh -h'.
 
-E.g.:
-    $ ./RUN_CI_TESTS.sh
-  or
-    $ prove -v RUN_CI_TESTS.sh
-
-Before doing either of these, make sure you have interactively allocated nodes
-or are submitting a batch job.
+Refer to the UnifyFS Testing Guide for more information:
+https://unifyfs.readthedocs.io/en/dev/testing.html#subsets-of-individual-suites
 EOF
 )"
 
@@ -65,7 +45,6 @@ do
             ;;
     esac
 done
-
 
 ########## Set up messages and vars needed before sourcing sharness  ##########
 

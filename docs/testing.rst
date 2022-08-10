@@ -315,29 +315,47 @@ normally be run first to start the UnifyFS daemon. E.g., to run just the
 
     $ make check TESTS='0001-setup.t 0100-sysio-gotcha.t 9010-stop-unifyfsd.t 9999-cleanup.t'
 
-.. note::
+.. note:: **Running Unit Tests from Spack Install**
 
-    If you are using Spack to install UnifyFS then there are two ways to
-    manually run these tests:
+    If using Spack to install UnifyFS there are two ways to manually run the
+    units tests:
 
-    1. Upon your installation with Spack
+    1. Upon installation with Spack
 
         ``spack install -v --test=root unifyfs``
 
     2. Manually from Spack's build directory
 
-        ``spack install --keep-stage unifyfs``
+        Open the Spack config file:
 
-        ``spack cd unifyfs``
+            ``spack config edit config``
 
-        ``cd spack-build/t``
+        Provide Spack a staging path that is visible from a job allocation:
 
-        ``make check``
+            .. code-block:: yaml
+
+                config:
+                  build_stage:
+                  - /visible/path/allocated/node
+                  # or build directly inside Spack's install directory
+                  - $spack/var/spack/stage
+
+        Include the ``--keep-stage`` option when installing:
+
+            ``spack install --keep-stage unifyfs``
+
+            ``spack cd unifyfs``
+
+            ``cd spack-build/t``
+
+        Run the tests from the package's build environment:
+
+            ``spack build-env unifyfs make check``
 
 The tests in https://github.com/LLNL/UnifyFS/tree/dev/t are run automatically
-using `GitHub Actions`_ along with the :ref:`style checks <style-check-label>` when a
-pull request is created or updated. All pull requests must pass these tests
-before they will be accepted.
+using `GitHub Actions`_ along with the :ref:`style checks <style-check-label>`
+when a pull request is created or updated. All pull requests must pass these
+tests before they will be accepted.
 
 Interpreting the Results
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -600,11 +618,11 @@ Misc
 """"
 
 ``KB``
-    :math:`2^{10}`.
+    :math:`2^{10}`
 ``MB``
-    :math:`2^{20}`.
+    :math:`2^{20}`
 ``GB``
-    :math:`2^{30}`.
+    :math:`2^{30}`
 
 ------------
 
@@ -614,33 +632,56 @@ Running the Tests
 .. attention::
 
     UnifyFS's integration test suite requires MPI and currently only supports
-    ``srun`` and ``jsrun`` MPI launch commands. Changes are coming to support
-    ``mpirun``.
+    ``srun`` and ``jsrun`` MPI launch commands.
 
-UnifyFS's integration tests are primarly set up to be run all as one suite.
-However, they can be run individually if desired.
+UnifyFS's integration tests are primarly set up to run distinct suites of tests,
+however they can also all be run at once or manually for more fine-grained
+control.
 
 The testing scripts in `t/ci`_ depend on sharness_, which is set up in the
 containing *t/* directory. These tests will not function properly if moved or if
-they cannot find the sharness files.
+the sharness files cannot be found.
 
-Whether running all tests or individual tests, first make sure you have
-either interactively allocated nodes or are submitting a batch job to run
-them.
+Before running any tests, ensure either compute nodes have been interactively
+allocated or run via a batch job submission.
 
 Make sure all :ref:`dependencies <spack-build-label>` are installed and loaded.
 
-.. note::
+The *t/ci/RUN_CI_TESTS.sh* script is designed to simplify running various suites
+of tests.
 
-    In order to run the the integration tests from a Spack_ installation of
-    UnifyFS, you'll need to tell Spack to use a different location for staging
-    builds in order to have the source files available from inside an allocation.
+.. rubric:: ``RUN_CI_TESTS.sh`` Script
 
-    Open your Spack config file
+.. code-block:: Bash
+
+    Usage: ./RUN_CI_TESTS.sh [-h] -s {all|[writeread,[write|read],pc,stage]} -t {all|[posix,mpiio]}
+
+    Any previously set UnifyFS environment variables will take precedence.
+
+    Options:
+      -h, --help
+             Print this help message
+
+      -s, --suite {all|[writeread,[write|read],pc,stage]}
+             Select the test suite(s) to be run
+             Takes a comma-separated list of available suites
+
+      -t, --type {all|[posix,mpiio]}
+             Select the type(s) of each suite to be run
+             Takes a comma-separated list of available types
+             Required with --suite unless stage is the only suite selected
+
+.. note:: **Running Integration Tests from Spack Build**
+
+    Running the integration tests from a Spack_ installation of UnifyFS requires
+    telling Spack to use a different location for staging the build in order to
+    have the source files available from inside a job allocation.
+
+    Open the Spack config file:
 
         ``spack config edit config``
 
-    and provide a path that is visible during job allocations:
+    Provide a staging path that is visible to all nodes from a job allocations:
 
         .. code-block:: yaml
 
@@ -650,42 +691,104 @@ Make sure all :ref:`dependencies <spack-build-label>` are installed and loaded.
               # or build directly inside Spack's install directory
               - $spack/var/spack/stage
 
-    Then make sure to include the ``--keep-stage`` option when installing:
+    Include the ``--keep-stage`` option when installing:
 
         ``spack install --keep-stage unifyfs``
 
-Running All Tests
+    Allocate compute nodes and spawn a new shell containing the package's build
+    environment:
+
+        ``spack build-env unifyfs bash``
+
+    Run the integration tests:
+
+        ``spack load unifyfs``
+
+        ``spack cd unifyfs``
+
+        ``cd t/ci``
+
+        # Run tests using any of the following formats
+
+Individual Suites
 ^^^^^^^^^^^^^^^^^
 
-To run all of the tests, simply run ``./RUN_CI_TESTS.sh``.
+To run individual test suites, indicate the desired suite(s) and type(s) when
+running *RUN_CI_TESTS.sh*. E.g.:
 
 .. code-block:: BASH
 
-    $ ./RUN_CI_TESTS.sh
+    $ ./RUN_CI_TESTS.sh -s writeread -t mpiio
 
 or
 
 .. code-block:: BASH
 
-    $ prove -v RUN_CI_TESTS.sh
+    $ prove -v RUN_CI_TESTS.sh :: -s writeread -t mpiio
 
-Running Individual Tests
-^^^^^^^^^^^^^^^^^^^^^^^^
+The ``-s|--suite`` and ``-t|--type`` options flag which set(s) of tests to run.
+Each suite (aside from ``stage``) requires a type to be selected as well. Note
+that if ``all`` is selected, the other arguments are redundant. If the ``read``
+suite is selected, then the ``write`` argument is redundant.
 
-In order to run individual tests, the testing functions and variables need to be
-set up first and then the UnifyFS server needs to be started.
+Available suites: all|[writeread,[write,read],pc,stage]
+  all:       run all suites
+  writeread: run writeread tests
+  write:     run write tests only (redundant if read also set)
+  read:      run write then read tests (all-hosts producer-consumer tests)
+  pc:        run producer-consumer tests (disjoint sets of hosts)
+  stage:     run stage tests (type not required)
+
+Available types: all|[posix,mpiio]
+  all:   run all types
+  posix: run posix versions of above suites
+  mpiio: run mpiio versions of above suites
+
+All Tests
+^^^^^^^^^
+
+.. warning::
+
+  If running all or most tests within a single allocation, a large amount of
+  time and storage space will be required. Even if enough of both are available,
+  it is still possible the run may hit other limitations (e.g.,
+  ``client_max_files``, ``client_max_active_requests``,
+  ``server_max_app_clients``). To avoid this, run individual suites from
+  separate job allocations.
+
+To run all of the tests, run *RUN_CI_TESTS.sh* with the all suites and types
+options.
+
+.. code-block:: BASH
+
+    $ ./RUN_CI_TESTS.sh -s all -t all
+
+or
+
+.. code-block:: BASH
+
+    $ prove -v RUN_CI_TESTS.sh :: -s all -t all
+
+Subsets of Individual Suites
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Subsets of individual test suites can be run manually. This can be useful when
+wanting more fine-grained control or for testing a specific configuration. To
+run manually, the testing functions and variables need to be set up first and
+then the UnifyFS servers need to be started.
 
 First source the *t/ci/001-setup.sh* script whereafter sharness will change
-directories to the ``$SHARNESS_TRASH_DIRECTORY``. To account for this, source
-*002-start-server.sh* and each desired test script after that prefixed with
-``$UNIFYFS_CI_DIR/``. When finished, source the *990-stop-server.sh* script
-last to stop the server and clean up.
+directories to the ``$SHARNESS_TRASH_DIRECTORY``. To account for this, prefix
+each subsequent script with ``$UNIFYFS_CI_DIR/`` when sourcing. Start the
+servers next by sourcing *002-start-server.sh* followed by each desired test
+script. When finished, source *990-stop-server.sh* last to stop the servers,
+report the results, and clean up.
 
 .. code-block:: BASH
 
     $ . ./001-setup.sh
     $ . $UNIFYFS_CI_DIR/002-start-server.sh
-    $ . $UNIFYFS_CI_DIR/100-writeread-tests.sh
+    $ . $UNIFYFS_CI_DIR/100-writeread-tests.sh --laminate --shuffle --mpiio
     $ . $UNIFYFS_CI_DIR/990-stop-server.sh
 
 The various CI test suites can be run multiple times with different behaviors.
@@ -700,6 +803,7 @@ additional information for that particular suite.
 
       options:
         -h, --help        print help message
+        -l, --laminate    laminate between writing and reading
         -M, --mpiio       use MPI-IO instead of POSIX I/O
         -x, --shuffle     read different data than written
 
@@ -753,7 +857,7 @@ the appropriate -m if posix test or not). The stderr output file is also created
 (based on the filename that is autogenerated) and the appropriate option is set
 for the MPI job run command.
 
-Args that can be passed in are ([-pncbx][-A|-M|-N|-P|-S|-V]). All other args
+Args that can be passed in are ([-cblnpx][-A|-L|-M|-N|-P|-S|-V]). All other args
 (see :ref:`Running the Examples <run-ex-label>`) are set automatically,
 including the outfile and filename (which are generated based on the input
 ``$app_name`` and ``$app_args``).

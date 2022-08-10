@@ -113,7 +113,7 @@ jobs:
 
     - name: Install UnifyFS dependencies
       run: |
-        spack install gotcha@1.0.3
+        spack install gotcha@develop
         spack install mochi-margo@0.9.6 ^mercury~boostsys ^libfabric@1.12.1 fabrics=rxm,sockets,tcp
         spack install spath~mpi
         echo "GOTCHA_INSTALL=$(spack location -i gotcha)" >> $GITHUB_ENV

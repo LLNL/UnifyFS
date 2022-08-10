@@ -1,0 +1,15 @@
+spack:
+  packages:
+    all:
+      compiler: [gcc@8.3.1]
+      providers:
+        mpi: [spectrum-mpi]
+      target: [ppc64le]
+  specs:
+  - automake@1.15.1
+  - gotcha@develop
+  - mochi-margo@0.9.6 ^libfabric fabrics=rxm,sockets,tcp
+  - spath~mpi
+  view: true
+  concretizer:
+    unify: true

@@ -10,7 +10,7 @@ Required
 
 - `GOTCHA <https://github.com/LLNL/GOTCHA/releases>`_ version 1.0.3 (or later)
 
-- `Margo <https://github.com/mochi-hpc/mochi-margo/releases>`_ version 0.9.6 - version 0.9.9 and its dependencies:
+- `Margo <https://github.com/mochi-hpc/mochi-margo/releases>`_ version 0.9.6 and its dependencies:
 
   - `Argobots <https://github.com/pmodels/argobots/releases>`_ version 1.1 (or later)
   - `Mercury <https://github.com/mercury-hpc/mercury/releases>`_ version 2.0.1 (or later)

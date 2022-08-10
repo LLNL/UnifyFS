@@ -71,7 +71,7 @@ jsargs="-a ${nprocs} -c ${ncores} -r ${nrs_per_node}"
 app_out="-o"
 app_err="-k"
 JOB_RUN_COMMAND="jsrun $jsargs -n ${nres_sets}"
-JOB_RUN_ONCE_PER_NODE="jsrun -r1"
+JOB_RUN_ONCE_PER_NODE="jsrun -r 1"
 JOB_ID=${JOB_ID:-$LSB_JOBID}
 
 # Set up producer-consumer variables and functions when using two or more hosts
@@ -105,5 +105,5 @@ fi
 
 echo "$infomsg ====================== LSF Job Info ======================"
 echo "$infomsg ----------------------- Job Status -----------------------"
-bjobs -l $JOB_ID
+bquery -l $JOB_ID
 echo "$infomsg ----------------------------------------------------------"

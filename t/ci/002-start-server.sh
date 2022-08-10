@@ -56,10 +56,10 @@ test_expect_success "unifyfsd hasn't started yet" '
 
 # UNIFYFS_BIN envar is set if not using unifyfs module
 if [[ -n $UNIFYFS_BIN ]]; then
-    $UNIFYFS_CLU start -c -d -S $UNIFYFS_SHAREDFS_DIR \
+    $UNIFYFS_CLU start -d -S $UNIFYFS_SHAREDFS_DIR \
         -e $UNIFYFS_BIN/unifyfsd &> ${UNIFYFS_LOG_DIR}/unifyfs.start.out
 else
-    $UNIFYFS_CLU start -c -d -S $UNIFYFS_SHAREDFS_DIR \
+    $UNIFYFS_CLU start -d -S $UNIFYFS_SHAREDFS_DIR \
         &> ${UNIFYFS_LOG_DIR}/unifyfs.start.out
 fi
 

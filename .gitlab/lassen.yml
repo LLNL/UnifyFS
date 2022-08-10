@@ -7,7 +7,16 @@
   rules:
     - if: '$RUN_LASSEN != "ON"'
       when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - when: on_success
+
+.lassen-scheduled-template:
+  extends: .base-template
+  rules:
+    - if: '$RUN_LASSEN != "ON"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
 
 .lassen-shell-template:
   extends: .lassen-template
@@ -21,78 +30,146 @@
     - lassen
     - batch
 
+.lassen-scheduled-shell-template:
+  extends: .lassen-scheduled-template
+  tags:
+    - lassen
+    - shell
+
+.lassen-scheduled-batch-template:
+  extends: .lassen-scheduled-template
+  tags:
+    - lassen
+    - batch
+
 ##### All Lassen Jobs #####
 
 ### gcc@4.9.3 ###
-lassen-gcc-4_9_3-build:
+.lassen-gcc-4_9_3-template:
   variables:
     COMPILER: gcc/4.9.3
     CC_COMMAND: "which gcc"
     FC_COMMAND: "which gfortran"
-  extends: [.lassen-shell-template, .build-template]
+    SPACK_ENV_NAME: "unifyfs-lsf-gcc4_9_3"
+
+lassen-gcc-4_9_3-install-deps:
+  extends: [.lassen-shell-template, .lassen-gcc-4_9_3-template, .install-deps-template]
+
+lassen-gcc-4_9_3-build:
+  extends: [.lassen-shell-template, .lassen-gcc-4_9_3-template, .build-template]
+  needs: ["lassen-gcc-4_9_3-install-deps"]
 
 lassen-gcc-4_9_3-unit-test:
-  variables:
-    COMPILER: gcc/4.9.3
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.lsf-single-node-template, .lassen-batch-template, .unit-test-template]
+  extends: [.lsf-single-node-template, .lassen-batch-template, .lassen-gcc-4_9_3-template, .unit-test-template]
   needs: ["lassen-gcc-4_9_3-build"]
 
-lassen-gcc-4_9_3-integ-test:
+# Integration tests
+
+lassen-gcc-4_9_3-integ-test-writeread-posix:
   variables:
-    COMPILER: gcc/4.9.3
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.lsf-multi-node-template, .lassen-batch-template, .integ-test-template]
+    CI_TEST_OPTIONS: ":: -s writeread -t posix"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-4_9_3-template, .integ-test-template]
+  needs: ["lassen-gcc-4_9_3-build"]
+
+lassen-gcc-4_9_3-integ-test-writeread-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s writeread -t mpiio"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-4_9_3-template, .integ-test-template]
+  needs: ["lassen-gcc-4_9_3-build"]
+
+lassen-gcc-4_9_3-integ-test-read-posix:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t posix"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-4_9_3-template, .integ-test-template]
+  needs: ["lassen-gcc-4_9_3-build"]
+
+lassen-gcc-4_9_3-integ-test-read-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t mpiio"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-4_9_3-template, .integ-test-template]
+  needs: ["lassen-gcc-4_9_3-build"]
+
+lassen-gcc-4_9_3-integ-test-pc-all:
+  variables:
+    CI_TEST_OPTIONS: ":: -s pc -t all"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-4_9_3-template, .integ-test-template]
+  needs: ["lassen-gcc-4_9_3-build"]
+
+lassen-gcc-4_9_3-integ-test-stage:
+  variables:
+    CI_TEST_OPTIONS: ":: -s stage"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-4_9_3-template, .integ-test-template]
   needs: ["lassen-gcc-4_9_3-build"]
 
 
 ### gcc@8.3.1 ###
-lassen-gcc-8_3_1-build:
+.lassen-gcc-8_3_1-template:
   variables:
     COMPILER: gcc/8.3.1
     CC_COMMAND: "which gcc"
     FC_COMMAND: "which gfortran"
-  extends: [.lassen-shell-template, .build-template]
+    SPACK_ENV_NAME: "unifyfs-lsf-gcc8_3_1"
+
+lassen-gcc-8_3_1-install-deps:
+  extends: [.lassen-shell-template, .lassen-gcc-8_3_1-template, .install-deps-template]
+
+lassen-gcc-8_3_1-build:
+  extends: [.lassen-shell-template, .lassen-gcc-8_3_1-template, .build-template]
+  needs: ["lassen-gcc-8_3_1-install-deps"]
 
 lassen-gcc-8_3_1-unit-test:
-  variables:
-    COMPILER: gcc/8.3.1
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.lsf-single-node-template, .lassen-batch-template, .unit-test-template]
+  extends: [.lsf-single-node-template, .lassen-batch-template, .lassen-gcc-8_3_1-template, .unit-test-template]
   needs: ["lassen-gcc-8_3_1-build"]
 
-lassen-gcc-8_3_1-integ-test:
+# Integration tests
+
+lassen-gcc-8_3_1-integ-test-writeread-posix:
   variables:
-    COMPILER: gcc/8.3.1
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.lsf-multi-node-template, .lassen-batch-template, .integ-test-template]
+    CI_TEST_OPTIONS: ":: -s writeread -t posix"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-8_3_1-template, .integ-test-template]
   needs: ["lassen-gcc-8_3_1-build"]
 
+lassen-gcc-8_3_1-integ-test-writeread-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s writeread -t mpiio"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-8_3_1-template, .integ-test-template]
+  needs: ["lassen-gcc-8_3_1-build"]
 
-### xl@16.1 ###
-#lassen-xl-16_1-build:
-#  variables:
-#    COMPILER: xl/16.1
-#    CC_COMMAND: "which xlc"
-#    FC_COMMAND: "which xlf90"
-#  extends: [.lassen-shell-template, .build-template]
-#
-#lassen-xl-16_1-unit-test:
-#  variables:
-#    COMPILER: xl/16.1
-#    CC_COMMAND: "which xlc"
-#    FC_COMMAND: "which xlf90"
-#  extends: [.lsf-single-node-template, .lassen-batch-template, .unit-test-template]
-#  needs: ["lassen-xl-16_1-build"]
-#
-#lassen-xl-16_1-integ-test:
-#  variables:
-#    COMPILER: xlc/16.1
-#    CC_COMMAND: "which xlc"
-#    FC_COMMAND: "which xlf90"
-#  extends: [.lsf-multi-node-template, .lassen-batch-template, .integ-test-template]
-#  needs: ["lassen-xl-16_1-build"]
+lassen-gcc-8_3_1-integ-test-read-posix:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t posix"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-8_3_1-template, .integ-test-template]
+  needs: ["lassen-gcc-8_3_1-build"]
+
+lassen-gcc-8_3_1-integ-test-read-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t mpiio"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-8_3_1-template, .integ-test-template]
+  needs: ["lassen-gcc-8_3_1-build"]
+
+lassen-gcc-8_3_1-integ-test-pc-all:
+  variables:
+    CI_TEST_OPTIONS: ":: -s pc -t all"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-8_3_1-template, .integ-test-template]
+  needs: ["lassen-gcc-8_3_1-build"]
+
+lassen-gcc-8_3_1-integ-test-stage:
+  variables:
+    CI_TEST_OPTIONS: ":: -s stage"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-8_3_1-template, .integ-test-template]
+  needs: ["lassen-gcc-8_3_1-build"]
+
+# Larger Scheduled Stage Job(s)
+
+lassen-gcc-8_3_1-scheduled-install-deps:
+  extends: [.lassen-scheduled-shell-template, .lassen-gcc-8_3_1-template, .install-deps-template]
+
+lassen-gcc-8_3_1-scheduled-build:
+  extends: [.lassen-scheduled-shell-template, .lassen-gcc-8_3_1-template, .build-template]
+  needs: ["lassen-gcc-8_3_1-scheduled-install-deps"]
+
+lassen-gcc-8_3_1-integ-test-scheduled-stage:
+  variables:
+    CI_TEST_OPTIONS: ":: -s stage"
+  extends: [.lsf-multi-node-template, .lassen-scheduled-batch-template, .lassen-gcc-8_3_1-template, .integ-test-template]
+  needs: ["lassen-gcc-8_3_1-scheduled-build"]
