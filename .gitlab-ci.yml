@@ -3,9 +3,11 @@
 # DAG.
 stages:
   - init
+  - install-deps
   - build
   - test-unit
   - test-integ
+  - clean
 
 ##### System Templates #####
 
@@ -14,10 +16,12 @@ stages:
 # these are LLNL specific, but can be adjusted or added to as new
 # systems become available.
 #
-# The NNODES, WALL_TIME, and STORAGE_SIZE variables can be altered in
-# Gitlab interface if/when the defaults need to be changed.
+# The NNODES, WALL_TIME, QUEUE, and STORAGE_SIZE variables can be altered in
+# Gitlab web interface if/when the defaults need to be changed.
 
 .base-template:
+  variables:
+    LLNL_SERVICE_USER: unifysrv
   retry:
     max: 1
     when:
@@ -26,21 +30,21 @@ stages:
 
 .slurm-single-node-template:
   variables:
-    LLNL_SLURM_SCHEDULER_PARAMETERS: "-N 1 -p $QUEUE -t $UNIT_WALL_TIME -J unifyfs-unit-tests"
+    LLNL_SLURM_SCHEDULER_PARAMETERS: "-N 1 -p $QUEUE -t $UNIT_WALL_TIME"
 
 .slurm-multi-node-template:
   variables:
-    LLNL_SLURM_SCHEDULER_PARAMETERS: "-N $NNODES -p $QUEUE -t $INTEG_WALL_TIME -J unifyfs-integ-tests"
+    LLNL_SLURM_SCHEDULER_PARAMETERS: "-N $NNODES -p $QUEUE -t $INTEG_WALL_TIME"
 
 .lsf-single-node-template:
   variables:
-    LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes 1 -q $QUEUE -W $UNIT_WALL_TIME -J unifyfs-unit-tests"
-    SCHEDULER_PARAMETERS: "-nnodes 1 -P $PROJECT_ID -W $UNIT_WALL_TIME -J unifyfs-unit-tests"
+    LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes 1 -q $QUEUE -W $UNIT_WALL_TIME"
+    SCHEDULER_PARAMETERS: "-nnodes 1 -P $PROJECT_ID -W $UNIT_WALL_TIME"
 
 .lsf-multi-node-template:
   variables:
-    LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes $NNODES $STAGE_STORAGE -q $QUEUE -W $INTEG_WALL_TIME -J unifyfs-integ-tests"
-    SCHEDULER_PARAMETERS: "-nnodes $NNODES -P $PROJECT_ID -W $INTEG_WALL_TIME -J unifyfs-integ-tests"
+    LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes $NNODES $STAGE_STORAGE -q $QUEUE -W $INTEG_WALL_TIME"
+    SCHEDULER_PARAMETERS: "-nnodes $NNODES -P $PROJECT_ID -W $INTEG_WALL_TIME"
 
 ##### Job Templates #####
 
@@ -58,9 +62,23 @@ stages:
   script:
     - git clone -b ${CI_COMMIT_BRANCH} --depth=1 ${CI_REPOSITORY_URL} $WORKING_DIR
 
-# Build script used by each system. The CC and FC variables are set in
-# the specific job scripts and evaluated in the before_script in order
-# to customize which compiler will be used for each job.
+# Check if Spack is installed, but don't install if not. Doing so may create
+# issues with the user's/service user's Spack installation.
+# Check if the SPACK_ENV_NAME set in the job already exists. If so, this does
+# nothing. If not, create and install the Spack Environment for subsequent jobs
+# to use.
+.install-deps-template:
+  stage: install-deps
+  before_script:
+  - which spack || ((cd $HOME/spack && git describe) && . $HOME/spack/share/spack/setup-env.sh)
+  - module load $COMPILER
+  script:
+  - spack env list | grep $SPACK_ENV_NAME || (spack env create $SPACK_ENV_NAME .spack-env/${SPACK_ENV_NAME}/spack.yaml && spack env activate $SPACK_ENV_NAME && spack install --fail-fast)
+  needs: []
+
+# Build script used by each system to build UnifyFS. The CC and FC variables are
+# set in the specific job scripts and evaluated here in order to customize which
+# compiler will be used for each job.
 # An artifact is created to pass on to the testing stages. The
 # test-unit stage requires the unifyfs-build/ files and the test-integ
 # stage requires the unifyfs-install/ files.
@@ -69,18 +87,17 @@ stages:
   script:
     - CC_PATH=$($CC_COMMAND)
     - FC_PATH=$($FC_COMMAND)
-    - GOTCHA_INSTALL=$(spack location -i gotcha %$SPACK_COMPILER arch=$SPACK_ARCH)
-    - SPATH_INSTALL=$(spack location -i spath %$SPACK_COMPILER arch=$SPACK_ARCH)
+    - GOTCHA_INSTALL=$(spack location -i gotcha)
+    - SPATH_INSTALL=$(spack location -i spath)
     - ./autogen.sh
     - mkdir -p unifyfs-build unifyfs-install && cd unifyfs-build
     - ../configure CC=$CC_PATH FC=$FC_PATH --prefix=${WORKING_DIR}/unifyfs-install --with-gotcha=$GOTCHA_INSTALL --with-spath=$SPATH_INSTALL --enable-fortran --disable-silent-rules
     - make V=1
     - make V=1 install
-  needs: []
   artifacts:
     name: "${CI_JOB_NAME}-${CI_PIPELINE_ID}"
     untracked: true
-    expire_in: 1 hour
+    expire_in: 6 hour
     paths:
       - unifyfs-build/
       - unifyfs-install/
@@ -92,46 +109,69 @@ stages:
   after_script:
     - rm -rf /tmp/unify* /tmp/tmp.* /tmp/mdhim* /tmp/na_sm | true
 
-# Variables here are used for the integration test suite and can be
-# adjusted in the Gitlab interface. See our testing documentation for
-# full details.
+# Run the integration test suite with the options provided from the specific
+# job.
+# Variables used in the integration test suite can be adjusted in the Gitlab web
+# interface. See our testing documentation for full details.
+# If the job was successful, clean up the build directory in the after_script.
 .integ-test-template:
   stage: test-integ
   script:
-    - cd t/ci && unbuffer prove -v RUN_CI_TESTS.sh
+    - cd t/ci && unbuffer prove -v RUN_CI_TESTS.sh $CI_TEST_OPTIONS
+  after_script:
+    - >
+        echo "CI_JOB_STATUS: $CI_JOB_STATUS";
+        if [[ $CI_JOB_STATUS == 'success' ]]; then
+            echo "Cleaning CI_BUILDS_DIR: $CI_BUILDS_DIR"
+            rm -rf $CI_BUILDS_DIR
+        elif [[ $CI_JOB_STATUS == 'failed' ]]; then
+            echo "Logs for debugging available in:"
+            echo "CI_BUILDS_DIR: $CI_BUILDS_DIR"
+        else
+            echo "Job status unknown"
+        fi
 
 ##### Jobs #####
 
-# Since Gitlab currently runs in the user's home environment, the
-# before_script is currently only set up to load the proper Spack
-# modules, if they are available, to prevent changing the user's
-# environment. Install any needed modules in the user's environment
-# prior to running when new compilers or architectures need to be
-# tested.
+# Default before_script for each job. Use an alternative working directory (if
+# necessary), module load the compiler associated with this job, and activate
+# the Spack Environment associated with this job.
 #
-# For jobs running in the not-default location, change directories
-# to the WORKING_DIR directory. Otherwise, set WORKING_DIR to be the
-# CI_PROJECT_DIR for the build step.
+# For jobs running in the not-default location, change directories to the
+# WORKING_DIR directory. Otherwise, set WORKING_DIR to be the CI_PROJECT_DIR for
+# the build step.
+# TODO: Look into CUSTOM_CI_BUILDS_DIR as an alternative (must work on ascent).
 #
-# The COMPILER, CC_PATH, and FC_PATH variables are evaluated here. Set
-# them in their specific job scripts.
-# SPACK_COMPILER and SPACK_ARCH are then set to load the matching
-# dependencies for the desired compiler.
+# The COMPILER variable (evaluated here) is set in the specific job scripts.
+#
+# Activate the Spack Environment created in the install-deps job.
 before_script:
-  - which spack || ((cd $HOME/spack && git describe) && . $HOME/spack/share/spack/setup-env.sh)
   - if [[ -d $WORKING_DIR ]]; then cd ${WORKING_DIR}; else export WORKING_DIR=${CI_PROJECT_DIR}; fi
   - module load $COMPILER
-  - SPACK_COMPILER=${COMPILER//\//@}
-  - SPACK_ARCH="$(spack arch -p)-$(spack arch -o)-$(uname -m)"
-  - spack load automake@1.15 %$SPACK_COMPILER arch=$SPACK_ARCH
-  - spack load gotcha %$SPACK_COMPILER arch=$SPACK_ARCH
-  - spack load argobots %$SPACK_COMPILER arch=$SPACK_ARCH
-  - spack load mercury %$SPACK_COMPILER arch=$SPACK_ARCH
-  - spack load mochi-margo %$SPACK_COMPILER arch=$SPACK_ARCH
-  - spack load spath %$SPACK_COMPILER arch=$SPACK_ARCH
+  - spack env activate $SPACK_ENV_NAME && spack env status && spack find
+
+# Scheduled job to fully clean the runner directory to avoid space issues that
+# may accumulate over time.
+#
+# Running with lsf tag here, but this may be too vague as the job may attempt to
+# use a runner on a system the service user doesn't have permission to access.
+# If so, move this job to a specific system.
+full_clean:
+  stage: clean
+  extends: .base-template
+  variables:
+    GIT_STRATEGY: none
+  rules:
+    - if: $FULL_CLEAN == "YES" && $CI_PIPELINE_SOURCE == "schedule"
+  tags:
+    - shell
+  before_script: []
+  script: rm -rf ${HOME}/.jacamar-ci/*
+  needs: []
 
 # System specific jobs
 include:
   - local: .gitlab/ascent.yml
   - local: .gitlab/catalyst.yml
   - local: .gitlab/lassen.yml
+  - local: .gitlab/quartz.yml

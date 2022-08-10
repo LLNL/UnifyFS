@@ -63,5 +63,5 @@ fi
 
 echo "$infomsg ====================== SLURM Job Info ======================"
 echo "$infomsg ------------------------ Job Status ------------------------"
-checkjob -v $JOB_ID
+scontrol show job $JOB_ID
 echo "$infomsg ------------------------------------------------------------"
