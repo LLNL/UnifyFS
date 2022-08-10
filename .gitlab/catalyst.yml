@@ -7,7 +7,16 @@
   rules:
     - if: '$RUN_CATALYST != "ON"'
       when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - when: on_success
+
+.catalyst-scheduled-template:
+  extends: .base-template
+  rules:
+    - if: '$RUN_CATALYST != "ON"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
 
 .catalyst-shell-template:
   extends: .catalyst-template
@@ -21,78 +30,146 @@
     - catalyst
     - batch
 
+.catalyst-scheduled-shell-template:
+  extends: .catalyst-scheduled-template
+  tags:
+    - catalyst
+    - shell
+
+.catalyst-scheduled-batch-template:
+  extends: .catalyst-scheduled-template
+  tags:
+    - catalyst
+    - batch
+
 ##### All Catalyst Jobs #####
 
 ### gcc@4.9.3 ###
-catalyst-gcc-4_9_3-build:
+.catalyst-gcc-4_9_3-template:
   variables:
     COMPILER: gcc/4.9.3
     CC_COMMAND: "which gcc"
     FC_COMMAND: "which gfortran"
-  extends: [.catalyst-shell-template, .build-template]
+    SPACK_ENV_NAME: "unifyfs-slurm-gcc4_9_3"
+
+catalyst-gcc-4_9_3-install-deps:
+  extends: [.catalyst-shell-template, .catalyst-gcc-4_9_3-template, .install-deps-template]
+
+catalyst-gcc-4_9_3-build:
+  extends: [.catalyst-shell-template, .catalyst-gcc-4_9_3-template, .build-template]
+  needs: ["catalyst-gcc-4_9_3-install-deps"]
 
 catalyst-gcc-4_9_3-unit-test:
-  variables:
-    COMPILER: gcc/4.9.3
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.slurm-single-node-template, .catalyst-batch-template, .unit-test-template]
+  extends: [.slurm-single-node-template, .catalyst-batch-template, .catalyst-gcc-4_9_3-template, .unit-test-template]
   needs: ["catalyst-gcc-4_9_3-build"]
 
-catalyst-gcc-4_9_3-integ-test:
+# Integration tests
+
+catalyst-gcc-4_9_3-integ-test-writeread-posix:
   variables:
-    COMPILER: gcc/4.9.3
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.slurm-multi-node-template, .catalyst-batch-template, .integ-test-template]
+    CI_TEST_OPTIONS: ":: -s writeread -t posix"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .catalyst-gcc-4_9_3-template, .integ-test-template]
+  needs: ["catalyst-gcc-4_9_3-build"]
+
+catalyst-gcc-4_9_3-integ-test-writeread-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s writeread -t mpiio"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .catalyst-gcc-4_9_3-template, .integ-test-template]
+  needs: ["catalyst-gcc-4_9_3-build"]
+
+catalyst-gcc-4_9_3-integ-test-read-posix:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t posix"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .catalyst-gcc-4_9_3-template, .integ-test-template]
+  needs: ["catalyst-gcc-4_9_3-build"]
+
+catalyst-gcc-4_9_3-integ-test-read-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t mpiio"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .catalyst-gcc-4_9_3-template, .integ-test-template]
+  needs: ["catalyst-gcc-4_9_3-build"]
+
+catalyst-gcc-4_9_3-integ-test-pc-all:
+  variables:
+    CI_TEST_OPTIONS: ":: -s pc -t all"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .catalyst-gcc-4_9_3-template, .integ-test-template]
+  needs: ["catalyst-gcc-4_9_3-build"]
+
+catalyst-gcc-4_9_3-integ-test-stage:
+  variables:
+    CI_TEST_OPTIONS: ":: -s stage"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .catalyst-gcc-4_9_3-template, .integ-test-template]
   needs: ["catalyst-gcc-4_9_3-build"]
 
 
 ### gcc@10.2.1 ###
-catalyst-gcc-10_2_1-build:
+.catalyst-gcc-10_2_1-template:
   variables:
     COMPILER: gcc/10.2.1
     CC_COMMAND: "which gcc"
     FC_COMMAND: "which gfortran"
-  extends: [.catalyst-shell-template, .build-template]
+    SPACK_ENV_NAME: "unifyfs-slurm-gcc10_2_1"
+
+catalyst-gcc-10_2_1-install-deps:
+  extends: [.catalyst-shell-template, .catalyst-gcc-10_2_1-template, .install-deps-template]
+
+catalyst-gcc-10_2_1-build:
+  extends: [.catalyst-shell-template, .catalyst-gcc-10_2_1-template, .build-template]
+  needs: ["catalyst-gcc-10_2_1-install-deps"]
 
 catalyst-gcc-10_2_1-unit-test:
-  variables:
-    COMPILER: gcc/10.2.1
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.slurm-single-node-template, .catalyst-batch-template, .unit-test-template]
+  extends: [.slurm-single-node-template, .catalyst-batch-template, .catalyst-gcc-10_2_1-template, .unit-test-template]
   needs: ["catalyst-gcc-10_2_1-build"]
 
-catalyst-gcc-10_2_1-integ-test:
+# Integration tests
+
+catalyst-gcc-10_2_1-integ-test-writeread-posix:
   variables:
-    COMPILER: gcc/10.2.1
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.slurm-multi-node-template, .catalyst-batch-template, .integ-test-template]
+    CI_TEST_OPTIONS: ":: -s writeread -t posix"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .catalyst-gcc-10_2_1-template, .integ-test-template]
   needs: ["catalyst-gcc-10_2_1-build"]
 
+catalyst-gcc-10_2_1-integ-test-writeread-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s writeread -t mpiio"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .catalyst-gcc-10_2_1-template, .integ-test-template]
+  needs: ["catalyst-gcc-10_2_1-build"]
 
-### intel@19.0.4 ###
-#catalyst-intel-19_0_4-build:
-#  variables:
-#    COMPILER: intel/19.0.4
-#    CC_COMMAND: "which icc"
-#    FC_COMMAND: "which ifort"
-#  extends: [.catalyst-shell-template, .build-template]
-#
-#catalyst-intel-19_0_4-unit-test:
-#  variables:
-#    COMPILER: intel/19.0.4
-#    CC_COMMAND: "which icc"
-#    FC_COMMAND: "which ifort"
-#  extends: [.slurm-single-node-template, .catalyst-batch-template, .unit-test-template]
-#  needs: ["catalyst-intel-19_0_4-build"]
-#
-#catalyst-intel-19_0_4-integ-test:
-#  variables:
-#    COMPILER: intel/19.0.4
-#    CC_COMMAND: "which icc"
-#    FC_COMMAND: "which ifort"
-#  extends: [.slurm-multi-node-template, .catalyst-batch-template, .integ-test-template]
-#  needs: ["catalyst-intel-19_0_4-build"]
+catalyst-gcc-10_2_1-integ-test-read-posix:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t posix"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .catalyst-gcc-10_2_1-template, .integ-test-template]
+  needs: ["catalyst-gcc-10_2_1-build"]
+
+catalyst-gcc-10_2_1-integ-test-read-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t mpiio"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .catalyst-gcc-10_2_1-template, .integ-test-template]
+  needs: ["catalyst-gcc-10_2_1-build"]
+
+catalyst-gcc-10_2_1-integ-test-pc-all:
+  variables:
+    CI_TEST_OPTIONS: ":: -s pc -t all"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .catalyst-gcc-10_2_1-template, .integ-test-template]
+  needs: ["catalyst-gcc-10_2_1-build"]
+
+catalyst-gcc-10_2_1-integ-test-stage:
+  variables:
+    CI_TEST_OPTIONS: ":: -s stage"
+  extends: [.slurm-multi-node-template, .catalyst-batch-template, .catalyst-gcc-10_2_1-template, .integ-test-template]
+  needs: ["catalyst-gcc-10_2_1-build"]
+
+# Larger Scheduled Stage Job(s)
+
+catalyst-gcc-10_2_1-scheduled-install-deps:
+  extends: [.catalyst-scheduled-shell-template, .catalyst-gcc-10_2_1-template, .install-deps-template]
+
+catalyst-gcc-10_2_1-scheduled-build:
+  extends: [.catalyst-scheduled-shell-template, .catalyst-gcc-10_2_1-template, .build-template]
+  needs: ["catalyst-gcc-10_2_1-scheduled-install-deps"]
+
+catalyst-gcc-10_2_1-integ-test-scheduled-stage:
+  variables:
+    CI_TEST_OPTIONS: ":: -s stage"
+  extends: [.slurm-multi-node-template, .catalyst-scheduled-batch-template, .catalyst-gcc-10_2_1-template, .integ-test-template]
+  needs: ["catalyst-gcc-10_2_1-scheduled-build"]

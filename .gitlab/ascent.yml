@@ -3,7 +3,7 @@
 # The WORKING_DIR envar is defined to allow the init job to clone the
 # git repo to a different location than the default. Subsequent jobs
 # will then `cd` to this directory during their before_script stage.
-# The WORKING_DIR_BASE envar is definied in the Gitlab UI.
+# The WORKING_DIR_BASE envar is defined in the Gitlab Web UI.
 #
 # The RUN_ASCENT variable can be toggled in the Gitlab interface to
 # toggle whether jobs should be run on this system.
@@ -14,7 +14,18 @@
   rules:
     - if: '$RUN_ASCENT != "ON"'
       when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - when: on_success
+
+.ascent-scheduled-template:
+  variables:
+    WORKING_DIR: ${WORKING_DIR_BASE}/${CI_PIPELINE_ID}/source
+  extends: .base-template
+  rules:
+    - if: '$RUN_ASCENT != "ON"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
 
 .ascent-shell-template:
   extends: .ascent-template
@@ -26,90 +37,155 @@
   extends: .ascent-template
   tags: [batch]
 
+.ascent-scheduled-shell-template:
+  extends: .ascent-scheduled-template
+  tags: [nobatch]
+
+.ascent-scheduled-batch-template:
+  variables:
+    JOB_LAUNCH_COMMAND: "jsrun -r1 -n1"
+  extends: .ascent-scheduled-template
+  tags: [batch]
+
 ##### All Ascent Jobs #####
 
 ### gcc@4.8.5 ###
+.ascent-gcc-4_8_5-template:
+  variables:
+    COMPILER: gcc/4.8.5
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+    SPACK_ENV_NAME: "unifyfs-lsf-gcc4_8_5"
+
 ascent-gcc-4_8_5-init:
   extends: [.ascent-shell-template, .init-template]
 
-ascent-gcc-4_8_5-build:
-  variables:
-    COMPILER: gcc/4.8.5
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.ascent-shell-template, .build-template]
+ascent-gcc-4_8_5-install-deps:
+  extends: [.ascent-shell-template, .ascent-gcc-4_8_5-template, .install-deps-template]
   needs: ["ascent-gcc-4_8_5-init"]
 
+ascent-gcc-4_8_5-build:
+  extends: [.ascent-shell-template, .ascent-gcc-4_8_5-template, .build-template]
+  needs: ["ascent-gcc-4_8_5-install-deps"]
+
 ascent-gcc-4_8_5-unit-test:
-  variables:
-    COMPILER: gcc/4.8.5
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.lsf-single-node-template, .ascent-batch-template, .unit-test-template]
+  extends: [.lsf-single-node-template, .ascent-batch-template, .ascent-gcc-4_8_5-template, .unit-test-template]
   needs: ["ascent-gcc-4_8_5-build"]
 
-ascent-gcc-4_8_5-integ-test:
+# Integration tests
+
+ascent-gcc-4_8_5-integ-test-writeread-posix:
   variables:
-    COMPILER: gcc/4.8.5
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.lsf-multi-node-template, .ascent-batch-template, .integ-test-template]
+    CI_TEST_OPTIONS: ":: -s writeread -t posix"
+  extends: [.lsf-multi-node-template, .ascent-batch-template, .ascent-gcc-4_8_5-template, .integ-test-template]
+  needs: ["ascent-gcc-4_8_5-build"]
+
+ascent-gcc-4_8_5-integ-test-writeread-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s writeread -t mpiio"
+  extends: [.lsf-multi-node-template, .ascent-batch-template, .ascent-gcc-4_8_5-template, .integ-test-template]
+  needs: ["ascent-gcc-4_8_5-build"]
+
+ascent-gcc-4_8_5-integ-test-read-posix:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t posix"
+  extends: [.lsf-multi-node-template, .ascent-batch-template, .ascent-gcc-4_8_5-template, .integ-test-template]
+  needs: ["ascent-gcc-4_8_5-build"]
+
+ascent-gcc-4_8_5-integ-test-read-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t mpiio"
+  extends: [.lsf-multi-node-template, .ascent-batch-template, .ascent-gcc-4_8_5-template, .integ-test-template]
+  needs: ["ascent-gcc-4_8_5-build"]
+
+ascent-gcc-4_8_5-integ-test-pc-all:
+  variables:
+    CI_TEST_OPTIONS: ":: -s pc -t all"
+  extends: [.lsf-multi-node-template, .ascent-batch-template, .ascent-gcc-4_8_5-template, .integ-test-template]
+  needs: ["ascent-gcc-4_8_5-build"]
+
+ascent-gcc-4_8_5-integ-test-stage:
+  variables:
+    CI_TEST_OPTIONS: ":: -s stage"
+  extends: [.lsf-multi-node-template, .ascent-batch-template, .ascent-gcc-4_8_5-template, .integ-test-template]
   needs: ["ascent-gcc-4_8_5-build"]
 
 
 ### gcc@10.2.0 ###
+.ascent-gcc-10_2_0-template:
+  variables:
+    COMPILER: gcc/10.2.0
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+
 ascent-gcc-10_2_0-init:
   extends: [.ascent-shell-template, .init-template]
 
-ascent-gcc-10_2_0-build:
-  variables:
-    COMPILER: gcc/10.2.0
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.ascent-shell-template, .build-template]
+ascent-gcc-10_2_0-install-deps:
+  extends: [.ascent-shell-template, .ascent-gcc-10_2_0-template, .install-deps-template]
   needs: ["ascent-gcc-10_2_0-init"]
 
+ascent-gcc-10_2_0-build:
+  extends: [.ascent-shell-template, .ascent-gcc-10_2_0-template, .build-template]
+  needs: ["ascent-gcc-10_2_0-install-deps"]
+
 ascent-gcc-10_2_0-unit-test:
-  variables:
-    COMPILER: gcc/10.2.0
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.lsf-single-node-template, .ascent-batch-template, .unit-test-template]
+  extends: [.lsf-single-node-template, .ascent-batch-template, .ascent-gcc-10_2_0-template, .unit-test-template]
   needs: ["ascent-gcc-10_2_0-build"]
 
-ascent-gcc-10_2_0-integ-test:
+# Integration tests
+
+ascent-gcc-10_2_0-integ-test-writeread-posix:
   variables:
-    COMPILER: gcc/10.2.0
-    CC_COMMAND: "which gcc"
-    FC_COMMAND: "which gfortran"
-  extends: [.lsf-multi-node-template, .ascent-batch-template, .integ-test-template]
+    CI_TEST_OPTIONS: ":: -s writeread -t posix"
+  extends: [.lsf-multi-node-template, .ascent-batch-template, .ascent-gcc-10_2_0-template, .integ-test-template]
   needs: ["ascent-gcc-10_2_0-build"]
 
+ascent-gcc-10_2_0-integ-test-writeread-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s writeread -t mpiio"
+  extends: [.lsf-multi-node-template, .ascent-batch-template, .ascent-gcc-10_2_0-template, .integ-test-template]
+  needs: ["ascent-gcc-10_2_0-build"]
 
-### xl@16.1 ###
-#ascent-xl-16_1-init:
-#  extends: [.ascent-shell-template, .init-template]
+ascent-gcc-10_2_0-integ-test-read-posix:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t posix"
+  extends: [.lsf-multi-node-template, .ascent-batch-template, .ascent-gcc-10_2_0-template, .integ-test-template]
+  needs: ["ascent-gcc-10_2_0-build"]
+
+ascent-gcc-10_2_0-integ-test-read-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t mpiio"
+  extends: [.lsf-multi-node-template, .ascent-batch-template, .ascent-gcc-10_2_0-template, .integ-test-template]
+  needs: ["ascent-gcc-10_2_0-build"]
+
+ascent-gcc-10_2_0-integ-test-pc-all:
+  variables:
+    CI_TEST_OPTIONS: ":: -s pc -t all"
+  extends: [.lsf-multi-node-template, .ascent-batch-template, .ascent-gcc-10_2_0-template, .integ-test-template]
+  needs: ["ascent-gcc-10_2_0-build"]
+
+ascent-gcc-10_2_0-integ-test-stage:
+  variables:
+    CI_TEST_OPTIONS: ":: -s stage"
+  extends: [.lsf-multi-node-template, .ascent-batch-template, .ascent-gcc-10_2_0-template, .integ-test-template]
+  needs: ["ascent-gcc-10_2_0-build"]
+
+# Larger Scheduled Stage Job(s)
 #
-#ascent-xl-16_1-build:
-#  variables:
-#    COMPILER: xl/16.1
-#    CC_COMMAND: "which xlc"
-#    FC_COMMAND: "which xlf90"
-#  extends: [.ascent-shell-template, .build-template]
-#  needs: ["ascent-xl-16_1-init"]
-#
-#ascent-xl-16_1-unit-test:
-#  variables:
-#    COMPILER: xl/16.1
-#    CC_COMMAND: "which xlc"
-#    FC_COMMAND: "which xlf90"
-#  extends: [.lsf-single-node-template, .ascent-batch-template, .unit-test-template]
-#  needs: ["ascent-xl-16_1-build"]
-#
-#ascent-xl-16_1-integ-test:
-#  variables:
-#    COMPILER: xlc/16.1
-#    CC_COMMAND: "which xlc"
-#    FC_COMMAND: "which xlf90"
-#  extends: [.lsf-multi-node-template, .ascent-batch-template, .integ-test-template]
-#  needs: ["ascent-xl-16_1-build"]
+ascent-gcc-10_2_0-scheduled-init:
+  extends: [.ascent-scheduled-shell-template, .init-template]
+
+ascent-gcc-10_2_0-scheduled-install-deps:
+  extends: [.ascent-scheduled-shell-template, .ascent-gcc-10_2_0-template, .install-deps-template]
+  needs: ["ascent-gcc-10_2_0-scheduled-init"]
+
+ascent-gcc-10_2_0-scheduled-build:
+  extends: [.ascent-scheduled-shell-template, .ascent-gcc-10_2_0-template, .build-template]
+  needs: ["ascent-gcc-10_2_0-scheduled-install-deps"]
+
+ascent-gcc-10_2_0-integ-test-scheduled-stage:
+  variables:
+    CI_TEST_OPTIONS: ":: -s stage"
+  extends: [.lsf-multi-node-template, .ascent-scheduled-batch-template, .ascent-gcc-10_2_0-template, .integ-test-template]
+  needs: ["ascent-gcc-10_2_0-scheduled-build"]
