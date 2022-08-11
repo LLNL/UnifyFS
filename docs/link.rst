@@ -32,7 +32,7 @@ Dynamic link
 A build of UnifyFS includes two different shared libraries.  Which one you
 should link against depends on your application.  If you wish to take advantage
 of the UnifyFS auto-mount feature (assuming the feature was enabled at
-compile-time), the you should link against ``libunifyfs_mpi_gotcha.so``.  If
+compile-time), then you should link against ``libunifyfs_mpi_gotcha.so``.  If
 you are not building an MPI-enabled application, or if you want explicit
 control over when UnifyFS filesystem is mounted and unmounted, then link
 against ``libunifyfs_gotcha.so``.  (In this case, you will also have to add
