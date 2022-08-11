@@ -35,7 +35,7 @@ of the UnifyFS auto-mount feature (assuming the feature was enabled at
 compile-time), then you should link against ``libunifyfs_mpi_gotcha.so``.  If
 you are not building an MPI-enabled application, or if you want explicit
 control over when UnifyFS filesystem is mounted and unmounted, then link
-against ``libunifyfs_gotcha.so``.  (In this case, you will also have to add
+against ``libunifyfs_gotcha.so``.  In this case, you will also have to add
 calls to ``unifyfs_mount`` and ``unifyfs_unmount`` in the appropriate
 locations in your code. See :doc:`api`.)
 
