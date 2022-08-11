@@ -37,7 +37,7 @@ you are not building an MPI-enabled application, or if you want explicit
 control over when UnifyFS filesystem is mounted and unmounted, then link
 against ``libunifyfs_gotcha.so``.  In this case, you will also have to add
 calls to ``unifyfs_mount`` and ``unifyfs_unmount`` in the appropriate
-locations in your code. See :doc:`api`.)
+locations in your code. See :doc:`api`.
 
 To intercept I/O calls using gotcha, use the following syntax to link an
 application:
