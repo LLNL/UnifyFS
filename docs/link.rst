@@ -57,7 +57,7 @@ For code that explicitly calls ``unifyfs_mount`` and ``unifyfs_unmount``:
 .. code-block:: Bash
 
     $ mpicc -o test_write test_write.c \
-        -I<unifyfs>/include -L<unifyfs>/lib -lunifyfs_gotcha \
+        -I<unifyfs>/include -L<unifyfs>/lib -lunifyfs_gotcha
 
 Note the use of the ``-I`` option so that the compiler knows where to find
 the ``unifyfs.h`` header file.
