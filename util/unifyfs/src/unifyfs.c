@@ -67,7 +67,6 @@ static unifyfs_resource_t resource;
 
 static struct option const long_opts[] = {
     { "cleanup", no_argument, NULL, 'c' },
-    { "consistency", required_argument, NULL, 'C' },
     { "debug", no_argument, NULL, 'd' },
     { "exe", required_argument, NULL, 'e' },
     { "help", no_argument, NULL, 'h' },
@@ -97,7 +96,6 @@ static char* usage_str =
     "  -h, --help                print usage\n"
     "\n"
     "Command options for \"start\":\n"
-    "  -C, --consistency=<model>  [OPTIONAL] consistency model (NONE | LAMINATED | POSIX)\n"
     "  -e, --exe=<path>           [OPTIONAL] <path> where unifyfsd is installed\n"
     "  -m, --mount=<path>         [OPTIONAL] mount UnifyFS at <path>\n"
     "  -s, --script=<path>        [OPTIONAL] <path> to custom launch script\n"
@@ -132,7 +130,6 @@ static void parse_cmd_arguments(int argc, char** argv)
     int timeout = UNIFYFS_DEFAULT_INIT_TIMEOUT;
     int stage_parallel = 0;
     int stage_timeout = -1;
-    unifyfs_cm_e consistency = UNIFYFS_CM_LAMINATED;
     char* mountpoint = NULL;
     char* script = NULL;
     char* share_dir = NULL;
@@ -148,13 +145,6 @@ static void parse_cmd_arguments(int argc, char** argv)
         case 'c':
             printf("WARNING: cleanup not yet supported!\n");
             cleanup = 1;
-            break;
-
-        case 'C':
-            consistency = unifyfs_cm_enum_from_str(optarg);
-            if (consistency == UNIFYFS_CM_INVALID) {
-                usage(1);
-            }
             break;
 
         case 'd':
@@ -211,7 +201,6 @@ static void parse_cmd_arguments(int argc, char** argv)
 
     cli_args.debug = debug;
     cli_args.cleanup = cleanup;
-    cli_args.consistency = consistency;
     cli_args.script = script;
     cli_args.mountpoint = mountpoint;
     cli_args.server_path = srvr_exe;
@@ -254,8 +243,6 @@ int main(int argc, char** argv)
     if (debug) {
         printf("\n## options from the command line ##\n");
         printf("cleanup:\t%d\n", cli_args.cleanup);
-        printf("consistency:\t%s\n",
-               unifyfs_cm_enum_str(cli_args.consistency));
         printf("debug:\t%d\n", cli_args.debug);
         printf("mountpoint:\t%s\n", cli_args.mountpoint);
         printf("script:\t%s\n", cli_args.script);
