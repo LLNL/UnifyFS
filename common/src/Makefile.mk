@@ -6,8 +6,6 @@ UNIFYFS_COMMON_INSTALL_HDRS = \
 UNIFYFS_COMMON_BASE_SRCS = \
   %reldir%/arraylist.h \
   %reldir%/arraylist.c \
-  %reldir%/cm_enumerator.h \
-  %reldir%/cm_enumerator.c \
   %reldir%/ini.h \
   %reldir%/ini.c \
   %reldir%/rm_enumerator.h \

@@ -46,7 +46,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "cm_enumerator.h"
 #include "rm_enumerator.h"
 #include "unifyfs_const.h"
 
@@ -58,7 +57,6 @@ struct _unifyfs_args {
     int debug;                 /* enable debug output */
     int cleanup;               /* cleanup on termination? (0 or 1) */
     int timeout;               /* timeout of server initialization */
-    unifyfs_cm_e consistency;  /* consistency model */
     char* mountpoint;          /* mountpoint */
     char* server_path;         /* full path to installed unifyfsd */
     char* share_dir;           /* full path to shared file system directory */
