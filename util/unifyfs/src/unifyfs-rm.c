@@ -664,15 +664,6 @@ static size_t construct_server_argv(unifyfs_args_t* args,
         argc++;
     }
 
-    if (args->consistency != UNIFYFS_CM_LAMINATED) {
-        if (server_argv != NULL) {
-            server_argv[argc] = strdup("-c");
-            server_argv[argc + 1] =
-                strdup(unifyfs_cm_enum_str(args->consistency));
-        }
-        argc += 2;
-    }
-
     if (args->mountpoint != NULL) {
         if (server_argv != NULL) {
             server_argv[argc] = strdup("-m");
