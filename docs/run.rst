@@ -52,8 +52,8 @@ for further details on customizing the UnifyFS runtime configuration.
 
 .. _unifyfs_utility_label:
 
-``unifyfs`` provides command-line options to choose the client mountpoint,
-adjust the consistency model, and control stage-in and stage-out of files.
+``unifyfs`` provides command-line options to select the shared file system path,
+choose the client mountpoint, and control stage-in and stage-out of files.
 The full usage for ``unifyfs`` is as follows:
 
 .. code-block:: Bash
@@ -71,7 +71,6 @@ The full usage for ``unifyfs`` is as follows:
       -h, --help                print usage
 
     Command options for "start":
-      -C, --consistency=<model>  [OPTIONAL] consistency model (NONE | LAMINATED | POSIX)
       -e, --exe=<path>           [OPTIONAL] <path> where unifyfsd is installed
       -m, --mount=<path>         [OPTIONAL] mount UnifyFS at <path>
       -s, --script=<path>        [OPTIONAL] <path> to custom launch script

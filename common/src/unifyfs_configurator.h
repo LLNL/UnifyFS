@@ -66,7 +66,6 @@
 #define UNIFYFS_CONFIGS \
     UNIFYFS_CFG_CLI(unifyfs, cleanup, BOOL, off, "cleanup storage on server exit", NULL, 'C', "on|off") \
     UNIFYFS_CFG_CLI(unifyfs, configfile, STRING, /etc/unifyfs.conf, "path to configuration file", configurator_file_check, 'f', "specify full path to config file") \
-    UNIFYFS_CFG_CLI(unifyfs, consistency, STRING, LAMINATED, "consistency model", NULL, 'c', "specify consistency model (NONE | LAMINATED | POSIX)") \
     UNIFYFS_CFG_CLI(unifyfs, daemonize, BOOL, off, "enable server daemonization", NULL, 'D', "on|off") \
     UNIFYFS_CFG_CLI(unifyfs, mountpoint, STRING, /unifyfs, "mountpoint directory", NULL, 'm', "specify full path to desired mountpoint") \
     UNIFYFS_CFG(client, cwd, STRING, NULLSTRING, "current working directory", NULL) \
