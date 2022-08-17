@@ -55,7 +55,6 @@ a given section and key.
    =============  ======  ===============================================
    cleanup        BOOL    cleanup storage on server exit (default: off)
    configfile     STRING  path to custom configuration file
-   consistency    STRING  consistency model [ LAMINATED | POSIX | NONE ]
    daemonize      BOOL    enable server daemonization (default: off)
    mountpoint     STRING  mountpoint path prefix (default: /unifyfs)
    =============  ======  ===============================================
@@ -186,7 +185,6 @@ is used, the value must immediately follow the option character (e.g., ``-Cyes``
    =========================  ========
    ``--unifyfs-cleanup``       ``-C``
    ``--unifyfs-configfile``    ``-f``
-   ``--unifyfs-consistency``   ``-c``
    ``--unifyfs-daemonize``     ``-D``
    ``--unifyfs-mountpoint``    ``-m``
    ``--log-verbosity``         ``-v``
@@ -197,4 +195,3 @@ is used, the value must immediately follow the option character (e.g., ``-Cyes``
    ``--sharedfs-dir``          ``-S``
    ``--server-init_timeout``   ``-t``
    =========================  ========
-

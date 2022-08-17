@@ -29,6 +29,10 @@ some less obvious limitations when using some I/O libraries with UnifyFS
     corruption. Running the application through :doc:`VerifyIO <verifyio>` can
     help determine if any file locking calls are made.
 
+.. rubric:: Directories
+
+UnifyFS does not currently support directory operations.
+
 ----------
 
 ---------------------------
