@@ -126,13 +126,15 @@ int rm_create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
 reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id,
                                       int client_id);
 
+/* cleanup Request Manager thread state */
+int unifyfs_rm_thrd_cleanup(reqmgr_thrd_t* thrd_ctrl);
+
 /* Request Manager pthread main */
 void* request_manager_thread(void* arg);
 
 /* function called by main thread to instruct
- * resource manager thread to exit,
- * returns UNIFYFS_SUCCESS on success */
-int rm_request_exit(reqmgr_thrd_t* thrd_ctrl);
+ * Request Manager thread to exit */
+void rm_request_exit(reqmgr_thrd_t* thrd_ctrl);
 
 /* update state for remote chunk reads with received response data */
 int rm_post_chunk_read_responses(int app_id,

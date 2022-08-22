@@ -182,6 +182,58 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
     return thrd_ctrl;
 }
 
+/* cleanup Request Manager thread state */
+int unifyfs_rm_thrd_cleanup(reqmgr_thrd_t* thrd_ctrl)
+{
+    if (NULL == thrd_ctrl) {
+        return EINVAL;
+    }
+
+    /* grab the lock */
+    RM_LOCK(thrd_ctrl);
+
+    /* if reqmgr thread is waiting for work, tell it to go away
+     * and wake it up */
+    if (thrd_ctrl->waiting_for_work) {
+        rm_request_exit(thrd_ctrl);
+
+         /* signal reqmgr thread */
+        pthread_cond_signal(&thrd_ctrl->thrd_cond);
+    }
+
+    /* release the lock */
+    RM_UNLOCK(thrd_ctrl);
+
+    /* wait for reqmgr thread to exit */
+    int rc = pthread_join(thrd_ctrl->thrd, NULL);
+    if (0 == rc) {
+        pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
+        pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
+    }
+
+    if (NULL != thrd_ctrl->client_reqs) {
+        arraylist_free(thrd_ctrl->client_reqs);
+    }
+    if (NULL != thrd_ctrl->client_callbacks) {
+        arraylist_free(thrd_ctrl->client_callbacks);
+    }
+
+    ABT_mutex_free(&(thrd_ctrl->reqs_sync));
+
+    return UNIFYFS_SUCCESS;
+}
+
+/* function called by main thread to instruct
+ * resource manager thread to exit,
+ * returns UNIFYFS_SUCCESS on success */
+void rm_request_exit(reqmgr_thrd_t* thrd_ctrl)
+{
+    if (!thrd_ctrl->exited) {
+        /* inform reqmgr thread that it's time to exit */
+        thrd_ctrl->exit_flag = 1;
+    }
+}
+
 static void debug_print_read_req(server_read_req_t* req)
 {
     if (NULL != req) {
@@ -455,40 +507,7 @@ int rm_submit_read_request(server_read_req_t* req)
     return ret;
 }
 
-/* function called by main thread to instruct
- * resource manager thread to exit,
- * returns UNIFYFS_SUCCESS on success */
-int rm_request_exit(reqmgr_thrd_t* thrd_ctrl)
-{
-    if (thrd_ctrl->exited) {
-        /* already done */
-        return UNIFYFS_SUCCESS;
-    }
 
-    /* grab the lock */
-    RM_LOCK(thrd_ctrl);
-
-    /* inform reqmgr thread that it's time to exit */
-    thrd_ctrl->exit_flag = 1;
-
-    /* if reqmgr thread is waiting for work, wake it up */
-    if (thrd_ctrl->waiting_for_work) {
-         /* signal reqmgr thread */
-        pthread_cond_signal(&thrd_ctrl->thrd_cond);
-    }
-
-    /* release the lock */
-    RM_UNLOCK(thrd_ctrl);
-
-    /* wait for reqmgr thread to exit */
-    int rc = pthread_join(thrd_ctrl->thrd, NULL);
-    if (0 == rc) {
-        pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
-        pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
-        thrd_ctrl->exited = 1;
-    }
-    return UNIFYFS_SUCCESS;
-}
 
 /************************
  * These functions define the logic of the request manager thread
@@ -1646,6 +1665,9 @@ void* request_manager_thread(void* arg)
         }
     }
 
+    RM_LOCK(thrd_ctrl);
+    thrd_ctrl->exited = 1;
+    RM_UNLOCK(thrd_ctrl);
     LOGDBG("RM[%d:%d] thread exiting", appid, clid);
 
     return NULL;

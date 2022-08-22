@@ -1070,6 +1070,8 @@ unifyfs_rc cleanup_app_client(app_config* app, app_client* client)
         return EINVAL;
     }
 
+    unifyfs_rc urc = UNIFYFS_SUCCESS;
+
     LOGDBG("cleaning application client %d:%d",
            client->state.app_id, client->state.client_id);
 
@@ -1089,21 +1091,17 @@ unifyfs_rc cleanup_app_client(app_config* app, app_client* client)
 
     /* free client structure */
     if (NULL != client->reqmgr) {
-        if (NULL != client->reqmgr->client_reqs) {
-            arraylist_free(client->reqmgr->client_reqs);
+        int rc = unifyfs_rm_thrd_cleanup(client->reqmgr);
+        if (rc) {
+            urc = rc;
         }
-        if (NULL != client->reqmgr->client_callbacks) {
-            arraylist_free(client->reqmgr->client_callbacks);
-        }
-
-        ABT_mutex_free(&(client->reqmgr->reqs_sync));
 
         free(client->reqmgr);
         client->reqmgr = NULL;
     }
     free(client);
 
-    return UNIFYFS_SUCCESS;
+    return urc;
 }
 
 unifyfs_rc add_failed_client(int app_id, int client_id)
