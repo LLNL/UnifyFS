@@ -71,12 +71,12 @@ int unifyfs_logio_init_client(const int app_id,
 /**
  * Close logio context.
  *
- * @param ctx          pointer to logio context
- * @param clean_spill  set to non-zero to have server remove spill file
+ * @param ctx            pointer to logio context
+ * @param clean_storage  set to non-zero to have server remove data storage
  * @return UNIFYFS_SUCCESS, or error code
  */
 int unifyfs_logio_close(logio_context* ctx,
-                        int clean_spill);
+                        int clean_storage);
 
 /**
  * Allocate write space from logio context.

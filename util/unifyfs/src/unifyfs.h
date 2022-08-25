@@ -46,7 +46,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "cm_enumerator.h"
 #include "rm_enumerator.h"
 #include "unifyfs_const.h"
 
@@ -58,14 +57,16 @@ struct _unifyfs_args {
     int debug;                 /* enable debug output */
     int cleanup;               /* cleanup on termination? (0 or 1) */
     int timeout;               /* timeout of server initialization */
-    unifyfs_cm_e consistency;  /* consistency model */
     char* mountpoint;          /* mountpoint */
     char* server_path;         /* full path to installed unifyfsd */
     char* share_dir;           /* full path to shared file system directory */
-    char* share_hostfile;      /* full path to shared server hostfile */
-    char* stage_in;            /* data path to stage-in */
-    char* stage_out;           /* data path to stage-out (drain) */
-    int stage_timeout;         /* timeout of (in or out) file staging*/
+    char* share_hostfile;      /* full path to shared server hosts file */
+    char* share_pidfile;       /* full path to shared server pids file */
+    char* stage_in;            /* full path to stage-in manifest file */
+    char* stage_out;           /* full path to stage-out manifest file */
+    char* stage_status;        /* full path to stage-in/out status file */
+    int stage_parallel;        /* enable parallal stage-in/out */
+    int stage_timeout;         /* timeout of (in or out) file staging */
     char* script;              /* path to custom launch/terminate script */
 };
 typedef struct _unifyfs_args unifyfs_args_t;

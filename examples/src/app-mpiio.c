@@ -342,7 +342,7 @@ int main(int argc, char* argv[])
         if (debug) {
             test_pause(rank, "Attempting to mount");
         }
-        ret = unifyfs_mount(mountpoint, rank, total_ranks, 0);
+        ret = unifyfs_mount(mountpoint, rank, total_ranks);
         if (ret) {
             test_print(rank, "unifyfs_mount failed (return = %d)", ret);
             exit(-1);

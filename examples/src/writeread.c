@@ -148,6 +148,9 @@ size_t generate_read_reqs(test_cfg* cfg, char* dstbuf,
  *    cfg.use_aio - when enabled, aio(7) will be used for issuing and
  *    completion of reads and writes.
  *
+ *    cfg.use_api - when enabled, the UnifyFS library API will be used
+ *    for issuing and completion of reads and writes.
+ *
  *    cfg.use_lio - when enabled, lio_listio(3) will be used for batching
  *    reads and writes. When cfg.use_aio is also enabled, the mode will
  *    be LIO_NOWAIT.
@@ -218,17 +221,30 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    // create file
     target_file = test_target_filename(cfg);
-    test_print_verbose_once(cfg, "DEBUG: creating target file %s",
-                            target_file);
+
+    // if reusing filename, remove old target file before starting timers
+    if (cfg->reuse_filename) {
+        test_print_verbose_once(cfg,
+            "DEBUG: removing file %s for reuse", target_file);
+        rc = test_remove_file(cfg, target_file);
+        if (rc) {
+            test_print(cfg, "ERROR - test_remove_file(%s) failed", target_file);
+        }
+    }
+
+    // create file
+    test_print_verbose_once(cfg,
+        "DEBUG: creating target file %s", target_file);
     timer_start_barrier(cfg, &time_create);
     rc = test_create_file(cfg, target_file, O_RDWR);
     if (rc) {
         test_abort(cfg, rc);
     }
     timer_stop_barrier(cfg, &time_create);
-    test_print_verbose_once(cfg, "DEBUG: finished create");
+    test_print_verbose_once(cfg,
+        "DEBUG: finished create (elapsed=%.6lf sec)",
+        time_create.elapsed_sec_all);
 
     if (cfg->pre_wr_trunc) {
         write_truncate(cfg);
@@ -257,7 +273,9 @@ int main(int argc, char* argv[])
         test_abort(cfg, rc);
     }
     timer_stop_barrier(cfg, &time_wr);
-    test_print_verbose_once(cfg, "DEBUG: finished write requests");
+    test_print_verbose_once(cfg,
+        "DEBUG: finished write requests (elapsed=%.6lf sec)",
+        time_wr.elapsed_sec_all);
 
     // sync
     timer_start_barrier(cfg, &time_sync);
@@ -266,13 +284,17 @@ int main(int argc, char* argv[])
         test_abort(cfg, rc);
     }
     timer_stop_barrier(cfg, &time_sync);
-    test_print_verbose_once(cfg, "DEBUG: finished sync");
+    test_print_verbose_once(cfg,
+        "DEBUG: finished sync (elapsed=%.6lf sec)",
+        time_sync.elapsed_sec_all);
 
     // stat file pre-laminate
     timer_start_barrier(cfg, &time_stat_pre);
     stat_file(cfg, target_file);
     timer_stop_barrier(cfg, &time_stat_pre);
-    test_print_verbose_once(cfg, "DEBUG: finished stat pre-laminate");
+    test_print_verbose_once(cfg,
+        "DEBUG: finished stat pre-laminate (elapsed=%.6lf sec)",
+        time_stat_pre.elapsed_sec_all);
 
     if (cfg->post_wr_trunc) {
         write_truncate(cfg);
@@ -281,23 +303,31 @@ int main(int argc, char* argv[])
         timer_start_barrier(cfg, &time_stat_pre2);
         stat_file(cfg, target_file);
         timer_stop_barrier(cfg, &time_stat_pre2);
-        test_print_verbose_once(cfg, "DEBUG: finished stat pre2 (post trunc)");
+        test_print_verbose_once(cfg,
+            "DEBUG: finished stat pre2 (post trunc, elapsed=%.6lf sec)",
+            time_stat_pre2.elapsed_sec_all);
     }
 
-    // laminate
-    timer_start_barrier(cfg, &time_laminate);
-    rc = write_laminate(cfg, target_file);
-    if (rc) {
-        test_abort(cfg, rc);
-    }
-    timer_stop_barrier(cfg, &time_laminate);
-    test_print_verbose_once(cfg, "DEBUG: finished laminate");
+    if (cfg->laminate) {
+        // laminate
+        timer_start_barrier(cfg, &time_laminate);
+        rc = write_laminate(cfg, target_file);
+        if (rc) {
+            test_abort(cfg, rc);
+        }
+        timer_stop_barrier(cfg, &time_laminate);
+        test_print_verbose_once(cfg,
+            "DEBUG: finished laminate (elapsed=%.6lf sec)",
+            time_laminate.elapsed_sec_all);
 
-    // stat file post-laminate
-    timer_start_barrier(cfg, &time_stat_post);
-    stat_cmd(cfg, target_file);
-    timer_stop_barrier(cfg, &time_stat_post);
-    test_print_verbose_once(cfg, "DEBUG: finished stat post-laminate");
+        // stat file post-laminate
+        timer_start_barrier(cfg, &time_stat_post);
+        stat_cmd(cfg, target_file);
+        timer_stop_barrier(cfg, &time_stat_post);
+        test_print_verbose_once(cfg,
+            "DEBUG: finished stat post-laminate (elapsed=%.6lf sec)",
+            time_stat_post.elapsed_sec_all);
+    }
 
     // post-write cleanup
     free(wr_buf);
@@ -327,7 +357,9 @@ int main(int argc, char* argv[])
         test_abort(cfg, rc);
     }
     timer_stop_barrier(cfg, &time_rd);
-    test_print_verbose_once(cfg, "DEBUG: finished read requests");
+    test_print_verbose_once(cfg,
+        "DEBUG: finished read requests (elapsed=%.6lf sec)",
+        time_rd.elapsed_sec_all);
 
     if (test_config.io_check) {
         test_print_verbose_once(cfg, "DEBUG: verifying data");
@@ -404,7 +436,7 @@ int main(int argc, char* argv[])
         test_print_once(cfg, "Stat Time Pre-Laminate is %.6lf s",
                         time_stat_pre.elapsed_sec_all);
         test_print_once(cfg, "Stat Time Pre-Laminate2 is %.6lf s",
-                        time_stat_pre.elapsed_sec_all);
+                        time_stat_pre2.elapsed_sec_all);
         test_print_once(cfg, "File Laminate Time is %.6lf s",
                         time_laminate.elapsed_sec_all);
         test_print_once(cfg, "Stat Time Post-Laminate is %.6lf s",
@@ -417,6 +449,15 @@ int main(int argc, char* argv[])
                         aggr_local_read_bw);
         test_print_once(cfg, "Global Read BW is %.3lf MiB/s",
                         global_read_bw);
+    }
+
+    if (cfg->remove_target) {
+        test_print_verbose_once(cfg,
+            "DEBUG: removing file %s", target_file);
+        rc = test_remove_file(cfg, target_file);
+        if (rc) {
+            test_print(cfg, "ERROR - test_remove_file(%s) failed", target_file);
+        }
     }
 
     // cleanup

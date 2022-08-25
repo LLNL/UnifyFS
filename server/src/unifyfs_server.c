@@ -45,30 +45,23 @@
 // margo rpcs
 #include "margo_server.h"
 
-/* PMI information */
-int glb_pmi_rank; /* = 0 */
-int glb_pmi_size = 1; // for standalone server tests
 int server_pid;
 
 char glb_host[UNIFYFS_MAX_HOSTNAME];
-size_t glb_host_ndx;        // index of localhost in glb_servers
 
 size_t glb_num_servers;     // size of glb_servers array
-server_info_t* glb_servers; // array of server_info_t
 
 unifyfs_cfg_t server_cfg;
 
-static ABT_mutex app_configs_abt_sync;
-static app_config* app_configs[MAX_NUM_APPS]; /* list of apps */
-static size_t clients_per_app = MAX_APP_CLIENTS;
+bool use_server_local_extents; // = false
 
-/**
- * @brief create a ready status file to notify that all servers are ready for
- * accepting client requests.
- *
- * @return 0 on success, error otherwise
- */
-int unifyfs_publish_server_pids(void);
+/* arraylist to track failed clients */
+arraylist_t* failed_clients; // = NULL
+
+static ABT_mutex app_configs_abt_sync;
+static app_config* app_configs[UNIFYFS_SERVER_MAX_NUM_APPS]; /* list of apps */
+static size_t clients_per_app = UNIFYFS_SERVER_MAX_APP_CLIENTS;
+
 
 static int unifyfs_exit(void);
 
@@ -161,15 +154,64 @@ void exit_request(int sig)
     }
 }
 
-#if defined(UNIFYFSD_USE_MPI)
-static void init_MPI(int* argc, char*** argv)
+static int process_servers_hostfile(const char* hostfile)
 {
-    int rc, provided;
-    rc = MPI_Init_thread(argc, argv, MPI_THREAD_MULTIPLE, &provided);
-    if (rc != MPI_SUCCESS) {
-        exit(1);
+    if (NULL == hostfile) {
+        return EINVAL;
     }
 
+    FILE* fp = fopen(hostfile, "r");
+    if (!fp) {
+        LOGERR("failed to open hostfile %s", hostfile);
+        return (int)UNIFYFS_FAILURE;
+    }
+
+    // scan first line: number of hosts
+    size_t cnt = 0;
+    int rc = fscanf(fp, "%zu\n", &cnt);
+    if (1 != rc) {
+        LOGERR("failed to scan hostfile host count");
+        fclose(fp);
+        return (int)UNIFYFS_FAILURE;
+    }
+
+    // scan host lines to find index of host of this process
+    size_t i;
+    size_t ndx = 0;
+    for (i = 0; i < cnt; i++) {
+        char hostbuf[UNIFYFS_MAX_HOSTNAME + 1];
+        memset(hostbuf, 0, sizeof(hostbuf));
+        rc = fscanf(fp, "%s\n", hostbuf);
+        if (1 != rc) {
+            LOGERR("failed to scan hostfile host line %zu", i);
+            fclose(fp);
+            return (int)UNIFYFS_FAILURE;
+        }
+
+        // check whether this line matches our hostname
+        // NOTE: following assumes one server per host
+        if (0 == strcmp(glb_host, hostbuf)) {
+            ndx = (int)i;
+            LOGDBG("found myself at hostfile index=%zu", ndx);
+        }
+    }
+    fclose(fp);
+
+    glb_pmi_rank = (int)ndx;
+    glb_pmi_size = (int)cnt;
+
+    LOGDBG("set pmi rank to host index %d", glb_pmi_rank);
+
+    return (int)UNIFYFS_SUCCESS;
+}
+
+/* Ensure that glb_pmi_rank, glb_pmi_size, and glb_num_server values are set. */
+static int get_server_rank_and_size(const unifyfs_cfg_t* cfg)
+{
+    int rc;
+
+#if defined(UNIFYFSD_USE_MPI)
+    /* use rank and size of MPI communicator */
     rc = MPI_Comm_rank(MPI_COMM_WORLD, &glb_pmi_rank);
     if (rc != MPI_SUCCESS) {
         exit(1);
@@ -179,92 +221,74 @@ static void init_MPI(int* argc, char*** argv)
     if (rc != MPI_SUCCESS) {
         exit(1);
     }
-}
+#elif !defined(USE_PMIX) && !defined(USE_PMI2)
+    /* if not using PMIX or PMI2,
+     * initialize rank/size to assume a singleton job */
+    glb_pmi_rank = 0;
+    glb_pmi_size = 1;
+#endif
 
-static void fini_MPI(void)
-{
-    MPI_Finalize();
-}
-#endif // UNIFYFSD_USE_MPI
-
-static int allocate_servers(size_t n_servers)
-{
-    glb_num_servers = n_servers;
-    glb_servers = (server_info_t*) calloc(n_servers, sizeof(server_info_t));
-    if (NULL == glb_servers) {
-        LOGERR("failed to allocate server_info array");
-        return ENOMEM;
+    /* If the user has specified a hostfile,
+     * extract glb_pmi_rank and glb_pmi_size from there
+     * overriding any settings from MPI/PMI. */
+    if (NULL != cfg->server_hostfile) {
+        rc = process_servers_hostfile(cfg->server_hostfile);
+        if (rc != (int)UNIFYFS_SUCCESS) {
+            LOGERR("failed to gather server information");
+            exit(1);
+        }
     }
+
+    /* TODO: can we just use glb_pmi_size everywhere instead? */
+    glb_num_servers = glb_pmi_size;
+
     return (int)UNIFYFS_SUCCESS;
 }
 
-static int process_servers_hostfile(const char* hostfile)
+static void process_client_failures(void)
 {
-    int rc;
-    size_t i, cnt;
-    FILE* fp = NULL;
-    char hostbuf[UNIFYFS_MAX_HOSTNAME+1];
+    int num_failed = 0;
+    arraylist_t* failures = NULL;
 
-    if (NULL == hostfile) {
-        return EINVAL;
-    }
-    fp = fopen(hostfile, "r");
-    if (!fp) {
-        LOGERR("failed to open hostfile %s", hostfile);
-        return (int)UNIFYFS_FAILURE;
-    }
-
-    // scan first line: number of hosts
-    rc = fscanf(fp, "%zu\n", &cnt);
-    if (1 != rc) {
-        LOGERR("failed to scan hostfile host count");
-        fclose(fp);
-        return (int)UNIFYFS_FAILURE;
-    }
-    rc = allocate_servers(cnt);
-    if ((int)UNIFYFS_SUCCESS != rc) {
-        fclose(fp);
-        return (int)UNIFYFS_FAILURE;
-    }
-
-    // scan host lines
-    for (i = 0; i < cnt; i++) {
-        memset(hostbuf, 0, sizeof(hostbuf));
-        rc = fscanf(fp, "%s\n", hostbuf);
-        if (1 != rc) {
-            LOGERR("failed to scan hostfile host line %zu", i);
-            fclose(fp);
-            return (int)UNIFYFS_FAILURE;
-        }
-
-        // NOTE: following assumes one server per host
-        if (0 == strcmp(glb_host, hostbuf)) {
-            glb_host_ndx = (int)i;
-            LOGDBG("found myself at hostfile index=%zu, pmi_rank=%d",
-                   glb_host_ndx, glb_pmi_rank);
+    ABT_mutex_lock(app_configs_abt_sync);
+    if (NULL != failed_clients) {
+        /* if we have any failed clients, take pointer to the list
+         * and replace it with a newly allocated list */
+        num_failed = arraylist_size(failed_clients);
+        if (num_failed) {
+            LOGDBG("processing %d client failures", num_failed);
+            failures = failed_clients;
+            failed_clients = arraylist_create(0);
         }
     }
-    fclose(fp);
+    ABT_mutex_unlock(app_configs_abt_sync);
 
-    if (glb_pmi_size < cnt) {
-        glb_pmi_rank = (int)glb_host_ndx;
-        glb_pmi_size = (int)cnt;
-        LOGDBG("set pmi rank to host index %d", glb_pmi_rank);
+    if (NULL != failures) {
+        app_config* app;
+        app_client* client;
+        for (int i = 0; i < num_failed; i++) {
+             /* cleanup client at index */
+            client = (app_client*) arraylist_remove(failures, i);
+            if (NULL != client) {
+                app = get_application(client->state.app_id);
+                cleanup_app_client(app, client);
+            }
+        }
+        arraylist_free(failures);
     }
-
-    return (int)UNIFYFS_SUCCESS;
 }
 
 int main(int argc, char* argv[])
 {
     int rc;
     int kv_rank, kv_nranks;
+    long l;
+    bool b;
     bool daemon = true;
     struct sigaction sa;
-    char rank_str[16] = {0};
     char dbg_fname[UNIFYFS_MAX_FILENAME] = {0};
 
-    rc = unifyfs_config_init(&server_cfg, argc, argv);
+    rc = unifyfs_config_init(&server_cfg, argc, argv, 0, NULL);
     if (rc != 0) {
         exit(1);
     }
@@ -282,7 +306,6 @@ int main(int argc, char* argv[])
     server_pid = getpid();
 
     if (server_cfg.log_verbosity != NULL) {
-        long l;
         rc = configurator_int_val(server_cfg.log_verbosity, &l);
         if (0 == rc) {
             unifyfs_set_log_level((unifyfs_log_level_t)l);
@@ -297,6 +320,14 @@ int main(int argc, char* argv[])
         }
     }
 
+    if (server_cfg.server_local_extents != NULL) {
+        bool enable = false;
+        rc = configurator_bool_val(server_cfg.server_local_extents, &enable);
+        if ((0 == rc) && enable) {
+            use_server_local_extents = true;
+        }
+    }
+
     // setup clean termination by signal
     memset(&sa, 0, sizeof(struct sigaction));
     sa.sa_handler = exit_request;
@@ -307,7 +338,6 @@ int main(int argc, char* argv[])
 
     // update clients_per_app based on configuration
     if (server_cfg.server_max_app_clients != NULL) {
-        long l;
         rc = configurator_int_val(server_cfg.server_max_app_clients, &l);
         if (0 == rc) {
             clients_per_app = l;
@@ -317,12 +347,10 @@ int main(int argc, char* argv[])
     // initialize empty app_configs[]
     memset(app_configs, 0, sizeof(app_configs));
 
-#if defined(UNIFYFSD_USE_MPI)
-    init_MPI(&argc, &argv);
-#endif
+    // record hostname of this server in global variable
+    gethostname(glb_host, sizeof(glb_host));
 
     // start logging
-    gethostname(glb_host, sizeof(glb_host));
     snprintf(dbg_fname, sizeof(dbg_fname), "%s/%s.%s",
              server_cfg.log_dir, server_cfg.log_file, glb_host);
     rc = unifyfs_log_open(dbg_fname);
@@ -333,12 +361,40 @@ int main(int argc, char* argv[])
     // print config
     unifyfs_config_print(&server_cfg, unifyfs_log_stream);
 
-    if (NULL != server_cfg.server_hostfile) {
-        rc = process_servers_hostfile(server_cfg.server_hostfile);
-        if (rc != (int)UNIFYFS_SUCCESS) {
-            LOGERR("failed to gather server information");
-            exit(1);
-        }
+    // initialize MPI and PMI if we're using them
+#if defined(UNIFYFSD_USE_MPI)
+    int provided;
+    rc = MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
+    if (rc != MPI_SUCCESS) {
+        LOGERR("failed to initialize MPI");
+        exit(1);
+    }
+#elif defined(USE_PMIX)
+    rc = unifyfs_pmix_init();
+    if (rc != (int)UNIFYFS_SUCCESS) {
+        LOGERR("failed to initialize PMIX");
+        exit(1);
+    }
+#elif defined(USE_PMI2)
+    rc = unifyfs_pmi2_init();
+    if (rc != (int)UNIFYFS_SUCCESS) {
+        LOGERR("failed to initialize PMI2");
+        exit(1);
+    }
+#endif
+
+    /* get rank of this server process and number of servers,
+     * set glb_pmi_rank and glb_pmi_size */
+    rc = get_server_rank_and_size(&server_cfg);
+    if (rc != (int)UNIFYFS_SUCCESS) {
+        LOGERR("failed to get server rank and size");
+        exit(1);
+    }
+
+    /* bail out if we don't have our server rank and group size defined */
+    if (glb_pmi_size <= 0) {
+        LOGERR("failed to read rank and size of server group");
+        exit(1);
     }
 
     kv_rank = glb_pmi_rank;
@@ -348,45 +404,64 @@ int main(int argc, char* argv[])
         exit(1);
     }
     if (glb_pmi_rank != kv_rank) {
-        LOGDBG("mismatch on pmi (%d) vs kvstore (%d) rank",
+        LOGWARN("mismatch on pmi (%d) vs kvstore (%d) rank",
                glb_pmi_rank, kv_rank);
         glb_pmi_rank = kv_rank;
     }
     if (glb_pmi_size != kv_nranks) {
-        LOGDBG("mismatch on pmi (%d) vs kvstore (%d) num ranks",
+        LOGWARN("mismatch on pmi (%d) vs kvstore (%d) num ranks",
                glb_pmi_size, kv_nranks);
         glb_pmi_size = kv_nranks;
     }
 
-    snprintf(rank_str, sizeof(rank_str), "%d", glb_pmi_rank);
-    rc = unifyfs_keyval_publish_remote(key_unifyfsd_pmi_rank, rank_str);
-    if (rc != (int)UNIFYFS_SUCCESS) {
-        exit(1);
+    LOGDBG("initializing RPC service");
+
+    rc = configurator_int_val(server_cfg.margo_client_timeout, &l);
+    if (0 == rc) {
+        margo_client_server_timeout_msec = (double) l;
     }
 
-    if (NULL == server_cfg.server_hostfile) {
-        //glb_svr_rank = kv_rank;
-        rc = allocate_servers((size_t)kv_nranks);
+    rc = configurator_int_val(server_cfg.margo_server_timeout, &l);
+    if (0 == rc) {
+        margo_server_server_timeout_msec = (double) l;
     }
 
-    LOGDBG("initializing rpc service");
-    ABT_init(argc, argv);
-    ABT_mutex_create(&app_configs_abt_sync);
-    rc = configurator_bool_val(server_cfg.margo_tcp, &margo_use_tcp);
+    rc = configurator_int_val(server_cfg.margo_client_pool_size, &l);
+    if (0 == rc) {
+        margo_client_server_pool_sz = l;
+    }
+
+    rc = configurator_int_val(server_cfg.margo_server_pool_size, &l);
+    if (0 == rc) {
+        margo_server_server_pool_sz = l;
+    }
+
+    rc = configurator_bool_val(server_cfg.margo_lazy_connect, &b);
+    if (0 == rc) {
+        margo_lazy_connect = b;
+    }
+
+    rc = configurator_bool_val(server_cfg.margo_tcp, &b);
+    if (0 == rc) {
+        margo_use_tcp = b;
+    }
+
     rc = margo_server_rpc_init();
     if (rc != UNIFYFS_SUCCESS) {
-        LOGERR("%s", unifyfs_rc_enum_description(rc));
+        LOGERR("RPC init failed - %s", unifyfs_rc_enum_description(rc));
         exit(1);
     }
 
-    LOGDBG("connecting rpc servers");
-    rc = margo_connect_servers();
-    if (rc != UNIFYFS_SUCCESS) {
-        LOGERR("%s", unifyfs_rc_enum_description(rc));
-        exit(1);
-    }
+    /* We wait to call any ABT functions until after margo_init.
+     * Margo configures ABT in a particular way, so we defer to
+     * Margo to call ABT_init. */
+    ABT_mutex_create(&app_configs_abt_sync);
 
-    /* launch the service manager */
+    ABT_mutex_lock(app_configs_abt_sync);
+    failed_clients = arraylist_create(0);
+    ABT_mutex_unlock(app_configs_abt_sync);
+
+    /* launch the service manager (note: must happen after ABT_init) */
     LOGDBG("launching service manager thread");
     rc = svcmgr_init();
     if (rc != (int)UNIFYFS_SUCCESS) {
@@ -397,6 +472,13 @@ int main(int argc, char* argv[])
     LOGDBG("initializing file operations");
     rc = unifyfs_fops_init(&server_cfg);
     if (rc != 0) {
+        LOGERR("%s", unifyfs_rc_enum_description(rc));
+        exit(1);
+    }
+
+    LOGDBG("connecting rpc servers");
+    rc = margo_connect_servers();
+    if (rc != UNIFYFS_SUCCESS) {
         LOGERR("%s", unifyfs_rc_enum_description(rc));
         exit(1);
     }
@@ -415,7 +497,11 @@ int main(int argc, char* argv[])
     LOGDBG("server[%d] - finished initialization", glb_pmi_rank);
 
     while (1) {
+        /* process any newly failed clients */
+        process_client_failures();
+
         sleep(1);
+
         if (time_to_exit) {
             LOGDBG("starting service shutdown");
             break;
@@ -594,10 +680,15 @@ static int find_rank_idx(int my_rank)
 static int unifyfs_exit(void)
 {
     int ret = UNIFYFS_SUCCESS;
+    /* Note: ret could potentially get overwritten a few times.  Since this
+     * is shutdown/cleanup code, we'll do as much cleanup as we can and just
+     * return the most recent value of ret.
+     */
 
     /* iterate over each active application and free resources */
+    LOGDBG("cleaning application state");
     ABT_mutex_lock(app_configs_abt_sync);
-    for (int i = 0; i < MAX_NUM_APPS; i++) {
+    for (int i = 0; i < UNIFYFS_SERVER_MAX_NUM_APPS; i++) {
         /* get pointer to app config for this app_id */
         app_config* app = app_configs[i];
         if (NULL != app) {
@@ -608,6 +699,10 @@ static int unifyfs_exit(void)
             }
         }
     }
+    if (NULL != failed_clients) {
+        arraylist_free(failed_clients);
+        failed_clients = NULL;
+    }
     ABT_mutex_unlock(app_configs_abt_sync);
 
     /* TODO: notify the service threads to exit */
@@ -615,6 +710,11 @@ static int unifyfs_exit(void)
     /* finalize kvstore service*/
     LOGDBG("finalizing kvstore service");
     unifyfs_keyval_fini();
+
+    ret = ABT_mutex_free(&app_configs_abt_sync);
+    if (ret != ABT_SUCCESS) {
+        LOGERR("Error returned from ABT_mutex_free(): %d", ret);
+    }
 
     /* shutdown rpc service
      * (note: this needs to happen after app-client cleanup above) */
@@ -629,8 +729,15 @@ static int unifyfs_exit(void)
 
 #if defined(UNIFYFSD_USE_MPI)
     LOGDBG("finalizing MPI");
-    fini_MPI();
+    MPI_Finalize();
 #endif
+
+    /* Finalize the config variables */
+    LOGDBG("Finalizing config variables");
+    ret = unifyfs_config_fini(&server_cfg);
+    if (ret != ABT_SUCCESS) {
+        LOGERR("Error returned from unifyfs_config_fini(): %d", ret);
+    }
 
     LOGDBG("all done!");
     unifyfs_log_close();
@@ -642,7 +749,7 @@ static int unifyfs_exit(void)
 app_config* get_application(int app_id)
 {
     ABT_mutex_lock(app_configs_abt_sync);
-    for (int i = 0; i < MAX_NUM_APPS; i++) {
+    for (int i = 0; i < UNIFYFS_SERVER_MAX_NUM_APPS; i++) {
         app_config* app_cfg = app_configs[i];
         if ((NULL != app_cfg) && (app_cfg->app_id == app_id)) {
             ABT_mutex_unlock(app_configs_abt_sync);
@@ -654,8 +761,13 @@ app_config* get_application(int app_id)
 }
 
 /* insert a new app config in app_configs[] */
-app_config* new_application(int app_id)
+app_config* new_application(int app_id,
+                            int* created)
 {
+    if (NULL != created) {
+        *created = 0;
+    }
+
     ABT_mutex_lock(app_configs_abt_sync);
 
     /* don't have an app_config for this app_id,
@@ -670,7 +782,7 @@ app_config* new_application(int app_id)
     new_app->app_id = app_id;
 
     /* insert the given app_config in an empty slot */
-    for (int i = 0; i < MAX_NUM_APPS; i++) {
+    for (int i = 0; i < UNIFYFS_SERVER_MAX_NUM_APPS; i++) {
         app_config* existing = app_configs[i];
         if (NULL == existing) {
             new_app->clients = (app_client**) calloc(clients_per_app,
@@ -683,6 +795,9 @@ app_config* new_application(int app_id)
             new_app->clients_sz = clients_per_app;
             app_configs[i] = new_app;
             ABT_mutex_unlock(app_configs_abt_sync);
+            if (NULL != created) {
+                *created = 1;
+            }
             return new_app;
         } else if (existing->app_id == app_id) {
             /* someone beat us to it, use existing */
@@ -767,8 +882,8 @@ static unifyfs_rc attach_to_client_shmem(app_client* client,
         return EINVAL;
     }
 
-    int app_id = client->app_id;
-    int client_id = client->client_id;
+    int app_id = client->state.app_id;
+    int client_id = client->state.client_id;
 
     /* initialize shmem region for client's superblock */
     sprintf(shm_name, SHMEM_SUPER_FMTSTR, app_id, client_id);
@@ -777,7 +892,7 @@ static unifyfs_rc attach_to_client_shmem(app_client* client,
         LOGERR("Failed to attach to shmem superblock region %s", shm_name);
         return UNIFYFS_ERROR_SHMEM;
     }
-    client->shmem_super = shm_ctx;
+    client->state.shm_super_ctx = shm_ctx;
 
     return UNIFYFS_SUCCESS;
 }
@@ -810,9 +925,9 @@ app_client* new_app_client(app_config* app,
     app_client* client = (app_client*) calloc(1, sizeof(app_client));
     if (NULL != client) {
         int failure = 0;
-        client->app_id = app_id;
-        client->client_id = client_id;
-        client->dbg_rank = debug_rank;
+        client->state.app_id = app_id;
+        client->state.client_id = client_id;
+        client->state.app_rank = debug_rank;
 
         /* convert client_addr_str to margo hg_addr_t */
         hg_return_t hret = margo_addr_lookup(unifyfsd_rpc_context->shm_mid,
@@ -862,8 +977,8 @@ unifyfs_rc attach_app_client(app_client* client,
         return EINVAL;
     }
 
-    int app_id = client->app_id;
-    int client_id = client->client_id;
+    int app_id = client->state.app_id;
+    int client_id = client->state.client_id;
     int failure = 0;
 
     /* initialize server-side logio for this client */
@@ -871,7 +986,7 @@ unifyfs_rc attach_app_client(app_client* client,
                                        logio_shmem_size,
                                        logio_spill_size,
                                        logio_spill_dir,
-                                       &(client->logio));
+                                       &(client->state.logio_ctx));
     if (rc != UNIFYFS_SUCCESS) {
         failure = 1;
     }
@@ -887,9 +1002,16 @@ unifyfs_rc attach_app_client(app_client* client,
         return UNIFYFS_FAILURE;
     }
 
-    client->super_meta_offset = super_meta_offset;
-    client->super_meta_size = super_meta_size;
-    client->connected = 1;
+    client->state.write_index.index_offset = super_meta_offset;
+    client->state.write_index.index_size = super_meta_size;
+
+    char* super_ptr = (char*)(client->state.shm_super_ctx->addr);
+    char* index_ptr = super_ptr + super_meta_offset;
+    client->state.write_index.ptr_num_entries = (size_t*) index_ptr;
+    index_ptr += get_page_size();
+    client->state.write_index.index_entries = (unifyfs_index_t*) index_ptr;
+
+    client->state.initialized = 1;
 
     return UNIFYFS_SUCCESS;
 }
@@ -904,12 +1026,12 @@ unifyfs_rc disconnect_app_client(app_client* client)
         return EINVAL;
     }
 
-    if (!client->connected) {
+    if (!client->state.initialized) {
         /* already done */
         return UNIFYFS_SUCCESS;
     }
 
-    client->connected = 0;
+    client->state.initialized = 0;
 
     /* stop client request manager thread */
     if (NULL != client->reqmgr) {
@@ -921,12 +1043,12 @@ unifyfs_rc disconnect_app_client(app_client* client)
                     client->margo_addr);
 
     /* release client shared memory regions */
-    if (NULL != client->shmem_super) {
+    if (NULL != client->state.shm_super_ctx) {
         /* Release superblock shared memory region.
          * Server is responsible for deleting superblock shared
          * memory file that was created by the client. */
-        unifyfs_shm_unlink(client->shmem_super);
-        unifyfs_shm_free(&(client->shmem_super));
+        unifyfs_shm_unlink(client->state.shm_super_ctx);
+        unifyfs_shm_free(&(client->state.shm_super_ctx));
     }
 
     return UNIFYFS_SUCCESS;
@@ -949,28 +1071,56 @@ unifyfs_rc cleanup_app_client(app_config* app, app_client* client)
     }
 
     LOGDBG("cleaning application client %d:%d",
-           client->app_id, client->client_id);
+           client->state.app_id, client->state.client_id);
 
     disconnect_app_client(client);
 
     /* close client logio context */
-    if (NULL != client->logio) {
-        unifyfs_logio_close(client->logio, 1);
-        client->logio = NULL;
+    if (NULL != client->state.logio_ctx) {
+        unifyfs_logio_close(client->state.logio_ctx, 1);
+        client->state.logio_ctx = NULL;
     }
 
     /* reset app->clients array index if set */
-    int client_ndx = client->client_id - 1; /* client ids start at 1 */
+    int client_ndx = client->state.client_id - 1; /* client ids start at 1 */
     if (client == app->clients[client_ndx]) {
         app->clients[client_ndx] = NULL;
     }
 
     /* free client structure */
     if (NULL != client->reqmgr) {
+        if (NULL != client->reqmgr->client_reqs) {
+            arraylist_free(client->reqmgr->client_reqs);
+        }
+        if (NULL != client->reqmgr->client_callbacks) {
+            arraylist_free(client->reqmgr->client_callbacks);
+        }
+
+        ABT_mutex_free(&(client->reqmgr->reqs_sync));
+
         free(client->reqmgr);
         client->reqmgr = NULL;
     }
     free(client);
 
     return UNIFYFS_SUCCESS;
+}
+
+unifyfs_rc add_failed_client(int app_id, int client_id)
+{
+    app_client* client = get_app_client(app_id, client_id);
+    if (NULL == client) {
+        return EINVAL;
+    }
+    unifyfs_rc ret = UNIFYFS_SUCCESS;
+    ABT_mutex_lock(app_configs_abt_sync);
+    if (NULL != failed_clients) {
+        int rc = arraylist_add(failed_clients, client);
+        if (rc == -1) {
+            LOGERR("failed to add client to failed_clients arraylist");
+            ret = UNIFYFS_FAILURE;
+        }
+    }
+    ABT_mutex_unlock(app_configs_abt_sync);
+    return ret;
 }

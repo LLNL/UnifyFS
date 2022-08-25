@@ -47,6 +47,7 @@
 // common headers
 #include "arraylist.h"
 #include "tree.h"
+#include "unifyfs_client.h"
 #include "unifyfs_const.h"
 #include "unifyfs_log.h"
 #include "unifyfs_logio.h"
@@ -55,6 +56,12 @@
 #include "unifyfs_client_rpcs.h"
 #include "unifyfs_server_rpcs.h"
 
+
+/* server transfer modes */
+typedef enum {
+    SERVER_TRANSFER_MODE_OWNER = 0, /* owner transfers all data */
+    SERVER_TRANSFER_MODE_LOCAL = 1  /* each server transfers local data */
+} transfer_mode_e;
 
 /* Some global variables/structures used throughout the server code */
 
@@ -73,16 +80,14 @@ typedef struct {
     int pmi_rank;
 } server_info_t;
 
-extern server_info_t* glb_servers; /* array of server info structs */
-extern size_t glb_num_servers; /* number of entries in glb_servers array */
+/* number of entries in glb_servers array */
+extern size_t glb_num_servers;
 
-extern struct unifyfs_inode_tree* global_inode_tree; /* global inode tree */
+/* global inode tree */
+extern struct unifyfs_inode_tree* global_inode_tree;
 
-/* defines commands for messages sent to service manager threads */
-typedef enum {
-    SVC_CMD_INVALID = 0,
-    SVC_CMD_RDREQ_CHK,     /* read requests (chunk_read_req_t) */
-} service_cmd_e;
+/* flag to control the use of server local extents for faster local reads */
+extern bool use_server_local_extents;
 
 // NEW READ REQUEST STRUCTURES
 typedef enum {
@@ -101,6 +106,15 @@ typedef struct {
     int log_client_id;  /* remote log client id */
     int rank;           /* remote server rank who holds data */
 } chunk_read_req_t;
+
+#define debug_print_chunk_read_req(reqptr) \
+do { \
+    chunk_read_req_t* _req = (reqptr); \
+    LOGDBG("chunk_read_req(%p) - gfid=%d, offset=%zu, nbytes=%zu @ " \
+           "server[%d] log(app=%d, client=%d, offset=%zu)", \
+           _req, _req->gfid, _req->offset, _req->nbytes, _req->rank, \
+           _req->log_app_id, _req->log_client_id, _req->log_offset); \
+} while (0)
 
 typedef struct {
     int gfid;         /* gfid */
@@ -126,25 +140,18 @@ typedef struct {
 // forward declaration of reqmgr_thrd
 struct reqmgr_thrd;
 
+
+
 /**
  * Structure to maintain application client state, including
  * logio and shared memory contexts, margo rpc address, etc.
  */
 typedef struct app_client {
-    int app_id;              /* index of app in server app_configs array */
-    int client_id;           /* this client's index in app's clients array */
-    int dbg_rank;            /* client debug rank - NOT CURRENTLY USED */
-    int connected;           /* is client currently connected? */
+    unifyfs_client_state state;
 
     hg_addr_t margo_addr;    /* client Margo address */
 
     struct reqmgr_thrd* reqmgr; /* this client's request manager thread */
-
-    logio_context* logio;    /* logio context for write data */
-
-    shm_context* shmem_super; /* shmem context for superblock region */
-    size_t super_meta_offset; /* superblock offset to index metadata */
-    size_t super_meta_size;   /* size of index metadata region in bytes */
 } app_client;
 
 /**
@@ -166,7 +173,8 @@ typedef struct app_config {
 
 app_config* get_application(int app_id);
 
-app_config* new_application(int app_id);
+app_config* new_application(int app_id,
+                            int* created);
 
 unifyfs_rc cleanup_application(app_config* app);
 
@@ -188,5 +196,14 @@ unifyfs_rc attach_app_client(app_client* client,
 unifyfs_rc disconnect_app_client(app_client* clnt);
 
 unifyfs_rc cleanup_app_client(app_config* app, app_client* clnt);
+
+unifyfs_rc add_failed_client(int app_id, int client_id);
+
+
+/* publish the pids of all servers to a shared file */
+int unifyfs_publish_server_pids(void);
+
+/* report the pid for a server with given rank */
+int unifyfs_report_server_pid(int rank, int pid);
 
 #endif // UNIFYFS_GLOBAL_H

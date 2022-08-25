@@ -36,6 +36,13 @@
 #include "unifyfs_metadata_mdhim.h"
 
 typedef struct {
+    client_callback_e req_type;
+    int app_id;
+    int client_id;
+    int gfid;
+} client_callback_req;
+
+typedef struct {
     client_rpc_e req_type;
     hg_handle_t handle;
     void* input;
@@ -54,7 +61,7 @@ typedef struct {
     int num_server_reads;      /* size of remote_reads array */
     chunk_read_req_t* chunks;  /* array of chunk-reads */
     server_chunk_reads_t* remote_reads; /* per-server remote reads array */
-    unifyfs_inode_extent_t extent; /* the requested extent */
+    unifyfs_extent_t extent;   /* the requested extent */
 } server_read_req_t;
 
 /* Request manager state structure - created by main thread for each request
@@ -75,9 +82,6 @@ typedef struct reqmgr_thrd {
     /* flag indicating request manager thread is waiting on thrd_cond CV */
     int waiting_for_work;
 
-    /* flag indicating a margo rpc handler ULT is waiting on thrd_cond CV */
-    int has_waiting_dispatcher;
-
     /* argobots mutex for synchronizing access to request state between
      * margo rpc handler ULTs and request manager thread */
     ABT_mutex reqs_sync;
@@ -85,13 +89,13 @@ typedef struct reqmgr_thrd {
     /* array of server read requests */
     int num_read_reqs;
     int next_rdreq_ndx;
-    server_read_req_t read_reqs[RM_MAX_SERVER_READS];
+    server_read_req_t read_reqs[UNIFYFS_SERVER_MAX_READS];
 
     /* list of client rpc requests */
     arraylist_t* client_reqs;
 
-    /* buffer to build read request messages */
-    char del_req_msg_buf[REQ_BUF_LEN];
+    /* list of client callback requests */
+    arraylist_t* client_callbacks;
 
     /* flag set to indicate request manager thread should exit */
     int exit_flag;
@@ -156,21 +160,23 @@ int rm_handle_chunk_read_responses(reqmgr_thrd_t* thrd_ctrl,
 int rm_submit_read_request(server_read_req_t* req);
 
 /**
+ * @brief submit a client callback request to the request manager thread.
+ *
+ * @param req   pointer to client callback request struct
+ *
+ * @return UNIFYFS_SUCCESS, or error code
+ */
+int rm_submit_client_callback_request(client_callback_req* req);
+
+/**
  * @brief submit a client rpc request to the request manager thread.
  *
- * @param client    application client context
- * @param req       pointer to client rpc request struct
+ * @param ctx   application client context
+ * @param req   pointer to client rpc request struct
  *
  * @return UNIFYFS_SUCCESS, or error code
  */
 int rm_submit_client_rpc_request(unifyfs_fops_ctx_t* ctx,
                                  client_rpc_req_t* req);
-
-/* MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
-
-int invoke_chunk_read_request_rpc(int dst_srvr_rank,
-                                  server_read_req_t* rdreq,
-                                  int num_chunks,
-                                  void* data_buf, size_t buf_sz);
 
 #endif

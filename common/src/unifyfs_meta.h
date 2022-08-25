@@ -32,6 +32,10 @@
 extern "C" {
 #endif
 
+#ifndef UNIFYFS_METADATA_CACHE_SECONDS
+# define UNIFYFS_METADATA_CACHE_SECONDS 5
+#endif
+
 
 /* extent slice size used for metadata */
 extern size_t meta_slice_sz;
@@ -52,13 +56,21 @@ typedef struct {
     int gfid;
 } unifyfs_extent_t;
 
-/* write-log metadata index structure */
+/* write-log metadata index structures */
 typedef struct {
     off_t file_pos; /* start offset of data in file */
     off_t log_pos;  /* start offset of data in write log */
     size_t length;  /* length of data */
     int gfid;       /* global file id */
 } unifyfs_index_t;
+
+typedef struct {
+    size_t  index_size;    /* size of index metadata region in bytes */
+    size_t  index_offset;  /* superblock offset of index metadata region */
+
+    size_t* ptr_num_entries;         /* pointer to number of index entries */
+    unifyfs_index_t* index_entries;  /* pointer to first unifyfs_index_t */
+} unifyfs_write_index;
 
 /* UnifyFS file attributes */
 typedef struct {
@@ -67,6 +79,9 @@ typedef struct {
 
     /* Set when the file is laminated */
     int is_laminated;
+
+    /* Set when file is shared between clients */
+    int is_shared;
 
     /* essential stat fields */
     uint32_t mode;   /* st_mode bits */
@@ -86,22 +101,17 @@ enum {
 };
 
 static inline
-int unifyfs_file_attr_set_invalid(unifyfs_file_attr_t* attr)
+void unifyfs_file_attr_set_invalid(unifyfs_file_attr_t* attr)
 {
-    if (!attr) {
-        return EINVAL;
-    }
-
     memset(attr, 0, sizeof(*attr));
-    attr->filename = NULL;
-    attr->gfid = -1;
+    attr->filename     = NULL;
+    attr->gfid         = -1;
     attr->is_laminated = -1;
-    attr->mode = -1;
-    attr->uid = -1;
-    attr->gid = -1;
-    attr->size = (uint64_t) -1;
-
-    return 0;
+    attr->is_shared    = -1;
+    attr->mode         = (uint32_t) -1;
+    attr->uid          = (uint32_t) -1;
+    attr->gid          = (uint32_t) -1;
+    attr->size         = (uint64_t) -1;
 }
 
 static inline
@@ -110,10 +120,12 @@ void debug_print_file_attr(unifyfs_file_attr_t* attr)
     if (!attr) {
         return;
     }
-    LOGDBG("fileattr(%p) - gfid=%d filename=%s laminated=%d",
-           attr, attr->gfid, attr->filename, attr->is_laminated);
+    LOGDBG("fileattr(%p) - gfid=%d filename=%s",
+           attr, attr->gfid, attr->filename);
     LOGDBG("             - sz=%zu mode=%o uid=%d gid=%d",
            (size_t)attr->size, attr->mode, attr->uid, attr->gid);
+    LOGDBG("             - shared=%d laminated=%d",
+           attr->is_shared, attr->is_laminated);
     LOGDBG("             - atime=%ld.%09ld ctime=%ld.%09ld mtime=%ld.%09ld",
            attr->atime.tv_sec, attr->atime.tv_nsec,
            attr->ctime.tv_sec, attr->ctime.tv_nsec,
@@ -151,7 +163,7 @@ int unifyfs_file_attr_update(int attr_op,
     /* Update fields only with valid values and associated operation.
      * invalid values are set by unifyfs_file_attr_set_invalid() above */
 
-    if ((src->mode != -1) &&
+    if ((src->mode != (uint32_t)-1) &&
         ((attr_op == UNIFYFS_FILE_ATTR_OP_CHMOD) ||
          (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) ||
          (attr_op == UNIFYFS_FILE_ATTR_OP_LAMINATE))) {
@@ -159,13 +171,13 @@ int unifyfs_file_attr_update(int attr_op,
         dst->mode = src->mode;
     }
 
-    if ((src->uid != -1) &&
+    if ((src->uid != (uint32_t)-1) &&
         ((attr_op == UNIFYFS_FILE_ATTR_OP_CHOWN) ||
          (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE))) {
         dst->uid = src->uid;
     }
 
-    if ((src->gid != -1) &&
+    if ((src->gid != (uint32_t)-1) &&
         ((attr_op == UNIFYFS_FILE_ATTR_OP_CHGRP) ||
          (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE))) {
         dst->gid = src->gid;
@@ -216,6 +228,12 @@ int unifyfs_file_attr_update(int attr_op,
         dst->is_laminated = src->is_laminated;
     }
 
+    if ((src->is_shared != -1) &&
+        (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE)) {
+        LOGDBG("setting attr.is_shared to %d", src->is_shared);
+        dst->is_shared = src->is_shared;
+    }
+
     if (src->filename && !dst->filename) {
         LOGDBG("setting attr.filename to %s", src->filename);
         dst->filename = strdup(src->filename);
@@ -239,7 +257,7 @@ void unifyfs_file_attr_to_stat(unifyfs_file_attr_t* fattr, struct stat* sb)
         sb->st_size = fattr->size;
 
         /* TODO: use cfg.logio_chunk_size here for st_blksize
-         *       and report acutal chunks allocated for st_blocks */
+         *       and report actual chunks allocated for st_blocks */
         sb->st_blksize = UNIFYFS_STAT_DEFAULT_BLKSIZE;
         sb->st_blocks = fattr->size / UNIFYFS_STAT_DEFAULT_BLKSIZE;
         if (fattr->size % UNIFYFS_STAT_DEFAULT_BLKSIZE > 0) {

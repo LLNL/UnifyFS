@@ -12,10 +12,11 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
-#ifndef __UNIFYFS_DIROPS_H
-#define __UNIFYFS_DIROPS_H
+#ifndef UNIFYFS_DIROPS_H
+#define UNIFYFS_DIROPS_H
 
 #include "unifyfs-internal.h"
+#include "unifyfs_wrap.h"
 
 /*
  * FIXME: is this portable to use the linux dirent structure?
@@ -48,5 +49,5 @@ UNIFYFS_DECL(scandir, int, (const char* dirp, struct dirent** namelist,
                                     const struct dirent**)));
 UNIFYFS_DECL(seekdir, void, (DIR* dirp, long loc));
 
-#endif /* __UNIFYFS_DIROPS_H */
+#endif /* UNIFYFS_DIROPS_H */
 

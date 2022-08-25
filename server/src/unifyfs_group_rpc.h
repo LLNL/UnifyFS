@@ -15,10 +15,51 @@
 #ifndef _UNIFYFS_GROUP_RPC_H
 #define _UNIFYFS_GROUP_RPC_H
 
-#include "unifyfs_tree.h"
+#include "unifyfs_global.h"
 #include "unifyfs_inode.h"
+#include "unifyfs_tree.h"
+#include "margo_server.h"
 
 /* Collective Server RPCs */
+
+/* server collective (coll) request state structure */
+typedef struct coll_request {
+    server_rpc_e   req_type;
+    int            app_id;
+    int            client_id;
+    int            client_req_id;
+    unifyfs_tree_t tree;
+    hg_handle_t    progress_hdl;
+    hg_handle_t    resp_hdl;
+    size_t         output_sz;    /* size of output struct */
+    void*          output;       /* output struct (type is dependent on rpc) */
+    void*          input;
+    void*          bulk_buf;     /* allocated buffer for bulk data */
+    hg_bulk_t      bulk_in;
+    hg_bulk_t      bulk_forward;
+    margo_request  progress_req;
+    margo_request* child_reqs;
+    hg_handle_t*   child_hdls;
+} coll_request;
+
+/* set collective output return value to local result value */
+void collective_set_local_retval(coll_request* coll_req, int val);
+
+/* finish collective process by waiting for any child responses and
+ * sending parent response (if applicable) */
+int collective_finish(coll_request* coll_req);
+
+/* release resources associated with collective */
+void collective_cleanup(coll_request* coll_req);
+
+/**
+ * @brief Progress an ongoing broadcast tree operation
+ *
+ * @param coll_req    the broadcast collective
+ *
+ * @return success|failure
+ */
+int invoke_bcast_progress_rpc(coll_request* coll_req);
 
 /**
  * @brief Broadcast file extents metadata to all servers
@@ -56,6 +97,20 @@ int unifyfs_invoke_broadcast_fileattr(int gfid,
 int unifyfs_invoke_broadcast_laminate(int gfid);
 
 /**
+ * @brief Broadcast request to transfer file to all servers
+ *
+ * @param gfid      target file
+ *
+ * @return success|failure
+ */
+int unifyfs_invoke_broadcast_transfer(int client_app,
+                                      int client_id,
+                                      int transfer_id,
+                                      int gfid,
+                                      int transfer_mode,
+                                      const char* dest_file);
+
+/**
  * @brief Truncate target file at all servers
  *
  * @param gfid      target file
@@ -63,7 +118,8 @@ int unifyfs_invoke_broadcast_laminate(int gfid);
  *
  * @return success|failure
  */
-int unifyfs_invoke_broadcast_truncate(int gfid, size_t filesize);
+int unifyfs_invoke_broadcast_truncate(int gfid,
+                                      size_t filesize);
 
 /**
  * @brief Unlink file at all servers

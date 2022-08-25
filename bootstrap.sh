@@ -3,6 +3,13 @@
 # This is an easy-bake script to download and build all UnifyFS's dependencies.
 #
 
+# Abort the script if we have any errors
+err_report() {
+        echo "!!!! Previous command failed!  (Line number $1) Aborting. !!!!"
+        exit 1
+}
+trap 'err_report $LINENO' ERR
+
 make_nproc=4
 
 ROOT="$(pwd)"
@@ -47,10 +54,10 @@ if [ $use_old_margo -eq 1 ]; then
     mercury_version="v1.0.1"
     margo_version="v0.4.3"
 else
-    argobots_version="v1.0.1"
-    libfabric_version="v1.11.1"
-    mercury_version="v2.0.0"
-    margo_version="v0.9.1"
+    argobots_version="v1.1"
+    libfabric_version="v1.12.1"
+    mercury_version="v2.0.1"
+    margo_version="v0.9.6"
     repos+=(https://github.com/json-c/json-c.git)
 fi
 
@@ -120,7 +127,7 @@ if [ "$automake_sub_version" -lt "15" ]; then
     popd
 
     # build automake
-    echo "### building automake v1.15 ###"
+    echo "### building automake ###"
     pushd automake-1.15
         ./configure --prefix=$INSTALL_DIR
         make
@@ -148,8 +155,9 @@ else
 fi
 
 echo "### building GOTCHA ###"
+gotcha_version="1.0.3"
 cd GOTCHA
-git checkout 1.0.3
+git checkout $gotcha_version
 mkdir -p build && cd build
 cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" ..
 make -j $make_nproc && make install
@@ -244,7 +252,7 @@ cd ..
 
 echo "### building spath ###"
 cd spath
-git checkout master
+git checkout main
 mkdir -p build && cd build
 cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DMPI=OFF ..
 make -j $make_nproc && make install
@@ -268,7 +276,7 @@ echo -n "  export LD_LIBRARY_PATH=$INSTALL_DIR/lib:$INSTALL_DIR/lib64:"
 echo "\$LD_LIBRARY_PATH"
 
 echo "  ./autogen.sh"
-echo -n "  ./configure --prefix=$INSTALL_DIR CPPFLAGS=-I$INSTALL_DIR/include"
+echo -n "  ./configure --prefix=$INSTALL_DIR CPPFLAGS=-I$INSTALL_DIR/include "
 echo "LDFLAGS=\"-L$INSTALL_DIR/lib -L$INSTALL_DIR/lib64\""
 echo "  make && make install"
 echo ""

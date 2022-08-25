@@ -8,7 +8,7 @@ AC_LANG([C])
 AC_INIT([unifyfs],
         m4_esyscmd([git describe --always |
                    awk '/.*/{sub(/^v/,""); printf "%s",$1; exit}']),
-        [unifycr@llnl.gov])
+        [ecp-unifyfs@exascaleproject.org])
 AC_PREREQ(2.60)
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_HEADERS([config.h])
@@ -65,6 +65,7 @@ AC_CHECK_HEADERS([fcntl.h inttypes.h libgen.h limits.h mntent.h strings.h syslog
 AC_CHECK_HEADERS([wchar.h wctype.h])
 AC_CHECK_HEADERS([sys/mount.h sys/socket.h sys/statfs.h sys/time.h])
 AC_CHECK_HEADERS([arpa/inet.h netdb.h netinet/in.h])
+AC_CHECK_HEADER([sys/sysmacros.h], [], AC_MSG_ERROR([cannot find required header sys/sysmacros.h]))
 
 # Checks for library functions.
 AC_FUNC_MALLOC
@@ -162,7 +163,7 @@ AS_IF([test "$have_C_mpi" != "yes"],
     []
 )
 
-# look for gotcha library, sets GOTCHA_INCLUDE, GOTCHA_LIB
+# look for gotcha library, sets GOTCHA_CFLAGS, GOTCHA_LDFLAGS, GOTCHA_LIBS
 UNIFYFS_AC_GOTCHA
 
 # error out if fortran was enabled but GOTCHA wasn't found
@@ -389,6 +390,7 @@ AC_CONFIG_FILES([Makefile
                  client/Makefile
                  client/src/Makefile
                  client/unifyfs.pc
+                 client/unifyfs-api.pc
                  examples/Makefile
                  examples/src/Makefile
                  extras/Makefile
@@ -400,6 +402,8 @@ AC_CONFIG_FILES([Makefile
                  util/scripts/lsfcsm/Makefile
                  util/unifyfs/Makefile
                  util/unifyfs/src/Makefile
+                 util/unifyfs-api-client/Makefile
+                 util/unifyfs-api-client/src/Makefile
                  util/unifyfs-stage/Makefile
                  util/unifyfs-stage/src/Makefile])
 

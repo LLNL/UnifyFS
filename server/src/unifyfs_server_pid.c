@@ -21,10 +21,12 @@
 #include "unifyfs_configurator.h"
 #include "unifyfs_global.h"
 #include "margo_server.h"
+#include "unifyfs_p2p_rpc.h"
 #include "unifyfs_server_rpcs.h"
 
 extern unifyfs_cfg_t server_cfg;
 
+static int n_servers_reported; // = 0
 static int* server_pids; // = NULL
 static pthread_cond_t server_pid_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t server_pid_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -44,86 +46,6 @@ static int alloc_server_pids(void)
     pthread_mutex_unlock(&server_pid_mutex);
     return ret;
 }
-
-static int server_pid_invoke_rpc(void)
-{
-    int ret = 0;
-    hg_return_t hret = 0;
-    hg_handle_t handle;
-    server_pid_in_t in;
-    server_pid_out_t out;
-
-    in.rank = glb_pmi_rank;
-    in.pid = server_pid;
-
-    hret = margo_create(unifyfsd_rpc_context->svr_mid,
-                        glb_servers[0].margo_svr_addr,
-                        unifyfsd_rpc_context->rpcs.server_pid_id,
-                        &handle);
-    if (hret != HG_SUCCESS) {
-        LOGERR("failed to create rpc handle (ret=%d)", hret);
-        return UNIFYFS_ERROR_MARGO;
-    }
-
-    hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("failed to forward rpc (ret=%d)", hret);
-        return UNIFYFS_ERROR_MARGO;
-    }
-
-    hret = margo_get_output(handle, &out);
-    if (hret != HG_SUCCESS) {
-        LOGERR("failed to get rpc result (ret=%d)", hret);
-        return UNIFYFS_ERROR_MARGO;
-    }
-
-    ret = out.ret;
-
-    margo_free_output(handle, &out);
-    margo_destroy(handle);
-
-    return ret;
-}
-
-static void server_pid_rpc(hg_handle_t handle)
-{
-    int ret = 0;
-    hg_return_t hret = 0;
-    server_pid_in_t in;
-    server_pid_out_t out;
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("failed to get input (ret=%d)", hret);
-        return;
-    }
-
-    ret = alloc_server_pids();
-    if (ret) {
-        LOGERR("failed to allocate pid array");
-        return;
-    }
-    assert((int)in.rank < glb_pmi_size);
-    pthread_mutex_lock(&server_pid_mutex);
-    server_pids[in.rank] = (int) in.pid;
-    pthread_mutex_unlock(&server_pid_mutex);
-
-    out.ret = 0;
-    hret = margo_respond(handle, &out);
-    if (hret != HG_SUCCESS) {
-        LOGERR("failed to respond rpc (ret=%d)", hret);
-        return;
-    }
-
-    margo_free_input(handle, &in);
-    margo_destroy(handle);
-
-    ret = pthread_cond_signal(&server_pid_cond);
-    if (ret) {
-        LOGERR("failed to signal condition (%s)", strerror(ret));
-    }
-}
-DEFINE_MARGO_RPC_HANDLER(server_pid_rpc);
 
 static inline int set_pidfile_timeout(void)
 {
@@ -158,7 +80,7 @@ static int create_server_pid_file(void)
     }
 
     snprintf(filename, sizeof(filename), "%s/%s",
-             server_cfg.sharedfs_dir, UNIFYFSD_PID_FILENAME);
+             server_cfg.sharedfs_dir, UNIFYFS_SERVER_PID_FILENAME);
 
     fp = fopen(filename, "w");
     if (!fp) {
@@ -175,17 +97,36 @@ static int create_server_pid_file(void)
     return ret;
 }
 
+int unifyfs_report_server_pid(int rank, int pid)
+{
+    assert(rank < glb_pmi_size);
+
+    int ret = alloc_server_pids();
+    if (ret) {
+        LOGERR("failed to allocate pid array");
+        return ret;
+    }
+
+    pthread_mutex_lock(&server_pid_mutex);
+    n_servers_reported++;
+    server_pids[rank] = pid;
+    pthread_cond_signal(&server_pid_cond);
+    pthread_mutex_unlock(&server_pid_mutex);
+
+    return UNIFYFS_SUCCESS;
+}
+
 int unifyfs_publish_server_pids(void)
 {
     int ret = UNIFYFS_SUCCESS;
 
     if (glb_pmi_rank > 0) {
         /* publish my pid to server 0 */
-        ret = server_pid_invoke_rpc();
+        ret = unifyfs_invoke_server_pid_rpc();
         if (ret) {
             LOGERR("failed to invoke pid rpc (%s)", strerror(ret));
         }
-    } else {
+    } else { /* rank 0 acts as coordinator */
         ret = alloc_server_pids();
         if (ret) {
             return ret;
@@ -198,35 +139,33 @@ int unifyfs_publish_server_pids(void)
 
         pthread_mutex_lock(&server_pid_mutex);
         server_pids[0] = server_pid;
+        n_servers_reported++;
 
         /* keep checking count of reported servers until all have reported
          * or we hit the timeout */
-        do {
-            int count = 0;
-            for (int i = 0; i < glb_pmi_size; i++) {
-                if (server_pids[i] > 0) {
-                    count++;
-                }
-            }
-            if (count == glb_pmi_size) {
-                ret = create_server_pid_file();
-                if (UNIFYFS_SUCCESS == ret) {
-                    LOGDBG("servers ready to accept client connections");
-                }
-                break;
-            }
+        while (n_servers_reported < glb_pmi_size) {
             ret = pthread_cond_timedwait(&server_pid_cond,
                                          &server_pid_mutex,
                                          &server_pid_timeout);
             if (ETIMEDOUT == ret) {
-                LOGERR("some servers failed to initialize within timeout");
+                LOGERR("server initialization timeout");
                 break;
             } else if (ret) {
                 LOGERR("failed to wait on condition (err=%d, %s)",
                        errno, strerror(errno));
                 break;
             }
-        } while (1);
+        }
+
+        if (n_servers_reported == glb_pmi_size) {
+            ret = create_server_pid_file();
+            if (UNIFYFS_SUCCESS == ret) {
+                LOGDBG("servers ready to accept client connections");
+            }
+        } else {
+            LOGERR("%d of %d servers reported their pids",
+                   n_servers_reported, glb_pmi_size);
+        }
 
         free(server_pids);
         server_pids = NULL;

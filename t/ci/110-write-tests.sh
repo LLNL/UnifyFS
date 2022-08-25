@@ -42,6 +42,7 @@ usage ./110-write-tests.sh [options]
 
   options:
     -h, --help        print this (along with overall) help message
+    -l, --laminate    laminate after finished writing
     -M, --mpiio       use MPI-IO instead of POSIX I/O
 
 Run a series of tests on the UnifyFS write example application. By default, a
@@ -52,6 +53,8 @@ was built with (static, gotcha, and optionally posix).
 Providing available options can change the default I/O behavior and/or I/O type
 used. The varying I/O types are mutually exclusive options and thus only one
 should be provided at a time.
+
+For more information on manually running tests, run './001-setup.sh -h'.
 EOF
 )"
 
@@ -61,8 +64,10 @@ do
         -h|--help)
             echo "$WRITE_USAGE"
             ci_dir=$(dirname "$(readlink -fm $BASH_SOURCE)")
-            $ci_dir/001-setup.sh -h
             exit
+            ;;
+        -l|--laminate)
+            write_laminate=yes
             ;;
         -M|--mpiio)
             [ -n "$write_io_type" ] &&
@@ -142,10 +147,14 @@ fi
 # Reset additional behavior to default
 behavior=""
 
+# Laminate after writing all data
+if [ -n "$write_laminate" ]; then
+    behavior="$behavior -l"
+fi
+
 # Set I/O type
 if [ -n "$write_io_type" ]; then
     behavior="$behavior $write_io_type"
-    unset write_io_type # prevent option being picked up by subsequent runs
 fi
 
 # For each io_size, test with each io_pattern and for each io_pattern, test each
@@ -158,3 +167,6 @@ for io_size in "${io_sizes[@]}"; do
         done
     done
 done
+
+unset write_io_type
+unset write_laminate
