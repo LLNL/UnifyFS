@@ -1254,7 +1254,7 @@ int main(int argc, char **argv) {
         if (!testdir) {
             testdir = "/unifyfs";
         }
-        ret = unifyfs_mount(testdir, rank, size, 0);
+        ret = unifyfs_mount(testdir, rank, size);
         if (ret && rank == 0) {
             printf("unifyfs_mount failed (ret=%d)\n", ret);
             MPI_Abort(MPI_COMM_WORLD, 2);

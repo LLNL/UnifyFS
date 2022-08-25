@@ -9,7 +9,7 @@
 # way and the call is falling through to the operating system.
 test_description="Verify UnifyFS intercepted mount point is empty"
 
-. $(dirname $0)/sharness.sh
+. $(dirname $0)/sharness.sh -v
 
 test_expect_success "Intercepted mount point $UNIFYFS_MOUNTPOINT is empty" '
     test_dir_is_empty $UNIFYFS_MOUNTPOINT

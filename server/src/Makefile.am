@@ -14,7 +14,7 @@ unifyfsd_SOURCES = \
   extent_tree.h \
   margo_server.c \
   margo_server.h \
-  unifyfs_cmd_handler.c \
+  unifyfs_client_rpc.c \
   unifyfs_fops.h \
   unifyfs_global.h \
   unifyfs_group_rpc.h \
@@ -32,6 +32,8 @@ unifyfsd_SOURCES = \
   unifyfs_service_manager.c \
   unifyfs_service_manager.h \
   unifyfs_server_pid.c \
+  unifyfs_transfer.c \
+  unifyfs_transfer.h \
   unifyfs_tree.c \
   unifyfs_tree.h
 
@@ -69,6 +71,16 @@ else # ! USE_MDHIM
   unifyfsd_SOURCES += unifyfs_fops_rpc.c
 
 endif # USE_MDHIM
+
+if USE_PMIX
+  OPT_C_FLAGS += -DUSE_PMIX
+  OPT_LIBS += -lpmix
+endif
+
+if USE_PMI2
+  OPT_C_FLAGS += -DUSE_PMI2
+  OPT_LIBS += -lpmi2
+endif
 
 unifyfsd_CFLAGS  = $(AM_CFLAGS) $(UNIFYFS_COMMON_FLAGS) $(OPT_C_FLAGS)
 unifyfsd_LDFLAGS = $(OPT_LD_FLAGS)

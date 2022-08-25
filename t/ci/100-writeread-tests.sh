@@ -40,6 +40,7 @@ usage ./100-writeread-tests.sh [options]
 
   options:
     -h, --help        print this (along with overall) help message
+    -l, --laminate    laminate between writing and reading
     -M, --mpiio       use MPI-IO instead of POSIX I/O
     -x, --shuffle     read different data than written
 
@@ -51,6 +52,8 @@ was built with (static, gotcha, and optionally posix).
 Providing available options can change the default I/O behavior and/or I/O type
 used. The varying I/O types are mutually exclusive options and thus only one
 should be provided at a time.
+
+For more information on manually running tests, run './001-setup.sh -h'.
 EOF
 )"
 
@@ -60,8 +63,10 @@ do
         -h|--help)
             echo "$WRITEREAD_USAGE"
             ci_dir=$(dirname "$(readlink -fm $BASH_SOURCE)")
-            $ci_dir/001-setup.sh -h
             exit
+            ;;
+        -l|--laminate)
+            writeread_laminate=yes
             ;;
         -M|--mpiio)
             [ -n "$writeread_io_type" ] &&
@@ -91,6 +96,12 @@ unify_test_writeread() {
     rc=$?
     lcount=$(echo "$app_output" | wc -l)
 
+    if [ -n "$writeread_laminate" ]; then
+        expected_lcount=29
+    else
+        expected_lcount=17
+    fi
+
     # Test the return code and resulting line count to determine pass/fail.
     # If mode is posix, also test that the file or files exist at the mountpoint
     # depending on whether testing shared file or file-per-process.
@@ -99,7 +110,7 @@ unify_test_writeread() {
 
         test_expect_success "$app_name $2: (line_count=${lcount}, rc=$rc)" '
             test $rc = 0 &&
-            test $lcount = 29 &&
+            test $lcount = $expected_lcount &&
             if [[ $io_pattern =~ (n1)$ ]]; then
                 test_path_is_file ${UNIFYFS_CI_POSIX_MP}/$filename
             else
@@ -109,7 +120,7 @@ unify_test_writeread() {
     else
         test_expect_success "$app_name $2: (line_count=${lcount}, rc=$rc)" '
             test $rc = 0 &&
-            test $lcount = 29
+            test $lcount = $expected_lcount
         '
     fi
 }
@@ -145,16 +156,19 @@ fi
 # Reset additional behavior to default
 behavior=""
 
+# Laminate after writing all data
+if [ -n "$writeread_laminate" ]; then
+    behavior="$behavior -l"
+fi
+
 # Set I/O type
 if [ -n "$writeread_io_type" ]; then
     behavior="$behavior $writeread_io_type"
-    unset writeread_io_type # prevent option being picked up by subsequent runs
 fi
 
 # Read different data than written
 if [ -n "$writeread_shuffle" ]; then
     behavior="$behavior -x"
-    unset writeread_shuffle # prevent option being picked up by subsequent runs
 fi
 
 # For each io_size, test with each io_pattern and for each io_pattern, test each
@@ -167,3 +181,7 @@ for io_size in "${io_sizes[@]}"; do
         done
     done
 done
+
+unset writeread_io_type
+unset writeread_laminate
+unset writeread_shuffle

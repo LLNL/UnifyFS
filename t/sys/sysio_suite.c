@@ -53,7 +53,7 @@ int main(int argc, char* argv[])
     unifyfs_root = testutil_get_mount_point();
 
     /* Verify unifyfs_mount succeeds. */
-    rc = unifyfs_mount(unifyfs_root, rank, rank_num, 0);
+    rc = unifyfs_mount(unifyfs_root, rank, rank_num);
     ok(rc == 0, "unifyfs_mount(%s) (rc=%d)", unifyfs_root, rc);
 
     /* If the mount fails, bailout, as there is no point in running the tests */

@@ -44,6 +44,9 @@
 #define UNIFYFS_SYSIO_H
 
 #include "unifyfs-internal.h"
+#include "unifyfs_wrap.h"
+
+#include "unifyfs-dirops.h"
 
 #define AIOCB_ERROR_CODE(cbp) (cbp->__error_code)
 #define AIOCB_RETURN_VAL(cbp) (cbp->__return_value)
@@ -56,6 +59,7 @@ UNIFYFS_DECL(access, int, (const char* pathname, int mode));
 UNIFYFS_DECL(mkdir, int, (const char* path, mode_t mode));
 UNIFYFS_DECL(rmdir, int, (const char* path));
 UNIFYFS_DECL(chdir, int, (const char* path));
+UNIFYFS_DECL(chmod, int, (const char* path, mode_t mode));
 UNIFYFS_DECL(__getcwd_chk, char*, (char* path, size_t, size_t));
 UNIFYFS_DECL(getcwd, char*, (char* path, size_t));
 UNIFYFS_DECL(getwd, char*, (char* path));
@@ -94,6 +98,7 @@ UNIFYFS_DECL(posix_fadvise, int, (int fd, off_t offset, off_t len, int advice));
 UNIFYFS_DECL(lseek, off_t, (int fd, off_t offset, int whence));
 UNIFYFS_DECL(lseek64, off64_t, (int fd, off64_t offset, int whence));
 UNIFYFS_DECL(fchdir, int, (int fd));
+UNIFYFS_DECL(fchmod, int, (int fd, mode_t mode));
 UNIFYFS_DECL(ftruncate, int, (int fd, off_t length));
 UNIFYFS_DECL(fstat, int, (int fd, struct stat* buf));
 UNIFYFS_DECL(__fxstat, int, (int vers, int fd, struct stat* buf));
@@ -137,7 +142,5 @@ int unifyfs_fd_write(
     size_t count,    /* number of bytes to write */
     size_t* nwritten /* number of bytes written */
 );
-
-#include "unifyfs-dirops.h"
 
 #endif /* UNIFYFS_SYSIO_H */

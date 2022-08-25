@@ -17,6 +17,18 @@
 
 #include "testutil.h"
 
+#ifndef DISABLE_UNIFYFS
+static struct {
+    size_t n_reqs;
+    struct aiocb* reqs;
+    unifyfs_io_request* writes;
+} unify_writes;
+static struct {
+    size_t n_reqs;
+    struct aiocb* reqs;
+    unifyfs_io_request* reads;
+} unify_reads;
+#endif
 
 static inline
 void test_print_aiocb(test_cfg* cfg, struct aiocb* cbp)
@@ -27,6 +39,9 @@ void test_print_aiocb(test_cfg* cfg, struct aiocb* cbp)
 }
 
 /* -------- Write Helper Methods -------- */
+
+static inline
+int issue_write_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs);
 
 static inline
 int issue_write_req(test_cfg* cfg, struct aiocb* req)
@@ -48,6 +63,8 @@ int issue_write_req(test_cfg* cfg, struct aiocb* req)
             test_print(cfg, "aio_write() failed");
         }
         return rc;
+    } else if (cfg->use_api || cfg->use_lio) {
+        return issue_write_req_batch(cfg, 1, req);
     } else if (cfg->use_mapio) { // mmap(2)
         return ENOTSUP;
     } else if (cfg->use_mpiio) { // MPI-IO
@@ -112,7 +129,38 @@ int issue_write_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs)
 
     assert(NULL != cfg);
 
-    if (cfg->use_lio) { // lio_listio(2)
+
+    if (cfg->use_api) {
+#ifdef DISABLE_UNIFYFS
+        return ENOTSUP;
+#else
+        if (unify_writes.writes != NULL) {
+            /* release allocation from previous call */
+            free(unify_writes.writes);
+        }
+        unify_writes.n_reqs = n_reqs;
+        unify_writes.reqs = reqs;
+        unify_writes.writes = calloc(n_reqs, sizeof(unifyfs_io_request));
+        for (size_t i = 0; i < n_reqs; i++) {
+            struct aiocb* req = reqs + i;
+            unifyfs_io_request* wr = unify_writes.writes + i;
+            wr->op       = UNIFYFS_IOREQ_OP_WRITE;
+            wr->gfid     = cfg->gfid;
+            wr->nbytes   = req->aio_nbytes;
+            wr->offset   = req->aio_offset;
+            wr->user_buf = (void*) req->aio_buf;
+        }
+
+        unifyfs_rc urc = unifyfs_dispatch_io(cfg->fshdl, n_reqs,
+                                             unify_writes.writes);
+        if (UNIFYFS_SUCCESS != urc) {
+            test_print(cfg, "unifyfs_dispatch_io(%s, OP_WRITE) failed - %s",
+                       cfg->filename, unifyfs_rc_enum_description(urc));
+            return -1;
+        }
+        return 0;
+#endif
+    } else if (cfg->use_lio) { // lio_listio(2)
         struct aiocb* lio_vec[n_reqs];
         for (i = 0; i < n_reqs; i++) {
             lio_vec[i] = reqs + i;
@@ -146,6 +194,9 @@ int issue_write_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs)
 }
 
 static inline
+int wait_write_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs);
+
+static inline
 int wait_write_req(test_cfg* cfg, struct aiocb* req)
 {
     assert(NULL != cfg);
@@ -175,6 +226,8 @@ int wait_write_req(test_cfg* cfg, struct aiocb* req)
                        ss, req->aio_nbytes);
             return -1;
         }
+    } else if (cfg->use_api) {
+        return wait_write_req_batch(cfg, 1, req);
     }
     return 0;
 }
@@ -186,6 +239,26 @@ int wait_write_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs)
     size_t i;
 
     assert(NULL != cfg);
+
+    if (cfg->use_api) {
+#ifdef DISABLE_UNIFYFS
+        return ENOTSUP;
+#else
+        if ((unify_writes.n_reqs != n_reqs) || (unify_writes.reqs != reqs)) {
+            /* wait args do not match previous write batch */
+            test_print(cfg, "mismatched wait on unify_writes");
+            return EINVAL;
+        }
+        unifyfs_rc urc = unifyfs_wait_io(cfg->fshdl, n_reqs,
+                                         unify_writes.writes, 1);
+        if (UNIFYFS_SUCCESS != urc) {
+            test_print(cfg, "unifyfs_wait_io(%s, WAITALL) failed - %s",
+                       cfg->filename, unifyfs_rc_enum_description(urc));
+            return -1;
+        }
+        return 0;
+#endif
+    }
 
     for (i = 0; i < n_reqs; i++) {
         rc = wait_write_req(cfg, reqs + i);
@@ -202,7 +275,30 @@ int write_truncate(test_cfg* cfg)
 {
     int rc = 0;
 
-    if (cfg->use_mpiio) {
+    if (cfg->use_api) {
+#ifdef DISABLE_UNIFYFS
+        return ENOTSUP;
+#else
+        unifyfs_io_request req = {0};
+        req.op       = UNIFYFS_IOREQ_OP_TRUNC;
+        req.gfid     = cfg->gfid;
+        req.offset   = cfg->trunc_size;
+
+        unifyfs_rc urc = unifyfs_dispatch_io(cfg->fshdl, 1, &req);
+        if (UNIFYFS_SUCCESS != urc) {
+            test_print(cfg, "unifyfs_dispatch_io(%s, OP_TRUNC) failed - %s",
+                       cfg->filename, unifyfs_rc_enum_description(urc));
+            return -1;
+        }
+        urc = unifyfs_wait_io(cfg->fshdl, 1, &req, 1);
+        if (UNIFYFS_SUCCESS != urc) {
+            test_print(cfg, "unifyfs_wait_io(%s, WAITALL) failed - %s",
+                       cfg->filename, unifyfs_rc_enum_description(urc));
+            return -1;
+        }
+        return 0;
+#endif
+    } else if (cfg->use_mpiio) {
         MPI_Offset mpi_off = (MPI_Offset) cfg->trunc_size;
         MPI_CHECK(cfg, (MPI_File_set_size(cfg->mpifh, mpi_off)));
     } else {
@@ -227,7 +323,20 @@ int write_sync(test_cfg* cfg)
 
     assert(NULL != cfg);
 
-    if (NULL != cfg->fp) { // fflush(3)
+    if (cfg->use_api) {
+#ifdef DISABLE_UNIFYFS
+        return ENOTSUP;
+#else
+        unifyfs_rc urc = unifyfs_sync(cfg->fshdl, cfg->gfid);
+        if (UNIFYFS_SUCCESS != urc) {
+            test_print(cfg, "unifyfs_sync(%s, gfid=%d) failed - %s",
+                       cfg->filename, cfg->gfid,
+                       unifyfs_rc_enum_description(urc));
+            return -1;
+        }
+        return 0;
+#endif
+    } else if (NULL != cfg->fp) { // fflush(3)
         rc = fflush(cfg->fp);
         if (-1 == rc) {
             test_print(cfg, "fflush() failed");
@@ -258,12 +367,25 @@ int write_laminate(test_cfg* cfg, const char* filepath)
      * we use the same process that created the file */
     int rc = 0;
     if (cfg->rank == 0 || cfg->io_pattern == IO_PATTERN_NN) {
-        /* laminate by setting permissions to read-only */
-        int chmod_rc = chmod(filepath, 0444);
-        if (-1 == chmod_rc) {
-            /* lamination failed */
-            test_print(cfg, "chmod() during lamination failed");
-            rc = -1;
+        if (cfg->use_api) {
+#ifdef DISABLE_UNIFYFS
+            return ENOTSUP;
+#else
+            unifyfs_rc urc = unifyfs_laminate(cfg->fshdl, filepath);
+            if (UNIFYFS_SUCCESS != urc) {
+                test_print(cfg, "unifyfs_laminate(%s) failed - %s",
+                           cfg->filename, unifyfs_rc_enum_description(urc));
+                rc = -1;
+            }
+#endif
+        } else {
+            /* laminate by setting permissions to read-only */
+            int chmod_rc = chmod(filepath, 0444);
+            if (-1 == chmod_rc) {
+                /* lamination failed */
+                test_print(cfg, "chmod() during lamination failed");
+                rc = -1;
+            }
         }
     }
     if (cfg->io_pattern == IO_PATTERN_N1) {
@@ -277,17 +399,35 @@ int stat_file(test_cfg* cfg, const char* filepath)
 {
     int rc = 0;
     if (cfg->rank == 0 || cfg->io_pattern == IO_PATTERN_NN) {
-        struct stat s;
-        int stat_rc = stat(filepath, &s);
-        if (-1 == stat_rc) {
-            test_print(cfg, "ERROR - stat(%s) failed", filepath);
-            rc = -1;
+        if (cfg->use_api) {
+#ifdef DISABLE_UNIFYFS
+            return ENOTSUP;
+#else
+            unifyfs_file_status us;
+            unifyfs_rc urc = unifyfs_stat(cfg->fshdl, cfg->gfid, &us);
+            if (UNIFYFS_SUCCESS != urc) {
+                test_print(cfg, "unifyfs_stat(%s, gfid=%d) failed - %s",
+                           cfg->filename, cfg->gfid,
+                           unifyfs_rc_enum_description(urc));
+                rc = -1;
+            }
+#endif
+        } else {
+            struct stat s;
+            int stat_rc = stat(filepath, &s);
+            if (-1 == stat_rc) {
+                test_print(cfg, "ERROR - stat(%s) failed", filepath);
+                rc = -1;
+            }
         }
     }
     return rc;
 }
 
 /* -------- Read Helper Methods -------- */
+
+static inline
+int issue_read_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs);
 
 static inline
 int issue_read_req(test_cfg* cfg, struct aiocb* req)
@@ -307,6 +447,8 @@ int issue_read_req(test_cfg* cfg, struct aiocb* req)
             test_print(cfg, "aio_read() failed");
         }
         return rc;
+    } else if (cfg->use_api || cfg->use_lio) {
+        return issue_read_req_batch(cfg, 1, req);
     } else if (cfg->use_mapio) { // mmap(2)
         return ENOTSUP;
     } else if (cfg->use_mpiio) { // MPI-IO
@@ -314,8 +456,13 @@ int issue_read_req(test_cfg* cfg, struct aiocb* req)
         MPI_Offset off = (MPI_Offset) req->aio_offset;
         void* dst_buf = (void*) req->aio_buf;
         int count = (int) req->aio_nbytes;
-        MPI_CHECK(cfg, (MPI_File_read_at(cfg->mpifh, off, dst_buf,
-                                         count, MPI_CHAR, &mst)));
+        if (req->aio_fildes == cfg->fd) {
+            MPI_CHECK(cfg, (MPI_File_read_at(cfg->mpifh, off, dst_buf,
+                                             count, MPI_CHAR, &mst)));
+        } else if (req->aio_fildes == cfg->dest_fd) {
+            MPI_CHECK(cfg, (MPI_File_read_at(cfg->dest_mpifh, off, dst_buf,
+                                             count, MPI_CHAR, &mst)));
+        }
     } else if (cfg->use_prdwr) { // pread(2)
         nread = 0;
         remaining = req->aio_nbytes;
@@ -382,7 +529,37 @@ int issue_read_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs)
 
     assert(NULL != cfg);
 
-    if (cfg->use_lio) { // lio_listio(2)
+    if (cfg->use_api) {
+#ifdef DISABLE_UNIFYFS
+        return ENOTSUP;
+#else
+        if (unify_reads.reads != NULL) {
+            /* release allocation from previous call */
+            free(unify_reads.reads);
+        }
+        unify_reads.n_reqs = n_reqs;
+        unify_reads.reqs = reqs;
+        unify_reads.reads = calloc(n_reqs, sizeof(unifyfs_io_request));
+        for (size_t i = 0; i < n_reqs; i++) {
+            struct aiocb* req = reqs + i;
+            unifyfs_io_request* rd = unify_reads.reads + i;
+            rd->op       = UNIFYFS_IOREQ_OP_READ;
+            rd->gfid     = cfg->gfid;
+            rd->nbytes   = req->aio_nbytes;
+            rd->offset   = req->aio_offset;
+            rd->user_buf = (void*) req->aio_buf;
+        }
+
+        unifyfs_rc urc = unifyfs_dispatch_io(cfg->fshdl, n_reqs,
+                                             unify_reads.reads);
+        if (UNIFYFS_SUCCESS != rc) {
+            test_print(cfg, "unifyfs_dispatch_io(%s, OP_READ) failed - %s",
+                       cfg->filename, unifyfs_rc_enum_description(urc));
+            return -1;
+        }
+        return 0;
+#endif
+    } else if (cfg->use_lio) { // lio_listio(2)
         struct aiocb* lio_vec[n_reqs];
         for (i = 0; i < n_reqs; i++) {
             lio_vec[i] = reqs + i;
@@ -415,6 +592,9 @@ int issue_read_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs)
 }
 
 static inline
+int wait_read_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs);
+
+static inline
 int wait_read_req(test_cfg* cfg, struct aiocb* req)
 {
     assert(NULL != cfg);
@@ -444,6 +624,8 @@ int wait_read_req(test_cfg* cfg, struct aiocb* req)
                        ss, req->aio_nbytes);
             return -1;
         }
+    } else if (cfg->use_api) {
+        return wait_read_req_batch(cfg, 1, req);
     }
     return 0;
 }
@@ -455,6 +637,26 @@ int wait_read_req_batch(test_cfg* cfg, size_t n_reqs, struct aiocb* reqs)
     size_t i;
 
     assert(NULL != cfg);
+
+    if (cfg->use_api) {
+#ifdef DISABLE_UNIFYFS
+        return ENOTSUP;
+#else
+        if ((unify_reads.n_reqs != n_reqs) || (unify_reads.reqs != reqs)) {
+            /* wait args do not match previous read batch */
+            test_print(cfg, "mismatched wait on unify_reads");
+            return EINVAL;
+        }
+        unifyfs_rc urc = unifyfs_wait_io(cfg->fshdl, n_reqs,
+                                         unify_reads.reads, 1);
+        if (UNIFYFS_SUCCESS != urc) {
+            test_print(cfg, "unifyfs_wait_io(%s, WAITALL) failed - %s",
+                       cfg->filename, unifyfs_rc_enum_description(urc));
+            return -1;
+        }
+        return 0;
+#endif
+    }
 
     for (i = 0; i < n_reqs; i++) {
         rc = wait_read_req(cfg, reqs + i);

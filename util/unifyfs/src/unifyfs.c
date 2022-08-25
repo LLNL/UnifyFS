@@ -67,7 +67,6 @@ static unifyfs_resource_t resource;
 
 static struct option const long_opts[] = {
     { "cleanup", no_argument, NULL, 'c' },
-    { "consistency", required_argument, NULL, 'C' },
     { "debug", no_argument, NULL, 'd' },
     { "exe", required_argument, NULL, 'e' },
     { "help", no_argument, NULL, 'h' },
@@ -76,13 +75,14 @@ static struct option const long_opts[] = {
     { "share-dir", required_argument, NULL, 'S' },
     { "stage-in", required_argument, NULL, 'i' },
     { "stage-out", required_argument, NULL, 'o' },
-    { "timeout", required_argument, NULL, 't' },
+    { "stage-parallel", no_argument, NULL, 'P' },
     { "stage-timeout", required_argument, NULL, 'T' },
+    { "timeout", required_argument, NULL, 't' },
     { 0, 0, 0, 0 },
 };
 
 static char* program;
-static char* short_opts = ":cC:de:hi:m:o:s:S:t:T:";
+static char* short_opts = ":cC:de:hi:m:o:Ps:S:t:T:";
 static char* usage_str =
     "\n"
     "Usage: %s <command> [options...]\n"
@@ -96,7 +96,6 @@ static char* usage_str =
     "  -h, --help                print usage\n"
     "\n"
     "Command options for \"start\":\n"
-    "  -C, --consistency=<model>  [OPTIONAL] consistency model (NONE | LAMINATED | POSIX)\n"
     "  -e, --exe=<path>           [OPTIONAL] <path> where unifyfsd is installed\n"
     "  -m, --mount=<path>         [OPTIONAL] mount UnifyFS at <path>\n"
     "  -s, --script=<path>        [OPTIONAL] <path> to custom launch script\n"
@@ -104,10 +103,12 @@ static char* usage_str =
     "  -S, --share-dir=<path>     [REQUIRED] shared file system <path> for use by servers\n"
     "  -c, --cleanup              [OPTIONAL] clean up the UnifyFS storage upon server exit\n"
     "  -i, --stage-in=<manifest>  [OPTIONAL] stage in file(s) listed in <manifest> file\n"
+    "  -P, --stage-parallel       [OPTIONAL] use parallel stage-in\n"
     "  -T, --stage-timeout=<sec>  [OPTIONAL] timeout for stage-in operation\n"
     "\n"
     "Command options for \"terminate\":\n"
     "  -o, --stage-out=<manifest> [OPTIONAL] stage out file(s) listed in <manifest> on termination\n"
+    "  -P, --stage-parallel       [OPTIONAL] use parallel stage-out\n"
     "  -T, --stage-timeout=<sec>  [OPTIONAL] timeout for stage-out operation\n"
     "  -s, --script=<path>        [OPTIONAL] <path> to custom termination script\n"
     "  -S, --share-dir=<path>     [REQUIRED for --stage-out] shared file system <path> for use by servers\n"
@@ -127,8 +128,8 @@ static void parse_cmd_arguments(int argc, char** argv)
     int optidx = 2;
     int cleanup = 0;
     int timeout = UNIFYFS_DEFAULT_INIT_TIMEOUT;
+    int stage_parallel = 0;
     int stage_timeout = -1;
-    unifyfs_cm_e consistency = UNIFYFS_CM_LAMINATED;
     char* mountpoint = NULL;
     char* script = NULL;
     char* share_dir = NULL;
@@ -146,13 +147,6 @@ static void parse_cmd_arguments(int argc, char** argv)
             cleanup = 1;
             break;
 
-        case 'C':
-            consistency = unifyfs_cm_enum_from_str(optarg);
-            if (consistency == UNIFYFS_CM_INVALID) {
-                usage(1);
-            }
-            break;
-
         case 'd':
             debug = 5;
             break;
@@ -163,6 +157,10 @@ static void parse_cmd_arguments(int argc, char** argv)
 
         case 'm':
             mountpoint = strdup(optarg);
+            break;
+
+        case 'P':
+            stage_parallel = 1;
             break;
 
         case 's':
@@ -203,13 +201,13 @@ static void parse_cmd_arguments(int argc, char** argv)
 
     cli_args.debug = debug;
     cli_args.cleanup = cleanup;
-    cli_args.consistency = consistency;
     cli_args.script = script;
     cli_args.mountpoint = mountpoint;
     cli_args.server_path = srvr_exe;
     cli_args.share_dir = share_dir;
     cli_args.stage_in = stage_in;
     cli_args.stage_out = stage_out;
+    cli_args.stage_parallel = stage_parallel;
     cli_args.stage_timeout = stage_timeout;
     cli_args.timeout = timeout;
 }
@@ -245,14 +243,14 @@ int main(int argc, char** argv)
     if (debug) {
         printf("\n## options from the command line ##\n");
         printf("cleanup:\t%d\n", cli_args.cleanup);
-        printf("consistency:\t%s\n",
-               unifyfs_cm_enum_str(cli_args.consistency));
+        printf("debug:\t%d\n", cli_args.debug);
         printf("mountpoint:\t%s\n", cli_args.mountpoint);
         printf("script:\t%s\n", cli_args.script);
         printf("share_dir:\t%s\n", cli_args.share_dir);
         printf("server:\t%s\n", cli_args.server_path);
         printf("stage_in:\t%s\n", cli_args.stage_in);
         printf("stage_out:\t%s\n", cli_args.stage_out);
+        printf("stage_parallel:\t%d\n", cli_args.stage_parallel);
         printf("stage_timeout:\t%d\n", cli_args.stage_timeout);
     }
 

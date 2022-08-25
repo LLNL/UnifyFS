@@ -21,11 +21,16 @@
 extern "C" {
 #endif
 
+extern int glb_pmi_rank;
+extern int glb_pmi_size;
+
+int unifyfs_pmix_init(void);
+int unifyfs_pmi2_init(void);
+
 // keys we use
 extern const char* const key_unifyfsd_socket;    // server domain socket path
 extern const char* const key_unifyfsd_margo_shm; // client-server margo address
 extern const char* const key_unifyfsd_margo_svr; // server-server margo address
-extern const char* const key_unifyfsd_pmi_rank;  // server-server pmi rank
 
 // initialize key-value store
 int unifyfs_keyval_init(unifyfs_cfg_t* cfg,

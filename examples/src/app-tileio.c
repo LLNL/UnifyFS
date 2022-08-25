@@ -83,8 +83,7 @@ typedef struct {
     long offset;
     long length;
     char* buf;
-
-} read_req_t;
+} rdreq_t;
 
 static const char* opts = "h:v:d:f:p:n:";
 
@@ -158,7 +157,7 @@ int main(int argc, char* argv[])
 
     long num_reqs = y_size; /*number of I/O requests*/
 
-    read_req_t* r_w_reqs = (read_req_t*) malloc(num_reqs * sizeof(read_req_t));
+    rdreq_t* r_w_reqs = (rdreq_t*) calloc(num_reqs, sizeof(rdreq_t));
 
     /*initialize the I/O requests*/
     long cursor = 0, tot_sz;
@@ -175,7 +174,7 @@ int main(int argc, char* argv[])
     memset(buf, 0, x_size * sz_per_elem);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    unifyfs_mount("/unifyfs", rank, ranknum, 0);
+    unifyfs_mount("/unifyfs", rank, ranknum);
     MPI_Barrier(MPI_COMM_WORLD);
 
     int fd;

@@ -28,46 +28,268 @@
  */
 
 #include "unifyfs_global.h"
+#include "unifyfs_group_rpc.h"
+#include "unifyfs_p2p_rpc.h"
 #include "unifyfs_request_manager.h"
 #include "unifyfs_service_manager.h"
 #include "unifyfs_server_rpcs.h"
+#include "unifyfs_transfer.h"
 #include "margo_server.h"
 
 /* Service Manager (SM) state */
 typedef struct {
     /* the SM thread */
     pthread_t thrd;
+    pid_t tid;
 
-    /* argobots mutex for synchronizing access to request state between
-     * margo rpc handler ULTs and SM thread */
-    ABT_mutex sync;
+    /* pthread mutex and condition variable for work notification */
+    pthread_mutex_t thrd_lock;
+    pthread_cond_t thrd_cond;
 
     /* thread status */
     int initialized;
+    int waiting_for_work;
     volatile int time_to_exit;
 
     /* thread return status code */
     int sm_exit_rc;
 
+    /* argobots mutex for synchronizing access to request state between
+     * margo rpc handler ULTs and SM thread */
+    ABT_mutex reqs_sync;
+
     /* list of chunk read requests from remote servers */
     arraylist_t* chunk_reads;
+
+    /* list of local transfer requests */
+    arraylist_t* local_transfers;
+    arraylist_t* completed_transfers;
+
+    /* list of service requests (server_rpc_req_t*) */
+    arraylist_t* svc_reqs;
 
 } svcmgr_state_t;
 svcmgr_state_t* sm; // = NULL
 
-/* lock macro for debugging SM locking */
 #define SM_LOCK() \
 do { \
-    LOGDBG("locking service manager state"); \
-    ABT_mutex_lock(sm->sync); \
+    if ((NULL != sm) && sm->initialized) { \
+        /*LOGDBG("locking SM state");*/ \
+        pthread_mutex_lock(&(sm->thrd_lock)); \
+    } \
 } while (0)
 
-/* unlock macro for debugging SM locking */
 #define SM_UNLOCK() \
 do { \
-    LOGDBG("unlocking service manager state"); \
-    ABT_mutex_unlock(sm->sync); \
+    if ((NULL != sm) && sm->initialized) { \
+        /*LOGDBG("unlocking SM state");*/ \
+        pthread_mutex_unlock(&(sm->thrd_lock)); \
+    } \
 } while (0)
+
+#define SM_REQ_LOCK() \
+do { \
+    if ((NULL != sm) && sm->initialized) { \
+        /*LOGDBG("locking SM requests");*/ \
+        ABT_mutex_lock(sm->reqs_sync); \
+    } \
+} while (0)
+
+#define SM_REQ_UNLOCK() \
+do { \
+    if ((NULL != sm) && sm->initialized) { \
+        /*LOGDBG("unlocking SM requests");*/ \
+        ABT_mutex_unlock(sm->reqs_sync); \
+    } \
+} while (0)
+
+
+static inline void signal_svcmgr(void)
+{
+    pid_t this_thread = unifyfs_gettid();
+    if (this_thread != sm->tid) {
+        /* signal svcmgr to begin processing the requests we just added */
+        LOGDBG("signaling new service requests");
+        pthread_cond_signal(&(sm->thrd_cond));
+    }
+}
+
+/* submit a request to the service manager thread */
+int sm_submit_service_request(server_rpc_req_t* req)
+{
+    if ((NULL == sm) || (NULL == sm->svc_reqs)) {
+        return UNIFYFS_FAILURE;
+    }
+
+    SM_REQ_LOCK();
+    arraylist_add(sm->svc_reqs, req);
+    SM_REQ_UNLOCK();
+
+    signal_svcmgr();
+
+    return UNIFYFS_SUCCESS;
+}
+
+/* submit a transfer request to the service manager thread */
+int sm_submit_transfer_request(transfer_thread_args* tta)
+{
+    if ((NULL == sm) || (NULL == sm->local_transfers)) {
+        return UNIFYFS_FAILURE;
+    }
+
+    SM_REQ_LOCK();
+    arraylist_add(sm->local_transfers, tta);
+    SM_REQ_UNLOCK();
+
+    signal_svcmgr();
+
+    return UNIFYFS_SUCCESS;
+}
+
+/* tell service manager thread transfer has completed */
+int sm_complete_transfer_request(transfer_thread_args* tta)
+{
+    if ((NULL == sm) || (NULL == sm->completed_transfers)) {
+        return UNIFYFS_FAILURE;
+    }
+
+    SM_REQ_LOCK();
+    arraylist_add(sm->completed_transfers, tta);
+    SM_REQ_UNLOCK();
+
+    signal_svcmgr();
+
+    return UNIFYFS_SUCCESS;
+}
+
+/* initialize and launch service manager thread */
+int svcmgr_init(void)
+{
+    /* allocate a struct to maintain service manager state.
+     * store pointer to struct in a global variable */
+    sm = (svcmgr_state_t*)calloc(1, sizeof(svcmgr_state_t));
+    if (NULL == sm) {
+        LOGERR("failed to allocate service manager state!");
+        return ENOMEM;
+    }
+
+    /* initialize lock for shared data structures of the
+     * service manager */
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    int rc = pthread_mutex_init(&(sm->thrd_lock), &attr);
+    if (rc != 0) {
+        LOGERR("pthread_mutex_init failed for service manager rc=%d (%s)",
+               rc, strerror(rc));
+        svcmgr_fini();
+        return rc;
+    }
+
+    /* initialize condition variable to synchronize work
+     * notifications for the request manager thread */
+    rc = pthread_cond_init(&(sm->thrd_cond), NULL);
+    if (rc != 0) {
+        LOGERR("pthread_cond_init failed for service manager rc=%d (%s)",
+               rc, strerror(rc));
+        pthread_mutex_destroy(&(sm->thrd_lock));
+        svcmgr_fini();
+        return rc;
+    }
+
+    ABT_mutex_create(&(sm->reqs_sync));
+
+    /* allocate a list to track chunk reads */
+    sm->chunk_reads = arraylist_create(0);
+    if (sm->chunk_reads == NULL) {
+        LOGERR("failed to allocate service manager chunk_reads!");
+        svcmgr_fini();
+        return ENOMEM;
+    }
+
+    /* allocate lists to track local transfer requests */
+    sm->local_transfers = arraylist_create(0);
+    if (sm->local_transfers == NULL) {
+        LOGERR("failed to allocate service manager local_transfers!");
+        svcmgr_fini();
+        return ENOMEM;
+    }
+    sm->completed_transfers = arraylist_create(0);
+    if (sm->completed_transfers == NULL) {
+        LOGERR("failed to allocate service manager completed_transfers!");
+        svcmgr_fini();
+        return ENOMEM;
+    }
+
+    /* allocate a list to track service requests */
+    sm->svc_reqs = arraylist_create(0);
+    if (sm->svc_reqs == NULL) {
+        LOGERR("failed to allocate service manager svc_reqs!");
+        svcmgr_fini();
+        return ENOMEM;
+    }
+
+    sm->tid = -1;
+    sm->initialized = 1;
+
+    rc = pthread_create(&(sm->thrd), NULL, service_manager_thread, (void*)sm);
+    if (rc != 0) {
+        LOGERR("failed to create service manager thread");
+        svcmgr_fini();
+        return UNIFYFS_ERROR_THREAD;
+    }
+
+    return UNIFYFS_SUCCESS;
+}
+
+/* join service manager thread (if created) and clean up state */
+int svcmgr_fini(void)
+{
+    if (NULL != sm) {
+        if (sm->initialized) {
+            /* join thread before cleaning up state */
+            if (sm->tid != -1) {
+                pthread_mutex_lock(&(sm->thrd_lock));
+                sm->time_to_exit = 1;
+                pthread_cond_signal(&(sm->thrd_cond));
+                pthread_mutex_unlock(&(sm->thrd_lock));
+                pthread_join(sm->thrd, NULL);
+            }
+        }
+
+        if (NULL != sm->chunk_reads) {
+            arraylist_free(sm->chunk_reads);
+        }
+
+        if (NULL != sm->local_transfers) {
+            arraylist_free(sm->local_transfers);
+        }
+
+        if (NULL != sm->completed_transfers) {
+            arraylist_free(sm->completed_transfers);
+        }
+
+        if (NULL != sm->svc_reqs) {
+            arraylist_free(sm->svc_reqs);
+        }
+
+        int abt_err = ABT_mutex_free(&(sm->reqs_sync));
+        if (ABT_SUCCESS != abt_err) {
+            /* All we can really do here is log the error */
+            LOGERR("Error code returned from ABT_mutex_free(): %d", abt_err);
+        }
+
+        if (sm->initialized) {
+            pthread_mutex_destroy(&(sm->thrd_lock));
+            pthread_cond_destroy(&(sm->thrd_cond));
+        }
+
+        /* free the service manager struct allocated during init */
+        free(sm);
+        sm = NULL;
+    }
+    return UNIFYFS_SUCCESS;
+}
 
 /* Decode and issue chunk-reads received from request manager.
  * We get a list of read requests for data on our node.  Read
@@ -87,24 +309,11 @@ int sm_issue_chunk_reads(int src_rank,
                          int src_client_id,
                          int src_req_id,
                          int num_chks,
+                         size_t total_data_sz,
                          char* msg_buf)
 {
-    /* get pointer to start of receive buffer */
-    char* ptr = msg_buf;
-
-    /* advance past command */
-    ptr += sizeof(int);
-
-    /* extract number of chunk read requests */
-    assert(num_chks == *((int*)ptr));
-    ptr += sizeof(int);
-
-    /* total data size we'll be reading */
-    size_t total_data_sz = *((size_t*)ptr);
-    ptr += sizeof(size_t);
-
     /* get pointer to read request array */
-    chunk_read_req_t* reqs = (chunk_read_req_t*)ptr;
+    chunk_read_req_t* reqs = (chunk_read_req_t*)msg_buf;
 
     /* we'll allocate a buffer to hold a list of chunk read response
      * structures, one for each chunk, followed by a data buffer
@@ -118,7 +327,7 @@ int sm_issue_chunk_reads(int src_rank,
     // NOTE: calloc() is required here, don't use malloc
     char* crbuf = (char*) calloc(1, buf_sz);
     if (NULL == crbuf) {
-        LOGERR("failed to allocate chunk_read_reqs");
+        LOGERR("failed to allocate chunk_read_reqs (buf_sz=%zu)", buf_sz);
         return ENOMEM;
     }
 
@@ -158,6 +367,7 @@ int sm_issue_chunk_reads(int src_rank,
     for (i = 0; i < num_chks; i++) {
         /* pointer to next read request */
         chunk_read_req_t* rreq = reqs + i;
+        debug_print_chunk_read_req(rreq);
 
         /* pointer to next read response */
         chunk_read_resp_t* rresp = resp + i;
@@ -171,8 +381,6 @@ int sm_issue_chunk_reads(int src_rank,
         rresp->read_rc = 0;
         rresp->nbytes  = nbytes;
         rresp->offset  = rreq->offset;
-        LOGDBG("reading chunk(offset=%zu, size=%zu)",
-               rreq->offset, nbytes);
 
         /* get pointer to next position in buffer to store read data */
         char* buf_ptr = databuf + buf_cursor;
@@ -182,7 +390,7 @@ int sm_issue_chunk_reads(int src_rank,
         int cli_id = rreq->log_client_id;
         app_clnt = get_app_client(app_id, cli_id);
         if (NULL != app_clnt) {
-            logio_context* logio_ctx = app_clnt->logio;
+            logio_context* logio_ctx = app_clnt->state.logio_ctx;
             if (NULL != logio_ctx) {
                 size_t nread = 0;
                 int rc = unifyfs_logio_read(logio_ctx, log_offset, nbytes,
@@ -193,9 +401,13 @@ int sm_issue_chunk_reads(int src_rank,
                     rresp->read_rc = (ssize_t)(-rc);
                 }
             } else {
+                LOGERR("app client [%d:%d] has NULL logio context",
+                       app_id, cli_id);
                 rresp->read_rc = (ssize_t)(-EINVAL);
             }
         } else {
+            LOGERR("failed to get application client [%d:%d] state",
+                   app_id, cli_id);
             rresp->read_rc = (ssize_t)(-EINVAL);
         }
 
@@ -205,14 +417,13 @@ int sm_issue_chunk_reads(int src_rank,
 
     if (src_rank != glb_pmi_rank) {
         /* we need to send these read responses to another rank,
-         * add chunk_reads to svcmgr response list and another
-         * thread will take care of that */
+         * add chunk_reads to svcmgr response list */
         LOGDBG("adding to svcmgr chunk_reads");
         assert(NULL != sm);
 
-        SM_LOCK();
+        SM_REQ_LOCK();
         arraylist_add(sm->chunk_reads, scr);
-        SM_UNLOCK();
+        SM_REQ_UNLOCK();
 
         /* scr will be freed later by the sending thread */
 
@@ -224,7 +435,7 @@ int sm_issue_chunk_reads(int src_rank,
         int rc = rm_post_chunk_read_responses(src_app_id, src_client_id,
                                               src_rank, src_req_id,
                                               num_chks, buf_sz, crbuf);
-        if (rc != (int)UNIFYFS_SUCCESS) {
+        if (rc != UNIFYFS_SUCCESS) {
             LOGERR("failed to handle chunk read responses");
         }
 
@@ -235,84 +446,219 @@ int sm_issue_chunk_reads(int src_rank,
     }
 }
 
-/* initialize and launch service manager thread */
-int svcmgr_init(void)
+int sm_laminate(int gfid)
 {
-    /* allocate a service manager struct,
-     * store in global variable */
-    sm = (svcmgr_state_t*)calloc(1, sizeof(svcmgr_state_t));
-    if (NULL == sm) {
-        LOGERR("failed to allocate service manager state!");
-        return ENOMEM;
+    int owner_rank = hash_gfid_to_server(gfid);
+    int is_owner = (owner_rank == glb_pmi_rank);
+
+    int ret = unifyfs_inode_laminate(gfid);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("failed to laminate gfid=%d (rc=%d, is_owner=%d)",
+               gfid, ret, is_owner);
+    } else if (is_owner) {
+        /* I'm the owner, tell the rest of the servers */
+        ret = unifyfs_invoke_broadcast_laminate(gfid);
+        if (ret != UNIFYFS_SUCCESS) {
+            LOGERR("laminate broadcast failed");
+        }
     }
-
-    /* allocate a list to track chunk read requests */
-    sm->chunk_reads = arraylist_create(0);
-    if (sm->chunk_reads == NULL) {
-        LOGERR("failed to allocate service manager chunk_reads!");
-        svcmgr_fini();
-        return ENOMEM;
-    }
-
-    ABT_mutex_create(&(sm->sync));
-
-    sm->initialized = 1;
-
-    int rc = pthread_create(&(sm->thrd), NULL,
-                            service_manager_thread, (void*)sm);
-    if (rc != 0) {
-        LOGERR("failed to create service manager thread");
-        svcmgr_fini();
-        return (int)UNIFYFS_ERROR_THRDINIT;
-    }
-
-    return (int)UNIFYFS_SUCCESS;
+    return ret;
 }
 
-/* join service manager thread (if created) and clean up state */
-int svcmgr_fini(void)
+int sm_get_fileattr(int gfid,
+                    unifyfs_file_attr_t* attrs)
 {
-    if (NULL != sm) {
-        if (sm->thrd) {
-            sm->time_to_exit = 1;
-            pthread_join(sm->thrd, NULL);
+    int owner_rank = hash_gfid_to_server(gfid);
+    int is_owner = (owner_rank == glb_pmi_rank);
+
+    /* do local inode metadata lookup */
+    int ret = unifyfs_inode_metaget(gfid, attrs);
+    if (ret) {
+        if (ret != ENOENT) {
+            LOGERR("failed to get attributes for gfid=%d (rc=%d, is_owner=%d)",
+                    gfid, ret, is_owner);
         }
-
-        if (sm->initialized) {
-            SM_LOCK();
-        }
-
-        arraylist_free(sm->chunk_reads);
-
-        if (sm->initialized) {
-            SM_UNLOCK();
-        }
-
-        /* free the service manager struct allocated during init */
-        free(sm);
-        sm = NULL;
     }
-    return (int)UNIFYFS_SUCCESS;
+    return ret;
 }
+
+int sm_set_fileattr(int gfid,
+                    int file_op,
+                    unifyfs_file_attr_t* attrs)
+{
+    int owner_rank = hash_gfid_to_server(gfid);
+    int is_owner = (owner_rank == glb_pmi_rank);
+
+    /* set local metadata for target file */
+    int ret = unifyfs_inode_metaset(gfid, file_op, attrs);
+    if (ret) {
+        if ((ret == EEXIST) && (file_op == UNIFYFS_FILE_ATTR_OP_CREATE)) {
+            LOGWARN("create requested for existing gfid=%d", gfid);
+        } else {
+            LOGERR("failed to set attributes for gfid=%d (rc=%d, is_owner=%d)",
+                   gfid, ret, is_owner);
+        }
+    }
+    return ret;
+}
+
+int sm_add_extents(int gfid,
+                   size_t num_extents,
+                   extent_metadata* extents)
+{
+    int owner_rank = hash_gfid_to_server(gfid);
+    int is_owner = (owner_rank == glb_pmi_rank);
+
+    unsigned int n_extents = (unsigned int)num_extents;
+    int ret = unifyfs_inode_add_extents(gfid, n_extents, extents);
+    if (ret) {
+        LOGERR("failed to add %u extents to gfid=%d (rc=%d, is_owner=%d)",
+               n_extents, gfid, ret, is_owner);
+    }
+    return ret;
+}
+
+int sm_find_extents(int gfid,
+                    size_t num_extents,
+                    unifyfs_extent_t* extents,
+                    unsigned int* out_num_chunks,
+                    chunk_read_req_t** out_chunks,
+                    int* full_coverage)
+{
+    /* do local inode metadata lookup */
+    unifyfs_file_attr_t attrs;
+    int ret = unifyfs_inode_metaget(gfid, &attrs);
+    if (ret == UNIFYFS_SUCCESS) {
+        /* do inode extent lookup */
+        unsigned int n_extents = (unsigned int) num_extents;
+        ret = unifyfs_inode_resolve_extent_chunks(n_extents, extents,
+                                                  out_num_chunks,
+                                                  out_chunks,
+                                                  full_coverage);
+        if (ret) {
+            LOGERR("failed to find extents for gfid=%d (rc=%d)", gfid, ret);
+        } else if (*out_num_chunks == 0) {
+            LOGDBG("extent lookup for gfid=%d found no matching chunks", gfid);
+        }
+    }
+    return ret;
+}
+
+int sm_transfer(int client_server,
+                int client_app,
+                int client_id,
+                int transfer_id,
+                int gfid,
+                int transfer_mode,
+                const char* dest_file,
+                void* bcast_coll)
+{
+    int rc;
+    int ret = UNIFYFS_SUCCESS;
+
+    int owner_rank = hash_gfid_to_server(gfid);
+    int is_owner = (owner_rank == glb_pmi_rank);
+
+    transfer_thread_args* tta = calloc(1, sizeof(*tta));
+    if (NULL == tta) {
+        LOGERR("failed to allocate transfer_thread_args for gfid=%d", gfid);
+        return ENOMEM;
+    }
+    tta->dst_file = strdup(dest_file);
+    tta->gfid = gfid;
+    tta->bcast_coll = bcast_coll;
+    tta->client_server = client_server;
+    tta->client_app = client_app;
+    tta->client_id = client_id;
+    tta->transfer_id = transfer_id;
+
+    if (glb_pmi_rank == client_server) {
+        unifyfs_file_attr_t attrs;
+        rc = unifyfs_invoke_metaget_rpc(gfid, &attrs);
+        if (rc == UNIFYFS_SUCCESS) {
+            tta->file_sz = (size_t) attrs.size;
+        }
+    }
+
+    LOGDBG("transfer - gfid=%d mode=%d file=%s",
+           gfid, transfer_mode, dest_file);
+
+    if (transfer_mode == SERVER_TRANSFER_MODE_LOCAL) {
+        /* each server transfers local data to the destination file */
+        rc = create_local_transfers(gfid, tta);
+        if ((rc != UNIFYFS_SUCCESS) && (rc != ENOENT)) {
+            LOGERR("failed to create local transfers - %s",
+                   unifyfs_rc_enum_description(rc));
+        }
+
+        /* submit transfer request for processing */
+        rc = sm_submit_transfer_request(tta);
+        if (rc != UNIFYFS_SUCCESS) {
+            ret = rc;
+        }
+    } else if (is_owner && (transfer_mode == SERVER_TRANSFER_MODE_OWNER)) {
+        // TODO: support SERVER_TRANSFER_MODE_OWNER
+        ret = UNIFYFS_ERROR_NYI;
+    }
+
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("transfer(gfid=%d, mode=%d, file=%s) failed - %s",
+               gfid, transfer_mode, dest_file,
+               unifyfs_rc_enum_description(ret));
+    }
+    return ret;
+}
+
+int sm_truncate(int gfid, size_t filesize)
+{
+    int owner_rank = hash_gfid_to_server(gfid);
+    int is_owner = (owner_rank == glb_pmi_rank);
+
+    unifyfs_file_attr_t attrs;
+    int ret = unifyfs_inode_metaget(gfid, &attrs);
+    if (ret == UNIFYFS_SUCCESS) {
+        /* apply truncation to local file state */
+        size_t old_size = (size_t) attrs.size;
+        LOGDBG("truncate - gfid=%d size=%zu old-size=%zu",
+               gfid, filesize, old_size);
+        ret = unifyfs_inode_truncate(gfid, (unsigned long)filesize);
+        if (ret != UNIFYFS_SUCCESS) {
+            LOGERR("truncate(gfid=%d, size=%zu) failed",
+                   gfid, filesize);
+        } else if (is_owner && (filesize < old_size)) {
+            /* truncate the target file at other servers */
+            ret = unifyfs_invoke_broadcast_truncate(gfid, filesize);
+            if (ret != UNIFYFS_SUCCESS) {
+                LOGERR("truncate broadcast failed");
+            }
+        }
+    } else if (!is_owner && (ENOENT == ret)) {
+        /* non-owner is not guaranteed to have local metadata for gfid */
+        ret = UNIFYFS_SUCCESS;
+    }
+
+    return ret;
+}
+
 
 /* iterate over list of chunk reads and send responses */
 static int send_chunk_read_responses(void)
 {
     /* assume we'll succeed */
-    int rc = (int)UNIFYFS_SUCCESS;
+    int rc = UNIFYFS_SUCCESS;
 
     /* this will hold a list of chunk read requests if we find any */
     arraylist_t* chunk_reads = NULL;
 
     /* lock to access global service manager object */
-    ABT_mutex_lock(sm->sync);
+    SM_REQ_LOCK();
 
     /* if we have any chunk reads, take pointer to the list
      * of chunk read requests and replace it with a newly allocated
      * list on the service manager structure */
     int num_chunk_reads = arraylist_size(sm->chunk_reads);
     if (num_chunk_reads) {
-        /* got some chunk read requets, take the list and replace
+        /* got some chunk read requests, take the list and replace
          * it with an empty list */
         LOGDBG("processing %d chunk read responses", num_chunk_reads);
         chunk_reads = sm->chunk_reads;
@@ -320,7 +666,7 @@ static int send_chunk_read_responses(void)
     }
 
     /* release lock on service manager object */
-    ABT_mutex_unlock(sm->sync);
+    SM_REQ_UNLOCK();
 
     /* iterate over each chunk read request */
     for (int i = 0; i < num_chunk_reads; i++) {
@@ -339,6 +685,747 @@ static int send_chunk_read_responses(void)
     return rc;
 }
 
+static int spawn_local_transfers(void)
+{
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
+
+    /* this will hold a list of local transfers if we find any */
+    arraylist_t* transfers = NULL;
+
+    /* lock to access global service manager object */
+    SM_REQ_LOCK();
+
+    /* if we have any local transfers, take pointer to the list
+     * of transfer args and replace it with a newly allocated
+     * list on the service manager structure */
+    int num_transfers = arraylist_size(sm->local_transfers);
+    if (num_transfers) {
+        /* got some transfer requests, take the list and replace
+         * it with an empty list */
+        LOGDBG("processing %d local transfers", num_transfers);
+        transfers = sm->local_transfers;
+        sm->local_transfers = arraylist_create(0);
+    }
+
+    /* release lock on service manager object */
+    SM_REQ_UNLOCK();
+
+    /* iterate over each transfer and spawn helper thread */
+    transfer_thread_args* tta;
+    for (int i = 0; i < num_transfers; i++) {
+        /* get next transfer */
+        tta = (transfer_thread_args*) arraylist_remove(transfers, i);
+
+        /* record transfer start time on initiator */
+        if (glb_pmi_rank == tta->client_server) {
+            gettimeofday(&(tta->transfer_time), NULL);
+        }
+
+        /* spawn transfer helper thread */
+        int rc = pthread_create(&(tta->thrd), NULL,
+                                transfer_helper_thread, (void*)tta);
+        if (rc != 0) {
+            LOGERR("failed to spawn transfer helper thread for tta=%p", tta);
+            ret = UNIFYFS_ERROR_THREAD;
+            release_transfer_thread_args(tta);
+        }
+    }
+
+    return ret;
+}
+
+static int complete_local_transfers(void)
+{
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
+
+    /* this will hold a list of local transfers if we find any */
+    arraylist_t* transfers = NULL;
+
+    /* lock to access global service manager object */
+    SM_REQ_LOCK();
+
+    /* if we have any local transfers, take pointer to the list
+     * of transfer args and replace it with a newly allocated
+     * list on the service manager structure */
+    int num_transfers = arraylist_size(sm->completed_transfers);
+    if (num_transfers) {
+        /* got some transfer requests, take the list and replace
+         * it with an empty list */
+        LOGDBG("completing %d local transfers", num_transfers);
+        transfers = sm->completed_transfers;
+        sm->completed_transfers = arraylist_create(0);
+    }
+
+    /* release lock on service manager object */
+    SM_REQ_UNLOCK();
+
+    /* iterate over each transfer and spawn helper thread */
+    transfer_thread_args* tta;
+    for (int i = 0; i < num_transfers; i++) {
+        /* get next transfer */
+        tta = (transfer_thread_args*) arraylist_remove(transfers, i);
+
+        /* join transfer helper thread */
+        int rc = pthread_join(tta->thrd, NULL);
+        if (rc != 0) {
+            LOGERR("failed to join transfer helper thread for tta=%p", tta);
+            ret = UNIFYFS_ERROR_THREAD;
+        }
+
+        if (glb_pmi_rank == tta->client_server) {
+            struct timeval s_time = tta->transfer_time;
+            struct timeval e_time;
+            gettimeofday(&e_time, NULL);
+            int tv_sec = e_time.tv_sec - s_time.tv_sec;
+            if (e_time.tv_usec < s_time.tv_usec) {
+                tv_sec -= 1;
+                e_time.tv_usec += 1000000;
+            }
+            int tv_usec = e_time.tv_usec - s_time.tv_usec;
+
+            rc = invoke_client_transfer_complete_rpc(tta->client_app,
+                                                     tta->client_id,
+                                                     tta->transfer_id,
+                                                     tta->file_sz,
+                                                     tv_sec,
+                                                     tv_usec,
+                                                     tta->status);
+            if (rc != 0) {
+                LOGERR("failed transfer(id=%d) complete rpc to client[%d:%d]",
+                       tta->transfer_id, tta->client_app, tta->client_id);
+                ret = rc;
+            }
+        }
+
+        release_transfer_thread_args(tta);
+    }
+
+    return ret;
+}
+
+static int process_chunk_read_rpc(server_rpc_req_t* req)
+{
+    int ret;
+    chunk_read_request_in_t* in = req->input;
+
+    /* issue chunk read requests */
+    int src_rank    = (int)in->src_rank;
+    int app_id      = (int)in->app_id;
+    int client_id   = (int)in->client_id;
+    int req_id      = (int)in->req_id;
+    int num_chks    = (int)in->num_chks;
+    size_t total_sz = (size_t)in->total_data_size;
+
+    LOGDBG("handling chunk read requests from server[%d]: "
+           "req=%d num_chunks=%d data_sz=%zu bulk_sz=%zu",
+           src_rank, req_id, num_chks, total_sz, req->bulk_sz);
+
+    ret = sm_issue_chunk_reads(src_rank, app_id, client_id,
+                               req_id, num_chks, total_sz,
+                               (char*)req->bulk_buf);
+
+    margo_free_input(req->handle, in);
+    free(in);
+    free(req->bulk_buf);
+
+    /* send rpc response */
+    chunk_read_request_out_t out;
+    out.ret = (int32_t) ret;
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
+}
+
+static int process_add_extents_rpc(server_rpc_req_t* req)
+{
+    /* get input parameters */
+    add_extents_in_t* in = req->input;
+    int sender = (int) in->src_rank;
+    int gfid = (int) in->gfid;
+    size_t num_extents = (size_t) in->num_extents;
+    extent_metadata* extents = req->bulk_buf;
+
+    /* add extents */
+    LOGDBG("adding %zu extents to gfid=%d from server[%d]",
+           num_extents, gfid, sender);
+    int ret = sm_add_extents(gfid, num_extents, extents);
+    if (ret) {
+        LOGERR("failed to add extents from %d (ret=%d)", sender, ret);
+    }
+
+    margo_free_input(req->handle, in);
+    free(in);
+    free(req->bulk_buf);
+
+    /* send rpc response */
+    add_extents_out_t out;
+    out.ret = (int32_t) ret;
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
+}
+
+static int process_find_extents_rpc(server_rpc_req_t* req)
+{
+    /* get input parameters */
+    find_extents_in_t* in = req->input;
+    int sender = (int) in->src_rank;
+    int gfid = (int) in->gfid;
+    size_t num_extents = (size_t) in->num_extents;
+    unifyfs_extent_t* extents = req->bulk_buf;
+
+    LOGDBG("received %zu extent lookups for gfid=%d from server[%d]",
+           num_extents, gfid, sender);
+
+    /* find chunks for given extents */
+    int full_coverage = 0;
+    unsigned int num_chunks = 0;
+    chunk_read_req_t* chunk_locs = NULL;
+    int ret = sm_find_extents(gfid, num_extents, extents,
+                              &num_chunks, &chunk_locs, &full_coverage);
+
+    margo_free_input(req->handle, in);
+    free(in);
+    free(req->bulk_buf);
+
+    /* define a bulk handle to transfer chunk address info */
+    hg_bulk_t bulk_resp_handle = HG_BULK_NULL;
+    if (ret == UNIFYFS_SUCCESS) {
+        if (num_chunks > 0) {
+            const struct hg_info* hgi = margo_get_info(req->handle);
+            assert(hgi);
+            margo_instance_id mid = margo_hg_info_get_instance(hgi);
+            assert(mid != MARGO_INSTANCE_NULL);
+
+            void* buf = (void*) chunk_locs;
+            size_t buf_sz = (size_t)num_chunks * sizeof(chunk_read_req_t);
+            hg_return_t hret = margo_bulk_create(mid, 1, &buf, &buf_sz,
+                                                 HG_BULK_READ_ONLY,
+                                                 &bulk_resp_handle);
+            if (hret != HG_SUCCESS) {
+                LOGERR("margo_bulk_create() failed");
+                ret = UNIFYFS_ERROR_MARGO;
+            }
+        }
+    }
+
+    /* send rpc response */
+    find_extents_out_t out;
+    out.ret           = (int32_t) ret;
+    out.num_locations = (int32_t) num_chunks;
+    out.locations     = bulk_resp_handle;
+
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    if (HG_BULK_NULL != bulk_resp_handle) {
+        margo_bulk_free(bulk_resp_handle);
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
+}
+
+static int process_filesize_rpc(server_rpc_req_t* req)
+{
+    /* get target file */
+    filesize_in_t* in = req->input;
+    int gfid = (int) in->gfid;
+    margo_free_input(req->handle, in);
+    free(in);
+
+    /* get size of target file */
+    size_t filesize;
+    int ret = unifyfs_inode_get_filesize(gfid, &filesize);
+
+    /* send rpc response */
+    filesize_out_t out;
+    out.ret = (int32_t) ret;
+    out.filesize = (hg_size_t) filesize;
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
+}
+
+static int process_laminate_rpc(server_rpc_req_t* req)
+{
+    /* get target file */
+    laminate_in_t* in = req->input;
+    int gfid  = (int)in->gfid;
+    margo_free_input(req->handle, in);
+    free(in);
+
+    /* do file lamination */
+    int ret = sm_laminate(gfid);
+
+    /* send rpc response */
+    laminate_out_t out;
+    out.ret = (int32_t) ret;
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
+}
+
+static int process_metaget_rpc(server_rpc_req_t* req)
+{
+    /* get target file */
+    metaget_in_t* in = req->input;
+    int gfid  = (int) in->gfid;
+    margo_free_input(req->handle, in);
+    free(in);
+
+    /* initialize invalid attributes */
+    unifyfs_file_attr_t attrs;
+    unifyfs_file_attr_set_invalid(&attrs);
+
+    /* get metadata for target file */
+    int ret = sm_get_fileattr(gfid, &attrs);
+
+    /* send rpc response */
+    metaget_out_t out;
+    out.ret = (int32_t) ret;
+    out.attr = attrs;
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
+    return UNIFYFS_ERROR_NYI;
+}
+
+static int process_metaset_rpc(server_rpc_req_t* req)
+{
+    /* update target file metadata */
+    metaset_in_t* in = req->input;
+    int gfid = (int) in->gfid;
+    int attr_op = (int) in->fileop;
+    unifyfs_file_attr_t* attrs = &(in->attr);
+    int ret = sm_set_fileattr(gfid, attr_op, attrs);
+    margo_free_input(req->handle, in);
+    free(in);
+
+    /* send rpc response */
+    metaset_out_t out;
+    out.ret = (int32_t) ret;
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
+}
+
+static int process_server_pid_rpc(server_rpc_req_t* req)
+{
+    /* get input parameters */
+    server_pid_in_t* in = req->input;
+    int src_rank = (int) in->rank;
+    int pid = (int) in->pid;
+    margo_free_input(req->handle, in);
+    free(in);
+
+    /* do pid report */
+    int ret = unifyfs_report_server_pid(src_rank, pid);
+
+    /* send rpc response */
+    server_pid_out_t out;
+    out.ret = (int32_t) ret;
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
+}
+
+static int process_transfer_rpc(server_rpc_req_t* req)
+{
+    /* get target file and requested file size */
+    transfer_in_t* in = req->input;
+    int src_rank      = (int) in->src_rank;
+    int client_app    = (int) in->client_app;
+    int client_id     = (int) in->client_id;
+    int transfer_id   = (int) in->transfer_id;
+    int gfid          = (int) in->gfid;
+    int transfer_mode = (int) in->mode;
+    char* dest_file = strdup(in->dst_file);
+    margo_free_input(req->handle, in);
+    free(in);
+
+    /* do file transfer */
+    int ret = sm_transfer(src_rank, client_app, client_id, transfer_id,
+                          gfid, transfer_mode, dest_file, NULL);
+    free(dest_file);
+
+    /* send rpc response */
+    transfer_out_t out;
+    out.ret = (int32_t) ret;
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
+}
+
+static int process_truncate_rpc(server_rpc_req_t* req)
+{
+    /* get target file and requested file size */
+    truncate_in_t* in = req->input;
+    int gfid = (int) in->gfid;
+    size_t fsize = (size_t) in->filesize;
+    margo_free_input(req->handle, in);
+    free(in);
+
+    /* do file truncation */
+    int ret = sm_truncate(gfid, fsize);
+
+    /* send rpc response */
+    truncate_out_t out;
+    out.ret = (int32_t) ret;
+    hg_return_t hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+
+    return ret;
+}
+
+static int process_extents_bcast_rpc(server_rpc_req_t* req)
+{
+    /* get target file and extents */
+    extent_bcast_in_t* in = req->input;
+    int gfid = (int) in->gfid;
+    size_t num_extents = (size_t) in->num_extents;
+    extent_metadata* extents = req->bulk_buf;
+
+    LOGDBG("gfid=%d num_extents=%zu", gfid, num_extents);
+
+    /* add extents */
+    int ret = sm_add_extents(gfid, num_extents, extents);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("add_extents(gfid=%d) failed - rc=%d", gfid, ret);
+    }
+    collective_set_local_retval(req->coll, ret);
+
+    /* create a ULT to finish broadcast operation */
+    ret = invoke_bcast_progress_rpc(req->coll);
+
+    return ret;
+}
+
+static int process_fileattr_bcast_rpc(server_rpc_req_t* req)
+{
+    /* get target file and attributes */
+    fileattr_bcast_in_t* in = req->input;
+    int gfid = (int) in->gfid;
+    int attr_op = (int) in->attrop;
+    unifyfs_file_attr_t* attrs = &(in->attr);
+
+    LOGDBG("gfid=%d", gfid);
+
+    /* update file attributes */
+    int ret = sm_set_fileattr(gfid, attr_op, attrs);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("set_fileattr(gfid=%d, op=%d) failed - rc=%d",
+               gfid, attr_op, ret);
+    }
+    collective_set_local_retval(req->coll, ret);
+
+    /* create a ULT to finish broadcast operation */
+    ret = invoke_bcast_progress_rpc(req->coll);
+
+    return ret;
+}
+
+static int process_laminate_bcast_rpc(server_rpc_req_t* req)
+{
+    /* get target file and extents */
+    laminate_bcast_in_t* in = req->input;
+    int gfid = (int) in->gfid;
+    size_t num_extents = (size_t) in->num_extents;
+    unifyfs_file_attr_t* fattr = &(in->attr);
+    extent_metadata* extents = req->bulk_buf;
+
+    LOGDBG("gfid=%d num_extents=%zu", gfid, num_extents);
+
+    /* update inode file attributes. first check to make sure
+     * inode for the gfid exists. if it doesn't, create it with
+     * given attrs. otherwise, just do a metadata update. */
+    unifyfs_file_attr_t existing_fattr;
+    int ret = unifyfs_inode_metaget(gfid, &existing_fattr);
+    if (ret == ENOENT) {
+        /* create with is_laminated=0 so we can add extents */
+        fattr->is_laminated = 0;
+        ret = unifyfs_inode_create(gfid, fattr);
+        if (ret != UNIFYFS_SUCCESS) {
+            LOGERR("inode create during laminate(gfid=%d) failed  - rc=%d",
+                   gfid, ret);
+        }
+        fattr->is_laminated = 1;
+    }
+
+    /* add extents */
+    ret = sm_add_extents(gfid, num_extents, extents);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("extent add during laminate(gfid=%d) failed - rc=%d",
+               gfid, ret);
+        collective_set_local_retval(req->coll, ret);
+    }
+
+    /* mark as laminated with passed attributes */
+    int attr_op = UNIFYFS_FILE_ATTR_OP_LAMINATE;
+    ret = sm_set_fileattr(gfid, attr_op, fattr);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("metaset during laminate(gfid=%d) failed - rc=%d",
+               gfid, ret);
+        collective_set_local_retval(req->coll, ret);
+    }
+
+    /* create a ULT to finish broadcast operation */
+    ret = invoke_bcast_progress_rpc(req->coll);
+
+    return ret;
+}
+
+static int process_transfer_bcast_rpc(server_rpc_req_t* req)
+{
+    /* get target file and requested file size */
+    transfer_bcast_in_t* in = req->input;
+    int src_rank      = (int) in->root;
+    int gfid          = (int) in->gfid;
+    int transfer_mode = (int) in->mode;
+    const char* dest_file = (const char*) in->dst_file;
+
+    LOGDBG("gfid=%d dest_file=%s", gfid, dest_file);
+
+    /* do file transfer */
+    int ret = sm_transfer(src_rank, -1, -1, -1, gfid, transfer_mode,
+                          dest_file, req->coll);
+    if (UNIFYFS_SUCCESS != ret) {
+        /* submission of transfer request failed */
+        LOGERR("sm_transfer() failed for gfid=%d - rc=%d",
+               gfid, ret);
+        collective_set_local_retval(req->coll, ret);
+
+        /* create a ULT to finish broadcast operation */
+        invoke_bcast_progress_rpc(req->coll);
+    }
+    /* when sm_transfer() returns SUCCESS, we assume a transfer thread will
+     * be spawned, and that it will progress the broadcast collective after
+     * completing its data transfers */
+
+    return ret;
+}
+
+static int process_truncate_bcast_rpc(server_rpc_req_t* req)
+{
+    /* get target file and requested file size */
+    truncate_bcast_in_t* in = req->input;
+    int gfid = (int) in->gfid;
+    size_t fsize = (size_t) in->filesize;
+
+    LOGDBG("gfid=%d size=%zu", gfid, fsize);
+
+    /* apply truncation to local file state */
+    int ret = unifyfs_inode_truncate(gfid, (unsigned long)fsize);
+    if (ret != UNIFYFS_SUCCESS) {
+        /* owner is root of broadcast tree */
+        int is_owner = ((int)(in->root) == glb_pmi_rank);
+        if ((ret == ENOENT) && !is_owner) {
+            /* it's ok if inode doesn't exist at non-owners */
+            ret = UNIFYFS_SUCCESS;
+        } else {
+            LOGERR("truncate(gfid=%d, size=%zu) failed - rc=%d",
+                   gfid, fsize, ret);
+        }
+    }
+    collective_set_local_retval(req->coll, ret);
+
+    /* create a ULT to finish broadcast operation */
+    ret = invoke_bcast_progress_rpc(req->coll);
+
+    return ret;
+}
+
+static int process_unlink_bcast_rpc(server_rpc_req_t* req)
+{
+    /* get target file and requested file size */
+    unlink_bcast_in_t* in = req->input;
+    int gfid = (int) in->gfid;
+
+    LOGDBG("gfid=%d", gfid);
+
+    /* apply truncation to local file state */
+    int ret = unifyfs_inode_unlink(gfid);
+    if (ret != UNIFYFS_SUCCESS) {
+        /* owner is root of broadcast tree */
+        int is_owner = ((int)(in->root) == glb_pmi_rank);
+        if ((ret == ENOENT) && !is_owner) {
+            /* it's ok if inode doesn't exist at non-owners */
+            ret = UNIFYFS_SUCCESS;
+        } else {
+            LOGERR("unlink(gfid=%d) failed - rc=%d", gfid, ret);
+        }
+    }
+    collective_set_local_retval(req->coll, ret);
+
+    /* create a ULT to finish broadcast operation */
+    ret = invoke_bcast_progress_rpc(req->coll);
+
+    return ret;
+}
+
+static int process_service_requests(void)
+{
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
+
+    /* this will hold a list of client requests if we find any */
+    arraylist_t* svc_reqs = NULL;
+
+    /* lock to access requests */
+    SM_REQ_LOCK();
+
+    /* if we have any requests, take pointer to the list
+     * of requests and replace it with a newly allocated
+     * list on the request manager structure */
+    int num_svc_reqs = arraylist_size(sm->svc_reqs);
+    if (num_svc_reqs) {
+        /* got some client requets, take the list and replace
+         * it with an empty list */
+        LOGDBG("processing %d service requests", num_svc_reqs);
+        svc_reqs = sm->svc_reqs;
+        sm->svc_reqs = arraylist_create(0);
+    }
+
+    /* release lock on sm requests */
+    SM_REQ_UNLOCK();
+
+    /* iterate over each client request */
+    for (int i = 0; i < num_svc_reqs; i++) {
+        /* process next request */
+        int rret;
+        server_rpc_req_t* req = (server_rpc_req_t*)
+            arraylist_get(svc_reqs, i);
+        switch (req->req_type) {
+        case UNIFYFS_SERVER_RPC_CHUNK_READ:
+            rret = process_chunk_read_rpc(req);
+            break;
+        case UNIFYFS_SERVER_RPC_EXTENTS_ADD:
+            rret = process_add_extents_rpc(req);
+            break;
+        case UNIFYFS_SERVER_RPC_EXTENTS_FIND:
+            rret = process_find_extents_rpc(req);
+            break;
+        case UNIFYFS_SERVER_RPC_FILESIZE:
+            rret = process_filesize_rpc(req);
+            break;
+        case UNIFYFS_SERVER_RPC_LAMINATE:
+            rret = process_laminate_rpc(req);
+            break;
+        case UNIFYFS_SERVER_RPC_METAGET:
+            rret = process_metaget_rpc(req);
+            break;
+        case UNIFYFS_SERVER_RPC_METASET:
+            rret = process_metaset_rpc(req);
+            break;
+        case UNIFYFS_SERVER_RPC_PID_REPORT:
+            rret = process_server_pid_rpc(req);
+            break;
+        case UNIFYFS_SERVER_RPC_TRANSFER:
+            rret = process_transfer_rpc(req);
+            break;
+        case UNIFYFS_SERVER_RPC_TRUNCATE:
+            rret = process_truncate_rpc(req);
+            break;
+        case UNIFYFS_SERVER_BCAST_RPC_EXTENTS:
+            rret = process_extents_bcast_rpc(req);
+            break;
+        case UNIFYFS_SERVER_BCAST_RPC_FILEATTR:
+            rret = process_fileattr_bcast_rpc(req);
+            break;
+        case UNIFYFS_SERVER_BCAST_RPC_LAMINATE:
+            rret = process_laminate_bcast_rpc(req);
+            break;
+        case UNIFYFS_SERVER_BCAST_RPC_TRANSFER:
+            rret = process_transfer_bcast_rpc(req);
+            break;
+        case UNIFYFS_SERVER_BCAST_RPC_TRUNCATE:
+            rret = process_truncate_bcast_rpc(req);
+            break;
+        case UNIFYFS_SERVER_BCAST_RPC_UNLINK:
+            rret = process_unlink_bcast_rpc(req);
+            break;
+        default:
+            LOGERR("unsupported server rpc request type %d", req->req_type);
+            rret = UNIFYFS_ERROR_NYI;
+            break;
+        }
+        if (rret != UNIFYFS_SUCCESS) {
+            if ((rret != ENOENT) && (rret != EEXIST)) {
+                LOGERR("server rpc request %d failed (%s)",
+                       i, unifyfs_rc_enum_description(rret));
+            }
+            ret = rret;
+        }
+    }
+
+    /* free the list if we have one */
+    if (NULL != svc_reqs) {
+        /* NOTE: this will call free() on each req in the arraylist */
+        arraylist_free(svc_reqs);
+    }
+
+    return ret;
+}
+
 /* Entry point for service manager thread. The SM thread
  * runs in a loop processing read request replies until
  * the main server thread asks it to exit. The read requests
@@ -350,205 +1437,95 @@ void* service_manager_thread(void* arg)
 {
     int rc;
 
-    LOGDBG("I am the service manager thread!");
+    sm->tid = unifyfs_gettid();
+    LOGINFO("I am the service manager thread!");
     assert(sm == (svcmgr_state_t*)arg);
 
-    /* handle chunk reads until signaled to exit */
+#if defined(USE_SVCMGR_PROGRESS_TIMER)
+    int have_progress_timer = 0;
+    timer_t progress_timer;
+    struct itimerspec alarm_set = { {0}, {0} };
+    struct itimerspec alarm_reset = { {0}, {0} };
+    rc = timer_create(CLOCK_REALTIME, NULL, &progress_timer);
+    if (rc != 0) {
+        LOGERR("failed to create progress timer");
+    } else {
+        have_progress_timer = 1;
+        alarm_set.it_value.tv_sec = 60;
+    }
+#endif
+
+    /* handle requests until told to exit */
     while (1) {
+
+#if defined(USE_SVCMGR_PROGRESS_TIMER)
+        if (have_progress_timer) {
+            /* set a progress alarm for one minute */
+            rc = timer_settime(progress_timer, 0, &alarm_set, NULL);
+        }
+#endif
+
+        rc = process_service_requests();
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGWARN("failed to process service requests");
+        }
+
         rc = send_chunk_read_responses();
         if (rc != UNIFYFS_SUCCESS) {
             LOGERR("failed to send chunk read responses");
         }
 
+        rc = spawn_local_transfers();
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to send chunk read responses");
+        }
+
+#if defined(USE_SVCMGR_PROGRESS_TIMER)
+        if (have_progress_timer) {
+            /* cancel progress alarm */
+            rc = timer_settime(progress_timer, 0, &alarm_reset, NULL);
+        }
+#endif
+
+        /* inform dispatcher that we're waiting for work
+         * inside the critical section */
+        SM_LOCK();
+        sm->waiting_for_work = 1;
+
+        /* release lock and wait to be signaled by dispatcher */
+        //LOGDBG("SM waiting for work");
+        struct timespec timeout;
+        clock_gettime(CLOCK_REALTIME, &timeout);
+        timeout.tv_nsec += 50000000; /* 50 ms */
+        if (timeout.tv_nsec >= 1000000000) {
+            timeout.tv_nsec -= 1000000000;
+            timeout.tv_sec++;
+        }
+        int wait_rc = pthread_cond_timedwait(&(sm->thrd_cond),
+                                             &(sm->thrd_lock),
+                                             &timeout);
+        if (0 == wait_rc) {
+            LOGDBG("SM got work");
+        } else if (ETIMEDOUT != wait_rc) {
+            LOGERR("SM work condition wait failed (rc=%d)", wait_rc);
+        }
+
+        /* set flag to indicate we're no longer waiting */
+        sm->waiting_for_work = 0;
+        SM_UNLOCK();
+
+        rc = complete_local_transfers();
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to complete local transfers");
+        }
+
         if (sm->time_to_exit) {
             break;
         }
-
-        /* wait an interval */
-        usleep(MIN_USLEEP_INTERVAL);
     }
 
     LOGDBG("service manager thread exiting");
 
-    sm->sm_exit_rc = (int)UNIFYFS_SUCCESS;
+    sm->sm_exit_rc = UNIFYFS_SUCCESS;
     return NULL;
 }
-
-/* BEGIN MARGO SERVER-SERVER RPC INVOCATION FUNCTIONS */
-
-/* invokes the chunk_read_response rpc, this sends a set of read
- * reply headers and corresponding data back to a server that
- * had requested we read data on its behalf, the headers and
- * data are posted as a bulk transfer buffer */
-int invoke_chunk_read_response_rpc(server_chunk_reads_t* scr)
-{
-    /* assume we'll succeed */
-    int rc = UNIFYFS_SUCCESS;
-
-    /* rank of destination server */
-    int dst_rank = scr->rank;
-    assert(dst_rank < (int)glb_num_servers);
-
-    /* get address of destinaton server */
-    hg_addr_t dst_addr = glb_servers[dst_rank].margo_svr_addr;
-
-    /* pointer to struct containing rpc context info,
-     * shorter name for convience */
-    ServerRpcContext_t* ctx = unifyfsd_rpc_context;
-
-    /* get handle to read response rpc on destination server */
-    hg_handle_t handle;
-    hg_id_t resp_id = ctx->rpcs.chunk_read_response_id;
-    hg_return_t hret = margo_create(ctx->svr_mid, dst_addr,
-                                    resp_id, &handle);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_create() failed");
-        return UNIFYFS_ERROR_MARGO;
-    }
-
-    /* get address and size of our response buffer */
-    void* data_buf    = (void*)scr->resp;
-    hg_size_t bulk_sz = scr->total_sz;
-
-    /* register our response buffer for bulk remote read access */
-    chunk_read_response_in_t in;
-    hret = margo_bulk_create(ctx->svr_mid, 1, &data_buf, &bulk_sz,
-                             HG_BULK_READ_ONLY, &in.bulk_handle);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_bulk_create() failed");
-        return UNIFYFS_ERROR_MARGO;
-    }
-
-    /* fill in input struct */
-    in.src_rank  = (int32_t)glb_pmi_rank;
-    in.app_id    = (int32_t)scr->app_id;
-    in.client_id = (int32_t)scr->client_id;
-    in.req_id    = (int32_t)scr->rdreq_id;
-    in.num_chks  = (int32_t)scr->num_chunks;
-    in.bulk_size = bulk_sz;
-
-    /* call the read response rpc */
-    LOGDBG("invoking the chunk-read-response rpc function");
-    hret = margo_forward(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward() failed");
-        rc = UNIFYFS_ERROR_MARGO;
-    } else {
-        /* rpc executed, now decode response */
-        chunk_read_response_out_t out;
-        hret = margo_get_output(handle, &out);
-        if (hret == HG_SUCCESS) {
-            rc = (int)out.ret;
-            LOGDBG("chunk-read-response rpc to %d - ret=%d",
-                   dst_rank, rc);
-            margo_free_output(handle, &out);
-        } else {
-            LOGERR("margo_get_output() failed");
-            rc = UNIFYFS_ERROR_MARGO;
-        }
-    }
-
-    /* free resources allocated for executing margo rpc */
-    margo_bulk_free(in.bulk_handle);
-    margo_destroy(handle);
-
-    /* free response data buffer */
-    free(data_buf);
-    scr->resp = NULL;
-
-    return rc;
-}
-
-/* BEGIN MARGO SERVER-SERVER RPC HANDLERS */
-
-/* handler for server-server chunk read request */
-static void chunk_read_request_rpc(hg_handle_t handle)
-{
-    int32_t ret = UNIFYFS_SUCCESS;
-
-    /* get input params */
-    chunk_read_request_in_t in;
-    hg_return_t hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_input() failed");
-        ret = UNIFYFS_ERROR_MARGO;
-    } else {
-        /* extract params from input struct */
-        int src_rank   = (int)in.src_rank;
-        int app_id     = (int)in.app_id;
-        int client_id  = (int)in.client_id;
-        int req_id     = (int)in.req_id;
-        int num_chks   = (int)in.num_chks;
-        size_t bulk_sz = (size_t)in.bulk_size;
-
-        LOGDBG("handling chunk read request from server %d: "
-               "req=%d num_chunks=%d bulk_sz=%zu",
-               src_rank, req_id, num_chks, bulk_sz);
-
-        /* get margo info */
-        const struct hg_info* hgi = margo_get_info(handle);
-        assert(NULL != hgi);
-
-        margo_instance_id mid = margo_hg_info_get_instance(hgi);
-        assert(mid != MARGO_INSTANCE_NULL);
-
-        hg_bulk_t bulk_handle;
-        int reqcmd = (int)SVC_CMD_INVALID;
-        void* reqbuf = NULL;
-        if (bulk_sz) {
-            /* allocate and register local target buffer for bulk access */
-            reqbuf = malloc(bulk_sz);
-            if (NULL != reqbuf) {
-                hret = margo_bulk_create(mid, 1, &reqbuf, &in.bulk_size,
-                                        HG_BULK_WRITE_ONLY, &bulk_handle);
-                if (hret != HG_SUCCESS) {
-                    LOGERR("margo_bulk_create() failed");
-                    ret = UNIFYFS_ERROR_MARGO;
-                } else {
-                    /* pull request data */
-                    hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
-                                               in.bulk_handle, 0,
-                                               bulk_handle, 0, in.bulk_size);
-                    if (hret != HG_SUCCESS) {
-                        LOGERR("margo_bulk_transfer() failed");
-                        ret = UNIFYFS_ERROR_MARGO;
-                    } else {
-                        /* first int in request buffer is the command */
-                        reqcmd = *(int*)reqbuf;
-
-                        /* verify this is a request for data */
-                        if (reqcmd == (int)SVC_CMD_RDREQ_CHK) {
-                            /* chunk read request command */
-                            LOGDBG("request command: SVC_CMD_RDREQ_CHK");
-                            ret = sm_issue_chunk_reads(src_rank,
-                                                       app_id, client_id,
-                                                       req_id, num_chks,
-                                                       (char*)reqbuf);
-                        } else {
-                            LOGERR("invalid command %d from server %d",
-                                   reqcmd, src_rank);
-                            ret = EINVAL;
-                        }
-                    }
-                    margo_bulk_free(bulk_handle);
-                }
-                free(reqbuf);
-            } else {
-                ret = ENOMEM;
-            }
-        }
-        margo_free_input(handle, &in);
-    }
-
-    /* return output to caller */
-    chunk_read_request_out_t out;
-    out.ret = ret;
-    hret = margo_respond(handle, &out);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_respond() failed");
-    }
-
-    /* free margo resources */
-    margo_destroy(handle);
-}
-DEFINE_MARGO_RPC_HANDLER(chunk_read_request_rpc)

@@ -141,8 +141,9 @@ static int unifyfs_cstr2fstr(const char* cstr, char* fstr, int flen)
 
 FORTRAN_API
 void FORT_CALL unifyfs_mount_(char* prefix FORT_MIXED_LEN(prefix_len),
-                              int* rank, int* size, int* app_id,
-                              int* ierror FORT_END_LEN(prefix_len))
+                              int* rank, int* size,
+                              int* ierror
+                              FORT_END_LEN(prefix_len))
 {
     /* convert name from a Fortran string to C string */
     char prefix_tmp[1024];
@@ -155,8 +156,7 @@ void FORT_CALL unifyfs_mount_(char* prefix FORT_MIXED_LEN(prefix_len),
 
     int rank_tmp = *rank;
     int size_tmp = *size;
-    int app_id_tmp = *app_id;
-    *ierror = unifyfs_mount(prefix_tmp, rank_tmp, size_tmp, app_id_tmp);
+    *ierror = unifyfs_mount(prefix_tmp, rank_tmp, size_tmp);
     return;
 }
 
