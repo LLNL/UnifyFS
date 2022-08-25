@@ -2,7 +2,7 @@ name: UnifyFS Build and Test
 
 on:
   pull_request:
-    branches: [ dev ]
+    branches: [ main, dev ]
   push:
 
 jobs:
