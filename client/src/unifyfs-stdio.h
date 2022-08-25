@@ -44,6 +44,7 @@
 #define UNIFYFS_STDIO_H
 
 #include "unifyfs-internal.h"
+#include "unifyfs_wrap.h"
 
 /* TODO: declare the wrapper functions we define in unifyfs-stdio.c
  * so other routines can call them */
@@ -103,8 +104,5 @@ UNIFYFS_DECL(fwide,     int, (FILE* stream, int mode));
 UNIFYFS_DECL(getwc,     wint_t, (FILE* stream));
 UNIFYFS_DECL(putwc,     wint_t, (wchar_t c, FILE* stream));
 UNIFYFS_DECL(ungetwc,   wint_t, (wint_t c, FILE* stream));
-
-UNIFYFS_DECL(chmod,     int, (const char* path, mode_t mode));
-UNIFYFS_DECL(fchmod,    int, (int fd, mode_t mode));
 
 #endif /* UNIFYFS_STDIO_H */

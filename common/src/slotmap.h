@@ -25,6 +25,8 @@ extern "C" {
 typedef struct slot_map {
     size_t total_slots;
     size_t used_slots;
+    ssize_t first_used_slot;
+    ssize_t last_used_slot;
 } slot_map;
 
 /* The slot usage bitmap immediately follows the structure in memory.

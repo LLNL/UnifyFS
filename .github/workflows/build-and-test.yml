@@ -1,0 +1,140 @@
+name: UnifyFS Build and Test
+
+on:
+  pull_request:
+    branches: [ main, dev ]
+  push:
+
+jobs:
+  checkpatch:
+    runs-on: [ ubuntu-latest ]
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 2
+
+    - name: Checkpatch
+      run: |
+        eval $(git log HEAD^..HEAD | sed "s/^ *//g" | grep '^TEST_.*=')
+        export TEST_CHECKPATCH_SKIP_FILES
+        (git diff HEAD^..HEAD | ./scripts/checkpatch.sh origin/dev..HEAD) || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
+
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest ]
+        compiler: [ gcc ]
+        gcc: [ 7, 8, 9, 10, 11 ]
+
+    name: ${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.gcc }}
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      CC: gcc-${{ matrix.gcc }}
+      CXX: g++-${{ matrix.gcc }}
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up GCC
+      uses: egor-tensin/setup-gcc@v1
+      with:
+        version: ${{ matrix.gcc }}
+
+    - name: Install additional packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install libtool-bin
+        sudo apt-get install openmpi-bin
+        sudo apt-get install libopenmpi-dev
+
+    - name: Install Spack
+      uses: kzscisoft/install-spack@v1
+
+    - name: Set up packages.yaml
+      run: |
+        test -f $GITHUB_WORKSPACE/.spack/etc/spack/packages.yaml || cat > $GITHUB_WORKSPACE/.spack/etc/spack/packages.yaml << 'EOF'
+        packages:
+          all:
+            target: [x86_64]
+            providers:
+              mpi: [openmpi]
+          autoconf:
+            buildable: False
+            externals:
+            - spec: "autoconf@2.69"
+              prefix: /usr
+          automake:
+            buildable: False
+            externals:
+            - spec: "automake@1.16.1"
+              prefix: /usr
+          cmake:
+            buildable: False
+            externals:
+            - spec: "cmake@3.22.1"
+              prefix: /usr
+          libtool:
+            buildable: False
+            externals:
+            - spec: "libtool@2.4.6"
+              prefix: /usr
+          m4:
+            buildable: False
+            externals:
+            - spec: "m4@1.4.18"
+              prefix: /usr
+          openmpi:
+            buildable: False
+            externals:
+            - spec: "openmpi@4.0.3"
+              prefix: /usr
+          pkg-config:
+            buildable: False
+            externals:
+            - spec: "pkg-config@0.29.1"
+              prefix: /usr
+        EOF
+        spack compiler find --scope=user
+        if [[ $CC == 'gcc-7' ]]; then
+          spack config add "packages:all:compiler:[gcc@7.5.0]"
+        elif [[ $CC == 'gcc-8' ]]; then
+          spack config add "packages:all:compiler:[gcc@8.4.0]"
+        elif [[ $CC == 'gcc-9' ]]; then
+          spack config add "packages:all:compiler:[gcc@9.3.0]"
+        elif [[ $CC == 'gcc-11' ]]; then
+          spack config add "packages:all:compiler:[gcc@11.1.0]"
+        else
+          spack config add "packages:all:compiler:[gcc@10.3.0]"
+        fi
+
+    - name: Install UnifyFS dependencies
+      run: |
+        spack install gotcha@develop
+        spack install mochi-margo@0.9.6 ^mercury~boostsys ^libfabric@1.12.1 fabrics=rxm,sockets,tcp
+        spack install spath~mpi
+        echo "GOTCHA_INSTALL=$(spack location -i gotcha)" >> $GITHUB_ENV
+        echo "SPATH_INSTALL=$(spack location -i spath)" >> $GITHUB_ENV
+
+    - name: Configure and Build
+      run: |
+        source $GITHUB_WORKSPACE/.spack/share/spack/setup-env.sh
+        spack load gotcha && spack load argobots && spack load mercury && spack load mochi-margo && spack load spath
+        ./autogen.sh
+        ./configure CC=$CC --with-gotcha=$GOTCHA_INSTALL --with-spath=$SPATH_INSTALL --enable-fortran
+        make V=1
+
+    - name: Unit Tests
+      run: |
+        source $GITHUB_WORKSPACE/.spack/share/spack/setup-env.sh
+        spack load gotcha && spack load argobots && spack load mercury && spack load mochi-margo && spack load spath
+        cd t && make check
+
+    - name: After failure
+      if: ${{ failure() }}
+      run: |
+        cat $GITHUB_WORKSPACE/config.log
+        cat $GITHUB_WORKSPACE/t/test-suite.log

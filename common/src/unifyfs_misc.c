@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2022, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2020, UT-Battelle, LLC.
+ * Copyright 2022, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -20,8 +20,10 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+#include "unifyfs_misc.h"
+
 /*
- * Re-implementation of BSD's strlcpy() function.
+ * Implementation of BSD's strlcpy() function.
  *
  * This is a basically a safer version of strlncpy() since it always
  * NULL-terminates the buffer.  Google 'strlcpy' for full documentation.
@@ -43,24 +45,37 @@ size_t strlcpy(char* dest, const char* src, size_t size)
 }
 
 /*
- * This is a re-implementation of the Linux kernel's scnprintf() function.
+ * Implementation of the Linux kernel's scnprintf() function.
  *
  * It's snprintf() but returns the number of chars actually written into buf[]
  * not including the '\0'.  It also avoids the -Wformat-truncation warnings.
  */
 int scnprintf(char* buf, size_t size, const char* fmt, ...)
 {
-        va_list args;
-        int rc;
+    va_list args;
+    int rc;
 
-        va_start(args, fmt);
-        rc = vsnprintf(buf, size, fmt, args);
-        va_end(args);
+    va_start(args, fmt);
+    rc = vsnprintf(buf, size, fmt, args);
+    va_end(args);
 
-        if (rc >= size) {
-                /* We truncated */
-                return size - 1;
-        }
+    if (rc >= size) {
+        /* We truncated */
+        return size - 1;
+    }
 
-        return rc;
+    return rc;
+}
+
+
+/* Calculate timestamp difference in seconds */
+double timediff_sec(struct timeval* before, struct timeval* after)
+{
+    double diff;
+    if (!before || !after) {
+        return -1.0F;
+    }
+    diff = (double)(after->tv_sec - before->tv_sec);
+    diff += 0.000001 * ((double)(after->tv_usec) - (double)(before->tv_usec));
+    return diff;
 }

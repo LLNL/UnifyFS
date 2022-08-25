@@ -158,6 +158,8 @@ test_fixed=0
 test_broken=0
 test_success=0
 
+declare -a failed_tests_list=()
+
 die() {
 	code=$?
 	if test -n "$EXIT_OK"; then
@@ -270,6 +272,7 @@ test_ok_() {
 test_failure_() {
 	test_failure=$(($test_failure + 1))
 	say_color error "not ok $test_count - $1"
+	failed_tests_list+=("$test_count - $1")
 	shift
 	echo "$@" | sed -e 's/^/#	/'
 	test "$immediate" = "" || { EXIT_OK=t; exit 1; }
@@ -658,7 +661,7 @@ test_path_is_dir () {
 # Check if the directory exists and is empty as expected, barf otherwise.
 test_dir_is_empty () {
 	test_path_is_dir "$1" &&
-	if test -n "$(ls -a1 "$1" | egrep -v '^\.\.?$')"
+	if test -n "$(ls -a1 "$1" | egrep -v '^\.\.?/?$')"
 	then
 		echo "Directory '$1' is not empty, it contains:"
 		ls -la "$1"
@@ -784,6 +787,8 @@ test_done() {
 	*)
 		say_color error "# failed $test_failure among $msg"
 		say "1..$test_count"
+		say "Failed tests list:"
+		printf '%s\n' "${failed_tests_list[@]}"
 
 		exit 1 ;;
 

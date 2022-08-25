@@ -37,7 +37,6 @@
 const char* const key_unifyfsd_socket    = "unifyfsd.socket";
 const char* const key_unifyfsd_margo_shm = "unifyfsd.margo-shm";
 const char* const key_unifyfsd_margo_svr = "unifyfsd.margo-svr";
-const char* const key_unifyfsd_pmi_rank  = "unifyfsd.pmi-rank";
 
 // key-value store state
 static int kv_initialized; // = 0
@@ -58,6 +57,9 @@ static size_t kv_max_vallen; // = 0
 # define UNIFYFS_MAX_KV_VALLEN 4096
 #endif
 
+/* PMI information */
+int glb_pmi_rank = -1;
+int glb_pmi_size; /* = 0 */
 
 //--------------------- PMI2 K-V Store ---------------------
 #if defined(USE_PMI2)
@@ -127,11 +129,16 @@ static void unifyfs_pmi2_errstr(int rc)
 }
 
 // initialize PMI2
-static int unifyfs_pmi2_init(void)
+int unifyfs_pmi2_init(void)
 {
     int nprocs, rank, rc, val, len, found;
     int pmi_world_rank = -1;
     int pmi_world_nprocs = -1;
+
+    /* return success if we're already initialized */
+    if (pmi2_initialized) {
+        return (int)UNIFYFS_SUCCESS;
+    }
 
     kv_max_keylen = PMI2_MAX_KEYLEN;
     kv_max_vallen = PMI2_MAX_VALLEN;
@@ -191,6 +198,9 @@ static int unifyfs_pmi2_init(void)
     kv_myrank = pmi_world_rank;
     kv_nranks = pmi_world_nprocs;
 
+    glb_pmi_rank = kv_myrank;
+    glb_pmi_size = kv_nranks;
+
     LOGDBG("PMI2 Job Id: %s, Rank: %d of %d, hasNameServer=%d", pmi_jobid,
            kv_myrank, kv_nranks, pmi2_has_nameserv);
 
@@ -239,6 +249,26 @@ static int unifyfs_pmi2_lookup(const char* key,
         LOGERR("PMI2_KVS_Get(%s) failed: %s", key, pmi2_errstr);
         return (int)UNIFYFS_ERROR_PMI;
     }
+
+    // HACK: replace '!' with ';' for SLURM PMI2
+    // This assumes the value does not actually use "!"
+    //
+    // At least one version of SLURM PMI2 seems to use ";"
+    // characters to separate key/value pairs, so the following:
+    //
+    // PMI2_KVS_Put("unifyfs.margo-svr", "ofi+tcp;ofi_rxm://ip:port")
+    //
+    // leads to an error like:
+    //
+    // slurmstepd: error: mpi/pmi2: no value for key ;ofi_rxm://ip:port; in req
+    char* p = pmi2_val;
+    while (*p != '\0') {
+        if (*p == '!') {
+            *p = ';';
+        }
+        p++;
+    }
+
     *oval = strdup(pmi2_val);
     return (int)UNIFYFS_SUCCESS;
 }
@@ -257,6 +287,26 @@ static int unifyfs_pmi2_publish(const char* key,
 
     strncpy(pmi2_key, key, sizeof(pmi2_key));
     strncpy(pmi2_val, val, sizeof(pmi2_val));
+
+    // HACK: replace ';' with '!' for SLURM PMI2
+    // This assumes the value does not actually use "!"
+    //
+    // At least one version of SLURM PMI2 seems to use ";"
+    // characters to separate key/value pairs, so the following:
+    //
+    // PMI2_KVS_Put("unifyfs.margo-svr", "ofi+tcp;ofi_rxm://ip:port")
+    //
+    // leads to an error like:
+    //
+    // slurmstepd: error: mpi/pmi2: no value for key ;ofi_rxm://ip:port; in req
+    char* p = pmi2_val;
+    while (*p != '\0') {
+        if (*p == ';') {
+            *p = '!';
+        }
+        p++;
+    }
+
     rc = PMI2_KVS_Put(pmi2_key, pmi2_val);
     if (rc != PMI2_SUCCESS) {
         unifyfs_pmi2_errstr(rc);
@@ -294,13 +344,18 @@ static pmix_proc_t pmix_myproc;
 #endif
 
 // initialize PMIx
-static int unifyfs_pmix_init(void)
+int unifyfs_pmix_init(void)
 {
     int rc;
     size_t pmix_univ_nprocs;
     pmix_value_t value;
     pmix_value_t* valp = &value;
     pmix_proc_t proc;
+
+    /* return success if we're already initialized */
+    if (pmix_initialized) {
+        return (int)UNIFYFS_SUCCESS;
+    }
 
     /* init PMIx */
     PMIX_PROC_CONSTRUCT(&pmix_myproc);
@@ -313,20 +368,32 @@ static int unifyfs_pmix_init(void)
     kv_max_keylen = PMIX_MAX_KEYLEN;
     kv_max_vallen = PMIX_MAX_VALLEN;
 
-    /* get PMIx universe size */
+    /* get PMIx job size */
     PMIX_PROC_CONSTRUCT(&proc);
-    (void)strncpy(proc.nspace, pmix_myproc.nspace, PMIX_MAX_NSLEN);
+    strlcpy(proc.nspace, pmix_myproc.nspace, PMIX_MAX_NSLEN);
     proc.rank = PMIX_RANK_WILDCARD;
-    rc = PMIx_Get(&proc, PMIX_UNIV_SIZE, NULL, 0, &valp);
+
+    // Note: we do an extra copy because passing PMIX_JOB_SIZE directly to
+    // PMIx_Get() causes gcc 11 to generate a warning due to the fact that
+    // PMIX_JOB_SIZE evaluates to a 14 byte char array while pmix_key_t is
+    // (at least) 64 bytes.
+    pmix_key_t key;
+    strlcpy(key, PMIX_JOB_SIZE, sizeof(pmix_key_t));
+    rc = PMIx_Get(&proc, key, NULL, 0, &valp);
+
     if (rc != PMIX_SUCCESS) {
-        LOGERR("PMIx rank %d: PMIx_Get(UNIV_SIZE) failed: %s",
+        LOGERR("PMIx rank %d: PMIx_Get(JOB_SIZE) failed: %s",
                pmix_myproc.rank, PMIx_Error_string(rc));
         return (int)UNIFYFS_ERROR_PMI;
     }
     pmix_univ_nprocs = (size_t) valp->data.uint32;
+    LOGDBG("PMIX_JOB_SIZE: %d", pmix_univ_nprocs);
 
     kv_myrank = pmix_myproc.rank;
     kv_nranks = (int)pmix_univ_nprocs;
+
+    glb_pmi_rank = kv_myrank;
+    glb_pmi_size = kv_nranks;
 
     LOGDBG("PMIX Job Id: %s, Rank: %d of %d", pmix_myproc.nspace,
            kv_myrank, kv_nranks);
@@ -389,7 +456,7 @@ static int unifyfs_pmix_lookup(const char* key,
     }
 
     /* set key to lookup */
-    strncpy(pmix_key, key, sizeof(pmix_key));
+    strlcpy(pmix_key, key, sizeof(pmix_key));
     PMIX_PDATA_CREATE(pdata, 1);
     PMIX_PDATA_LOAD(&pdata[0], &pmix_myproc, pmix_key, NULL, PMIX_STRING);
 
@@ -440,7 +507,7 @@ static int unifyfs_pmix_publish(const char* key,
     }
 
     /* set key-val and modify publish behavior */
-    strncpy(pmix_key, key, sizeof(pmix_key));
+    strlcpy(pmix_key, key, sizeof(pmix_key));
     range = PMIX_RANGE_GLOBAL;
     ninfo = 2;
     PMIX_INFO_CREATE(info, ninfo);
@@ -490,7 +557,6 @@ static int unifyfs_fskv_init(unifyfs_cfg_t* cfg)
     int rc, err;
     struct stat s;
 
-
     if (NULL == cfg) {
         LOGERR("NULL config");
         return EINVAL;
@@ -516,7 +582,7 @@ static int unifyfs_fskv_init(unifyfs_cfg_t* cfg)
             err = errno;
             if ((rc != 0) && (err != EEXIST)) {
                 LOGERR("failed to create local kvstore directory %s - %s",
-                    localfs_kvdir, strerror(err));
+                       localfs_kvdir, strerror(err));
                 return (int)UNIFYFS_ERROR_KEYVAL;
             }
         } else {
@@ -525,39 +591,45 @@ static int unifyfs_fskv_init(unifyfs_cfg_t* cfg)
         }
     }
 
-    if ((UNIFYFS_SERVER == cfg->ptype) && (NULL != cfg->sharedfs_dir)) {
-        // find or create shared kvstore directory
-        snprintf(sharedfs_kvdir, sizeof(sharedfs_kvdir), "%s/kvstore",
-                 cfg->sharedfs_dir);
-        memset(&s, 0, sizeof(struct stat));
-        rc = stat(sharedfs_kvdir, &s);
-        if (rc != 0) {
-            // try to create it
-            rc = mkdir(sharedfs_kvdir, 0770);
-            err = errno;
-            if ((rc != 0) && (err != EEXIST)) {
-                LOGERR("failed to create kvstore directory %s - %s",
-                       sharedfs_kvdir, strerror(err));
-                return (int)UNIFYFS_ERROR_KEYVAL;
+    if (UNIFYFS_SERVER == cfg->ptype) {
+        if (NULL != cfg->sharedfs_dir) {
+            // find or create shared kvstore directory
+            snprintf(sharedfs_kvdir, sizeof(sharedfs_kvdir), "%s/kvstore",
+                     cfg->sharedfs_dir);
+            memset(&s, 0, sizeof(struct stat));
+            rc = stat(sharedfs_kvdir, &s);
+            if (rc != 0) {
+                // try to create it
+                rc = mkdir(sharedfs_kvdir, 0770);
+                err = errno;
+                if ((rc != 0) && (err != EEXIST)) {
+                    LOGERR("failed to create kvstore directory %s - %s",
+                           sharedfs_kvdir, strerror(err));
+                    return (int)UNIFYFS_ERROR_KEYVAL;
+                }
             }
-        }
 
-        // find or create rank-specific subdir
-        scnprintf(sharedfs_rank_kvdir, sizeof(sharedfs_rank_kvdir), "%s/%d",
-                 sharedfs_kvdir, kv_myrank);
-        memset(&s, 0, sizeof(struct stat));
-        rc = stat(sharedfs_rank_kvdir, &s);
-        if (rc != 0) {
-            // try to create it
-            rc = mkdir(sharedfs_rank_kvdir, 0770);
-            err = errno;
-            if ((rc != 0) && (err != EEXIST)) {
-                LOGERR("failed to create rank kvstore directory %s - %s",
-                       sharedfs_rank_kvdir, strerror(err));
-                return (int)UNIFYFS_ERROR_KEYVAL;
+            // find or create rank-specific subdir
+            scnprintf(sharedfs_rank_kvdir, sizeof(sharedfs_rank_kvdir), "%s/%d",
+                      sharedfs_kvdir, kv_myrank);
+            memset(&s, 0, sizeof(struct stat));
+            rc = stat(sharedfs_rank_kvdir, &s);
+            if (rc != 0) {
+                // try to create it
+                rc = mkdir(sharedfs_rank_kvdir, 0770);
+                err = errno;
+                if ((rc != 0) && (err != EEXIST)) {
+                    LOGERR("failed to create rank kvstore directory %s - %s",
+                           sharedfs_rank_kvdir, strerror(err));
+                    return (int)UNIFYFS_ERROR_KEYVAL;
+                }
             }
+            have_sharedfs_kvstore = 1;
+        } else {
+            // Server process, but nobody specified the sharedfs dir
+            LOGERR("can't create kvstore - sharedfs not specified");
+            return (int)UNIFYFS_ERROR_KEYVAL;
         }
-        have_sharedfs_kvstore = 1;
     }
 
     kv_max_keylen = UNIFYFS_MAX_KV_KEYLEN;
@@ -709,6 +781,27 @@ static int unifyfs_fskv_lookup_local(const char* key,
     return (int)UNIFYFS_SUCCESS;
 }
 
+// publish a key-value pair
+static int unifyfs_fskv_publish_local(const char* key,
+                                      const char* val)
+{
+    FILE* kvf;
+    char kvfile[UNIFYFS_MAX_FILENAME];
+
+    scnprintf(kvfile, sizeof(kvfile), "%s/%s",
+             localfs_kvdir, key);
+    kvf = fopen(kvfile, "w");
+    if (NULL == kvf) {
+        LOGERR("failed to create kvstore entry %s", kvfile);
+        return (int)UNIFYFS_ERROR_KEYVAL;
+    }
+    fprintf(kvf, "%s\n", val);
+    fclose(kvf);
+
+    return (int)UNIFYFS_SUCCESS;
+}
+
+#if (!defined(USE_PMI2)) && (!defined(USE_PMIX))
 static int unifyfs_fskv_lookup_remote(int rank,
                                       const char* key,
                                       char** oval)
@@ -739,26 +832,6 @@ static int unifyfs_fskv_lookup_remote(int rank,
     }
 
     *oval = strdup(kvalue);
-    return (int)UNIFYFS_SUCCESS;
-}
-
-// publish a key-value pair
-static int unifyfs_fskv_publish_local(const char* key,
-                                      const char* val)
-{
-    FILE* kvf;
-    char kvfile[UNIFYFS_MAX_FILENAME];
-
-    scnprintf(kvfile, sizeof(kvfile), "%s/%s",
-             localfs_kvdir, key);
-    kvf = fopen(kvfile, "w");
-    if (NULL == kvf) {
-        LOGERR("failed to create kvstore entry %s", kvfile);
-        return (int)UNIFYFS_ERROR_KEYVAL;
-    }
-    fprintf(kvf, "%s\n", val);
-    fclose(kvf);
-
     return (int)UNIFYFS_SUCCESS;
 }
 
@@ -800,6 +873,7 @@ static int unifyfs_fskv_fence(void)
 
     return (int)UNIFYFS_SUCCESS;
 }
+#endif
 
 //--------------------- K-V Store API ---------------------
 
@@ -832,6 +906,7 @@ int unifyfs_keyval_init(unifyfs_cfg_t* cfg,
             kv_nranks = *nranks;
         }
 #endif
+
         // NOTE: do this after getting rank/n_ranks info
         rc = unifyfs_fskv_init(cfg);
         if (rc != (int)UNIFYFS_SUCCESS) {
@@ -847,6 +922,7 @@ int unifyfs_keyval_init(unifyfs_cfg_t* cfg,
     if (NULL != nranks) {
         *nranks = kv_nranks;
     }
+
     return (int)UNIFYFS_SUCCESS;
 }
 
@@ -951,11 +1027,8 @@ int unifyfs_keyval_lookup_remote(int rank,
 #elif defined(USE_PMI2)
     rc = unifyfs_pmi2_lookup(rank_key, oval);
 #else
-    rc = (int)UNIFYFS_FAILURE;
+    rc = unifyfs_fskv_lookup_remote(rank, key, oval);
 #endif
-    if (rc != (int)UNIFYFS_SUCCESS) {
-        rc = unifyfs_fskv_lookup_remote(rank, key, oval);
-    }
     if (rc != (int)UNIFYFS_SUCCESS) {
         LOGERR("remote keyval lookup for '%s' failed", key);
     }
@@ -1035,12 +1108,8 @@ int unifyfs_keyval_publish_remote(const char* key,
 #elif defined(USE_PMI2)
     rc = unifyfs_pmi2_publish(rank_key, val);
 #else
-    rc = (int)UNIFYFS_FAILURE;
+    rc = unifyfs_fskv_publish_remote(key, val);
 #endif
-    if (rc != (int)UNIFYFS_SUCCESS) {
-        rc = unifyfs_fskv_publish_remote(key, val);
-    }
-
     if (rc != (int)UNIFYFS_SUCCESS) {
         LOGERR("remote keyval publish for '%s' failed", key);
     } else {

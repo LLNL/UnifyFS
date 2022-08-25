@@ -12,6 +12,7 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
+#include "margo_server.h"
 #include "unifyfs_inode_tree.h"
 #include "unifyfs_inode.h"
 #include "unifyfs_group_rpc.h"
@@ -22,16 +23,9 @@
 static
 int rpc_init(unifyfs_cfg_t* cfg)
 {
-    int ret = 0;
-    long range_sz = 0;
+    int ret = UNIFYFS_SUCCESS;
 
-    LOGDBG("initializing file operations..");
-
-    ret = configurator_int_val(cfg->meta_range_size, &range_sz);
-    if (ret != 0) {
-        LOGERR("failed to read configuration (meta_range_size)");
-    }
-    meta_slice_sz = (size_t) range_sz;
+    LOGDBG("initializing RPC file operations..");
 
     return ret;
 }
@@ -65,29 +59,11 @@ int rpc_fsync(unifyfs_fops_ctx_t* ctx,
     /* assume we'll succeed */
     int ret = UNIFYFS_SUCCESS;
 
-    /* get memory page size on this machine */
-    int page_sz = (int) get_page_size();
-
     /* get application client */
     app_client* client = get_app_client(ctx->app_id, ctx->client_id);
     if (NULL == client) {
         return EINVAL;
     }
-
-    /* get pointer to superblock for this client and app */
-    shm_context* super_ctx = client->shmem_super;
-    if (NULL == super_ctx) {
-        LOGERR("missing client superblock");
-        return UNIFYFS_FAILURE;
-    }
-    char* superblk = (char*)(super_ctx->addr);
-
-    /* get pointer to start of key/value region in superblock */
-    char* meta = superblk + client->super_meta_offset;
-
-    /* get number of file extent index values client has for us,
-     * stored as a size_t value in meta region of shared memory */
-    size_t num_extents = *(size_t*)(meta);
 
     /* indices are stored in the superblock shared memory
      * created by the client, these are stored as index_t
@@ -96,33 +72,35 @@ int rpc_fsync(unifyfs_fops_ctx_t* ctx,
      * Is it safe to assume that the index information in this superblock is
      * not going to be modified by the client while we perform this operation?
      */
-    char* ptr_extents = meta + page_sz;
+
+    /* get number of file extent index values client has for us,
+     * stored as a size_t value in index region of shared memory */
+    size_t num_extents = *(client->state.write_index.ptr_num_entries);
 
     if (num_extents == 0) {
         return UNIFYFS_SUCCESS;  /* Nothing to do */
     }
 
-    unifyfs_index_t* meta_payload = (unifyfs_index_t*)(ptr_extents);
+    unifyfs_index_t* index_entry = client->state.write_index.index_entries;
 
-    struct extent_tree_node* extents = calloc(num_extents, sizeof(*extents));
-    if (!extents) {
+    /* the sync rpc now contains extents from a single file/gfid */
+    assert(gfid == index_entry[0].gfid);
+
+    extent_metadata* extents = calloc(num_extents, sizeof(*extents));
+    if (NULL == extents) {
         LOGERR("failed to allocate memory for local_extents");
         return ENOMEM;
     }
 
-    /* the sync rpc now contains extents from a single file/gfid */
-    assert(gfid == meta_payload[0].gfid);
-
     for (i = 0; i < num_extents; i++) {
-        struct extent_tree_node* extent = &extents[i];
-        unifyfs_index_t* meta = &meta_payload[i];
-
-        extent->start = meta->file_pos;
-        extent->end = (meta->file_pos + meta->length) - 1;
+        unifyfs_index_t* meta = index_entry + i;
+        extent_metadata* extent = extents + i;
+        extent->start    = meta->file_pos;
+        extent->end      = (meta->file_pos + meta->length) - 1;
         extent->svr_rank = glb_pmi_rank;
-        extent->app_id = ctx->app_id;
-        extent->cli_id = ctx->client_id;
-        extent->pos = meta->log_pos;
+        extent->app_id   = ctx->app_id;
+        extent->cli_id   = ctx->client_id;
+        extent->log_pos  = meta->log_pos;
     }
 
     /* update local inode state first */
@@ -138,6 +116,8 @@ int rpc_fsync(unifyfs_fops_ctx_t* ctx,
         LOGERR("failed to add extents (gfid=%d, ret=%d)", gfid, ret);
     }
 
+    free(extents);
+
     return ret;
 }
 
@@ -147,6 +127,28 @@ int rpc_filesize(unifyfs_fops_ctx_t* ctx,
                  size_t* filesize)
 {
     return unifyfs_invoke_filesize_rpc(gfid, filesize);
+}
+
+static
+int rpc_transfer(unifyfs_fops_ctx_t* ctx,
+                 int transfer_id,
+                 int gfid,
+                 int transfer_mode,
+                 const char* dest_file)
+{
+    if (SERVER_TRANSFER_MODE_OWNER == transfer_mode) {
+        return unifyfs_invoke_transfer_rpc(ctx->app_id, ctx->client_id,
+                                           transfer_id, gfid, transfer_mode,
+                                           dest_file);
+    } else if (SERVER_TRANSFER_MODE_LOCAL == transfer_mode) {
+        return unifyfs_invoke_broadcast_transfer(ctx->app_id, ctx->client_id,
+                                                 transfer_id, gfid,
+                                                 transfer_mode, dest_file);
+    } else {
+        LOGERR("invalid transfer mode=%d");
+        return EINVAL;
+    }
+
 }
 
 static
@@ -168,6 +170,10 @@ static
 int rpc_unlink(unifyfs_fops_ctx_t* ctx,
                int gfid)
 {
+    int ret = unifyfs_inode_unlink(gfid);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("unlink(gfid=%d) failed", gfid);
+    }
     return unifyfs_invoke_broadcast_unlink(gfid);
 }
 
@@ -237,13 +243,13 @@ int create_remote_read_requests(unsigned int n_chunks,
 static
 int submit_read_request(unifyfs_fops_ctx_t* ctx,
                         unsigned int count,
-                        unifyfs_inode_extent_t* extents)
+                        unifyfs_extent_t* extents)
 {
     if ((count == 0) || (NULL == extents)) {
         return EINVAL;
     }
 
-    LOGDBG("handling read request (%u chunk requests)", count);
+    LOGDBG("handling read request (%u extents)", count);
 
     /* see if we have a valid app information */
     int app_id = ctx->app_id;
@@ -264,7 +270,7 @@ int submit_read_request(unifyfs_fops_ctx_t* ctx,
     int ret = UNIFYFS_SUCCESS;
     unsigned int extent_ndx = 0;
     for ( ; extent_ndx < count; extent_ndx++) {
-        unifyfs_inode_extent_t* ext = extents + extent_ndx;
+        unifyfs_extent_t* ext = extents + extent_ndx;
         unsigned int n_chunks = 0;
         chunk_read_req_t* chunks = NULL;
         int rc = unifyfs_invoke_find_extents_rpc(ext->gfid, 1, ext,
@@ -289,19 +295,21 @@ int submit_read_request(unifyfs_fops_ctx_t* ctx,
 
             /* fill the information of server_read_req_t and submit */
             server_read_req_t rdreq = { 0, };
-            rdreq.app_id = app_id;
-            rdreq.client_id = client_id;
-            rdreq.client_mread = client_mread;
-            rdreq.client_read_ndx = extent_ndx;
-            rdreq.chunks = chunks;
+            rdreq.app_id           = app_id;
+            rdreq.client_id        = client_id;
+            rdreq.client_mread     = client_mread;
+            rdreq.client_read_ndx  = extent_ndx;
+            rdreq.chunks           = chunks;
             rdreq.num_server_reads = (int) n_remote_reads;
-            rdreq.remote_reads = remote_reads;
-            rdreq.extent = *ext;
+            rdreq.remote_reads     = remote_reads;
+            rdreq.extent           = *ext;
             ret = rm_submit_read_request(&rdreq);
         } else {
             LOGDBG("extent(gfid=%d, offset=%lu, len=%lu) has no data",
                    ext->gfid, ext->offset, ext->length);
-            ret = ENODATA;
+            invoke_client_mread_req_complete_rpc(app_id, client_id,
+                                                 client_mread, extent_ndx,
+                                                 ENODATA);
         }
     }
 
@@ -314,13 +322,12 @@ int rpc_read(unifyfs_fops_ctx_t* ctx,
              off_t offset,
              size_t length)
 {
-    unifyfs_inode_extent_t chunk = { 0, };
+    unifyfs_extent_t extent = { 0 };
+    extent.gfid = gfid;
+    extent.offset = (unsigned long) offset;
+    extent.length = (unsigned long) length;
 
-    chunk.gfid = gfid;
-    chunk.offset = offset;
-    chunk.length = length;
-
-    return submit_read_request(ctx, 1, &chunk);
+    return submit_read_request(ctx, 1, &extent);
 }
 
 static
@@ -328,48 +335,24 @@ int rpc_mread(unifyfs_fops_ctx_t* ctx,
               size_t n_req,
               void* read_reqs)
 {
-    int ret = UNIFYFS_SUCCESS;
-    unsigned int i = 0;
-    unsigned int count = (unsigned int)n_req;
-    unifyfs_inode_extent_t* chunks = NULL;
-    unifyfs_extent_t* reqs = (unifyfs_extent_t*) read_reqs;
-
-    chunks = calloc(n_req, sizeof(*chunks));
-    if (!chunks) {
-        LOGERR("failed to allocate the chunk request");
-        return ENOMEM;
-    }
-
-    for (i = 0; i < count; i++) {
-        unifyfs_inode_extent_t* ch = chunks + i;
-        unifyfs_extent_t* req = reqs + i;
-        ch->gfid = req->gfid;
-        ch->offset = req->offset;
-        ch->length = req->length;
-    }
-
-    ret = submit_read_request(ctx, count, chunks);
-
-    if (chunks) {
-        free(chunks);
-        chunks = NULL;
-    }
-
-    return ret;
+    unsigned int count = (unsigned int) n_req;
+    unifyfs_extent_t* extents = (unifyfs_extent_t*) read_reqs;
+    return submit_read_request(ctx, count, extents);
 }
 
 static struct unifyfs_fops _fops_rpc = {
-    .name = "rpc",
-    .init = rpc_init,
-    .metaget = rpc_metaget,
-    .metaset = rpc_metaset,
-    .fsync = rpc_fsync,
+    .name     = "rpc",
+    .init     = rpc_init,
     .filesize = rpc_filesize,
-    .truncate = rpc_truncate,
+    .fsync    = rpc_fsync,
     .laminate = rpc_laminate,
-    .unlink = rpc_unlink,
-    .read = rpc_read,
-    .mread = rpc_mread,
+    .metaget  = rpc_metaget,
+    .metaset  = rpc_metaset,
+    .mread    = rpc_mread,
+    .read     = rpc_read,
+    .transfer = rpc_transfer,
+    .truncate = rpc_truncate,
+    .unlink   = rpc_unlink
 };
 
 struct unifyfs_fops* unifyfs_fops_impl = &_fops_rpc;

@@ -42,8 +42,9 @@
 
 #include "unifyfs-stdio.h"
 #include "unifyfs-sysio.h"
+#include "posix_client.h"
+#include "unifyfs_fid.h"
 
-static int unifyfs_fpos_enabled = 1; /* whether we can use fgetpos/fsetpos */
 
 /* ---------------------------------------
  * POSIX wrappers: file streams
@@ -87,7 +88,7 @@ static const char* unifyfs_stream_name(FILE* fp)
     const char* name = NULL;
     int fid = unifyfs_get_fid_from_fd(s->fd);
     if (fid >= 0) {
-        name = unifyfs_filelist[fid].filename;
+        name = posix_client->unifyfs_filelist[fid].filename;
     }
     return name;
 }
@@ -113,35 +114,32 @@ int unifyfs_unsupported_stream(
     /* determine length of string to hold formatted args */
     va_list args1;
     va_start(args1, format);
-    int strlen = vsnprintf(NULL, 0, format, args1);
+    int len = vsnprintf(NULL, 0, format, args1);
     va_end(args1);
 
     /* allocate memory for string */
-    int chars = strlen + 1;
-    char* str = (char*) malloc(chars);
-    if (str == NULL) {
+    int chars = len + 1;
+    char* args_str = (char*) malloc(chars);
+    if (args_str == NULL) {
         /* Error */
+        return ENOMEM;
     }
 
     /* create the string */
     va_list args2;
     va_start(args2, format);
-    vsnprintf(str, chars, format, args2);
+    vsnprintf(args_str, chars, format, args2);
     va_end(args2);
 
     /* print message */
-    va_list args;
-    va_start(args, format);
-    int rc = unifyfs_unsupported(
-                 wrap_fn, wrap_file, wrap_line,
-                 "file %s pos %lu msg %s", name, (unsigned long) pos, str
-             );
-    va_end(args);
+    unifyfs_unsupported(wrap_fn, wrap_file, wrap_line,
+                        "file %s pos %lu msg %s",
+                        name, (unsigned long) pos, args_str);
 
     /* free the string */
-    free(str);
+    free(args_str);
 
-    return rc;
+    return 0;
 }
 
 int unifyfs_stream_set_pointers(unifyfs_stream_t* s)
@@ -263,7 +261,7 @@ static int unifyfs_fopen_parse_mode(
         }
     }
 
-    return UNIFYFS_SUCCESS;
+    return 0;
 }
 
 /*
@@ -271,10 +269,9 @@ static int unifyfs_fopen_parse_mode(
  * fopen mode semantics, initializes outstream and returns UNIFYFS_SUCCESS if
  * successful.  Returns some other UNIFYFS/errno error otherwise.
  */
-static int unifyfs_fopen(
-    const char* path,
-    const char* mode,
-    FILE** outstream)
+static int unifyfs_fopen(const char* path,
+                         const char* mode,
+                         FILE** outstream)
 {
     /* assume that we'll fail */
     *outstream = NULL;
@@ -282,7 +279,7 @@ static int unifyfs_fopen(
     /* parse the fopen mode string */
     int read, write, append, plus;
     int parse_rc = unifyfs_fopen_parse_mode(mode, &read, &write, &append, &plus);
-    if (parse_rc != UNIFYFS_SUCCESS) {
+    if (parse_rc) {
         return parse_rc;
     }
 
@@ -299,21 +296,25 @@ static int unifyfs_fopen(
          */
         if (plus) {
             /* r+ ==> open file for update (reading and writing) */
-            open_rc = unifyfs_fid_open(path, O_RDWR, perms, &fid, &pos);
+            open_rc = unifyfs_fid_open(posix_client, path, O_RDWR, perms,
+                                       &fid, &pos);
         } else {
             /* r  ==> open file for reading */
-            open_rc = unifyfs_fid_open(path, O_RDONLY, perms, &fid, &pos);
+            open_rc = unifyfs_fid_open(posix_client, path, O_RDONLY, perms,
+                                       &fid, &pos);
         }
     } else if (write) {
         if (plus) {
             /* w+ ==> truncate to zero length or create file for update
              * (read/write)
              */
-            open_rc = unifyfs_fid_open(path, O_RDWR | O_CREAT | O_TRUNC,
+            open_rc = unifyfs_fid_open(posix_client, path,
+                                       O_RDWR | O_CREAT | O_TRUNC,
                                        perms, &fid, &pos);
         } else {
             /* w  ==> truncate to zero length or create file for writing */
-            open_rc = unifyfs_fid_open(path, O_WRONLY | O_CREAT | O_TRUNC,
+            open_rc = unifyfs_fid_open(posix_client, path,
+                                       O_WRONLY | O_CREAT | O_TRUNC,
                                        perms, &fid, &pos);
         }
     } else if (append) {
@@ -321,11 +322,12 @@ static int unifyfs_fopen(
         if (plus) {
             /* a+ ==> append, open or create file for update, initial file
              * position for reading should be at start */
-            open_rc = unifyfs_fid_open(path, O_RDWR | O_CREAT,
+            open_rc = unifyfs_fid_open(posix_client, path, O_RDWR | O_CREAT,
                                        perms, &fid, &pos);
         } else {
             /* a ==> append, open or create file for writing, at end of file */
-            open_rc = unifyfs_fid_open(path, O_WRONLY | O_CREAT | O_APPEND,
+            open_rc = unifyfs_fid_open(posix_client, path,
+                                       O_WRONLY | O_CREAT | O_APPEND,
                                        perms, &fid, &pos);
         }
     }
@@ -336,7 +338,7 @@ static int unifyfs_fopen(
     }
 
     /* allocate a stream for this file */
-    int sid = unifyfs_stack_pop(unifyfs_stream_stack);
+    int sid = unifyfs_stack_pop(posix_stream_stack);
     if (sid < 0) {
         /* TODO: would like to return EMFILE to indicate
          * process has hit file stream limit, not the OS */
@@ -349,13 +351,13 @@ static int unifyfs_fopen(
     unifyfs_stream_t* s = &(unifyfs_streams[sid]);
 
     /* allocate a file descriptor for this file */
-    int fd = unifyfs_stack_pop(unifyfs_fd_stack);
+    int fd = unifyfs_stack_pop(posix_fd_stack);
     if (fd < 0) {
         /* TODO: would like to return EMFILE to indicate
          * process has hit file descriptor limit, not the OS */
 
         /* put back our stream id */
-        unifyfs_stack_push(unifyfs_stream_stack, sid);
+        unifyfs_stack_push(posix_stream_stack, sid);
 
         /* exhausted our file descriptors */
         return ENFILE;
@@ -501,7 +503,7 @@ static int unifyfs_stream_flush(FILE* stream)
         }
 
         /* invoke fsync rpc to register index metadata with server */
-        int ret = unifyfs_fid_sync(fid);
+        int ret = unifyfs_fid_sync_extents(posix_client, fid);
         if (ret != UNIFYFS_SUCCESS) {
             /* sync failed for some reason, set errno and return error */
             s->err = 1;
@@ -538,17 +540,16 @@ static int unifyfs_stream_read(
     if (filedesc == NULL) {
         /* ERROR: invalid file descriptor */
         s->err = 1;
-        errno = EBADF;
         LOGDBG("Invalid file descriptor");
+        errno = EBADF;
         return EBADF;
     }
 
     /* bail with error if stream not open for reading */
     if (!filedesc->read) {
         s->err = 1;
-        errno = EBADF;
         LOGDBG("Stream not open for reading");
-
+        errno = EBADF;
         return EBADF;
     }
 
@@ -559,8 +560,8 @@ static int unifyfs_stream_read(
         if (setvbuf_rc != UNIFYFS_SUCCESS) {
             /* ERROR: failed to associate buffer */
             s->err = 1;
-            errno = unifyfs_rc_errno(setvbuf_rc);
             LOGDBG("Couldn't setvbuf");
+            errno = unifyfs_rc_errno(setvbuf_rc);
             return setvbuf_rc;
         }
     }
@@ -728,7 +729,7 @@ static int unifyfs_stream_write(
             errno = EBADF;
             return EBADF;
         }
-        current = unifyfs_fid_logical_size(fid);
+        current = unifyfs_fid_logical_size(posix_client, fid);
 
         /* like a seek, we discard push back bytes */
         s->ubuflen = 0;
@@ -942,7 +943,7 @@ static int unifyfs_fseek(FILE* stream, off_t offset, int whence)
         break;
     case SEEK_END:
         /* seek to EOF + offset */
-        filesize = unifyfs_fid_logical_size(fid);
+        filesize = unifyfs_fid_logical_size(posix_client, fid);
         if (unifyfs_would_overflow_offt(filesize, offset)) {
             s->err = 1;
             errno  = EOVERFLOW;
@@ -973,7 +974,7 @@ static int unifyfs_fseek(FILE* stream, off_t offset, int whence)
 
     /* clear end-of-file indicator */
     s->eof = 0;
-
+    errno = 0;
     return 0;
 }
 
@@ -988,6 +989,7 @@ FILE* UNIFYFS_WRAP(fopen)(const char* path, const char* mode)
             errno = unifyfs_rc_errno(rc);
             return NULL;
         }
+        errno = 0;
         return stream;
     } else {
         MAP_OR_FAIL(fopen);
@@ -1001,8 +1003,8 @@ FILE* UNIFYFS_WRAP(freopen)(const char* path, const char* mode, FILE* stream)
     /* check whether we should intercept this path */
     if (unifyfs_intercept_stream(stream)) {
         /* return file descriptor associated with stream */
-        unifyfs_unsupported_stream(stream, __func__, __FILE__, __LINE__, "new file %s",
-                                   path);
+        unifyfs_unsupported_stream(stream, __func__, __FILE__, __LINE__,
+                                   "new file %s", path);
 
         /* lookup stream */
         unifyfs_stream_t* s = (unifyfs_stream_t*) stream;
@@ -1025,6 +1027,7 @@ int UNIFYFS_WRAP(setvbuf)(FILE* stream, char* buf, int type, size_t size)
             errno = unifyfs_rc_errno(rc);
             return 1;
         }
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(setvbuf);
@@ -1176,6 +1179,7 @@ int UNIFYFS_WRAP(fputc)(int c, FILE* stream)
         }
 
         /* return value written */
+        errno = 0;
         return (int) charbuf;
     } else {
         MAP_OR_FAIL(fputc);
@@ -1200,6 +1204,7 @@ int UNIFYFS_WRAP(getc)(FILE* stream)
         }
 
         /* return byte read cast as an int */
+        errno = 0;
         return (int) charbuf;
     } else {
         MAP_OR_FAIL(getc);
@@ -1223,6 +1228,7 @@ int UNIFYFS_WRAP(putc)(int c, FILE* stream)
         }
 
         /* return value written */
+        errno = 0;
         return (int) charbuf;
     } else {
         MAP_OR_FAIL(putc);
@@ -1284,7 +1290,7 @@ char* UNIFYFS_WRAP(fgets)(char* s, int n, FILE* stream)
 
         /* terminate string with a NUL */
         s[limit] = '\0';
-
+        errno = 0;
         return s;
     } else {
         MAP_OR_FAIL(fgets);
@@ -1311,6 +1317,7 @@ int UNIFYFS_WRAP(fputs)(const char* s, FILE* stream)
         }
 
         /* return success */
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(fputs);
@@ -1342,6 +1349,7 @@ size_t UNIFYFS_WRAP(fread)(void* ptr, size_t size, size_t nitems, FILE* stream)
         }
 
         /* return number of items read */
+        errno = 0;
         if (retcount < count) {
             /* adjust return value if read less data than requested */
             size_t nitems_read = retcount / size;
@@ -1379,6 +1387,7 @@ size_t UNIFYFS_WRAP(fwrite)(const void* ptr, size_t size, size_t nitems,
         }
 
         /* return number of items written */
+        errno = 0;
         return nitems;
     } else {
         MAP_OR_FAIL(fwrite);
@@ -1435,6 +1444,7 @@ int UNIFYFS_WRAP(vfprintf)(FILE* stream, const char* format, va_list ap)
         free(str);
 
         /* return number of bytes written */
+        errno = 0;
         return chars;
     } else {
         va_list ap2;
@@ -1517,8 +1527,7 @@ int UNIFYFS_WRAP(fseek)(FILE* stream, long offset, int whence)
     /* check whether we should intercept this stream */
     if (unifyfs_intercept_stream(stream)) {
         off_t offset_offt = (off_t) offset;
-        int rc = unifyfs_fseek(stream, offset_offt, whence);
-        return rc;
+        return unifyfs_fseek(stream, offset_offt, whence);
     } else {
         MAP_OR_FAIL(fseek);
         int ret = UNIFYFS_REAL(fseek)(stream, offset, whence);
@@ -1530,8 +1539,7 @@ int UNIFYFS_WRAP(fseeko)(FILE* stream, off_t offset, int whence)
 {
     /* check whether we should intercept this stream */
     if (unifyfs_intercept_stream(stream)) {
-        int rc = unifyfs_fseek(stream, offset, whence);
-        return rc;
+        return unifyfs_fseek(stream, offset, whence);
     } else {
         MAP_OR_FAIL(fseeko);
         int ret = UNIFYFS_REAL(fseeko)(stream, offset, whence);
@@ -1558,6 +1566,7 @@ long UNIFYFS_WRAP(ftell)(FILE* stream)
 
         /* get current position */
         off_t current_pos = filedesc->pos;
+        errno = 0;
         return (long)current_pos;
     } else {
         MAP_OR_FAIL(ftell);
@@ -1584,6 +1593,7 @@ off_t UNIFYFS_WRAP(ftello)(FILE* stream)
 
         /* get current position */
         off_t current_pos = filedesc->pos;
+        errno = 0;
         return current_pos;
     } else {
         MAP_OR_FAIL(ftello);
@@ -1610,14 +1620,13 @@ void UNIFYFS_WRAP(rewind)(FILE* stream)
         /* seek to front of file */
         int rc = unifyfs_fseek(stream, (off_t) 0L, SEEK_SET);
 
-        /* set errno */
-        errno = unifyfs_rc_errno(rc);
-
         /* clear error indicator if seek successful */
         if (rc == 0) {
             s->err = 0;
         }
 
+        /* set errno and return */
+        errno = unifyfs_rc_errno(rc);
         return;
     } else {
         MAP_OR_FAIL(rewind);
@@ -1666,7 +1675,7 @@ int UNIFYFS_WRAP(fgetpos)(FILE* stream, fpos_t* pos)
         /* save pointer to state in output parameter */
         void** ptr = (void**) pos;
         *ptr = (void*) state;
-
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(fgetpos);
@@ -1725,7 +1734,7 @@ int UNIFYFS_WRAP(fflush)(FILE* stream)
 
         /* flush each active unifyfs stream */
         int i;
-        for (i = 0; i < UNIFYFS_CLIENT_MAX_FILEDESCS; i++) {
+        for (i = 0; i < UNIFYFS_CLIENT_MAX_FILES; i++) {
             /* get stream and check whether it's active */
             unifyfs_stream_t* s = &(unifyfs_streams[i]);
             if (s->fd >= 0) {
@@ -1738,6 +1747,9 @@ int UNIFYFS_WRAP(fflush)(FILE* stream)
             }
         }
 
+        if (!ret) {
+            errno = 0;
+        }
         return ret;
     }
 
@@ -1750,7 +1762,7 @@ int UNIFYFS_WRAP(fflush)(FILE* stream)
             /* ERROR: flush sets error indicator and errno */
             return EOF;
         }
-
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(fflush);
@@ -1760,7 +1772,7 @@ int UNIFYFS_WRAP(fflush)(FILE* stream)
 }
 
 /* return non-zero if and only if end-of-file indicator is set
- * for stream */
+ * for stream (does not set errno) */
 int UNIFYFS_WRAP(feof)(FILE* stream)
 {
     /* check whether we should intercept this stream */
@@ -1836,6 +1848,7 @@ int UNIFYFS_WRAP(fileno)(FILE* stream)
         /* return file descriptor associated with stream but don't conflict
          * with active system fds that range from 0 - (fd_limit) */
         ret = fd + unifyfs_fd_limit;
+        errno = 0;
         return ret;
     } else {
         MAP_OR_FAIL(fileno);
@@ -1879,7 +1892,7 @@ int UNIFYFS_WRAP(fclose)(FILE* stream)
         }
 
         /* close the file */
-        int close_rc = unifyfs_fid_close(fid);
+        int close_rc = unifyfs_fid_close(posix_client, fid);
         if (close_rc != UNIFYFS_SUCCESS) {
             errno = unifyfs_rc_errno(close_rc);
             return EOF;
@@ -1891,15 +1904,16 @@ int UNIFYFS_WRAP(fclose)(FILE* stream)
         unifyfs_fd_init(s->fd);
 
         /* add file descriptor back to free stack */
-        unifyfs_stack_push(unifyfs_fd_stack, s->fd);
+        unifyfs_stack_push(posix_fd_stack, s->fd);
 
         /* set file descriptor to -1 to indicate stream is invalid */
         unifyfs_stream_init(s->sid);
 
         /* add stream back to free stack */
-        unifyfs_stack_push(unifyfs_stream_stack, s->sid);
+        unifyfs_stack_push(posix_stream_stack, s->sid);
 
         /* currently a no-op */
+        errno = 0;
         return 0;
     } else {
         MAP_OR_FAIL(fclose);

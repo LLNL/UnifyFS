@@ -43,6 +43,7 @@ usage ./300-producer-consumer-tests.sh [options]
 
   options:
     -h, --help        print this (along with overall) help message
+    -l, --laminate    laminate files between writing and reading
     -M, --mpiio       use MPI-IO instead of POSIX I/O
 
 Run a series of producer-consumer workload tests using the UnifyFS write and
@@ -57,6 +58,8 @@ should be provided at a time.
 Only run this suite when using two or more hosts. Use 110-write-tests.sh
 followed by 120-read-tests.sh when using a single host as it will be equivalent
 in this case.
+
+For more information on manually running tests, run './001-setup.sh -h'.
 EOF
 )"
 
@@ -66,8 +69,10 @@ do
         -h|--help)
             echo "$PRODUCER_CONSUMER_USAGE"
             ci_dir=$(dirname "$(readlink -fm $BASH_SOURCE)")
-            $ci_dir/001-setup.sh -h
             exit
+            ;;
+        -l|--laminate)
+            producer_consumer_laminate=yes
             ;;
         -M|--mpiio)
             [ -n "$write_io_type" ] &&
@@ -148,10 +153,14 @@ fi
 # Reset additional behavior to default
 behavior=""
 
+# Laminate after writing all data
+if [ -n "$producer_consumer_laminate" ]; then
+    behavior="$behavior -l"
+fi
+
 # Set I/O type
 if [ -n "$write_io_type" ]; then
     behavior="$behavior $write_io_type"
-    unset write_io_type # prevent option being picked up by subsequent runs
 fi
 
 # For each io_size, test with each io_pattern and for each io_pattern, test each
@@ -164,3 +173,6 @@ for io_size in "${io_sizes[@]}"; do
         done
     done
 done
+
+unset producer_consumer_laminate
+unset write_io_type

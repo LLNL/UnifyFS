@@ -4,9 +4,17 @@ Integrate the UnifyFS API
 
 This section describes how to use the UnifyFS API in an application.
 
+.. rubric:: Transparent Mount Caveat
+
+MPI applications that take advantage of the :ref:`transparent mounting
+<auto-mount-label>` feature (through configuring with ``--enable-mpi-mount`` or
+with ``+auto-mount`` through Spack) do not need to be modified in any way in
+order to use UnifyFS. Move on to the :doc:`link` section next as this step can
+be skipped.
+
 .. Attention:: **Fortran Compatibility**
 
-   ``unifyfs_mount`` and ``unifyfs_unmount`` are now usable  with GFortran.
+   ``unifyfs_mount`` and ``unifyfs_unmount`` are usable with GFortran.
    There is a known ifort_issue_ with the Intel Fortran compiler as well as an
    xlf_issue_ with the IBM Fortran compiler. Other Fortran compilers are
    currently unknown.
@@ -15,9 +23,11 @@ This section describes how to use the UnifyFS API in an application.
    include the ``+fortran`` variant, or configure UnifyFS with the
    ``--enable-fortran`` option if building manually.
 
----------------------------
-Include the UnifyFS header
----------------------------
+-----
+
+--------------------------
+Include the UnifyFS Header
+--------------------------
 
 In C or C++ applications, include ``unifyfs.h``. See writeread.c_ for a full
 example.
@@ -35,9 +45,9 @@ full example.
 
     include 'unifyfsf.h'
 
----------------------------
+--------
 Mounting
----------------------------
+--------
 
 UnifyFS implements a file system in user space, which the system has no knowledge about.
 The UnifyFS library intecepts and handles I/O calls whose path matches a prefix that is defined by the user.
@@ -54,21 +64,20 @@ For instance, to use UnifyFS on all path prefixes that begin with
 .. code-block:: C
     :caption: C
 
-    unifyfs_mount('/unifyfs', rank, rank_num, 0);
+    unifyfs_mount('/unifyfs', rank, rank_num);
 
 .. code-block:: Fortran
     :caption: Fortran
 
-    call UNIFYFS_MOUNT('/unifyfs', rank, size, 0, ierr);
+    call UNIFYFS_MOUNT('/unifyfs', rank, size, ierr);
 
 Here, ``/unifyfs`` is the path prefix for UnifyFS to intercept.
 The ``rank`` parameter specifies the MPI rank of the calling process.
 The ``size`` parameter specifies the number of MPI ranks in the user job.
-Lastly, the zero corresponds to the app id.
 
----------------------------
+----------
 Unmounting
----------------------------
+----------
 
 When the application is done using UnifyFS, it should call ``unifyfs_unmount``.
 

@@ -54,8 +54,14 @@ test_expect_success "unifyfsd hasn't started yet" '
     process_is_not_running unifyfsd 10
 '
 
-$UNIFYFS_BIN/unifyfs start -c -d -S $UNIFYFS_SHAREDFS_DIR \
-    -e $UNIFYFS_BIN/unifyfsd &> ${UNIFYFS_LOG_DIR}/unifyfs.start.out
+# UNIFYFS_BIN envar is set if not using unifyfs module
+if [[ -n $UNIFYFS_BIN ]]; then
+    $UNIFYFS_CLU start -d -S $UNIFYFS_SHAREDFS_DIR \
+        -e $UNIFYFS_BIN/unifyfsd &> ${UNIFYFS_LOG_DIR}/unifyfs.start.out
+else
+    $UNIFYFS_CLU start -d -S $UNIFYFS_SHAREDFS_DIR \
+        &> ${UNIFYFS_LOG_DIR}/unifyfs.start.out
+fi
 
 test_expect_success "unifyfsd started" '
     process_is_running unifyfsd 10 ||

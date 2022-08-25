@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2022, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2020, UT-Battelle, LLC.
+ * Copyright 2022, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -11,60 +11,34 @@
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
-/* unifyfs-stage: this application is supposed to excuted by the unifyfs
- * command line utility for:
- * - stage in: moving files in pfs to unifyfs volume before user starts
- *   application,
- *   e.g., unifyfs start --stage-in=<manifest file>
- * - stage out: moving files in the unifyfs volume to parallel file system
- *   after user application completes,
- *   e.g., unifyfs terminate --stage-out=<manifest file>
- *
- * Currently, we request users to pass the <manifest file> to specify target
- * files to be transferred. The <manifest file> should list all target files
- * and their destinations, line by line.
- *
- * This supports two transfer modes (although both are technically parallel):
- *
- * - serial: Each process will transfer a file. Data of a single file will
- *   reside in a single compute node.
- * - parallel (-p, --parallel): Each file will be split and transferred by all
- *   processes. Data of a single file will be spread evenly across all
- *   available compute nodes.
- *
- * TODO:
- * Maybe later on, it would be better to have a size threshold. Based on the
- * threshold, we can determine whether a file needs to transferred serially (if
- * smaller than threshold), or parallelly.
- */
+
 #include <config.h>
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <getopt.h>
+#include <ctype.h>
 #include <errno.h>
+#include <getopt.h>
 #include <limits.h>
 #include <libgen.h>
 #include <mpi.h>
-#include <unifyfs_misc.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
-#include "unifyfs_const.h"
 #include "unifyfs-stage.h"
 
-int rank;
-int total_ranks;
+
 int verbose;
 
-static int debug;
+static int debug_pause;
 static int checksum;
-static int mode;
-static int should_we_mount_unifyfs = 1;
+static int data_distribution;
+static int transfer_mode;
 static char* manifest_file;
 static char* mountpoint = "/unifyfs";
-static char* share_dir;
+static char* status_file;
 
-static unifyfs_stage_t _ctx;
+static unifyfs_stage stage_ctx;
 
 /**
  * @brief create a status (lock) file to notify the unifyfs executable
@@ -76,52 +50,43 @@ static unifyfs_stage_t _ctx;
  */
 static int create_status_file(int status)
 {
-    char filename[PATH_MAX];
-    FILE* fp = NULL;
-    const char* msg = status ? "fail" : "success";
-    int return_val_from_scnprintf;
+    int err;
 
-    return_val_from_scnprintf =
-        scnprintf(filename, PATH_MAX,
-                  "%s/%s", share_dir, UNIFYFS_STAGE_STATUS_FILENAME);
-    if (return_val_from_scnprintf > (PATH_MAX - 1)) {
-        fprintf(stderr, "Stage status file is too long!\n");
-        return -ENOMEM;
-    }
-
-    fp = fopen(filename, "w");
+    errno = 0;
+    FILE* fp = fopen(status_file, "w");
+    err = errno;
     if (!fp) {
-        fprintf(stderr, "failed to create %s (%s)\n",
-                filename, strerror(errno));
-        return errno;
+        fprintf(stderr, "UNIFYFS-STAGE ERROR: failed to create %s (%s)\n",
+                status_file, strerror(err));
+        return err;
     }
 
+    const char* msg = (status == 0 ? "success" : "fail");
     fprintf(fp, "%s\n", msg);
-
     fclose(fp);
 
     return 0;
 }
 
+static char* short_opts = "cDhm:psS:v";
+
 static struct option long_opts[] = {
     { "checksum", 0, 0, 'c' },
-    { "debug", 0, 0, 'd' },
+    { "debug-pause", 0, 0, 'D' },
     { "help", 0, 0, 'h' },
     { "mountpoint", 1, 0, 'm' },
     { "parallel", 0, 0, 'p' },
-    { "share-dir", 1, 0, 's' },
+    { "skewed", 0, 0, 's' },
+    { "status-file", 1, 0, 'S' },
     { "verbose", 0, 0, 'v' },
-    { "no-mount-unifyfs", 0, 0, 'N' },
     { 0, 0, 0, 0 },
 };
-
-static char* short_opts = "cdhm:ps:vN";
 
 static const char* usage_str =
     "\n"
     "Usage: %s [OPTION]... <manifest file>\n"
     "\n"
-    "Transfer files between unifyfs volume and external file system.\n"
+    "Transfer files between UnifyFS volume and external file system.\n"
     "The <manifest file> should contain list of files to be transferred,\n"
     "and each line should be formatted as\n"
     "\n"
@@ -135,49 +100,43 @@ static const char* usage_str =
     "\n"
     "Available options:\n"
     "\n"
-    "  -c, --checksum           verify md5 checksum for each transfer\n"
-    "  -h, --help               print this usage\n"
-    "  -m, --mountpoint=<mnt>   use <mnt> as unifyfs mountpoint\n"
+    "  -c, --checksum           Verify md5 checksum for each transfer\n"
+    "                           (default: off)\n"
+    "  -h, --help               Print usage information\n"
+    "  -m, --mountpoint=<mnt>   Use <mnt> as UnifyFS mountpoint\n"
     "                           (default: /unifyfs)\n"
-    "  -p, --parallel           transfer each file in parallel\n"
-    "                           (experimental)\n"
-    "  -s, --share-dir=<path>   directory path for creating status file\n"
-    "  -v, --verbose            print noisy outputs\n"
-    "  -N, --no-mount-unifyfs   don't mount unifyfs file system (for testing)\n"
-    "\n"
-    "Without the '-p, --parallel' option, a file is transferred by a single\n"
-    "process. If the '-p, --parallel' option is specified, each file will be\n"
-    "divided by multiple processes and transferred in parallel.\n"
+    "  -p, --parallel           Transfer all files concurrently\n"
+    "                           (default: off, use sequential transfers)\n"
+    "  -s, --skewed             Use skewed data distribution for stage-in\n"
+    "                           (default: off, use balanced distribution)\n"
+    "  -S, --status-file=<path> Create stage status file at <path>\n"
+    "  -v, --verbose            Print verbose information\n"
+    "                           (default: off)\n"
     "\n";
 
-static char* program;
-
-static void print_usage(void)
+static void print_usage(char* program)
 {
-    if (0 == rank) {
-        fprintf(stdout, usage_str, program);
-    }
+    fprintf(stderr, usage_str, program);
 }
 
-static
-void debug_pause(int rank, const char* fmt, ...)
+static int debug_hold;
+static void pause_for_debug(int rank, const char* fmt, ...)
 {
     if (rank == 0) {
-        va_list args;
+        debug_hold = 1;
+        fprintf(stderr,
+                "UNIFYFS-STAGE DEBUG - PAUSED: To continue execution, use "
+                "debugger to set 'debug_hold' variable = 0 in MPI rank 0\n");
+        fflush(stderr);
+        while (debug_hold) {
+            sleep(1);
+        }
 
-        va_start(args, fmt);
-        vfprintf(stderr, fmt, args);
-        va_end(args);
-
-        fprintf(stderr, " ENTER to continue ... ");
-
-        (void) getchar();
+        fprintf(stderr, "UNIFYFS-STAGE DEBUG - CONTINUED\n");
+        fflush(stderr);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
-
-    /* internal accept() call from mpi may set errno */
-    errno = 0;
 }
 
 static int parse_option(int argc, char** argv)
@@ -185,6 +144,13 @@ static int parse_option(int argc, char** argv)
     int ch = 0;
     int optidx = 0;
     char* filepath = NULL;
+
+    /* set defaults */
+    checksum = 0;
+    debug_pause = 0;
+    status_file = NULL;
+    transfer_mode = UNIFYFS_STAGE_MODE_SERIAL;
+    data_distribution = UNIFYFS_STAGE_DATA_BALANCED;
 
     if (argc < 2) {
         return EINVAL;
@@ -197,8 +163,8 @@ static int parse_option(int argc, char** argv)
             checksum = 1;
             break;
 
-        case 'd':
-            debug = 1;
+        case 'D':
+            debug_pause = 1;
             break;
 
         case 'm':
@@ -206,20 +172,19 @@ static int parse_option(int argc, char** argv)
             break;
 
         case 'p':
-            mode = UNIFYFS_STAGE_PARALLEL;
+            transfer_mode = UNIFYFS_STAGE_MODE_PARALLEL;
             break;
 
         case 's':
-            share_dir = strdup(optarg);
+            data_distribution = UNIFYFS_STAGE_DATA_SKEWED;
+            break;
+
+        case 'S':
+            status_file = strdup(optarg);
             break;
 
         case 'v':
             verbose = 1;
-            break;
-
-        case 'N':
-            fprintf(stderr, "WARNING: not mounting unifyfs file system!\n");
-            should_we_mount_unifyfs = 0;
             break;
 
         case 'h':
@@ -236,84 +201,298 @@ static int parse_option(int argc, char** argv)
 
     manifest_file = realpath(filepath, NULL);
     if (!manifest_file) {
-        fprintf(stderr, "problem with accessing file %s: %s\n",
+        fprintf(stderr,
+                "UNIFYFS-STAGE ERROR: "
+                "could not access manifest file %s: %s\n",
                 filepath, strerror(errno));
         return errno;
+    }
+
+    if (NULL == status_file) {
+        /* status_file is required for transfer status file */
+        return EINVAL;
     }
 
     return 0;
 }
 
+void print_unifyfs_stage_context(unifyfs_stage* ctx)
+{
+    const char* mode_str = (ctx->mode == UNIFYFS_STAGE_MODE_SERIAL ?
+                            "serial" : "parallel");
+    const char* dist_str = (ctx->data_dist == UNIFYFS_STAGE_DATA_BALANCED ?
+                            "balanced" : "skewed");
+    fprintf(stderr,
+            "UNIFYFS-STAGE INFO: ==== stage context ====\n"
+            "                  : manifest file = %s\n"
+            "                  : mountpoint = %s\n"
+            "                  : transfer mode = %s\n"
+            "                  : data distribution = %s\n"
+            "                  : verify checksums = %d\n"
+            "                  : rank = %d of %d\n",
+            ctx->manifest_file,
+            ctx->mountpoint,
+            mode_str,
+            dist_str,
+            ctx->checksum,
+            ctx->rank, ctx->total_ranks);
+}
+
+/*
+ * Parse a line from the manifest in the form of:
+ *
+ * <source path> <whitespace separator> <destination path>
+ *
+ * If the paths have spaces, they must be quoted.
+ *
+ * On success, returns 0 along with allocated src_file and dst_file strings.
+ * These strings should be freed by the caller.
+ *
+ * On failure, returns non-zero, and set src and dst to NULL.
+ *
+ * Note, leading and tailing whitespace are ok.  They just get ignored.
+ * Lines with only whitespace or starting with the comment character '#'
+ * are ignored, and the return value will be 0 with src and dst being NULL.
+ */
+/**
+ * @brief parses manifest file line, passes back src and dst strings
+ *
+ * @param line_number       manifest file line number
+ * @param line              manifest file line
+ * @param[out] src_file     source file path
+ * @param[out] dst_file     destination file path
+ *
+ * @return 0 if all was well, or there was nothing; non-zero on error
+ */
+int unifyfs_parse_manifest_line(int line_number,
+                                char* line,
+                                char** src_file,
+                                char** dst_file)
+{
+    char* src = NULL;
+    char* dst = NULL;
+    char* copy;
+    char* tmp;
+    size_t copy_len;
+    size_t tmp_len;
+    size_t i;
+    int in_quotes = 0;
+    int ret = 0;
+
+
+    if ((NULL == line) || (NULL == src_file) || (NULL == dst_file)) {
+        return EINVAL;
+    }
+
+    *src_file = NULL;
+    *dst_file = NULL;
+
+    if ((line[0] == '\n') || (line[0] == '#')) {
+        // skip blank or comment (#) lines in manifest file
+        return 0;
+    }
+
+    copy = strdup(line);
+    if (NULL == copy) {
+        return ENOMEM;
+    }
+    copy_len = strlen(copy) + 1; /* +1 for '\0' */
+
+    /* Replace quotes and separator with NUL character */
+    for (i = 0; i < copy_len; i++) {
+        if (copy[i] == '"') {
+            in_quotes ^= 1;/* toggle */
+            copy[i] = '\0';
+        } else if (isspace(copy[i]) && !in_quotes) {
+            /*
+             * Allow any whitespace for our separator
+             */
+            copy[i] = '\0';
+        }
+    }
+
+    /* copy now contains a series of strings, separated by NUL characters */
+    tmp = copy;
+    while (tmp < (copy + copy_len)) {
+        tmp_len = strlen(tmp);
+        if (tmp_len > 0) {
+            /* We have a real string */
+            if (!src) {
+                src = strdup(tmp);
+                if (NULL == src) {
+                    return ENOMEM;
+                }
+            } else {
+                if (!dst) {
+                    dst = strdup(tmp);
+                    if (NULL == dst) {
+                        return ENOMEM;
+                    }
+                } else {
+                    /* Error: a third file name */
+                    ret = EINVAL;
+                    break;
+                }
+            }
+        }
+        tmp += tmp_len + 1;
+    }
+    free(copy);
+
+    /* Some kind of error parsing a line */
+    if ((ret != 0) || (NULL == src) || (NULL == dst)) {
+        if (NULL != src) {
+            free(src);
+            src = NULL;
+        }
+        if (NULL != dst) {
+            free(dst);
+            dst = NULL;
+        }
+        if (ret == 0) {
+            ret = EINVAL;
+        }
+    } else {
+        *src_file = src;
+        *dst_file = dst;
+    }
+
+    return ret;
+}
+
 int main(int argc, char** argv)
 {
-    int ret = 0;
-    unifyfs_stage_t* ctx = &_ctx;
+    int rc, ret;
+    int rank, total_ranks;
+    unifyfs_stage* ctx = &stage_ctx;
 
-    program = basename(strdup(argv[0]));
+    char* program = basename(strdup(argv[0]));
 
     ret = parse_option(argc, argv);
     if (ret) {
         if (EINVAL == ret) {
-            print_usage();
+            print_usage(program);
         }
-        goto preMPIout;
+        return ret;
     }
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &total_ranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+
+    ctx->checksum = checksum;
+    ctx->data_dist = data_distribution;
+    ctx->manifest_file = manifest_file;
+    ctx->mode = transfer_mode;
+    ctx->mountpoint = mountpoint;
     ctx->rank = rank;
     ctx->total_ranks = total_ranks;
-    ctx->checksum = checksum;
-    ctx->mode = mode;
-    ctx->mountpoint = mountpoint;
-    ctx->manifest_file = manifest_file;
-
     if (verbose) {
-        unifyfs_stage_print(ctx);
+        print_unifyfs_stage_context(ctx);
     }
 
-    if (debug) {
-        debug_pause(rank, "About to mount unifyfs.. ");
+    if (debug_pause) {
+        pause_for_debug(rank, "About to initialize UnifyFS.. ");
     }
 
-    if (should_we_mount_unifyfs) {
-        ret = unifyfs_mount(mountpoint, rank, total_ranks, 0);
-        if (ret) {
-            fprintf(stderr, "failed to mount unifyfs at %s (%s)",
-                    ctx->mountpoint, strerror(ret));
-            goto out;
-        }
+    // initialize UnifyFS API handle for transfer
+    unifyfs_handle fshdl = UNIFYFS_INVALID_HANDLE; /* client handle */
+    unifyfs_rc urc = unifyfs_initialize(ctx->mountpoint, NULL, 0, &(fshdl));
+    if (UNIFYFS_SUCCESS != urc) {
+        fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                "UnifyFS initialization for mntpt=%s failed (%s)",
+                ctx->mountpoint, unifyfs_rc_enum_description(urc));
+        ret = -1;
+        MPI_Abort(MPI_COMM_WORLD, ret);
     }
+    ctx->fshdl = fshdl;
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    ret = unifyfs_stage_transfer(ctx);
-    if (ret) {
-        fprintf(stderr, "data transfer failed (%s)\n", strerror(errno));
+    /* TODO - Currently, all ranks open and parse the manifest file. It may be
+     *        better if rank 0 does that and then broadcasts the file pairs */
+    FILE* manifest = NULL;
+    manifest = fopen(ctx->manifest_file, "r");
+    if (!manifest) {
+        if (rank == 0) {
+            fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                    "failed to open manifest file %s (%s)\n",
+                    ctx->manifest_file, strerror(errno));
+        }
+        ret = errno;
+        MPI_Abort(MPI_COMM_WORLD, ret);
     }
 
-    /* wait until all processes are done */
+    int line_count = 0;
+    int file_count = 0;
+    int n_xfer_failures = 0;
+    char* src = NULL;
+    char* dst = NULL;
+    char linebuf[LINE_MAX] = { 0, };
+    while (NULL != fgets(linebuf, LINE_MAX - 1, manifest)) {
+        line_count++;
+        rc = unifyfs_parse_manifest_line(line_count, linebuf, &src, &dst);
+        if (EINVAL == rc) {
+            if (rank == 0) {
+                fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                        "manifest line[%d] is invalid! - '%s'\n",
+                        line_count, linebuf);
+            }
+            ret = rc;
+        } else if ((0 == rc) && (NULL != src) && (NULL != dst)) {
+            file_count++;
+            rc = unifyfs_stage_transfer(ctx, file_count, src, dst);
+            if (rc) {
+                if (rc != EINVAL) {
+                    n_xfer_failures++;
+                }
+                ret = rc;
+            }
+        }
+    }
+
+    // wait until all processes are done
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (share_dir && rank == 0) {
-        ret = create_status_file(ret);
-        if (ret) {
-            fprintf(stderr, "failed to create the status file (%s)\n",
-                    strerror(errno));
+    // use a global reduction to sum total number of transfer failures
+    int total_xfer_failures = 0;
+    rc = MPI_Reduce(&n_xfer_failures, &total_xfer_failures,
+                    1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (rc != MPI_SUCCESS) {
+        char errstr[MPI_MAX_ERROR_STRING];
+        int len = 0;
+        MPI_Error_string(rc, errstr, &len);
+        fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                "failed to aggregate transfer failures (error='%s')\n",
+                errstr);
+        total_xfer_failures = 1;
+    }
+    if (0 == ret) {
+        ret = total_xfer_failures;
+    }
+
+    // rank 0 reports overall status
+    if (rank == 0) {
+        rc = create_status_file(ret);
+        if (rc) {
+            fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                    "failed to create stage status file (error=%d)\n",
+                    rc);
+            ret = rc;
         }
     }
 
-    if (should_we_mount_unifyfs) {
-        ret = unifyfs_unmount();
-        if (ret) {
-            fprintf(stderr, "unmounting unifyfs failed (ret=%d)\n", ret);
-        }
+    // finalize UnifyFS API handle
+    urc = unifyfs_finalize(fshdl);
+    if (UNIFYFS_SUCCESS != urc) {
+        fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                "UnifyFS finalization failed - %s",
+                unifyfs_rc_enum_description(urc));
     }
-out:
+    fshdl = UNIFYFS_INVALID_HANDLE;
+
     MPI_Finalize();
-preMPIout:
 
     return ret;
 }

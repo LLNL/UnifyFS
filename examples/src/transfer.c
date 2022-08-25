@@ -34,19 +34,16 @@
 
 #include "testlib.h"
 
+
+static unsigned long bufsize = 64 * (1 << 10);
+
+/* options */
 static int rank;
 static int total_ranks;
 static int rank_worker;
 static int parallel;
 static int debug;
-
-static char* mountpoint = "/unifyfs";  /* unifyfs mountpoint */
-static int unmount;                /* unmount unifyfs after running the test */
-
-static char* srcpath;
-static char* dstpath;
-
-static unsigned long bufsize = 64 * (1 << 10);
+static char* mountpoint;  /* unifyfs mountpoint */
 
 static struct option long_opts[] = {
     { "debug", 0, 0, 'd' },
@@ -54,11 +51,10 @@ static struct option long_opts[] = {
     { "mount", 1, 0, 'm' },
     { "parallel", 0, 0, 'p' },
     { "rank", 1, 0, 'r' },
-    { "unmount", 0, 0, 'u' },
     { 0, 0, 0, 0},
 };
 
-static char* short_opts = "dhm:pr:u";
+static char* short_opts = "dhm:pr:";
 
 static const char* usage_str =
     "\n"
@@ -72,7 +68,6 @@ static const char* usage_str =
     "                              (default: /unifyfs)\n"
     " -p, --parallel               parallel transfer\n"
     " -r, --rank=<rank>            use <rank> for transfer (default: 0)\n"
-    " -u, --unmount                unmount the filesystem after test\n"
     "\n";
 
 static char* program;
@@ -85,10 +80,15 @@ static void print_usage(void)
 
 int main(int argc, char** argv)
 {
+    int mounted = 0;
     int ret = 0;
     int ch = 0;
     int optidx = 0;
     struct stat sb = { 0, };
+
+    size_t srclen;
+    char* srcpath;
+    char* dstpath;
 
     program = basename(strdup(argv[0]));
 
@@ -117,10 +117,10 @@ int main(int argc, char** argv)
 
         case 'r':
             rank_worker = atoi(optarg);
-            break;
-
-        case 'u':
-            unmount = 1;
+            if (rank_worker >= total_ranks) {
+                test_print(rank, "ERROR - %d is not a valid rank");
+                print_usage();
+            }
             break;
 
         case 'h':
@@ -130,59 +130,60 @@ int main(int argc, char** argv)
         }
     }
 
+    /* get source and destination files */
     if (argc - optind != 2) {
         print_usage();
     }
-
     srcpath = strdup(argv[optind++]);
     dstpath = strdup(argv[optind++]);
 
-    if (srcpath[strlen(srcpath) - 1] == '/') {
-        srcpath[strlen(srcpath) - 1] = '\0';
+    srclen = strlen(srcpath);
+    if (srcpath[srclen - 1] == '/') {
+        srcpath[srclen - 1] = '\0';
     }
 
     if (debug) {
-        test_pause(rank, "Attempting to mount");
+        test_pause(rank, "Before mounting UnifyFS");
     }
 
-    ret = unifyfs_mount(mountpoint, rank, total_ranks, 0);
+    if (NULL == mountpoint) {
+        mountpoint = strdup("/unifyfs");
+    }
+
+    ret = unifyfs_mount(mountpoint, rank, total_ranks);
     if (ret) {
-        test_print(rank, "unifyfs_mount failed (return = %d)", ret);
-        goto out;
-    }
-
-    if (parallel) {
-        ret = unifyfs_transfer_file_parallel(srcpath, dstpath);
-        if (ret) {
-            test_print(rank, "copy failed (%d: %s)", ret, strerror(ret));
-        }
+        test_print(rank, "unifyfs_mount(%s) failed (rc=%d)",
+                   mountpoint, ret);
     } else {
-        if (rank_worker >= total_ranks) {
-            test_print(rank, "%d is not a valid rank");
-            goto out;
-        }
-
-        MPI_Barrier(MPI_COMM_WORLD);
-
-        if (rank == rank_worker) {
-            ret = unifyfs_transfer_file_serial(srcpath, dstpath);
-            if (ret) {
-                test_print(rank, "copy failed (%d: %s)", ret, strerror(ret));
-            }
-        }
+        mounted = 1;
     }
-
-    free(dstpath);
-    free(srcpath);
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (unmount) {
+    if (mounted) {
+        if (parallel) {
+            ret = unifyfs_transfer_file_parallel(srcpath, dstpath);
+            if (ret) {
+                test_print(rank, "paralled transfer failed (rc=%d: %s)",
+                        ret, strerror(ret));
+            }
+        } else if (rank == rank_worker) {
+            ret = unifyfs_transfer_file_serial(srcpath, dstpath);
+            if (ret) {
+                test_print(rank, "serial transfer failed (rc=%d: %s)",
+                        ret, strerror(ret));
+            }
+        }
         unifyfs_unmount();
     }
 
-out:
+    MPI_Barrier(MPI_COMM_WORLD);
+
     MPI_Finalize();
+
+    free(mountpoint);
+    free(srcpath);
+    free(dstpath);
 
     return ret;
 }

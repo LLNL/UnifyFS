@@ -190,13 +190,9 @@ char* mktemp_cmd(test_cfg* cfg, char* tmpdir)
         return NULL;
     }
 
-    /* If we can get our job ID, use it to seed our RNG. Else use our app_id */
-    job_id = getenv("LSB_JOBID");
-    if (job_id) {
-        srand(atol(job_id));
-    } else {
-        srand(cfg->app_id);
-    }
+    /* seed our RNG */
+    unsigned int now = (unsigned int) time(NULL);
+    srand(now);
 
     do {
         /*

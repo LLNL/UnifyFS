@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2020, Lawrence Livermore National Security, LLC.
+ * Copyright (c) 2022, Lawrence Livermore National Security, LLC.
  * Produced at the Lawrence Livermore National Laboratory.
  *
- * Copyright 2020, UT-Battelle, LLC.
+ * Copyright 2022, UT-Battelle, LLC.
  *
  * LLNL-CODE-741539
  * All rights reserved.
@@ -11,28 +11,137 @@
  * For details, see https://github.com/LLNL/UnifyFS.
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
+
 #include <config.h>
 
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
-#include <errno.h>
-#include <ctype.h>
-#include <limits.h>
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <libgen.h>
-#include <getopt.h>
-#include <time.h>
+
 #include <mpi.h>
 #include <openssl/md5.h>
 
 #include "unifyfs-stage.h"
+
+static
+int read_unify_file_block(unifyfs_handle fshdl,
+                          unifyfs_gfid gfid,
+                          off_t file_offset,
+                          size_t bufsize,
+                          char* databuf,
+                          size_t* nread)
+{
+    int ret = 0;
+    size_t len = 0;
+
+    unifyfs_io_request rd_req;
+    rd_req.op       = UNIFYFS_IOREQ_OP_READ;
+    rd_req.gfid     = gfid;
+    rd_req.nbytes   = bufsize;
+    rd_req.offset   = file_offset;
+    rd_req.user_buf = (void*) databuf;
+
+    unifyfs_rc urc = unifyfs_dispatch_io(fshdl, 1, &rd_req);
+    if (UNIFYFS_SUCCESS != urc) {
+        fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                "unifyfs_dispatch_io(OP_READ) failed - %s",
+                unifyfs_rc_enum_description(urc));
+        ret = unifyfs_rc_errno(urc);
+    } else {
+        urc = unifyfs_wait_io(fshdl, 1, &rd_req, 1);
+        if (UNIFYFS_SUCCESS != urc) {
+            fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                    "unifyfs_wait_io(OP_READ) failed - %s",
+                    unifyfs_rc_enum_description(urc));
+            ret = unifyfs_rc_errno(urc);
+        } else {
+            if (0 == rd_req.result.error) {
+                len = rd_req.result.count;
+            } else {
+                fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                        "OP_READ req failed - %s",
+                        strerror(rd_req.result.error));
+                ret = rd_req.result.error;
+            }
+        }
+    }
+    *nread = len;
+    return ret;
+}
+
+static
+int write_unify_file_block(unifyfs_handle fshdl,
+                           unifyfs_gfid gfid,
+                           off_t file_offset,
+                           size_t bufsize,
+                           char* databuf,
+                           size_t* nwrite)
+{
+    int ret = 0;
+    size_t len = 0;
+
+    unifyfs_io_request wr_req;
+    wr_req.op       = UNIFYFS_IOREQ_OP_WRITE;
+    wr_req.gfid     = gfid;
+    wr_req.nbytes   = bufsize;
+    wr_req.offset   = file_offset;
+    wr_req.user_buf = (void*) databuf;
+
+    unifyfs_rc urc = unifyfs_dispatch_io(fshdl, 1, &wr_req);
+    if (UNIFYFS_SUCCESS != urc) {
+        fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                "unifyfs_dispatch_io(OP_WRITE) failed - %s",
+                unifyfs_rc_enum_description(urc));
+        ret = unifyfs_rc_errno(urc);
+    } else {
+        urc = unifyfs_wait_io(fshdl, 1, &wr_req, 1);
+        if (UNIFYFS_SUCCESS != urc) {
+            fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                    "unifyfs_wait_io(OP_WRITE) failed - %s",
+                    unifyfs_rc_enum_description(urc));
+            ret = unifyfs_rc_errno(urc);
+        } else {
+            if (0 == wr_req.result.error) {
+                len = wr_req.result.count;
+            } else {
+                fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                        "OP_WRITE req failed - %s",
+                        strerror(wr_req.result.error));
+                ret = wr_req.result.error;
+            }
+        }
+    }
+    *nwrite = len;
+    return ret;
+}
+
+static
+int read_file_block(int fd,
+                    off_t file_offset,
+                    size_t bufsize,
+                    char* databuf,
+                    size_t* nread)
+{
+    int err;
+    int ret = 0;
+    errno = 0;
+    ssize_t len = pread(fd, (void*) databuf, bufsize, file_offset);
+    if (-1 == len) {
+        err = errno;
+        fprintf(stderr, "UNIFYFS-STAGE ERROR: pread() failed - %s",
+                strerror(err));
+        ret = err;
+        len = 0;
+    }
+    *nread = len;
+    return ret;
+}
 
 /**
  * @brief Run md5 checksum on specified file, send back
@@ -43,43 +152,82 @@
  *
  * @return 0 on success, errno otherwise
  */
-static int md5_checksum(const char* path, unsigned char* digest)
+static int md5_checksum(unifyfs_stage* ctx,
+                        bool is_unify_file,
+                        const char* path,
+                        unsigned char* digest)
 {
+    int err, fd, md5_rc, rc;
     int ret = 0;
+    unifyfs_gfid gfid;
+    unifyfs_rc urc;
     size_t len = 0;
-    int fd = -1;
-    unsigned char data[UNIFYFS_STAGE_MD5_BLOCKSIZE] = { 0, };
+    off_t file_offset;
     MD5_CTX md5;
+    unsigned char data[UNIFYFS_STAGE_MD5_BLOCKSIZE];
 
-    fd = open(path, O_RDONLY);
-    if (fd < 0) {
-        perror("open");
-        return errno;
-    }
-
-    ret = MD5_Init(&md5);
-    if (!ret) {
-        fprintf(stderr, "failed to create md5 context\n");
-        goto out;
-    }
-
-    while ((len = read(fd, (void*) data, UNIFYFS_STAGE_MD5_BLOCKSIZE)) != 0) {
-        ret = MD5_Update(&md5, data, len);
-        if (!ret) {
-            fprintf(stderr, "failed to update checksum\n");
-            goto out;
+    if (is_unify_file) {
+        fd = -1;
+        urc = unifyfs_open(ctx->fshdl, O_RDONLY, path, &gfid);
+        if (UNIFYFS_SUCCESS != urc) {
+            fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                    "failed to unifyfs_open(%s) - %s\n",
+                    path, unifyfs_rc_enum_description(urc));
+            return unifyfs_rc_errno(urc);
+        }
+    } else {
+        errno = 0;
+        fd = open(path, O_RDONLY);
+        if (fd < 0) {
+            err = errno;
+            fprintf(stderr, "UNIFYFS-STAGE ERROR: failed to open(%s) - %s\n",
+                    path, strerror(err));
+            return err;
         }
     }
 
-    ret = MD5_Final(digest, &md5);
-    if (!ret) {
-        fprintf(stderr, "failed to finalize md5\n");
+    /* NOTE: MD5_xxxx() returns 1 for success */
+    md5_rc = MD5_Init(&md5);
+    if (md5_rc != 1) {
+        fprintf(stderr, "UNIFYFS-STAGE ERROR: failed to create MD5 context\n");
+        ret = EIO;
+    } else {
+        file_offset = 0;
+        do {
+            len = 0;
+            memset(data, 0, sizeof(data));
+            if (is_unify_file) {
+                rc = read_unify_file_block(ctx->fshdl, gfid, file_offset,
+                                           sizeof(data), (char*)data, &len);
+            } else {
+                rc = read_file_block(fd, file_offset,
+                                     sizeof(data), (char*)data, &len);
+            }
+            if (rc != 0) {
+                ret = EIO;
+                break;
+            } else if (len) {
+                file_offset += (off_t) len;
+                md5_rc = MD5_Update(&md5, data, len);
+                if (md5_rc != 1) {
+                    fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                            "MD5 checksum update failed\n");
+                    ret = EIO;
+                    break;
+                }
+            }
+        } while (len != 0);
+
+        md5_rc = MD5_Final(digest, &md5);
+        if (md5_rc != 1) {
+            fprintf(stderr, "UNIFYFS-STAGE ERROR: failed to finalize MD5\n");
+            ret = EIO;
+        }
     }
 
-out:
-    /* MD5_xx returns 1 for success */
-    ret = (ret == 1 ? 0 : EIO);
-    close(fd);
+    if (-1 != fd) {
+        close(fd);
+    }
 
     return ret;
 }
@@ -109,12 +257,18 @@ static char* checksum_str(char* buf, unsigned char* digest)
 /**
  * @brief takes check sums of two files and compares
  *
- * @param src     path to one file
- * @param dst     path to the other file
+ * @param src_in_unify     is source file in UnifyFS?
+ * @param dst_in_unify     is destination file in UnifyFS?
+ * @param src              source file path
+ * @param dst              destination filepath
  *
  * @return 0 if files are identical, non-zero if not, or other error
  */
-static int verify_checksum(const char* src, const char* dst)
+static int verify_checksum(unifyfs_stage* ctx,
+                           bool src_in_unify,
+                           bool dst_in_unify,
+                           const char* src,
+                           const char* dst)
 {
     int ret = 0;
     int i = 0;
@@ -126,265 +280,316 @@ static int verify_checksum(const char* src, const char* dst)
     src_digest[MD5_DIGEST_LENGTH] = '\0';
     dst_digest[MD5_DIGEST_LENGTH] = '\0';
 
-    ret = md5_checksum(src, src_digest);
+    ret = md5_checksum(ctx, src_in_unify, src, src_digest);
     if (ret) {
-        fprintf(stderr, "failed to calculate checksum for %s (%s)\n",
-                src, strerror(ret));
+        fprintf(stderr, "UNIFYFS-STAGE ERROR: MD5 checksum failure "
+                "for source file %s\n",
+                src);
         return ret;
     }
 
-    ret = md5_checksum(dst, dst_digest);
+    ret = md5_checksum(ctx, dst_in_unify, dst, dst_digest);
     if (ret) {
-        fprintf(stderr, "failed to calculate checksum for %s (%s)\n",
-                dst, strerror(ret));
+        fprintf(stderr, "UNIFYFS-STAGE ERROR: MD5 checksum failure "
+                "for destination file %s\n",
+                dst);
         return ret;
-    }
-
-    if (verbose) {
-        printf("[%d] src: %s, dst: %s\n", rank,
-               checksum_str(md5src, src_digest),
-               checksum_str(md5dst, dst_digest));
     }
 
     for (i = 0; i < MD5_DIGEST_LENGTH; i++) {
         if (src_digest[i] != dst_digest[i]) {
-            fprintf(stderr, "[%d] checksum verification failed: "
-                    "(src=%s, dst=%s)\n", rank,
+            fprintf(stderr, "UNIFYFS-STAGE ERROR: checksums do not match! "
+                    "(src=%s, dst=%s)\n",
                     checksum_str(md5src, src_digest),
                     checksum_str(md5dst, dst_digest));
             ret = EIO;
+            break;
         }
+    }
+    if (verbose && (0 == ret)) {
+        printf("UNIFYFS-STAGE INFO: checksums (src=%s, dst=%s)\n",
+               checksum_str(md5src, src_digest),
+               checksum_str(md5dst, dst_digest));
     }
 
     return ret;
 }
 
-/*
- * Parse a line from the manifest in the form of:
- *
- * <src path> <whitespace separator> <dest path>
- *
- * If the paths have spaces, they must be quoted.
- *
- * On success, return 0 along with allocated src and dest strings.  These
- * must be freed when you're finished with them.  On failure return non-zero,
- * and set src and dest to NULL.
- *
- * Note, leading and tailing whitespace are ok.  They just get ignored.
- * Lines with only whitespace are ignored.  A line of all whitespace will
- * return 0, with src and dest being NULL, so users should not check for
- * 'if (*src == NULL)' to see if the function failed.  They should be looking
- * at the return code.
- */
-/**
- * @brief parses manifest file line, passes back src and dst strings
- *
- * @param line    input manifest file line
- * @param src     return val of src filename
- * @param dst     return val of dst filename
- *
- * @return 0 if all was well, or there was nothing; non-zero on error
- */
-int
-unifyfs_parse_manifest_line(char* line, char** src, char** dest)
+static
+int distribute_source_file_data(unifyfs_stage* ctx,
+                                const char* src_file_path,
+                                const char* dst_file_path,
+                                size_t transfer_blksz,
+                                size_t num_file_blocks)
 {
-    char* new_src = NULL;
-    char* new_dest = NULL;
-    char* copy;
-    char* tmp;
-    unsigned long copy_len;
-    int i;
-    unsigned int tmp_count;
-    int in_quotes = 0;
-    int rc = 0;
-
-    copy = strdup(line);
-    copy_len = strlen(copy) + 1;/* +1 for '\0' */
-
-    /* Replace quotes and separator with '\0' */
-    for (i = 0; i < copy_len; i++) {
-        if (copy[i] == '"') {
-            in_quotes ^= 1;/* toggle */
-            copy[i] = '\0';
-        } else if (isspace(copy[i]) && !in_quotes) {
-            /*
-             * Allow any whitespace for our separator
-             */
-            copy[i] = '\0';
-        }
-    }
-
-    /*
-     * copy[] now contains a series of strings, one after the other
-     * (possibly containing some NULL strings, which we ignore)
-     */
-    tmp = copy;
-    while (tmp < copy + copy_len) {
-        tmp_count = strlen(tmp);
-        if (tmp_count > 0) {
-            /* We have a real string */
-            if (!new_src) {
-                new_src = strdup(tmp);
-            } else {
-                if (!new_dest) {
-                    new_dest = strdup(tmp);
-                } else {
-                    /* Error: a third file name */
-                    rc = 1;
-                    break;
-                }
-            }
-        }
-        tmp += tmp_count + 1;
-    }
-
-    /* Some kind of error parsing a line */
-    if (rc != 0 || (new_src && !new_dest)) {
-        fprintf(stderr, "manifest file line >>%s<< is invalid!\n",
-                line);
-        free(new_src);
-        free(new_dest);
-        new_src = NULL;
-        new_dest = NULL;
-        if (rc == 0) {
-            rc = 1;
-        }
-    }
-
-    *src = new_src;
-    *dest = new_dest;
-
-    free(copy);
-    return rc;
-}
-
-/**
- * @brief controls the action of the stage-in or stage-out.  Opens up
- *        the manifest file, sends each line to be parsed, and fires
- *        each source/destination to be staged.
- *
- * @param ctx     stage context and instructions
- *
- * @return 0 indicates success, non-zero is error
- */
-int unifyfs_stage_transfer(unifyfs_stage_t* ctx)
-{
+    int rc;
+    int fd = -1;
     int ret = 0;
-    int count = 0;
-    FILE* fp = NULL;
-    char* src = NULL;
-    char* dst = NULL;
-    char linebuf[LINE_MAX] = { 0, };
+    unifyfs_gfid gfid;
+    unifyfs_rc urc;
 
-    if (!ctx) {
-        return EINVAL;
+    size_t blocks_per_client = num_file_blocks / ctx->total_ranks;
+    if (blocks_per_client < 8) {
+        /* somewhat arbitrary choice of minimum 8 blocks per client.
+         * also avoids distribution of small files */
+        blocks_per_client = 8;
     }
 
-    fp = fopen(ctx->manifest_file, "r");
-    if (!fp) {
-        fprintf(stderr, "failed to open file %s: %s\n",
-                ctx->manifest_file, strerror(errno));
-        ret = errno;
-        goto out;
+    /* rank 0 creates destination file */
+    if (ctx->rank == 0) {
+        urc = unifyfs_create(ctx->fshdl, O_WRONLY, dst_file_path, &gfid);
+        if (UNIFYFS_SUCCESS != urc) {
+            fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                    "failed to unifyfs_create(%s) - %s\n",
+                    dst_file_path, unifyfs_rc_enum_description(urc));
+            ret = unifyfs_rc_errno(urc);
+        }
     }
+    MPI_Barrier(MPI_COMM_WORLD);
 
-    while (NULL != fgets(linebuf, LINE_MAX - 1, fp)) {
-        if (strlen(linebuf) < 5) {
-            if (linebuf[0] == '\n') {
-                // manifest file ends in a blank line
-                goto out;
-            } else {
-                fprintf(stderr, "Short (bad) manifest file line: >%s<\n",
-                        linebuf);
-                ret = -EINVAL;
-                goto out;
+    size_t start_block_ndx = ctx->rank * blocks_per_client;
+    if (start_block_ndx < num_file_blocks) {
+        /* open source file */
+        errno = 0;
+        fd = open(src_file_path, O_RDONLY);
+        if (fd < 0) {
+            ret = errno;
+            fprintf(stderr, "UNIFYFS-STAGE ERROR: failed to open(%s) - %s\n",
+                    src_file_path, strerror(ret));
+        }
+
+        /* non-zero ranks just open destination file */
+        if (ctx->rank != 0) {
+            urc = unifyfs_open(ctx->fshdl, O_WRONLY, dst_file_path, &gfid);
+            if (UNIFYFS_SUCCESS != urc) {
+                fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                        "failed to unifyfs_open(%s) - %s\n",
+                        dst_file_path, unifyfs_rc_enum_description(urc));
+                ret = unifyfs_rc_errno(urc);
             }
         }
-        ret = unifyfs_parse_manifest_line(linebuf, &src, &dst);
-        if (ret < 0) {
-            fprintf(stderr, "failed to parse %s (%s)\n",
-                    linebuf, strerror(ret));
-            goto out;
+
+        /* make sure all the open/create calls succeeded */
+        if (ret) {
+            goto err_ret;
         }
-        if (ctx->mode == UNIFYFS_STAGE_SERIAL) {
-            if (count % total_ranks == rank) {
-                if (verbose) {
-                    fprintf(stdout, "[%d] serial transfer: src=%s, dst=%s\n",
-                            rank, src, dst);
-                }
 
-                ret = unifyfs_transfer_file_serial(src, dst);
-                if (ret) {
-                    goto out;
-                }
+        char* block_data = malloc(transfer_blksz);
+        if (NULL == block_data) {
+            ret = ENOMEM;
+            goto err_ret;
+        }
 
-                if (ret < 0) {
-                    fprintf(stderr, "stat on %s failed (err=%d, %s)\n",
-                            dst, errno, strerror(errno));
-                    ret = errno;
-                    goto out;
-                }
-
-                if (ctx->checksum) {
-                    ret = verify_checksum(src, dst);
-                    if (ret) {
-                        fprintf(stderr, "checksums for >%s< and >%s< differ!\n",
-                                src, dst);
-                        goto out;
+        for (size_t i = 0; i < blocks_per_client; i++) {
+            memset(block_data, 0, transfer_blksz);
+            size_t block_ndx = start_block_ndx + i;
+            if (block_ndx < num_file_blocks) {
+                size_t nread = 0;
+                off_t block_offset = block_ndx * transfer_blksz;
+                rc = read_file_block(fd, block_offset, transfer_blksz,
+                                     block_data, &nread);
+                if (rc) {
+                    ret = rc;
+                    break;
+                } else {
+                    size_t nwrite = 0;
+                    rc = write_unify_file_block(ctx->fshdl, gfid, block_offset,
+                                                nread, block_data, &nwrite);
+                    if (rc) {
+                        ret = rc;
+                        break;
+                    } else if (verbose && (nread != nwrite)) {
+                        printf("[rank=%d] UNIFYFS-STAGE DEBUG: "
+                               "mismatch on read=%zu / write=%zu bytes\n",
+                               ctx->rank, nread, nwrite);
                     }
                 }
             }
+        }
+
+        /* synchronize local writes */
+        urc = unifyfs_sync(ctx->fshdl, gfid);
+        if (UNIFYFS_SUCCESS != urc) {
+            fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                    "failed to unifyfs_sync(%s) - %s\n",
+                    dst_file_path, unifyfs_rc_enum_description(urc));
+            ret = unifyfs_rc_errno(urc);
+        }
+    }
+
+err_ret:
+    if (fd != -1) {
+        close(fd);
+    }
+
+    return ret;
+}
+
+/**
+ * @brief transfer source file to destination according to stage context
+ *
+ * @param ctx               stage context
+ * @param file_index        index of file in manifest (>=1)
+ * @param src_file_size     size in bytes of source file
+ * @param src_file_path     source file path
+ * @param dst_file_path     destination file path
+ *
+ * @return 0 on success, errno otherwise
+ */
+int unifyfs_stage_transfer(unifyfs_stage* ctx,
+                           int file_index,
+                           const char* src_file_path,
+                           const char* dst_file_path)
+{
+    int err, rc;
+    int ret = 0;
+    unifyfs_rc urc;
+
+    const char* src = src_file_path;
+    const char* dst = dst_file_path;
+
+    if (!ctx || (NULL == src) || (NULL == dst)) {
+        fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                "invalid stage_transfer() params\n");
+        return EINVAL;
+    }
+
+    /* decide which rank gets to manage the transfer */
+    int mgr_rank = (file_index - 1) % ctx->total_ranks;
+
+    bool src_in_unify = is_unifyfs_path(ctx->fshdl, src);
+    bool dst_in_unify = is_unifyfs_path(ctx->fshdl, dst);
+    if (src_in_unify && dst_in_unify) {
+        if (mgr_rank == ctx->rank) {
+            fprintf(stderr,
+                    "UNIFYFS-STAGE ERROR: staging is not supported "
+                    "for source (%s) and destination (%s) both in UnifyFS!\n",
+                    src, dst);
+        }
+        return EINVAL;
+    }
+
+    if (ctx->mode == UNIFYFS_STAGE_MODE_SERIAL) {
+        /* use barrier to force sequential processing */
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+
+    if (src_in_unify && (mgr_rank == ctx->rank)) {
+        /* transfer manager rank initiates transfer using library API,
+         * other ranks do nothing */
+        if (verbose) {
+            printf("[rank=%d] UNIFYFS-STAGE INFO: "
+                   "transfer src=%s, dst=%s\n",
+                   ctx->rank, src, dst);
+        }
+
+        unifyfs_transfer_request transfer = {0};
+        transfer.src_path = src;
+        transfer.dst_path = dst;
+        transfer.mode = UNIFYFS_TRANSFER_MODE_COPY;
+        transfer.use_parallel = 1;
+        urc = unifyfs_dispatch_transfer(ctx->fshdl, 1, &transfer);
+        if (urc != UNIFYFS_SUCCESS) {
+            fprintf(stderr, "[rank=%d] UNIFYFS-STAGE ERROR: "
+                    "transfer dispatch failed! %s\n",
+                    ctx->rank, unifyfs_rc_enum_description(urc));
+            ret = unifyfs_rc_errno(urc);
         } else {
-            if (0 == rank) {
-                int fd = -1;
-
-                if (verbose) {
-                    fprintf(stdout, "[%d] parallel transfer: src=%s, dst=%s\n",
-                            rank, src, dst);
-                }
-
-                fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0600);
-                if (fd < 0) {
-                    fprintf(stderr, "[%d] failed to create the file %s\n",
-                            rank, dst);
-                    goto out;
-                }
-                close(fd);
-            }
-
-            MPI_Barrier(MPI_COMM_WORLD);
-
-            ret = unifyfs_transfer_file_parallel(src, dst);
-            if (ret) {
-                goto out;
-            }
-
-            MPI_Barrier(MPI_COMM_WORLD);
-
-            // possible lamination check or force lamination
-            // may need to go here
-
-            if (ctx->checksum && 0 == rank) {
-                ret = verify_checksum(src, dst);
-                if (ret) {
-                    goto out;
+            urc = unifyfs_wait_transfer(ctx->fshdl, 1, &transfer, 1);
+            if (urc != UNIFYFS_SUCCESS) {
+                fprintf(stderr, "[rank=%d] UNIFYFS-STAGE ERROR: "
+                        "transfer wait failed! %s\n",
+                        ctx->rank, unifyfs_rc_enum_description(urc));
+                ret = unifyfs_rc_errno(urc);
+            } else {
+                if (transfer.result.rc == UNIFYFS_SUCCESS) {
+                    if (verbose) {
+                        printf("[rank=%d] UNIFYFS-STAGE INFO: "
+                               "file size = %zu B, "
+                               "transfer time = %.3f sec\n",
+                               ctx->rank,
+                               transfer.result.file_size_bytes,
+                               transfer.result.transfer_time_seconds);
+                    }
+                } else {
+                    ret = transfer.result.error;
                 }
             }
         }
-
-        count++;
-    }
-out:
-    if (ret) {
-        fprintf(stderr, "failed to transfer file (src=%s, dst=%s): %s\n",
-                src, dst, strerror(ret));
     }
 
-    if (fp) {
-        fclose(fp);
-        fp = NULL;
+    if (dst_in_unify) {
+        unsigned long src_file_size = 0;
+        if (mgr_rank == ctx->rank) {
+            struct stat ss;
+            errno = 0;
+            rc = stat(src_file_path, &ss);
+            if (rc) {
+                err = errno;
+                fprintf(stderr, "[rank=%d] UNIFYFS-STAGE ERROR: "
+                        "failed to stat(src=%s) - %s\n",
+                        ctx->rank, src, strerror(err));
+                ret = err;
+            } else {
+                src_file_size = (unsigned long) ss.st_size;
+            }
+        }
+        rc = MPI_Bcast((void*)&src_file_size, 1, MPI_UNSIGNED_LONG,
+                       mgr_rank, MPI_COMM_WORLD);
+        if (rc != MPI_SUCCESS) {
+            char mpi_errstr[MPI_MAX_ERROR_STRING];
+            int errstr_len = 0;
+            MPI_Error_string(rc, mpi_errstr, &errstr_len);
+            fprintf(stderr, "[rank=%d] UNIFYFS-STAGE ERROR: "
+                    "MPI_Bcast() of source file size failed - %s\n",
+                    ctx->rank, mpi_errstr);
+            ret = UNIFYFS_FAILURE;
+        } else {
+            size_t transfer_blksz = UNIFYFS_STAGE_TRANSFER_BLOCKSIZE;
+            size_t n_blocks = src_file_size / transfer_blksz;
+            if (src_file_size % transfer_blksz) {
+                n_blocks++;
+            }
+
+            if (ctx->data_dist == UNIFYFS_STAGE_DATA_BALANCED) {
+                /* spread source file data evenly across clients */
+                rc = distribute_source_file_data(ctx, src, dst,
+                                                transfer_blksz, n_blocks);
+                if (rc) {
+                    ret = rc;
+                    fprintf(stderr, "[rank=%d] UNIFYFS-STAGE ERROR: "
+                            "failed to distribute src=%s to dst=%s - %s\n",
+                            ctx->rank, src, dst, strerror(ret));
+                }
+            } else { // UNIFYFS_STAGE_DATA_SKEWED
+                // TODO: implement skewed data distribution
+                ret = UNIFYFS_ERROR_NYI;
+            }
+        }
     }
 
+    if (0 == ret) { /* transfer completed OK */
+        if ((mgr_rank == ctx->rank) && (ctx->checksum)) {
+            rc = verify_checksum(ctx, src_in_unify, dst_in_unify,
+                                 src, dst);
+            if (rc) {
+                fprintf(stderr,
+                        "[rank=%d] UNIFYFS-STAGE ERROR: "
+                        "checksums differ for src=%s, dst=%s !\n",
+                        ctx->rank, src, dst);
+                ret = rc;
+            }
+        }
+    }
+
+    if (0 != ret) { /* something went wrong */
+        if (mgr_rank == ctx->rank) {
+            fprintf(stderr, "UNIFYFS-STAGE ERROR: "
+                    "stage transfer failed for index[%d] "
+                    "src=%s, dst=%s (error=%d)\n",
+                    file_index, src, dst, ret);
+        }
+    }
     return ret;
 }
 

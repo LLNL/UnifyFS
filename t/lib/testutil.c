@@ -13,11 +13,14 @@
  */
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+
+#include "testutil.h"
 
 static unsigned long seed;
 
@@ -81,24 +84,47 @@ void testutil_rand_path(char* buf, size_t len, const char* pfx)
 }
 
 /*
- * Return a pointer to the path name of the UnifyFS mount point. Use the
- * value of the environment variable UNIFYFS_MOUNTPOINT if it exists,
- * otherwise use P_tmpdir which is defined in stdio.h and is typically
- * /tmp.
+ * Return a pointer to the path name of the test temp directory. Use the
+ * value of the environment variable UNIFYFS_TEST_TMPDIR if it exists,
+ * otherwise use P_tmpdir (defined in stdio.h, typically '/tmp').
  */
-char* testutil_get_mount_point(void)
+char* testutil_get_tmp_dir(void)
 {
     char* path;
-    char* env = getenv("UNIFYFS_MOUNTPOINT");
+    char* val = getenv("UNIFYFS_TEST_TMPDIR");
 
-    if (env != NULL) {
-        path = env;
+    if (val != NULL) {
+        path = val;
     } else {
         path = P_tmpdir;
     }
 
     return path;
 }
+
+/*
+ * Return a pointer to the path name of the UnifyFS mount point. Use the
+ * value of the environment variable UNIFYFS_MOUNTPOINT if it exists,
+ * otherwise use 'tmpdir/unifyfs'.
+ */
+char* testutil_get_mount_point(void)
+{
+    char* path;
+    char* val = getenv("UNIFYFS_MOUNTPOINT");
+
+    if (val != NULL) {
+        path = val;
+    } else {
+        char* tmpdir = testutil_get_tmp_dir();
+        size_t path_len = strlen(tmpdir) + strlen("/unifyfs") + 1;
+        path = malloc(path_len);
+        snprintf(path, path_len, "%s/unifyfs", tmpdir);
+    }
+
+    return path;
+}
+
+
 
 /* Stat the file associated to by path and store the global size of the
  * file at path in the address of the global pointer passed in. */
@@ -117,4 +143,93 @@ void testutil_get_size(char* path, size_t* global)
     if (global) {
         *global = sb.st_size;
     }
+}
+
+/*
+ * Sequentially number every 8 bytes (uint64_t)
+ */
+void testutil_lipsum_generate(char* buf, uint64_t len, uint64_t offset)
+{
+    uint64_t i;
+    uint64_t skip = 0;
+    uint64_t remain = 0;
+    uint64_t start = offset / sizeof(uint64_t);
+    uint64_t count = len / sizeof(uint64_t);
+    uint64_t* ibuf = (uint64_t*) buf;
+
+    /* check if we have any extra bytes at the front and end */
+    if (offset % sizeof(uint64_t)) {
+        skip = sizeof(uint64_t) - (offset % sizeof(uint64_t));
+        remain = (len - skip) % sizeof(uint64_t);
+
+        ibuf = (uint64_t*) &buf[skip];
+        start++;
+
+        if (skip + remain >= sizeof(uint64_t)) {
+            count--;
+        }
+    }
+
+    for (i = 0; i < count; i++) {
+        ibuf[i] = start + i;
+    }
+}
+
+/*
+ * Check buffer contains lipsum generated data.
+ * returns 0 on success, -1 otherwise with @error_offset set.
+ */
+int testutil_lipsum_check(const char* buf, uint64_t len, uint64_t offset,
+                          uint64_t* error_offset)
+{
+    uint64_t i, val;
+    uint64_t skip = 0;
+    uint64_t remain = 0;
+    uint64_t start = offset / sizeof(uint64_t);
+    uint64_t count = len / sizeof(uint64_t);
+    const uint64_t* ibuf = (uint64_t*) buf;
+
+    /* check if we have any extra bytes at the front and end */
+    if (offset % sizeof(uint64_t)) {
+        skip = sizeof(uint64_t) - (offset % sizeof(uint64_t));
+        remain = (len - skip) % sizeof(uint64_t);
+
+        ibuf = (uint64_t*) &buf[skip];
+        start++;
+
+        if (skip + remain >= sizeof(uint64_t)) {
+            count--;
+        }
+    }
+
+    for (i = 0; i < count; i++) {
+        val = start + i;
+        if (ibuf[i] != val) {
+            *error_offset = offset + (i * sizeof(uint64_t));
+            fprintf(stderr,
+                    "LIPSUM CHECK ERROR: [%" PRIu64 "] @ offset %" PRIu64
+                    ", expected=%" PRIu64 " found=%" PRIu64 "\n",
+                    i, *error_offset, val, ibuf[i]);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+/*
+ * Check buffer contains all zero bytes.
+ * returns 0 on success, -1 otherwise.
+ */
+int testutil_zero_check(const char* buf, size_t len)
+{
+    for (size_t i = 0; i < len; i++) {
+        if (buf[i] != 0) {
+            fprintf(stderr,
+                    "ZERO CHECK ERROR: byte @ offset %zu is non-zero\n", i);
+            return -1;
+        }
+    }
+
+    return 0;
 }

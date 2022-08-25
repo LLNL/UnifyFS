@@ -55,8 +55,7 @@ a given section and key.
    =============  ======  ===============================================
    cleanup        BOOL    cleanup storage on server exit (default: off)
    configfile     STRING  path to custom configuration file
-   consistency    STRING  consistency model [ LAMINATED | POSIX | NONE ]
-   daemonize      BOOL    enable server daemonization (default: on)
+   daemonize      BOOL    enable server daemonization (default: off)
    mountpoint     STRING  mountpoint path prefix (default: /unifyfs)
    =============  ======  ===============================================
 
@@ -67,8 +66,9 @@ a given section and key.
    Key               Type    Description
    ================  ======  =================================================================
    cwd               STRING  effective starting current working directory
-   max_files         INT     maximum number of open files per client process (default: 128)
+   fsync_persist     BOOL    persist data to storage on fsync() (default: on)
    local_extents     BOOL    service reads from local data if possible (default: off)
+   max_files         INT     maximum number of open files per client process (default: 128)
    super_magic       BOOL    whether to return UNIFYFS (on) or TMPFS (off) statfs magic (default: on)
    write_index_size  INT     maximum size (B) of memory buffer for storing write log metadata
    write_sync        BOOL    sync data to server after every write (default: off)
@@ -108,9 +108,20 @@ files.
    ===========  ======  ============================================================
    chunk_size   INT     data chunk size (B) (default: 4 MiB)
    shmem_size   INT     maximum size (B) of data in shared memory (default: 256 MiB)
-   spill_size   INT     maximum size (B) of data in spillover file (default: 1 GiB)
+   spill_size   INT     maximum size (B) of data in spillover file (default: 4 GiB)
    spill_dir    STRING  path to spillover data directory
    ===========  ======  ============================================================
+
+.. table:: ``[margo]`` section - margo server NA settings
+   :widths: auto
+
+   ==============  ====  =================================================================================
+   Key             Type  Description
+   ==============  ====  =================================================================================
+   tcp             BOOL  Use TCP for server-to-server rpcs (default: on, turn off to enable libfabric RMA)
+   client_timeout  INT   timeout in milliseconds for rpcs between client and server (default: 5000)
+   server_timeout  INT   timeout in milliseconds for rpcs between servers (default: 15000)
+   ==============  ====  =================================================================================
 
 .. table:: ``[runstate]`` section - server runstate settings
    :widths: auto
@@ -124,21 +135,13 @@ files.
 .. table:: ``[server]`` section - server settings
    :widths: auto
 
-   ============  ======  =============================================================================
-   Key           Type    Description
-   ============  ======  =============================================================================
-   hostfile      STRING  path to server hostfile
-   init_timeout  INT     timeout in seconds to wait for servers to be ready for clients (default: 120)
-   ============  ======  =============================================================================
-
-.. table:: ``[margo]`` section - margo server NA settings
-   :widths: auto
-
-   ===  ====  =================================================================================
-   Key  Type  Description
-   ===  ====  =================================================================================
-   tcp  BOOL  Use TCP for server-to-server rpcs (default: on, turn off to enable libfabric RMA)
-   ===  ====  =================================================================================
+   =============  ======  =============================================================================
+   Key            Type    Description
+   =============  ======  =============================================================================
+   hostfile       STRING  path to server hostfile
+   init_timeout   INT     timeout in seconds to wait for servers to be ready for clients (default: 120)
+   local_extents  BOOL    use server extents to service local reads without consulting file owner
+   =============  ======  =============================================================================
 
 .. table:: ``[sharedfs]`` section - server shared files settings
    :widths: auto
@@ -177,20 +180,18 @@ is used, the value must immediately follow the option character (e.g., ``-Cyes``
 .. table:: ``unifyfsd`` command line options
    :widths: auto
 
-   ======================  ========
-   LongOpt                 ShortOpt
-   ======================  ========
-   --unifyfs-cleanup         -C
-   --unifyfs-configfile      -f
-   --unifyfs-consistency     -c
-   --unifyfs-daemonize       -D
-   --unifyfs-mountpoint      -m
-   --log-verbosity           -v
-   --log-file                -l
-   --log-dir                 -L
-   --runstate-dir            -R
-   --server-hostfile         -H
-   --sharedfs-dir            -S
-   --server-init_timeout     -t
-   ======================  ========
-
+   =========================  ========
+   LongOpt                    ShortOpt
+   =========================  ========
+   ``--unifyfs-cleanup``       ``-C``
+   ``--unifyfs-configfile``    ``-f``
+   ``--unifyfs-daemonize``     ``-D``
+   ``--unifyfs-mountpoint``    ``-m``
+   ``--log-verbosity``         ``-v``
+   ``--log-file``              ``-l``
+   ``--log-dir``               ``-L``
+   ``--runstate-dir``          ``-R``
+   ``--server-hostfile``       ``-H``
+   ``--sharedfs-dir``          ``-S``
+   ``--server-init_timeout``   ``-t``
+   =========================  ========
