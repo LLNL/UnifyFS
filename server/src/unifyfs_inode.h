@@ -236,5 +236,13 @@ int unifyfs_inode_span_extents(int gfid,
  */
 int unifyfs_inode_dump(int gfid);
 
+
+/**
+ * @brief walks the tree and gets a list of the gfids for all the inodes
+ *
+ * @return 0 on success, errno otherwise
+ */
+int unifyfs_get_gfids(int *num_gfids, int**gfid_list);
+
 #endif /* __UNIFYFS_INODE_H */
 

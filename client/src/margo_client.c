@@ -56,6 +56,7 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
     CLIENT_REGISTER_RPC(laminate);
     CLIENT_REGISTER_RPC(fsync);
     CLIENT_REGISTER_RPC(mread);
+    CLIENT_REGISTER_RPC(get_gfids);
 
 #undef CLIENT_REGISTER_RPC
 
@@ -1211,3 +1212,83 @@ static void unifyfs_unlink_callback_rpc(hg_handle_t handle)
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(unifyfs_unlink_callback_rpc)
+
+/* invokes the get_gfids rpc function */
+int invoke_client_get_gfids_rpc(unifyfs_client* client,
+                                int* num_gfids,
+                                int** gfid_list)
+{
+    /* check that we have initialized margo */
+    if (NULL == client_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    /* get handle to rpc function */
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.get_gfids_id);
+
+    /* fill in input struct */
+    unifyfs_get_gfids_in_t in;
+    in.app_id     = (int32_t) client->state.app_id;
+    in.client_id  = (int32_t) client->state.client_id;
+    /* TODO: What are app_id and client_id for?!? */
+
+    /* call rpc function */
+    LOGDBG("invoking the get_gfids rpc function in client");
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of get_gfids rpc to server failed");
+        margo_destroy(handle);
+        return rc;
+    }
+
+    /* decode response */
+    int ret;
+    unifyfs_get_gfids_out_t out;
+    hg_return_t hret = margo_get_output(handle, &out);
+    if (hret == HG_SUCCESS) {
+        LOGDBG("Got response ret=%" PRIi32, out.ret);
+        ret = (int) out.ret;
+        if (ret == (int)UNIFYFS_SUCCESS) {
+            LOGDBG("Number of GFIDs returned: %d", out.num_gfids);
+            *num_gfids = out.num_gfids;
+
+            // Pull the bulk data (the list of gfids) over from the server
+            hg_bulk_t local_bulk;
+            hg_size_t buf_size = out.num_gfids * sizeof(**gfid_list);
+
+            // Allocate local memory for the list of GFIDs
+            int *_gfid_list = calloc(out.num_gfids, sizeof(**gfid_list));
+
+            // Figure out some margo-specific info that we need for the transfer
+            const struct hg_info* info = margo_get_info(handle); // TODO: Is this the correct handle??
+            hg_addr_t server_addr = info->addr;  // adress of the bulk data on the server side
+            margo_instance_id mid = margo_hg_handle_get_instance(handle);  // TODO: Is this the correct handle??
+
+            ret = margo_bulk_create(mid, 1, (void**)&_gfid_list, &buf_size,
+                                    HG_BULK_WRITE_ONLY, &local_bulk);
+            assert(ret == HG_SUCCESS);  // TODO: DON'T ASSERT! CHECK FOR ERROR AND LOG IT
+
+            ret = margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
+                                      out.bulk_gfids, 0, local_bulk, 0, buf_size);
+            assert(ret == HG_SUCCESS);
+
+            ret = margo_bulk_free(local_bulk);
+            assert(ret == HG_SUCCESS);
+
+            *gfid_list = _gfid_list;  // copy the pointer so it can be returned to the caller
+                                      // (Caller will need to eventually call free() on this pointer!)
+        }
+        margo_free_output(handle, &out);
+    } else {
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+
+    /* free resources */
+    margo_destroy(handle);
+
+    return ret;
+
+
+}

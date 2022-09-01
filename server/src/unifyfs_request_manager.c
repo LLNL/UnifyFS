@@ -1440,6 +1440,62 @@ static int process_unlink_rpc(reqmgr_thrd_t* reqmgr,
     return ret;
 }
 
+static int process_get_gfids(reqmgr_thrd_t* reqmgr,
+                             client_rpc_req_t* req)
+{
+
+    int ret = UNIFYFS_SUCCESS;
+    int *gfid_list;
+    int num_gfids;
+
+    // The input struct doesn't have anything in it we actually need.  Still
+    // have to free() it, though.
+    unifyfs_get_gfids_in_t* in = req->input;
+    assert(in != NULL);
+    margo_free_input(req->handle, in);
+    free(in);
+
+    unifyfs_fops_ctx_t ctx = {
+        .app_id = reqmgr->app_id,
+        .client_id = reqmgr->client_id,
+    };
+
+    ret = unifyfs_fops_get_gfids(&ctx, &gfid_list, &num_gfids);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("unifyfs_fops_get_gfids() failed");
+    }
+
+    /* send rpc response */
+
+    unifyfs_get_gfids_out_t out;
+
+    /* initialize bulk handle for the gfid_list */
+    hg_size_t segment_sizes[1] = { num_gfids * sizeof(int) };
+    void* segment_ptrs[1] = { (void*)gfid_list };
+    hg_return_t hret = margo_bulk_create(unifyfsd_rpc_context->shm_mid, /* defined in margo_server.h */
+                                         1, segment_ptrs, segment_sizes,
+                                         HG_BULK_READ_ONLY, &out.bulk_gfids);
+    if (hret != HG_SUCCESS) {
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    out.ret = (int32_t) ret;
+    out.num_gfids = num_gfids;
+    hret = margo_respond(req->handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
+    }
+
+    /* cleanup req */
+    margo_destroy(req->handle);
+    margo_bulk_free(out.bulk_gfids);
+    free(gfid_list);
+
+    return ret;
+
+
+}
+
 /* iterate over list of chunk reads and send responses */
 static int rm_process_client_requests(reqmgr_thrd_t* reqmgr)
 {
@@ -1504,6 +1560,9 @@ static int rm_process_client_requests(reqmgr_thrd_t* reqmgr)
             break;
         case UNIFYFS_CLIENT_RPC_UNLINK:
             rret = process_unlink_rpc(reqmgr, req);
+            break;
+        case UNIFYFS_CLIENT_RPC_GET_GFIDS:
+            rret = process_get_gfids(reqmgr, req);
             break;
         default:
             LOGERR("unsupported client rpc request type %d", req->req_type);
