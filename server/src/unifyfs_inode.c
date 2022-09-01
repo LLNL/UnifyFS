@@ -750,13 +750,13 @@ int unifyfs_get_gfids(int *num_gfids, int**gfid_list)
 
     int _num_gfids = 0;
     int gfid_list_size = 64; // TODO: Is there a better starting number???
-    int *_gfid_list = malloc(sizeof(int) * gfid_list_size);
+    int* _gfid_list = malloc(sizeof(int) * gfid_list_size);
     if (!_gfid_list) {
         return ENOMEM;
     }
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
-    struct unifyfs_inode *node = unifyfs_inode_tree_iter(global_inode_tree, NULL);
+    struct unifyfs_inode* node = unifyfs_inode_tree_iter(global_inode_tree, NULL);
     {
         while (node) {
             if (_num_gfids == gfid_list_size) {

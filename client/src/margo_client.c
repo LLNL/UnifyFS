@@ -1258,11 +1258,11 @@ int invoke_client_get_gfids_rpc(unifyfs_client* client,
             hg_size_t buf_size = out.num_gfids * sizeof(**gfid_list);
 
             // Allocate local memory for the list of GFIDs
-            int *_gfid_list = calloc(out.num_gfids, sizeof(**gfid_list));
+            int* _gfid_list = calloc(out.num_gfids, sizeof(**gfid_list));
 
             // Figure out some margo-specific info that we need for the transfer
             const struct hg_info* info = margo_get_info(handle); // TODO: Is this the correct handle??
-            hg_addr_t server_addr = info->addr;  // adress of the bulk data on the server side
+            hg_addr_t server_addr = info->addr;  // address of the bulk data on the server side
             margo_instance_id mid = margo_hg_handle_get_instance(handle);  // TODO: Is this the correct handle??
 
             ret = margo_bulk_create(mid, 1, (void**)&_gfid_list, &buf_size,

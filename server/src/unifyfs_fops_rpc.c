@@ -342,9 +342,9 @@ int rpc_mread(unifyfs_fops_ctx_t* ctx,
 
 static
 int rpc_get_gfids(
-    unifyfs_fops_ctx_t *ctx,
-    int **gfid_list,
-    int *num_gfids)
+    unifyfs_fops_ctx_t* ctx,
+    int** gfid_list,
+    int* num_gfids)
 {
     // TODO: what do we need ctx for?!?
     return unifyfs_get_gfids(num_gfids, gfid_list);

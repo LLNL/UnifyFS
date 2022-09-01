@@ -242,7 +242,7 @@ int unifyfs_inode_dump(int gfid);
  *
  * @return 0 on success, errno otherwise
  */
-int unifyfs_get_gfids(int *num_gfids, int**gfid_list);
+int unifyfs_get_gfids(int* num_gfids, int** gfid_list);
 
 #endif /* __UNIFYFS_INODE_H */
 

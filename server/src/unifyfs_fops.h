@@ -63,7 +63,7 @@ typedef int (*unifyfs_fops_truncate_t)(unifyfs_fops_ctx_t* ctx,
 
 typedef int (*unifyfs_fops_unlink_t)(unifyfs_fops_ctx_t* ctx, int gfid);
 
-typedef int (*unifyfs_fops_get_gfids_t)(unifyfs_fops_ctx_t *ctx, int **gfid_list, int *num_gfids);
+typedef int (*unifyfs_fops_get_gfids_t)(unifyfs_fops_ctx_t* ctx, int** gfid_list, int* num_gfids);
 
 struct unifyfs_fops {
     const char* name;
@@ -213,7 +213,7 @@ static inline int unifyfs_fops_unlink(unifyfs_fops_ctx_t* ctx, int gfid)
     return global_fops_tab->unlink(ctx, gfid);
 }
 
-static inline int unifyfs_fops_get_gfids(unifyfs_fops_ctx_t *ctx, int **gfid_list, int *num_gfids)
+static inline int unifyfs_fops_get_gfids(unifyfs_fops_ctx_t* ctx, int** gfid_list, int* num_gfids)
 {
     if (!global_fops_tab->get_gfids) {
         return ENOSYS;
