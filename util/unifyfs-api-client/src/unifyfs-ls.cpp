@@ -1,6 +1,6 @@
 // This is a very simple program that is designed to test the new
 // get_gfids rpc I've added to UnifyFS.
-// 
+//
 
 #include "unifyfs_api.h"
 
@@ -64,7 +64,7 @@ int main( int argc, char **argv)
     std::set<unifyfs_server_file_meta, CompareByFilename> file_set;
     if (UNIFYFS_SUCCESS==ret && num_gfids > 0) {
         unifyfs_server_file_meta fmeta;
-        
+
         for (unsigned i = 0; i < num_gfids; i++) {
             //ret = unifyfs_stat(fshdl, gfid_list[i], &gfattr);
             ret = unifyfs_get_server_file_meta(fshdl, gfid_list[i], &fmeta);
@@ -81,7 +81,7 @@ int main( int argc, char **argv)
         }
     }
 
-    
+
     // Now iterate through the set and print everything out (sorted by filename)
     cout << "GFIDs received:" << endl;
     auto it = file_set.cbegin();
@@ -91,18 +91,19 @@ int main( int argc, char **argv)
 
     // Walk the set freeing the filename strings so we don't have any
     // memory leaks.
-    // Note: set iterators are pretty much always const becuase changes to set
-    // members could affect the ordering within the set.  It looks like the
-    // standard way to modify a set member is to remove it, make the changes
-    // and then re-insert.
+    // Note: set iterators are pretty much always const (regardless of whether
+    // they come from begin() or cbegin()) because changes to set members
+    // could affect the ordering within the set.  It looks like the standard
+    // way to modify a set member is to remove it, make the changes and then
+    // re-insert.
     // TL;DR: we can't explicitly set the pointer to NULL after calling free()
     // This isn't a problem since we're going to erase the whole set anyway.
-    it = file_set.begin();  // For sets, begin() or cbegin() both return a const_iterator  
+    it = file_set.cbegin();
     while (it != file_set.end()) {
         free(it->filename);
         it++;
     }
-    // explicitly erase all the elements so we don't actually reference 
+    // explicitly erase all the elements so we don't actually reference
     // those now dangling filename pointers.
     file_set.erase(file_set.begin(), file_set.end());
 
@@ -138,9 +139,11 @@ void print_fmeta( const unifyfs_server_file_meta& attr)
 // An output resembling what you'd get from 'ls -l'
 void print_fmeta_ls(const unifyfs_server_file_meta& attr)
 {
-    cout << std::oct << std::right << std::setw(7) << attr.mode << std::dec << std::left << std::setw(0) 
+    cout << std::oct << std::right << std::setw(7) << attr.mode
+         << std::dec << std::left << std::setw(0)
          << " " << attr.uid << " " << attr.gid
-         << std::right << std::setw(8) << attr.size << std::left << std::setw(0)
+         << std::right << std::setw(8) << attr.size
+         << std::left << std::setw(0)
          << " " << attr.mtime.tv_sec << " " << attr.filename << endl;
     // TODO: mode mode should be symbolic, not octal
     // TODO: uid & gid should be names if possible
