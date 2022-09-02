@@ -63,13 +63,14 @@ typedef int (*unifyfs_fops_truncate_t)(unifyfs_fops_ctx_t* ctx,
 
 typedef int (*unifyfs_fops_unlink_t)(unifyfs_fops_ctx_t* ctx, int gfid);
 
-typedef int (*unifyfs_fops_get_gfids_t)(unifyfs_fops_ctx_t* ctx, int** gfid_list, int* num_gfids);
+typedef int (*unifyfs_fops_get_gfids_t)(int** gfid_list, int* num_gfids);
 
 struct unifyfs_fops {
     const char* name;
     unifyfs_fops_init_t init;
     unifyfs_fops_filesize_t filesize;
     unifyfs_fops_fsync_t fsync;
+    unifyfs_fops_get_gfids_t get_gfids;
     unifyfs_fops_laminate_t laminate;
     unifyfs_fops_metaget_t metaget;
     unifyfs_fops_metaset_t metaset;
@@ -78,7 +79,6 @@ struct unifyfs_fops {
     unifyfs_fops_transfer_t transfer;
     unifyfs_fops_truncate_t truncate;
     unifyfs_fops_unlink_t unlink;
-    unifyfs_fops_get_gfids_t get_gfids;
 };
 
 /* available file operations.  */
@@ -213,13 +213,13 @@ static inline int unifyfs_fops_unlink(unifyfs_fops_ctx_t* ctx, int gfid)
     return global_fops_tab->unlink(ctx, gfid);
 }
 
-static inline int unifyfs_fops_get_gfids(unifyfs_fops_ctx_t* ctx, int** gfid_list, int* num_gfids)
+static inline int unifyfs_fops_get_gfids(int** gfid_list, int* num_gfids)
 {
     if (!global_fops_tab->get_gfids) {
         return ENOSYS;
     }
 
-    return global_fops_tab->get_gfids(ctx, gfid_list, num_gfids);
+    return global_fops_tab->get_gfids(gfid_list, num_gfids);
 }
 
 

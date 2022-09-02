@@ -1448,19 +1448,7 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
     int *gfid_list;
     int num_gfids;
 
-    // The input struct doesn't have anything in it we actually need.  Still
-    // have to free() it, though.
-    unifyfs_get_gfids_in_t* in = req->input;
-    assert(in != NULL);
-    margo_free_input(req->handle, in);
-    free(in);
-
-    unifyfs_fops_ctx_t ctx = {
-        .app_id = reqmgr->app_id,
-        .client_id = reqmgr->client_id,
-    };
-
-    ret = unifyfs_fops_get_gfids(&ctx, &gfid_list, &num_gfids);
+    ret = unifyfs_fops_get_gfids(&gfid_list, &num_gfids);
     if (ret != UNIFYFS_SUCCESS) {
         LOGERR("unifyfs_fops_get_gfids() failed");
     }

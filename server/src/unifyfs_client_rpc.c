@@ -888,9 +888,14 @@ static void unifyfs_get_gfids_rpc(hg_handle_t handle)
                     .app_id = in->app_id,
                     .client_id = in->client_id,
                 };
+
+                // The handler function doesn't actually need the input struct
+                // for anything, so we can free it now.
+                margo_free_input(handle, in);
+
                 req->req_type = UNIFYFS_CLIENT_RPC_GET_GFIDS;
                 req->handle = handle;
-                req->input = (void*) in;
+                req->input = NULL;
                 req->bulk_buf = NULL;
                 req->bulk_sz = 0;
                 ret = rm_submit_client_rpc_request(&ctx, req);
@@ -900,17 +905,16 @@ static void unifyfs_get_gfids_rpc(hg_handle_t handle)
                 if (NULL != req) {
                     free(req);
                 }
-                margo_free_input(handle, in);
             }
         }
+
+        /* don't need the input struct any more, so free it now. */
+        free(in);
+        in = NULL;
     }
 
     /* if we hit an error during request submission, respond with the error */
     if (ret != UNIFYFS_SUCCESS) {
-        if (NULL != in) {
-            free(in);
-        }
-
         /* return to caller */
         unifyfs_get_gfids_out_t out;
         out.ret = (int32_t) ret;
