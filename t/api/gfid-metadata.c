@@ -94,6 +94,15 @@ int api_get_gfids_and_metadata_test(char* unifyfs_root,
             }
         }
 
+        for (unsigned int file_num = 0; file_num < NUM_TEST_FILES; file_num++) {
+            rc = unifyfs_sync(*fshdl, tf_gfids[file_num]);
+            if (!ok((rc == UNIFYFS_SUCCESS),
+                    "unifyfs_sync()  gfid: %d", tf_gfids[file_num])) {
+                diag("unifyfs_sync() for gfid %d failed: rc=%d (%s)",
+                     tf_gfids[file_num], rc, unifyfs_rc_enum_description(rc));
+            }
+        }
+
         /* (2) Get the list of all the GFIDs that the server knows about */
         int num_gfids;
         unifyfs_gfid* gfid_list;
