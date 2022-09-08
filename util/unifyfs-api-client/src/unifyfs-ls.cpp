@@ -4,25 +4,29 @@
 
 #include "unifyfs_api.h"
 
+#include <getopt.h>
+
 #include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <set>
-using namespace std;
+#include <string>
 
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-// Definition of the UnifyFS functions we need to call
-// (The functions aren't really intended to be called from outside the
-// library, but they do exist.)
-//int unifyfs_get_gfids(int *num_gfids, int **gfid_list);
-//int unifyfs_client_metaget( int gfid, unifyfs_file_attr_t* gfattr);
+// values that can be passed in via command line parameters
+// (filled in by the ParseOpts() function
+struct CommandOptions
+{
+    std::string mount_point;  // where is UnifyFS mounted
+    bool verbose;  // verbose display or not
 
-#ifdef __cplusplus
-} // extern "C"
-#endif
+    CommandOptions() : mount_point("/unifyfs"), verbose(false) {}
+};
+
+// Functions for parsing the arguments and printing some help text
+// (Definitions below)
+void parseOpts( int argc, char **argv, CommandOptions &cmdLineOpts);
+void printHelp( const char *exeName);
 
 
 // Comparison class for the std::set we use
@@ -35,31 +39,34 @@ struct CompareByFilename {
     }
 };
 
-
-// Quick functions to print out a file's metadata.  Defined down below.
-// TODO:We've got a choice of 2.  I haven't decided which one I like better yet.
+// Functions for printing out a file's metadata.
+// We've got a choice of 2: print_fmeta() is more verbose.  print_fmeta_ls()
+// looks similar to the output of the standard `ls` command.
+// (Functions are defined down below.)
 void print_fmeta( const unifyfs_server_file_meta& attr);
 void print_fmeta_ls(const unifyfs_server_file_meta& attr);
 
-
 int main( int argc, char **argv)
 {
-    // TODO: get this from command line options!
-    const char mountpt[]="/unifyfs";
+
+    CommandOptions opts;
+    parseOpts( argc, argv, opts);
 
     unifyfs_handle fshdl;
-    unifyfs_rc urc = unifyfs_initialize(mountpt, NULL, 0, &fshdl);
+    unifyfs_rc urc = unifyfs_initialize(opts.mount_point.c_str(),
+                                        NULL, 0, &fshdl);
     if (UNIFYFS_SUCCESS != urc) {
-        fprintf(stderr, "UNIFYFS ERROR: init failed at mountpoint %s - %s\n",
-                mountpt, unifyfs_rc_enum_description(urc));
+        std::cerr << "UNIFYFS ERROR: init failed at mountpoint "
+                  << opts.mount_point.c_str() << " - "
+                  << unifyfs_rc_enum_description(urc) << std::endl;
         return 1;
     }
 
-    cout << "Attempting to call unifyfs_get_gfids()..." << endl;
+    std::cout << "Attempting to call unifyfs_get_gfids()..." << std::endl;
     int num_gfids = -1;
     unifyfs_gfid *gfid_list;
     int ret = unifyfs_get_gfid_list(fshdl, &num_gfids, &gfid_list);
-    cout << "...and done.  ret=" << ret << "\tnum_gfids=" << num_gfids << endl;
+    std::cout << "...and done.  ret=" << ret << "\tnum_gfids=" << num_gfids << std::endl;
 
     std::set<unifyfs_server_file_meta, CompareByFilename> file_set;
     if (UNIFYFS_SUCCESS==ret && num_gfids > 0) {
@@ -76,14 +83,15 @@ int main( int argc, char **argv)
                 // iteration anyway.  We do need to rember to explicitly free
                 // the memory when removing items from the set, though.
             } else {
-                cout << "\t!!!ERROR " << ret << " retrieving metadata for GFID " << gfid_list[i] << "!!!" << endl;
+                std::cerr << "\t!!!ERROR " << ret << " retrieving metadata for GFID "
+                          << gfid_list[i] << "!!!" << std::endl;
             }
         }
     }
 
 
     // Now iterate through the set and print everything out (sorted by filename)
-    cout << "GFIDs received:" << endl;
+    std::cout << "GFIDs received:" << std::endl;
     auto it = file_set.cbegin();
     while (it != file_set.cend()) {
         print_fmeta_ls(*it++);
@@ -103,15 +111,14 @@ int main( int argc, char **argv)
         free(it->filename);
         it++;
     }
-    // explicitly erase all the elements so we don't actually reference
+    // explicitly erase all the elements so we don't accidentally reference
     // those now dangling filename pointers.
     file_set.erase(file_set.begin(), file_set.end());
 
-
     urc = unifyfs_finalize(fshdl);
     if (UNIFYFS_SUCCESS != urc) {
-        fprintf(stderr, "UNIFYFS ERROR: failed to finalize - %s\n",
-                unifyfs_rc_enum_description(urc));
+        std::cerr << "UNIFYFS ERROR: failed to finalize: "
+                  << unifyfs_rc_enum_description(urc) << std::endl;
         return 3;
     }
 
@@ -119,34 +126,87 @@ int main( int argc, char **argv)
 }
 
 
-#define tabout cout << "\t"
+#define tabout std::cout << "\t"
 void print_fmeta( const unifyfs_server_file_meta& attr)
 {
-    cout << attr.filename << endl;
-    tabout << "gfid:         " << attr.gfid << endl;
-    tabout << "is_laminated: " << attr.is_laminated << endl;
-    tabout << "is_shared:    " << attr.is_shared << endl;
-    tabout << "mode:         0" << std::oct << attr.mode << std::dec << endl;
-    tabout << "uid:          " << attr.uid << endl;
-    tabout << "gid:          " << attr.gid << endl;
-    tabout << "size:         " << attr.size << endl;
+    std::cout << attr.filename << std::endl;
+    tabout << "gfid:         " << attr.gfid << std::endl;
+    tabout << "is_laminated: " << attr.is_laminated << std::endl;
+    tabout << "is_shared:    " << attr.is_shared << std::endl;
+    tabout << "mode:         0" << std::oct << attr.mode << std::dec << std::endl;
+    tabout << "uid:          " << attr.uid << std::endl;
+    tabout << "gid:          " << attr.gid << std::endl;
+    tabout << "size:         " << attr.size << std::endl;
     // TODO: struct timespec has nanoseconds as well
-    tabout << "atime:        " << attr.atime.tv_sec << endl;
-    tabout << "mtime:        " << attr.mtime.tv_sec << endl;
-    tabout << "ctime:        " << attr.ctime.tv_sec << endl;
+    tabout << "atime:        " << attr.atime.tv_sec << std::endl;
+    tabout << "mtime:        " << attr.mtime.tv_sec << std::endl;
+    tabout << "ctime:        " << attr.ctime.tv_sec << std::endl;
 }
 
 // An output resembling what you'd get from 'ls -l'
 void print_fmeta_ls(const unifyfs_server_file_meta& attr)
 {
-    cout << std::oct << std::right << std::setw(7) << attr.mode
-         << std::dec << std::left << std::setw(0)
-         << " " << attr.uid << " " << attr.gid
-         << std::right << std::setw(8) << attr.size
-         << std::left << std::setw(0)
-         << " " << attr.mtime.tv_sec << " " << attr.filename << endl;
-    // TODO: mode mode should be symbolic, not octal
+    std::cout << std::oct << std::right << std::setw(7) << attr.mode
+              << std::dec << std::left << std::setw(0)
+              << " " << attr.uid << " " << attr.gid
+              << std::right << std::setw(8) << attr.size
+              << std::left << std::setw(0)
+              << " " << attr.mtime.tv_sec << " " << attr.filename << std::endl;
+    // TODO: mode should be symbolic, not octal
     // TODO: uid & gid should be names if possible
     // TODO: mtime should be text not epoch seconds
 }
 
+
+
+struct option long_options[] = {
+    {"mount_point", required_argument, 0, 'm'},
+    {"verbose",     no_argument,       0, 'v'},
+    {"help",        no_argument,       0, 'h'},
+    {0, 0, 0, 0} };
+
+void parseOpts( int argc, char **argv, CommandOptions &cmdLineOpts)
+{
+    while (1)
+    {
+        /* getopt_long stores the option index here. */
+        int option_index = 0;
+        int c = getopt_long( argc, argv, "m:vh?", long_options, &option_index);
+
+        /* Detect the end of the options. */
+        if (c == -1)
+                break;
+
+        switch (c)
+        {
+                case 'm':
+                    cmdLineOpts.mount_point.assign(optarg);
+                    break;
+
+                case 'v':
+                    cmdLineOpts.verbose = true;
+                    break;
+
+                case 'h':
+                case '?':
+                default:
+                    printHelp( argv[0]);
+                    exit( 0);
+        }
+    }
+}
+
+void printHelp( const char *exeName)
+{
+    using namespace std;
+    CommandOptions opts;
+
+    cout << "Usage:" << endl;
+    cout << "  " << exeName << " [ -v | --verbose ] "
+         << "[ -m <dir_name> | --mount_point_dir=<dir_name> ]" << endl;
+    cout << endl;
+    cout << "  " << "-v | --verbose: " << "show verbose information"
+         << "(default: " << opts.verbose << ")" << endl;
+    cout << "  " << "-m | --mount_point: " << "the location where unifyfs is mounted "
+         << "(default: " << opts.mount_point << ")" << endl;
+}
