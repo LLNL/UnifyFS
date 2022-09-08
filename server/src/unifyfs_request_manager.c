@@ -1444,9 +1444,9 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
                              client_rpc_req_t* req)
 {
 
-    int ret = UNIFYFS_SUCCESS;
-    int *gfid_list;
-    int num_gfids;
+    int  ret = UNIFYFS_SUCCESS;
+    int* gfid_list;
+    int  num_gfids;
 
     ret = unifyfs_fops_get_gfids(&gfid_list, &num_gfids);
     if (ret != UNIFYFS_SUCCESS) {

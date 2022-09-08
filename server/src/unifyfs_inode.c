@@ -744,7 +744,7 @@ int unifyfs_inode_dump(int gfid)
 }
 
 
-int unifyfs_get_gfids(int *num_gfids, int**gfid_list)
+int unifyfs_get_gfids(int* num_gfids, int** gfid_list)
 {
     int ret = UNIFYFS_SUCCESS;
 
