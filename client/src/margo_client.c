@@ -1223,6 +1223,14 @@ int invoke_client_get_gfids_rpc(unifyfs_client* client,
         return UNIFYFS_FAILURE;
     }
 
+    // Anything we check in the cleanup block needs to be initialized to a
+    // rational value up here.  Also, there are a couple of margo calls for
+    // which the only way to know if we need to clean up is to save their
+    // return values.  That's why we have separate hg_return_t's for them.
+    hg_return_t get_output_hret = HG_OTHER_ERROR;
+    hg_return_t bulk_create_hret = HG_OTHER_ERROR;
+    int ret = UNIFYFS_ERROR_MARGO;
+
     /* get handle to rpc function */
     hg_handle_t handle = create_handle(client_rpc_context->rpcs.get_gfids_id);
 
@@ -1235,60 +1243,87 @@ int invoke_client_get_gfids_rpc(unifyfs_client* client,
     /* call rpc function */
     LOGDBG("invoking the get_gfids rpc function in client");
     double timeout = client_rpc_context->timeout;
-    int rc = forward_to_server(handle, &in, timeout);
-    if (rc != UNIFYFS_SUCCESS) {
+    ret = forward_to_server(handle, &in, timeout);
+    if (ret != UNIFYFS_SUCCESS) {
         LOGERR("forward of get_gfids rpc to server failed");
-        margo_destroy(handle);
-        return rc;
+        goto exit;
     }
 
     /* decode response */
-    int ret;
     unifyfs_get_gfids_out_t out;
-    hg_return_t hret = margo_get_output(handle, &out);
-    if (hret == HG_SUCCESS) {
-        LOGDBG("Got response ret=%" PRIi32, out.ret);
-        ret = (int) out.ret;
-        if (ret == (int)UNIFYFS_SUCCESS) {
-            LOGDBG("Number of GFIDs returned: %d", out.num_gfids);
-            *num_gfids = out.num_gfids;
-
-            // Pull the bulk data (the list of gfids) over from the server
-            hg_bulk_t local_bulk;
-            hg_size_t buf_size = out.num_gfids * sizeof(**gfid_list);
-
-            // Allocate local memory for the list of GFIDs
-            int* _gfid_list = calloc(out.num_gfids, sizeof(**gfid_list));
-
-            // Figure out some margo-specific info that we need for the transfer
-            const struct hg_info* info = margo_get_info(handle); // TODO: Is this the correct handle??
-            hg_addr_t server_addr = info->addr;  // address of the bulk data on the server side
-            margo_instance_id mid = margo_hg_handle_get_instance(handle);  // TODO: Is this the correct handle??
-
-            ret = margo_bulk_create(mid, 1, (void**)&_gfid_list, &buf_size,
-                                    HG_BULK_WRITE_ONLY, &local_bulk);
-            assert(ret == HG_SUCCESS);  // TODO: DON'T ASSERT! CHECK FOR ERROR AND LOG IT
-
-            ret = margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
-                                      out.bulk_gfids, 0, local_bulk, 0, buf_size);
-            assert(ret == HG_SUCCESS);
-
-            ret = margo_bulk_free(local_bulk);
-            assert(ret == HG_SUCCESS);
-
-            *gfid_list = _gfid_list;  // copy the pointer so it can be returned to the caller
-                                      // (Caller will need to eventually call free() on this pointer!)
-        }
-        margo_free_output(handle, &out);
-    } else {
-        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
+    get_output_hret = margo_get_output(handle, &out);
+    if (get_output_hret != HG_SUCCESS) {
+        LOGERR("margo_get_output() failed - %s",
+               HG_Error_to_string(get_output_hret));
         ret = UNIFYFS_ERROR_MARGO;
+        goto exit;
     }
 
+    LOGDBG("Got response ret=%" PRIi32, out.ret);
+    ret = (int) out.ret;
+    if (ret != (int)UNIFYFS_SUCCESS) {
+        goto exit;
+    }
+
+    LOGDBG("Number of GFIDs returned: %d", out.num_gfids);
+    *num_gfids = out.num_gfids;
+
+    // Pull the bulk data (the list of gfids) over from the server
+    hg_bulk_t local_bulk;
+    hg_size_t buf_size = out.num_gfids * sizeof(**gfid_list);
+
+    // Allocate local memory for the list of GFIDs
+    int* _gfid_list = calloc(out.num_gfids, sizeof(**gfid_list));
+
+    // Figure out some margo-specific info that we need for the transfer
+    const struct hg_info* info = margo_get_info(handle);
+    // TODO: Is this the correct handle??
+    hg_addr_t server_addr = info->addr;
+    // address of the bulk data on the server side
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    // TODO: Is this the correct handle??
+
+    bulk_create_hret = margo_bulk_create(mid, 1, (void**)&_gfid_list, &buf_size,
+                                         HG_BULK_WRITE_ONLY, &local_bulk);
+    if (bulk_create_hret != HG_SUCCESS) {
+        LOGERR("margo_bulk_create() failed - %s",
+               HG_Error_to_string(bulk_create_hret));
+        ret = UNIFYFS_ERROR_MARGO;
+        goto exit;
+    }
+
+    hg_return_t hret = margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
+                                           out.bulk_gfids, 0, local_bulk,
+                                           0, buf_size);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_bulk_transfer() failed - %s", HG_Error_to_string(hret));
+        ret = UNIFYFS_ERROR_MARGO;
+        goto exit;
+    }
+
+    // copy the pointer so it can be returned to the caller
+    // (Caller will need to eventually call free() on this pointer!)
+    *gfid_list = _gfid_list;
+
+exit:  // normally, we use "out", but that's also the name of a variable
     /* free resources */
+    if (ret != UNIFYFS_SUCCESS) {
+        free(_gfid_list);
+    }
+
+    // If margo_bulk_create() succeeded, we need to free local_bulk
+    if (bulk_create_hret == HG_SUCCESS) {
+        hret = margo_bulk_free(local_bulk);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_bulk_free() failed - %s", HG_Error_to_string(hret));
+        }
+    }
+
+    // If margo_get_output() succeeded, we need to free out
+    if (get_output_hret == HG_SUCCESS) {
+        margo_free_output(handle, &out);
+    }
+
     margo_destroy(handle);
-
     return ret;
-
-
 }
