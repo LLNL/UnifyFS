@@ -1,9 +1,11 @@
 libexec_PROGRAMS = \
   unifyfs-laminate \
-  unifyfs-ls \
   unifyfs-remove
 
-CLEANFILES = $(libexec_PROGRAMS)
+bin_PROGRAMS = \
+  unifyfs-ls
+
+CLEANFILES = $(libexec_PROGRAMS) $(bin_PROGRAMS)
 
 # Compiler/linker flags
 
