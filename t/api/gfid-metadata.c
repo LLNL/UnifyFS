@@ -119,7 +119,8 @@ int api_get_gfids_and_metadata_test(char* unifyfs_root,
  * re-enable this check.
  */
         if (!ok((NUM_TEST_FILES + 1) == num_gfids,
-                "unifyfs_get_gfid_list() returned the expected number of GFIDs")) {
+                "unifyfs_get_gfid_list() returned the expected number "
+                "of GFIDs")) {
             diag("unifyfs_get_gfid_list() returned %d gfids.  Expected %d",
                  num_gfids, NUM_TEST_FILES + 1);
         }
@@ -128,9 +129,10 @@ int api_get_gfids_and_metadata_test(char* unifyfs_root,
          * checks something.
          */
         if (!cmp_ok(num_gfids, ">=", (NUM_TEST_FILES + 1),
-                    "check number of GFIDs returned by unifyfs_get_gfid_list()")) {
-            diag("unifyfs_get_gfid_list() returned %d gfids.  Expected at least %d",
-                 num_gfids, NUM_TEST_FILES + 1);
+                    "check number of GFIDs returned by "
+                    "unifyfs_get_gfid_list()")) {
+            diag("unifyfs_get_gfid_list() returned %d gfids.  "
+                 "Expected at least %d", num_gfids, NUM_TEST_FILES + 1);
         }
 #endif
 
@@ -154,41 +156,48 @@ int api_get_gfids_and_metadata_test(char* unifyfs_root,
                 if (fmeta.gfid == tf_gfids[j]) {
                     gfid_found = true;
                     if (!is(fmeta.filename, testfiles[j],
-                            "unifyfs_get_server_file_meta(): checking filename")) {
-                        diag("filename mismatch:  fmeta.filename: %s    Expected filename: %s",
-                             fmeta.filename, testfiles[j]);
+                            "unifyfs_get_server_file_meta(): "
+                            "checking filename")) {
+                        diag("filename mismatch:  fmeta.filename: %s    "
+                             "Expected filename: %s", fmeta.filename,
+                             testfiles[j]);
                     }
                     if (!ok((fmeta.size == filesize),
-                            "unifyfs_get_server_file_meta(): checking file size")) {
-                        diag("file size mismatch:  fmeta.size: %d,  Expected size: %d",
-                             fmeta.size, filesize);
+                            "unifyfs_get_server_file_meta(): checking "
+                            "file size")) {
+                        diag("file size mismatch:  fmeta.size: %d,  "
+                             "Expected size: %d", fmeta.size, filesize);
                     }
                     if (!ok((false == fmeta.is_laminated),
-                            "unifyfs_get_server_file_meta(): is file laminated")) {
-                        diag("is_laminated mismatch:  fmeta.is_laminated: %d   Expected: %d (boolean comparison)",
+                            "unifyfs_get_server_file_meta(): is "
+                            "file laminated")) {
+                        diag("is_laminated mismatch:  fmeta.is_laminated: %d"
+                             "   Expected: %d (boolean comparison)",
                              fmeta.is_laminated, false);
                     }
                     if (!ok((true == fmeta.is_shared),
                             "unifyfs_get_server_file_meta(): is file shared")) {
-                        diag("is_shared mismatch:  fmeta.is_shared: %d   Expected: %d (boolean comparison)",
+                        diag("is_shared mismatch:  fmeta.is_shared: %d"
+                              "   Expected: %d (boolean comparison)",
                               fmeta.is_shared, true);
                     }
                     if (!ok((0100644 == fmeta.mode),  // mode number is in octal
-                            "unifyfs_get_server_file_meta(): checking mode value")) {
-                        diag("mode value mismatch:  fmeta.mode: %o  Expected mode: %o",
-                             fmeta.mode, 0100644);
+                            "unifyfs_get_server_file_meta(): checking "
+                            "mode value")) {
+                        diag("mode value mismatch:  fmeta.mode: %o  "
+                             "Expected mode: %o", fmeta.mode, 0100644);
                     }
                     if (!ok((fmeta.uid == geteuid()),
-                            "%s:%d unifyfs_get_server_file_meta(): checking uid value",
-                             __FILE__, __LINE__)) {
-                        diag("uid value mismatch: fmeta.uid: %d     Expected uid: %d",
-                             fmeta.uid, geteuid());
+                            "%s:%d unifyfs_get_server_file_meta(): checking"
+                            " uid value", __FILE__, __LINE__)) {
+                        diag("uid value mismatch: fmeta.uid: %d     "
+                             "Expected uid: %d", fmeta.uid, geteuid());
                     }
                     if (!ok((fmeta.gid == getegid()),
-                            "%s:%d unifyfs_get_server_file_meta(): checking gid value",
-                             __FILE__, __LINE__)) {
-                        diag("gid value mismatch:  fmeta.gid: %d    Expected gid: %d",
-                             fmeta.gid, getegid());
+                            "%s:%d unifyfs_get_server_file_meta(): "
+                            "checking gid value", __FILE__, __LINE__)) {
+                        diag("gid value mismatch:  fmeta.gid: %d    "
+                             "Expected gid: %d", fmeta.gid, getegid());
                     }
                 }
             }
@@ -203,9 +212,11 @@ int api_get_gfids_and_metadata_test(char* unifyfs_root,
                 // If this gfid is for the mountpoint (presumably /unifyfs),
                 // then all is fine.  If not, it's an error.
                 if (!is(fmeta.filename, unifyfs_root,
-                        "unifyfs_get_server_file_meta(): look for mount point entry")) {
-                    diag("Was expecting the filname to match the mount point (%s), but got %s instead",
-                         unifyfs_root, fmeta.filename);
+                        "unifyfs_get_server_file_meta(): look for mount"
+                        " point entry")) {
+                    diag("Was expecting the filname to match the mount "
+                         "point (%s), but got %s instead", unifyfs_root,
+                         fmeta.filename);
                 }
                 // TODO: add directory-specific tests here!
 #endif
@@ -224,7 +235,8 @@ int api_get_gfids_and_metadata_test(char* unifyfs_root,
             rc = unifyfs_remove(*fshdl, testfiles[i]);
             ok(rc == UNIFYFS_SUCCESS,
                "%s:%d unifyfs_remove(%s) is successful: rc=%d (%s)",
-               __FILE__, __LINE__, testfiles[i], rc, unifyfs_rc_enum_description(rc));
+               __FILE__, __LINE__, testfiles[i], rc,
+               unifyfs_rc_enum_description(rc));
         }
     }
 

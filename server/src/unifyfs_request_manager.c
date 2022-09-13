@@ -1460,9 +1460,10 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
     /* initialize bulk handle for the gfid_list */
     hg_size_t segment_sizes[1] = { num_gfids * sizeof(int) };
     void* segment_ptrs[1] = { (void*)gfid_list };
-    hg_return_t hret = margo_bulk_create(unifyfsd_rpc_context->shm_mid, /* defined in margo_server.h */
+    hg_return_t hret = margo_bulk_create(unifyfsd_rpc_context->shm_mid,
                                          1, segment_ptrs, segment_sizes,
                                          HG_BULK_READ_ONLY, &out.bulk_gfids);
+    /* Note: unifyfsd_rpc_context defined in margo_server.h */
     if (hret != HG_SUCCESS) {
         return UNIFYFS_ERROR_MARGO;
     }

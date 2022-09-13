@@ -756,8 +756,9 @@ int unifyfs_get_gfids(int* num_gfids, int** gfid_list)
     }
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
-    struct unifyfs_inode* node = unifyfs_inode_tree_iter(global_inode_tree, NULL);
     {
+        struct unifyfs_inode* node =
+            unifyfs_inode_tree_iter(global_inode_tree, NULL);
         while (node) {
             if (_num_gfids == gfid_list_size) {
                 gfid_list_size *= 2;  // Double the list size each time
