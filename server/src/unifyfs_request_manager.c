@@ -1465,6 +1465,7 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
                                          HG_BULK_READ_ONLY, &out.bulk_gfids);
     /* Note: unifyfsd_rpc_context defined in margo_server.h */
     if (hret != HG_SUCCESS) {
+        free(gfid_list);
         return UNIFYFS_ERROR_MARGO;
     }
 

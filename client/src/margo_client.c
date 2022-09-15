@@ -1230,6 +1230,7 @@ int invoke_client_get_gfids_rpc(unifyfs_client* client,
     hg_return_t get_output_hret = HG_OTHER_ERROR;
     hg_return_t bulk_create_hret = HG_OTHER_ERROR;
     int ret = UNIFYFS_ERROR_MARGO;
+     int* _gfid_list = NULL;
 
     /* get handle to rpc function */
     hg_handle_t handle = create_handle(client_rpc_context->rpcs.get_gfids_id);
@@ -1273,7 +1274,7 @@ int invoke_client_get_gfids_rpc(unifyfs_client* client,
     hg_size_t buf_size = out.num_gfids * sizeof(**gfid_list);
 
     // Allocate local memory for the list of GFIDs
-    int* _gfid_list = calloc(out.num_gfids, sizeof(**gfid_list));
+    _gfid_list = calloc(out.num_gfids, sizeof(**gfid_list));
 
     // Figure out some margo-specific info that we need for the transfer
     const struct hg_info* info = margo_get_info(handle);
