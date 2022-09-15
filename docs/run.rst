@@ -267,7 +267,7 @@ the files they think are being managed by UnifyFS really are.
 
     [prompt]$ unifyfs-ls --help
     Usage:
-      /opt/unifyfs_tmp/libexec/unifyfs-ls [ -v | --verbose ] [ -m <dir_name> | --mount_point_dir=<dir_name> ]
+      unifyfs-ls [ -v | --verbose ] [ -m <dir_name> | --mount_point_dir=<dir_name> ]
 
       -v | --verbose: show verbose information(default: 0)
       -m | --mount_point: the location where unifyfs is mounted (default: /unifyfs)
