@@ -267,3 +267,48 @@ unifyfs_rc unifyfs_remove(unifyfs_handle fshdl,
 
     return ret;
 }
+
+
+/* Return a list of all the gfids the server knows about */
+unifyfs_rc unifyfs_get_gfid_list(unifyfs_handle fshdl,
+                                 int* num_gfids,
+                                 unifyfs_gfid** gfid_list)
+{
+    unifyfs_client* client = fshdl;
+    // TODO: internally, we seem to be using ints for gfids.  The fact that
+    // they're uint32_t at the API layer is worrying...
+    return invoke_client_get_gfids_rpc(client, num_gfids, (int**)gfid_list);
+}
+
+/* Get metadata for a specific gfid from the server */
+/* Note: This function differs from unifyfs_stat() above in that this function
+ * goes directly to the server and doesn't bother checking for anything that
+ * the client side knows about the file.
+ */
+unifyfs_rc unifyfs_get_server_file_meta(unifyfs_handle fshdl,
+                                        unifyfs_gfid gfid,
+                                        unifyfs_server_file_meta* fmeta)
+{
+    unifyfs_client* client = fshdl;
+    unifyfs_file_attr_t gfattr;
+
+    int ret = unifyfs_get_global_file_meta(client, gfid, &gfattr);
+    if (UNIFYFS_SUCCESS == ret) {
+        // Copy the fields from gfattr over to fmeta
+        // This is basically a 1-to-1 copy becaue unifyfs_server_file_meta
+        // is just a public-facing version of unifyfs_file_attr_t.  We don't
+        // want to memcpy(), though, in case the structs ever do diverge.
+        fmeta->filename     = gfattr.filename;
+        fmeta->gfid         = gfattr.gfid;
+        fmeta->is_laminated = gfattr.is_laminated;
+        fmeta->is_shared    = gfattr.is_shared;
+        fmeta->mode         = gfattr.mode;
+        fmeta->uid          = gfattr.uid;
+        fmeta->gid          = gfattr.gid;
+        fmeta->size         = gfattr.size;
+        fmeta->atime        = gfattr.atime;
+        fmeta->mtime        = gfattr.mtime;
+        fmeta->ctime        = gfattr.ctime;
+    }
+    return ret;
+}

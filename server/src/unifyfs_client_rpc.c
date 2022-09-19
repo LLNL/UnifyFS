@@ -863,3 +863,68 @@ static void unifyfs_mread_rpc(hg_handle_t handle)
     }
 }
 DEFINE_MARGO_RPC_HANDLER(unifyfs_mread_rpc)
+
+/* Request a list of all the GFIDs the server knows about */
+static void unifyfs_get_gfids_rpc(hg_handle_t handle)
+{
+    int ret = UNIFYFS_SUCCESS;
+    hg_return_t hret;
+
+    /* get input params */
+    unifyfs_get_gfids_in_t* in = malloc(sizeof(*in));
+    if (NULL == in) {
+        ret = ENOMEM;
+    } else {
+        hret = margo_get_input(handle, in);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_get_input() failed");
+            ret = UNIFYFS_ERROR_MARGO;
+        } else {
+            client_rpc_req_t* req = malloc(sizeof(client_rpc_req_t));
+            if (NULL == req) {
+                ret = ENOMEM;
+            } else {
+                unifyfs_fops_ctx_t ctx = {
+                    .app_id = in->app_id,
+                    .client_id = in->client_id,
+                };
+
+                // The handler function doesn't actually need the input struct
+                // for anything, so we can free it now.
+                margo_free_input(handle, in);
+
+                req->req_type = UNIFYFS_CLIENT_RPC_GET_GFIDS;
+                req->handle = handle;
+                req->input = NULL;
+                req->bulk_buf = NULL;
+                req->bulk_sz = 0;
+                ret = rm_submit_client_rpc_request(&ctx, req);
+            }
+
+            if (ret != UNIFYFS_SUCCESS) {
+                if (NULL != req) {
+                    free(req);
+                }
+            }
+        }
+
+        /* don't need the input struct any more, so free it now. */
+        free(in);
+        in = NULL;
+    }
+
+    /* if we hit an error during request submission, respond with the error */
+    if (ret != UNIFYFS_SUCCESS) {
+        /* return to caller */
+        unifyfs_get_gfids_out_t out;
+        out.ret = (int32_t) ret;
+        hret = margo_respond(handle, &out);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_respond() failed");
+        }
+
+        /* free margo resources */
+        margo_destroy(handle);
+    }
+}
+DEFINE_MARGO_RPC_HANDLER(unifyfs_get_gfids_rpc)
