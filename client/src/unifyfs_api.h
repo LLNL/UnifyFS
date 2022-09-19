@@ -143,6 +143,31 @@ typedef struct unifyfs_file_status {
     size_t local_write_nbytes;
 } unifyfs_file_status;
 
+/* File metadata from the server side */
+// TODO: Should we merge this with unifyfs_file_status above?
+typedef struct unifyfs_server_file_meta {
+    char* filename;  // Note: this pointer will be malloc'd by whoever fills
+                     // in the data for this struct.  It is the responsibility
+                     // of the user to free the pointer once its no longer
+                     // needed!
+    int gfid;
+
+    /* Set when the file is laminated */
+    int is_laminated;
+
+    /* Set when file is shared between clients */
+    int is_shared;
+
+    /* essential stat fields */
+    uint32_t mode;   /* st_mode bits */
+    uint32_t uid;
+    uint32_t gid;
+    uint64_t size;
+    struct timespec atime;
+    struct timespec mtime;
+    struct timespec ctime;
+
+} unifyfs_server_file_meta;
 
 /*
  * Public Methods
@@ -361,6 +386,22 @@ unifyfs_rc unifyfs_wait_transfer(unifyfs_handle fshdl,
 bool is_unifyfs_path(unifyfs_handle fshdl,
                      const char* filepath);
 
+
+
+/* Return a list of all the gfids the server knows about */
+unifyfs_rc unifyfs_get_gfid_list(unifyfs_handle fshdl,
+                                 int* num_gfids,
+                                 unifyfs_gfid** gfid_list);
+
+
+/* Get metadata for a specific gfid from the server */
+/* Note: This function differs from unifyfs_stat() above in that this function
+ * goes directly to the server and doesn't bother checking for anything that
+ * the client side knows about the file.
+ */
+unifyfs_rc unifyfs_get_server_file_meta(unifyfs_handle fshdl,
+                                        unifyfs_gfid gfid,
+                                        unifyfs_server_file_meta* fmeta);
 
 #ifdef __cplusplus
 } // extern "C"

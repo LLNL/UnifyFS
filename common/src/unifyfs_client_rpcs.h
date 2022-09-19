@@ -35,6 +35,7 @@ typedef enum {
     UNIFYFS_CLIENT_RPC_INVALID = 0,
     UNIFYFS_CLIENT_RPC_ATTACH,
     UNIFYFS_CLIENT_RPC_FILESIZE,
+    UNIFYFS_CLIENT_RPC_GET_GFIDS,
     UNIFYFS_CLIENT_RPC_LAMINATE,
     UNIFYFS_CLIENT_RPC_METAGET,
     UNIFYFS_CLIENT_RPC_METASET,
@@ -281,6 +282,21 @@ MERCURY_GEN_PROC(unifyfs_heartbeat_in_t,
                  ((int32_t)(client_id)))
 MERCURY_GEN_PROC(unifyfs_heartbeat_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_heartbeat_rpc)
+
+/* unifyfs_get_gfids_rpc (client => server)
+ *
+ * returns gfids for all the files the server knows about */
+MERCURY_GEN_PROC(unifyfs_get_gfids_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id)))
+MERCURY_GEN_PROC(unifyfs_get_gfids_out_t,
+                 ((int32_t)(ret))
+                 ((int32_t)(num_gfids))
+                 ((hg_size_t)(bulk_size))
+                 ((hg_bulk_t)(bulk_gfids))
+                 /* TODO: Do we need bulk_size in addition to num_gfids? */
+                )
+DECLARE_MARGO_RPC_HANDLER(unifyfs_get_gfids_rpc)
 
 #ifdef __cplusplus
 } // extern "C"

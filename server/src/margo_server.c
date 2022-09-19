@@ -323,6 +323,10 @@ static void register_client_server_rpcs(margo_instance_id mid)
                    unifyfs_mread_in_t, unifyfs_mread_out_t,
                    unifyfs_mread_rpc);
 
+    MARGO_REGISTER(mid, "unifyfs_get_gfids_rpc",
+                   unifyfs_get_gfids_in_t, unifyfs_get_gfids_out_t,
+                   unifyfs_get_gfids_rpc);
+
     /* register the RPCs we call (and capture assigned hg_id_t) */
     unifyfsd_rpc_context->rpcs.client_heartbeat_id =
             MARGO_REGISTER(mid, "unifyfs_heartbeat_rpc",

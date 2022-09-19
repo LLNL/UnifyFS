@@ -340,19 +340,28 @@ int rpc_mread(unifyfs_fops_ctx_t* ctx,
     return submit_read_request(ctx, count, extents);
 }
 
+static
+int rpc_get_gfids(
+    int** gfid_list,
+    int* num_gfids)
+{
+    return unifyfs_get_gfids(num_gfids, gfid_list);
+}
+
 static struct unifyfs_fops _fops_rpc = {
-    .name     = "rpc",
-    .init     = rpc_init,
-    .filesize = rpc_filesize,
-    .fsync    = rpc_fsync,
-    .laminate = rpc_laminate,
-    .metaget  = rpc_metaget,
-    .metaset  = rpc_metaset,
-    .mread    = rpc_mread,
-    .read     = rpc_read,
-    .transfer = rpc_transfer,
-    .truncate = rpc_truncate,
-    .unlink   = rpc_unlink
+    .name      = "rpc",
+    .init      = rpc_init,
+    .filesize  = rpc_filesize,
+    .fsync     = rpc_fsync,
+    .get_gfids = rpc_get_gfids,
+    .laminate  = rpc_laminate,
+    .metaget   = rpc_metaget,
+    .metaset   = rpc_metaset,
+    .mread     = rpc_mread,
+    .read      = rpc_read,
+    .transfer  = rpc_transfer,
+    .truncate  = rpc_truncate,
+    .unlink    = rpc_unlink
 };
 
 struct unifyfs_fops* unifyfs_fops_impl = &_fops_rpc;
