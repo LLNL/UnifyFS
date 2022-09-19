@@ -742,3 +742,40 @@ int unifyfs_inode_dump(int gfid)
 
     return ret;
 }
+
+
+int unifyfs_get_gfids(int* num_gfids, int** gfid_list)
+{
+    int ret = UNIFYFS_SUCCESS;
+
+    int _num_gfids = 0;
+    int gfid_list_size = 64; // TODO: Is there a better starting number???
+    int* _gfid_list = malloc(sizeof(int) * gfid_list_size);
+    if (!_gfid_list) {
+        return ENOMEM;
+    }
+
+    unifyfs_inode_tree_rdlock(global_inode_tree);
+    {
+        struct unifyfs_inode* node =
+            unifyfs_inode_tree_iter(global_inode_tree, NULL);
+        while (node) {
+            if (_num_gfids == gfid_list_size) {
+                gfid_list_size *= 2;  // Double the list size each time
+                _gfid_list = realloc(_gfid_list, sizeof(int)*gfid_list_size);
+                if (!_gfid_list) {
+                    unifyfs_inode_tree_unlock(global_inode_tree);
+                    return ENOMEM;
+                }
+            }
+            _gfid_list[_num_gfids++] = node->gfid;
+            node = unifyfs_inode_tree_iter(global_inode_tree, node);
+        }
+
+    }
+    unifyfs_inode_tree_unlock(global_inode_tree);
+
+    *num_gfids = _num_gfids;
+    *gfid_list = _gfid_list;
+    return ret;
+}

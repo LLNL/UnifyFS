@@ -68,6 +68,9 @@ int main(int argc, char* argv[])
         api_write_read_sync_stat_test(unifyfs_root, &fshdl,
                                       (size_t)4 * MIB, (size_t)128 * KIB);
 
+        api_get_gfids_and_metadata_test(unifyfs_root, &fshdl,
+                                        (size_t)64 * KIB);
+
         api_laminate_test(unifyfs_root, &fshdl);
 
         api_storage_test(unifyfs_root, &fshdl,
