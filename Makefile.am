@@ -5,8 +5,10 @@ CONFIG = ordered
 ACLOCAL_AMFLAGS = -I m4
 
 pkgconfigdir = @pkgconfigdir@
-pkgconfig_DATA = client/unifyfs.pc \
-		 client/unifyfs-api.pc
+pkgconfig_DATA = \
+  client/unifyfs.pc \
+  client/unifyfs-api.pc \
+  client/unifyfs-static.pc
 
 CLEANFILES =
 
