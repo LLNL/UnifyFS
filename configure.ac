@@ -377,6 +377,7 @@ AC_CONFIG_FILES([Makefile
                  client/src/Makefile
                  client/unifyfs.pc
                  client/unifyfs-api.pc
+                 client/unifyfs-static.pc
                  examples/Makefile
                  examples/src/Makefile
                  extras/Makefile
