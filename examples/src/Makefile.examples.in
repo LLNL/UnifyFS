@@ -1,0 +1,62 @@
+UNIFYFS_INSTALL = @prefix@
+
+MPICC ?= mpicc
+
+UNIFYFS_CFG    = $(UNIFYFS_INSTALL)/bin/unifyfs-config
+UNIFYFS_PKGCFG = PKG_CONFIG_PATH=$(PKG_CONFIG_PATH):$(UNIFYFS_INSTALL)/lib/pkgconfig pkg-config
+
+GOTCHA_PROGRAMS = \
+  app-btio-gotcha \
+  app-mpiio-gotcha \
+  app-tileio-gotcha \
+  checkpoint-restart-gotcha \
+  multi-write-gotcha \
+  read-gotcha \
+  read-data-gotcha \
+  simul-gotcha \
+  transfer-gotcha \
+  write-gotcha \
+  writeread-gotcha \
+  write-transfer-gotcha
+
+STATIC_PROGRAMS += \
+  app-btio-static \
+  app-mpiio-static \
+  app-tileio-static \
+  checkpoint-restart-static \
+  multi-write-static \
+  read-static \
+  read-data-static \
+  simul-static \
+  transfer-static \
+  write-static \
+  writeread-static \
+  write-transfer-static
+
+LIBS += -lm -lrt
+
+.PHONY: default all clean gotcha static
+
+default: all
+
+all: gotcha static
+
+clean:
+	$(RM) *.o
+	$(RM) $(GOTCHA_PROGRAMS)
+	$(RM) $(STATIC_PROGRAMS)
+
+gotcha: $(GOTCHA_PROGRAMS)
+
+static: $(STATIC_PROGRAMS)
+
+testutil.o: testutil.c
+	$(MPICC) $(CPPFLAGS) $(CFLAGS) `$(UNIFYFS_PKGCFG) --cflags unifyfs-api` -c -o testutil.o testutil.c
+
+%-gotcha: %.c testutil.o
+	$(MPICC) $(CPPFLAGS) $(CFLAGS) `$(UNIFYFS_PKGCFG) --cflags unifyfs-api` -c -o $<.o $<
+	$(MPICC) -o $@ $<.o testutil.o $(LDFLAGS) `$(UNIFYFS_PKGCFG) --libs unifyfs` $(LIBS)
+
+%-static: %.c testutil.o
+	$(MPICC) $(CPPFLAGS) $(CFLAGS) `$(UNIFYFS_PKGCFG) --cflags unifyfs-static` -c -o $<.o $<
+	$(MPICC) $(LDFLAGS) `$(UNIFYFS_PKGCFG) --libs-only-L unifyfs-static` -o $@ $<.o testutil.o `$(UNIFYFS_PKGCFG) --libs-only-other --libs-only-l unifyfs-static` $(LIBS)
