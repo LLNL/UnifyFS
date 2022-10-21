@@ -1,3 +1,7 @@
+makefiledir = $(datadir)/makefiles
+
+makefile_DATA = Makefile.examples
+
 testutil_headers = \
   testutil.h \
   testutil_rdwr.h
@@ -61,8 +65,9 @@ endif #HAVE_FORTRAN
 
 endif #HAVE_GOTCHA
 
-CLEANFILES = $(libexec_PROGRAMS)
+CLEANFILES = Makefile.examples $(libexec_PROGRAMS)
 
+EXTRA_DIST = Makefile.examples.in
 
 # Common compile/link flag definitions
 

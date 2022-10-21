@@ -380,6 +380,7 @@ AC_CONFIG_FILES([Makefile
                  client/unifyfs-static.pc
                  examples/Makefile
                  examples/src/Makefile
+                 examples/src/Makefile.examples
                  extras/Makefile
                  extras/unifyfs.conf
                  t/Makefile
