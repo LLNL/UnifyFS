@@ -158,7 +158,8 @@ typedef enum {
     UNIFYFS_FILE_ATTR_OP_CREATE,
     UNIFYFS_FILE_ATTR_OP_DATA,
     UNIFYFS_FILE_ATTR_OP_LAMINATE,
-    UNIFYFS_FILE_ATTR_OP_TRUNCATE
+    UNIFYFS_FILE_ATTR_OP_TRUNCATE,
+    UNIFYFS_FILE_ATTR_OP_UTIME,
 } unifyfs_file_attr_op_e;
 
 /*
@@ -211,7 +212,8 @@ int unifyfs_file_attr_update(int attr_op,
     }
 
     if ((src->atime.tv_sec != 0) &&
-        (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE)) {
+        ((attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_UTIME))) {
         LOGDBG("setting attr.atime to %d.%09ld",
                (int)src->atime.tv_sec, src->atime.tv_nsec);
         dst->atime = src->atime;
@@ -219,6 +221,7 @@ int unifyfs_file_attr_update(int attr_op,
 
     if ((src->mtime.tv_sec != 0) &&
         ((attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) ||
+         (attr_op == UNIFYFS_FILE_ATTR_OP_UTIME) ||
          (attr_op == UNIFYFS_FILE_ATTR_OP_DATA) ||
          (attr_op == UNIFYFS_FILE_ATTR_OP_LAMINATE) ||
          (attr_op == UNIFYFS_FILE_ATTR_OP_TRUNCATE))) {

@@ -1139,11 +1139,11 @@ static int posix_create(char* upath, mode_t mode)
     filedesc->pos   = pos;
     filedesc->read  = 0;
     filedesc->write = 1;
-
+    filedesc->use_count = 1;
 
     /* don't conflict with active system fds that range from 0 - (fd_limit) */
     int ret = fd + unifyfs_fd_limit;
-    LOGDBG("using fds (internal=%d, external=%d) for fid %d file %s",
+    LOGDBG("using fds (internal=%d, exposed=%d) for fid %d file %s",
            fd, ret, fid, upath);
     errno = 0;
     return ret;
@@ -1229,10 +1229,11 @@ int UNIFYFS_WRAP(open)(const char* path, int flags, ...)
         filedesc->write = ((flags & O_WRONLY) == O_WRONLY)
                           || ((flags & O_RDWR) == O_RDWR);
         filedesc->append = (flags & O_APPEND);
+        filedesc->use_count = 1;
 
         /* don't conflict with active system fds that range from 0 - (fd_limit) */
         ret = fd + unifyfs_fd_limit;
-        LOGDBG("using fds (internal=%d, external=%d) for fid %d file %s",
+        LOGDBG("using fds (internal=%d, exposed=%d) for fid %d file %s",
                fd, ret, fid, upath);
         errno = 0;
         return ret;
@@ -1317,6 +1318,127 @@ int UNIFYFS_WRAP(__open_2)(const char* path, int flags, ...)
         }
     }
 
+    return ret;
+}
+
+int UNIFYFS_WRAP(dup)(int fd)
+{
+    int err = 0;
+    int ret;
+
+    LOGDBG("fd=%d", fd);
+
+    /* check whether we should intercept this file descriptor */
+    int oldfd = fd;
+    if (unifyfs_intercept_fd(&fd)) {
+        /* dup() is expected to return an unused file descriptor nearest to 0,
+         * approximate that by calling socket(), which should be assigned the
+         * same fd value */
+
+        /* get file descriptor for this file */
+        unifyfs_fd_t* fdesc = unifyfs_get_filedesc_from_fd(fd);
+        if (fdesc == NULL) {
+            errno = EBADF;
+            return -1;
+        }
+
+        errno = 0;
+        int newfd = socket(PF_LOCAL, SOCK_DGRAM, 0);
+        err = errno;
+        if (-1 != newfd) {
+            int duped_fd = unifyfs_dup_fds[newfd];
+            if (-1 == duped_fd) {
+                /* slot is available, set it to our internal fd index */
+                unifyfs_dup_fds[newfd] = fd;
+                LOGDBG("assigned new fd=%d to old=%d", newfd, oldfd);
+                fdesc->use_count++;
+
+                err = 0;
+                ret = newfd;
+            } else {
+                LOGWARN("dup_fds[newfd=%d] slot already in use (internal=%d)",
+                        newfd, duped_fd);
+                /* close socket */
+                MAP_OR_FAIL(close);
+                UNIFYFS_REAL(close)(newfd);
+                err = EMFILE;
+                ret = -1;
+            }
+        } else {
+            LOGERR("failed to get an unused system fd - %s", strerror(err));
+            ret = -1;
+        }
+    } else {
+        MAP_OR_FAIL(dup);
+        errno = 0;
+        ret = UNIFYFS_REAL(dup)(fd);
+        err = errno;
+    }
+
+    errno = err;
+    return ret;
+}
+
+int UNIFYFS_WRAP(dup2)(int fd, int desired_fd)
+{
+    int err = 0;
+    int ret;
+
+    LOGDBG("fd=%d, desired_fd=%d", fd, desired_fd);
+
+    if (fd == desired_fd) {
+        errno = 0;
+        return desired_fd;
+    }
+
+    /* check whether we should intercept this file descriptor */
+    int oldfd = fd;
+    if (unifyfs_intercept_fd(&fd)) {
+        /* dup2() is expected to return the desired file descriptor, closing it
+         * if it's currently open. */
+
+        /* get file descriptor for this file */
+        unifyfs_fd_t* fdesc = unifyfs_get_filedesc_from_fd(fd);
+        if (fdesc == NULL) {
+            errno = EBADF;
+            return -1;
+        }
+
+        MAP_OR_FAIL(close);
+        errno = 0;
+        ret = UNIFYFS_REAL(close)(desired_fd);
+        err = errno;
+        if (err && (err != EBADF)) {
+            /* dup2() returns -1 with errno=EIO if close(desired_fd) fails.
+             * EBADF just means that desired_fd wasn't open, which is OK */
+            err = EIO;
+            ret = -1;
+        } else {
+            int newfd = desired_fd;
+            int duped_fd = unifyfs_dup_fds[newfd];
+            if (-1 == duped_fd) {
+                /* slot is available, set it to our internal fd index */
+                unifyfs_dup_fds[newfd] = fd;
+                LOGDBG("assigned new fd=%d to old=%d", newfd, oldfd);
+                fdesc->use_count++;
+
+                err = 0;
+                ret = newfd;
+            } else {
+                LOGWARN("dup_fds[newfd=%d] slot already in use (internal=%d)",
+                        newfd, duped_fd);
+                err = EMFILE;
+                ret = -1;
+            }
+        }
+    } else {
+        MAP_OR_FAIL(dup2);
+        errno = 0;
+        ret = UNIFYFS_REAL(dup2)(fd, desired_fd);
+        err = errno;
+    }
+
+    errno = err;
     return ret;
 }
 
@@ -2160,8 +2282,33 @@ void* UNIFYFS_WRAP(mmap64)(void* addr, size_t length, int prot, int flags,
 int UNIFYFS_WRAP(close)(int fd)
 {
     /* check whether we should intercept this file descriptor */
+    int oldfd = fd;
     if (unifyfs_intercept_fd(&fd)) {
-        LOGDBG("closing fd %d", fd);
+        LOGDBG("closing (internal=%d, exposed=%d)", fd, oldfd);
+
+        /* get file descriptor for this file */
+        unifyfs_fd_t* fdesc = unifyfs_get_filedesc_from_fd(fd);
+        if (fdesc == NULL) {
+            errno = EBADF;
+            return -1;
+        }
+        fdesc->use_count--;
+
+        if ((oldfd < UNIFYFS_CLIENT_MAX_FILES) &&
+            (fd == unifyfs_dup_fds[oldfd])) {
+                LOGDBG("closing duped fd=%d", oldfd);
+                /* if oldfd is a socket created in dup() wrapper, close it */
+                int type_val;
+                socklen_t type_len = sizeof(type_val);
+                errno = 0;
+                int rc = getsockopt(oldfd, SOL_SOCKET, SO_TYPE,
+                                    (void*)&type_val, &type_len);
+                if (rc == 0) {
+                    MAP_OR_FAIL(close);
+                    UNIFYFS_REAL(close)(oldfd);
+                }
+                unifyfs_dup_fds[oldfd] = -1;
+        }
 
         /* TODO: what to do if underlying file has been deleted? */
 
@@ -2172,15 +2319,9 @@ int UNIFYFS_WRAP(close)(int fd)
             return -1;
         }
 
-        /* get file descriptor for this file */
-        unifyfs_fd_t* filedesc = unifyfs_get_filedesc_from_fd(fd);
-        if (filedesc == NULL) {
-            errno = EBADF;
-            return -1;
-        }
-
         /* if file was opened for writing, sync it */
-        if (filedesc->write) {
+        if (fdesc->write) {
+            LOGDBG("syncing fid=%d", fid);
             int sync_rc = unifyfs_fid_sync_extents(posix_client, fid);
             if (sync_rc != UNIFYFS_SUCCESS) {
                 errno = unifyfs_rc_errno(sync_rc);
@@ -2188,20 +2329,23 @@ int UNIFYFS_WRAP(close)(int fd)
             }
         }
 
-        /* close the file id */
-        int close_rc = unifyfs_fid_close(posix_client, fid);
-        if (close_rc != UNIFYFS_SUCCESS) {
-            errno = unifyfs_rc_errno(close_rc);
-            return -1;
+        if (0 == fdesc->use_count) {
+            /* close the file id */
+            LOGDBG("closing fid=%d", fid);
+            int close_rc = unifyfs_fid_close(posix_client, fid);
+            if (close_rc != UNIFYFS_SUCCESS) {
+                errno = unifyfs_rc_errno(close_rc);
+                return -1;
+            }
+
+            /* reinitialize file descriptor to indicate that
+             * it is no longer associated with a file,
+             * not technically needed but may help catch bugs */
+            unifyfs_fd_init(fd);
+
+            /* add file descriptor back to free stack */
+            unifyfs_stack_push(posix_fd_stack, fd);
         }
-
-        /* reinitialize file descriptor to indicate that
-         * it is no longer associated with a file,
-         * not technically needed but may help catch bugs */
-        unifyfs_fd_init(fd);
-
-        /* add file descriptor back to free stack */
-        unifyfs_stack_push(posix_fd_stack, fd);
 
         errno = 0;
         return 0;
@@ -2331,6 +2475,116 @@ int UNIFYFS_WRAP(chmod)(const char* path, mode_t mode)
     } else {
         MAP_OR_FAIL(chmod);
         int ret = UNIFYFS_REAL(chmod)(path, mode);
+        return ret;
+    }
+}
+
+int UNIFYFS_WRAP(utimensat)(int dirfd, const char* pathname,
+    const struct timespec times[2], int flags)
+{
+    /* determine whether we should intercept this path */
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (pathname == NULL) {
+        /* check whether we should intercept this file descriptor */
+        if (unifyfs_intercept_fd(&dirfd)) {
+            /* TODO: what to do if underlying file has been deleted? */
+
+            /* check that fd is actually in use */
+            int fid = unifyfs_get_fid_from_fd(dirfd);
+            if (fid < 0) {
+                errno = EBADF;
+                return -1;
+            }
+
+            fprintf(stderr, "Function not yet supported @ %s:%d\n",
+                    __FILE__, __LINE__);
+            errno = ENOSYS;
+            return -1;
+        } else {
+            MAP_OR_FAIL(utimensat);
+            int ret = UNIFYFS_REAL(utimensat)(dirfd, pathname, times, flags);
+            return ret;
+        }
+    } else {
+        if (unifyfs_intercept_path(pathname, upath)) {
+            /* check if path exists */
+            int fid = unifyfs_fid_from_path(posix_client, upath);
+            if (fid < 0) {
+                LOGDBG("utimensat: unifyfs_get_id_from path failed,"
+                       " returning -1, %s", upath);
+                errno = ENOENT;
+                return -1;
+            }
+
+            fprintf(stderr, "Function not yet supported @ %s:%d\n",
+                    __FILE__, __LINE__);
+            errno = ENOSYS;
+            return -1;
+        } else {
+            MAP_OR_FAIL(utimensat);
+            int ret = UNIFYFS_REAL(utimensat)(dirfd, pathname, times, flags);
+            return ret;
+        }
+    }
+}
+
+int UNIFYFS_WRAP(futimens)(int fd, const struct timespec times[2])
+{
+    /* check whether we should intercept this file descriptor */
+    if (unifyfs_intercept_fd(&fd)) {
+        /* TODO: what to do if underlying file has been deleted? */
+
+        /* check that fd is actually in use */
+        int fid = unifyfs_get_fid_from_fd(fd);
+        if (fid < 0) {
+            errno = EBADF;
+            return -1;
+        }
+
+        /* lookup meta to update timestamp fields */
+        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(posix_client,
+                                                             fid);
+        if (meta == NULL) {
+            /* bad file descriptor */
+            errno = EBADF;
+            return -1;
+        }
+
+        if (times[0].tv_nsec != UTIME_OMIT) {
+            if (times[0].tv_nsec == UTIME_NOW) {
+                /* use current time */
+                struct timespec tp = {0};
+                clock_gettime(CLOCK_REALTIME, &tp);
+                meta->attrs.atime = tp;
+            } else {
+                meta->attrs.atime = times[0];
+            }
+        }
+        if (times[1].tv_nsec != UTIME_OMIT) {
+            if (times[1].tv_nsec == UTIME_NOW) {
+                /* use current time */
+                struct timespec tp = {0};
+                clock_gettime(CLOCK_REALTIME, &tp);
+                meta->attrs.mtime = tp;
+            } else {
+                meta->attrs.mtime = times[1];
+            }
+        }
+
+        /* update the global meta data to reflect new permissions */
+        unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_UTIME;
+        int ret = unifyfs_set_global_file_meta_from_fid(posix_client, fid, op);
+        if (ret) {
+            //LOGERR("futimens: can't set global meta entry for %s (fid:%d)",
+            //       path, fid);
+            errno = unifyfs_rc_errno(ret);
+            return -1;
+        }
+
+        return 0;
+    } else {
+        MAP_OR_FAIL(futimens);
+        int ret = UNIFYFS_REAL(futimens)(fd, times);
         return ret;
     }
 }

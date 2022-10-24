@@ -186,22 +186,13 @@ int unifyfs_pmi2_init(void)
         pmi2_has_nameserv = val;
     }
 
-    char pmi_jobid[64];
-    memset(pmi_jobid, 0, sizeof(pmi_jobid));
-    rc = PMI2_Job_GetId(pmi_jobid, sizeof(pmi_jobid));
-    if (rc != PMI2_SUCCESS) {
-        unifyfs_pmi2_errstr(rc);
-        LOGERR("PMI2_Job_GetId() failed: %s", pmi2_errstr);
-        return (int)UNIFYFS_ERROR_PMI;
-    }
-
     kv_myrank = pmi_world_rank;
     kv_nranks = pmi_world_nprocs;
 
     glb_pmi_rank = kv_myrank;
     glb_pmi_size = kv_nranks;
 
-    LOGDBG("PMI2 Job Id: %s, Rank: %d of %d, hasNameServer=%d", pmi_jobid,
+    LOGDBG("PMI2 Rank: %d of %d, hasNameServer=%d",
            kv_myrank, kv_nranks, pmi2_has_nameserv);
 
     pmi2_initialized = 1;

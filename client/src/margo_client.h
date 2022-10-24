@@ -105,11 +105,13 @@ int invoke_client_truncate_rpc(unifyfs_client* client,
 int invoke_client_unlink_rpc(unifyfs_client* client,
                              int gfid);
 
+
 int invoke_client_node_local_extents_get_rpc(unifyfs_client* client,
                                              int num_req,
                                              extents_list_t* read_req,
                                              size_t* extent_count,
                                              unifyfs_client_index_t** extents);
+
 int invoke_client_get_gfids_rpc(unifyfs_client* client,
                                 int* num_gfids,
                                 int** gfid_list);
