@@ -111,6 +111,6 @@ void update_read_req_coverage(read_req_t* req,
 /* process a set of client read requests */
 int process_gfid_reads(unifyfs_client* client,
                        read_req_t* in_reqs,
-                       int in_count);
+                       size_t in_count);
 
 #endif // UNIFYFS_CLIENT_READ_H

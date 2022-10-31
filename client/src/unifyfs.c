@@ -345,7 +345,8 @@ static int init_superblock_shm(unifyfs_client* client,
 
                 /* Reset our segment tree to track extents for all writes
                  * by this process, can be used to read back local data */
-                if (client->use_local_extents) {
+                if (client->use_local_extents ||
+                    client->use_node_local_extents) {
                     seg_tree_init(&meta->extents);
                 }
             }

@@ -56,6 +56,7 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
     CLIENT_REGISTER_RPC(laminate);
     CLIENT_REGISTER_RPC(fsync);
     CLIENT_REGISTER_RPC(mread);
+    CLIENT_REGISTER_RPC(node_local_extents_get);
     CLIENT_REGISTER_RPC(get_gfids);
 
 #undef CLIENT_REGISTER_RPC
@@ -886,6 +887,88 @@ int invoke_client_mread_rpc(unifyfs_client* client,
     /* free resources */
     margo_destroy(handle);
 
+    return ret;
+}
+
+/* invokes the client metaget rpc function */
+int invoke_client_node_local_extents_get_rpc(unifyfs_client* client,
+                                             int num_req,
+                                             extents_list_t* read_req,
+                                             size_t* extent_count,
+                                             unifyfs_client_index_t** extents)
+{
+    /* check that we have initialized margo */
+    if (NULL == client_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    size_t extents_size = num_req * sizeof(unifyfs_extent_t);
+    void* buffer = malloc(extents_size);
+    if (NULL == buffer) {
+        return ENOMEM;
+    }
+
+    unifyfs_extent_t* int_extents = (unifyfs_extent_t*)buffer;
+    extents_list_t* cur = read_req;
+    for (int i = 0; i < num_req; i++) {
+        unifyfs_extent_t* ext = int_extents + i;
+        ext->gfid = cur->value.gfid;
+        ext->offset = cur->value.file_pos;
+        ext->length = cur->value.length;
+        cur = cur->next;
+    }
+    /* get handle to rpc function */
+    hg_handle_t handle = create_handle(
+            client_rpc_context->rpcs.node_local_extents_get_id);
+
+    /* fill in input struct */
+    unifyfs_node_local_extents_get_in_t in;
+    hg_return_t hret = margo_bulk_create(client_rpc_context->mid,
+                                         1, &buffer, &extents_size,
+                                         HG_BULK_READ_ONLY, &in.bulk_data);
+    if (hret != HG_SUCCESS) {
+        return UNIFYFS_ERROR_MARGO;
+    }
+    in.app_id = (int32_t) client->state.app_id;
+    in.client_id = (int32_t) client->state.client_id;
+    in.num_req = num_req;
+    in.bulk_size = extents_size;
+
+    /* call rpc function */
+    LOGDBG("invoking the node_local_extents_get rpc function in client");
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of metaget rpc to server failed");
+        margo_destroy(handle);
+        return rc;
+    }
+
+    /* decode response */
+    int ret;
+    unifyfs_node_local_extents_get_out_t out;
+    hret = margo_get_output(handle, &out);
+    if (hret == HG_SUCCESS) {
+        LOGDBG("Got response ret=%" PRIi32, out.ret);
+        ret = (int) out.ret;
+        if (ret == (int) UNIFYFS_SUCCESS) {
+            *extent_count = out.extent_count;
+            void* out_buffer = pull_margo_bulk_buffer(handle, out.bulk_data,
+                                                  out.bulk_size, NULL);
+            *extents = (unifyfs_client_index_t*) out_buffer;
+        }
+        margo_free_output(handle, &out);
+    } else {
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+    /* margo_forward serializes all data before
+     * returning, and it's safe to free the rpc params */
+    margo_bulk_free(in.bulk_data);
+    /* free resources */
+
+    margo_destroy(handle);
+    free(buffer);
     return ret;
 }
 

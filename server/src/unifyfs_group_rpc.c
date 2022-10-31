@@ -14,6 +14,7 @@
 
 #include "unifyfs_group_rpc.h"
 #include "unifyfs_p2p_rpc.h"
+#include "unifyfs_rpc_util.h"
 
 
 #ifndef UNIFYFS_BCAST_K_ARY

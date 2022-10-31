@@ -419,17 +419,41 @@ void service_local_reqs(
             /* copy data from local write log into user buffer */
             off_t log_offset = ext_log_pos + ext_byte_offset;
             size_t nread = 0;
-            int rc = unifyfs_logio_read(client->state.logio_ctx, log_offset,
-                                        cover_length, req_ptr, &nread);
-            if (rc == UNIFYFS_SUCCESS) {
-                /* update bytes we have filled in the request buffer */
-                update_read_req_coverage(req, req_byte_offset, nread);
+            /* we need to use the logio_ctx from correct client */
+            logio_context* logio_ctx = NULL;
+            if (next->client_id == client->state.client_id) {
+                logio_ctx = client->state.logio_ctx;
+            } else if (client->logio_ctx_ptrs[next->client_id] != NULL) {
+                logio_ctx = client->logio_ctx_ptrs[next->client_id];
             } else {
-                LOGERR("local log read failed for offset=%zu size=%zu",
-                       (size_t)log_offset, cover_length);
-                req->errcode = rc;
+                size_t shmem_size = 0;
+                if (client->state.logio_ctx->shmem != NULL) {
+                    shmem_size = client->state.logio_ctx->shmem->size;
+                }
+                char* spill_dir = NULL;
+                if (client->state.logio_ctx->spill_sz > 0) {
+                    spill_dir = client->cfg.logio_spill_dir;
+                }
+                unifyfs_logio_init(client->state.app_id,
+                                   next->client_id,
+                                   shmem_size,
+                                   client->state.logio_ctx->spill_sz,
+                                   spill_dir,
+                                   &client->logio_ctx_ptrs[next->client_id]);
+                logio_ctx = client->logio_ctx_ptrs[next->client_id];
             }
-
+            if (NULL != logio_ctx) {
+                int rc = unifyfs_logio_read(logio_ctx, log_offset,
+                                            cover_length, req_ptr, &nread);
+                if (rc == UNIFYFS_SUCCESS) {
+                    /* update bytes we have filled in the request buffer */
+                    update_read_req_coverage(req, req_byte_offset, nread);
+                } else {
+                    LOGERR("local log read failed for offset=%zu size=%zu",
+                           (size_t) log_offset, cover_length);
+                    req->errcode = rc;
+                }
+            }
             /* get the next element in the tree */
             next = seg_tree_iter(extents, next);
         }
@@ -560,7 +584,7 @@ static void update_read_req_result(unifyfs_client* client,
  */
 int process_gfid_reads(unifyfs_client* client,
                        read_req_t* in_reqs,
-                       int in_count)
+                       size_t in_count)
 {
     if (0 == in_count) {
         return UNIFYFS_SUCCESS;
@@ -597,9 +621,76 @@ int process_gfid_reads(unifyfs_client* client,
     /* this records the pointer to the temp request array if
      * we allocate one, we should free this later if not NULL */
     read_req_t* reqs = NULL;
+    if (client->use_node_local_extents) {
+        extents_list_t* list = calloc(1, sizeof(struct extents_list));
+        struct extents_list* cur = list;
+        int num_request_selected = 0;
+        for (int i = 0; i < in_count; ++i) {
+            int fid = unifyfs_fid_from_gfid(client, in_reqs[i].gfid);
+            /* get meta for this file id */
+            unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(client, fid);
+            if (meta != NULL) {
+                if (!meta->attrs.is_laminated || !meta->needs_reads_sync) {
+                    /* do not proceed for this request as
+                     * it is not a laminated file or has already been synced.*/
+                    continue;
+                }
+                num_request_selected++;
+                off_t filesize_offt = unifyfs_gfid_filesize(client,
+                                                            in_reqs[i].gfid);
+                cur->value.file_pos = 0;
+                cur->value.length = filesize_offt - 1;
+                cur->value.gfid = in_reqs[i].gfid;
+                if (i < in_count - 1) {
+                    cur->next = calloc(1, sizeof(struct extents_list));
+                    cur->next->next = NULL;
+                    cur = cur->next;
+                } else {
+                    cur->next = NULL;
+                }
+                meta->needs_reads_sync = 0;
+            }
+        }
+        if (num_request_selected > 0) {
+            /* There are files which are laminated and
+             * require sync of extents */
+            size_t extent_count = 0;
+            unifyfs_client_index_t* extents = NULL;
+            int rc =
+                  invoke_client_node_local_extents_get_rpc(client,
+                                                           num_request_selected,
+                                                           list,
+                                                           &extent_count,
+                                                           &extents);
+            if (rc == UNIFYFS_SUCCESS && extent_count != 0) {
+                for (int j = 0; j < extent_count; ++j) {
+                    if (extents[j].log_app_id ==
+                        client->state.app_id) {
+                        int fid = unifyfs_fid_from_gfid(client,
+                                                        extents[j].gfid);
+                        /* get meta for this file id */
+                        unifyfs_filemeta_t* meta = unifyfs_get_meta_from_fid(
+                                client,
+                                fid);
+                        if (meta != NULL) {
+                            seg_tree_add(&meta->extents,
+                                         extents[j].file_pos,
+                                         extents[j].file_pos +
+                                         extents[j].length - 1,
+                                         extents[j].log_pos,
+                                         extents[j].log_client_id);
+                        }
+                    }
+                }
+            }
+            if (extents != NULL) {
+                free(extents);
+            }
+        }
+    }
 
     /* attempt to complete requests locally if enabled */
-    if (client->use_local_extents) {
+    if (client->use_local_extents || client->use_node_local_extents) {
         /* allocate space to make local and server copies of the requests,
          * each list will be at most in_count long */
         size_t reqs_size = 2 * in_count;
@@ -743,7 +834,7 @@ int process_gfid_reads(unifyfs_client* client,
     /* if we attempted to service requests from our local extent map,
      * then we need to copy the resulting read requests from the local
      * and server arrays back into the user's original array */
-    if (client->use_local_extents) {
+    if (client->use_local_extents || client->use_node_local_extents) {
         /* TODO: would be nice to copy these back into the same order
          * in which we received them. */
 
