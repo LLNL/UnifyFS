@@ -64,7 +64,7 @@ static int fid_storage_alloc(unifyfs_client* client,
 
         /* Initialize our segment tree to track extents for all writes
          * by this process, can be used to read back local data */
-        if (client->use_local_extents) {
+        if (client->use_local_extents || client->use_node_local_extents) {
             rc = seg_tree_init(&meta->extents);
             if (rc != 0) {
                 /* clean up extents_sync tree we initialized */
@@ -114,7 +114,7 @@ static int fid_storage_free(unifyfs_client* client,
             seg_tree_destroy(&meta->extents_sync);
 
             /* Free our extent seg_tree */
-            if (client->use_local_extents) {
+            if (client->use_local_extents || client->use_node_local_extents) {
                 seg_tree_destroy(&meta->extents);
             }
         }
@@ -249,7 +249,9 @@ int unifyfs_fid_create_file(unifyfs_client* client,
     /* set UnifyFS client metadata */
     meta->fid            = fid;
     meta->storage        = FILE_STORAGE_NULL;
-    meta->needs_sync     = 0;
+    meta->needs_writes_sync     = 0;
+    /* first time we read a laminated file we want to sync extents */
+    meta->needs_reads_sync     = 1;
     meta->pending_unlink = 0;
 
     return fid;
@@ -971,7 +973,8 @@ static int add_write_meta_to_index(unifyfs_client* client,
         seg_tree_add(&meta->extents,
                      file_pos,
                      file_pos + length - 1,
-                     log_pos);
+                     log_pos,
+                     client->state.client_id);
     }
 
     /*
@@ -991,7 +994,8 @@ static int add_write_meta_to_index(unifyfs_client* client,
     seg_tree_add(&meta->extents_sync,
                  file_pos,
                  file_pos + length - 1,
-                 log_pos);
+                 log_pos,
+                 client->state.client_id);
 
     return UNIFYFS_SUCCESS;
 }
@@ -1096,7 +1100,7 @@ int unifyfs_fid_sync_extents(unifyfs_client* client,
     int ret = UNIFYFS_SUCCESS;
 
     /* sync with server if we need to */
-    if (meta->needs_sync) {
+    if (meta->needs_writes_sync) {
         int rc;
 
         /* write contents from segment tree to index buffer */
@@ -1105,7 +1109,7 @@ int unifyfs_fid_sync_extents(unifyfs_client* client,
         /* if there are no index entries, we've got nothing to sync */
         if (*(client->state.write_index.ptr_num_entries) == 0) {
             /* consider that we've sync'd successfully */
-            meta->needs_sync = 0;
+            meta->needs_writes_sync = 0;
             return UNIFYFS_SUCCESS;
         }
 
@@ -1119,7 +1123,7 @@ int unifyfs_fid_sync_extents(unifyfs_client* client,
         }
 
         /* we've sync'd, so mark this file as being up-to-date */
-        meta->needs_sync = 0;
+        meta->needs_writes_sync = 0;
 
         /* flushed, clear buffer and refresh number of entries
          * and number remaining */
@@ -1220,7 +1224,7 @@ int unifyfs_fid_write(
         if (rc == UNIFYFS_SUCCESS) {
             /* write succeeded, remember that we have new data
              * that needs to be synced with the server */
-            meta->needs_sync = 1;
+            meta->needs_writes_sync = 1;
 
             /* optionally sync after every write */
             if (client->use_write_sync) {

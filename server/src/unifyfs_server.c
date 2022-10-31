@@ -982,11 +982,11 @@ unifyfs_rc attach_app_client(app_client* client,
     int failure = 0;
 
     /* initialize server-side logio for this client */
-    int rc = unifyfs_logio_init_server(app_id, client_id,
-                                       logio_shmem_size,
-                                       logio_spill_size,
-                                       logio_spill_dir,
-                                       &(client->state.logio_ctx));
+    int rc = unifyfs_logio_init(app_id, client_id,
+                                logio_shmem_size,
+                                logio_spill_size,
+                                logio_spill_dir,
+                                &(client->state.logio_ctx));
     if (rc != UNIFYFS_SUCCESS) {
         failure = 1;
     }
@@ -1070,6 +1070,8 @@ unifyfs_rc cleanup_app_client(app_config* app, app_client* client)
         return EINVAL;
     }
 
+    unifyfs_rc urc = UNIFYFS_SUCCESS;
+
     LOGDBG("cleaning application client %d:%d",
            client->state.app_id, client->state.client_id);
 
@@ -1089,21 +1091,17 @@ unifyfs_rc cleanup_app_client(app_config* app, app_client* client)
 
     /* free client structure */
     if (NULL != client->reqmgr) {
-        if (NULL != client->reqmgr->client_reqs) {
-            arraylist_free(client->reqmgr->client_reqs);
+        int rc = unifyfs_rm_thrd_cleanup(client->reqmgr);
+        if (rc) {
+            urc = rc;
         }
-        if (NULL != client->reqmgr->client_callbacks) {
-            arraylist_free(client->reqmgr->client_callbacks);
-        }
-
-        ABT_mutex_free(&(client->reqmgr->reqs_sync));
 
         free(client->reqmgr);
         client->reqmgr = NULL;
     }
     free(client);
 
-    return UNIFYFS_SUCCESS;
+    return urc;
 }
 
 unifyfs_rc add_failed_client(int app_id, int client_id)

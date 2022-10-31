@@ -72,7 +72,10 @@ void seg_tree_destroy(struct seg_tree* seg_tree)
 
 /* Allocate a node for the range tree.  Free node with free() when finished */
 static struct seg_tree_node*
-seg_tree_node_alloc(unsigned long start, unsigned long end, unsigned long ptr)
+seg_tree_node_alloc(unsigned long start,
+                    unsigned long end,
+                    unsigned long ptr,
+                    int client_id)
 {
     /* allocate a new node structure */
     struct seg_tree_node* node;
@@ -85,6 +88,7 @@ seg_tree_node_alloc(unsigned long start, unsigned long end, unsigned long ptr)
     node->start = start;
     node->end = end;
     node->ptr = ptr;
+    node->client_id = client_id;
 
     return node;
 }
@@ -146,7 +150,7 @@ static int get_non_overlapping_range(
  * Add an entry to the range tree.  Returns 0 on success, nonzero otherwise.
  */
 int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
-    unsigned long end, unsigned long ptr)
+    unsigned long end, unsigned long ptr, int client_id)
 {
     /* Assume we'll succeed */
     int rc = 0;
@@ -163,7 +167,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
     int ret;
 
     /* Create our range */
-    node = seg_tree_node_alloc(start, end, ptr);
+    node = seg_tree_node_alloc(start, end, ptr, client_id);
     if (!node) {
         return ENOMEM;
     }
@@ -205,7 +209,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
              * on the next pass of this while() loop.
              */
             resized = seg_tree_node_alloc(new_start, new_end,
-                overlap->ptr + (new_start - overlap->start));
+                overlap->ptr + (new_start - overlap->start), client_id);
             if (!resized) {
                 free(node);
                 rc = ENOMEM;
@@ -225,8 +229,10 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
                  * part.  Add it in.
                  */
                 remaining = seg_tree_node_alloc(
-                    resized->end + 1, overlap->end,
-                    overlap->ptr + (resized->end + 1 - overlap->start));
+                    resized->end + 1,
+                    overlap->end,
+                    overlap->ptr + (resized->end + 1 - overlap->start),
+                    client_id);
                 if (!remaining) {
                     free(node);
                     free(resized);
@@ -385,7 +391,11 @@ int seg_tree_remove(
                 /* add new (after) node */
                 LOGDBG("add after node [%lu, %lu]", a_start, a_end);
                 seg_tree_unlock(seg_tree);
-                int rc = seg_tree_add(seg_tree, a_start, a_end, a_ptr);
+                int rc = seg_tree_add(seg_tree,
+                                      a_start,
+                                      a_end,
+                                      a_ptr,
+                                      node->client_id);
                 if (rc) {
                     LOGERR("seg_tree_add() failed when splitting");
                     return rc;
@@ -414,7 +424,7 @@ struct seg_tree_node* seg_tree_find_nolock(
     unsigned long end)
 {
     /* Create a range of just our starting byte offset */
-    struct seg_tree_node* node = seg_tree_node_alloc(start, start, 0);
+    struct seg_tree_node* node = seg_tree_node_alloc(start, start, 0, 0);
     if (!node) {
         return NULL;
     }

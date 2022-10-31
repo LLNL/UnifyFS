@@ -239,6 +239,12 @@ static void register_server_server_rpcs(margo_instance_id mid)
         MARGO_REGISTER(mid, "unlink_bcast_rpc",
                        unlink_bcast_in_t, unlink_bcast_out_t,
                        unlink_bcast_rpc);
+
+    unifyfsd_rpc_context->rpcs.node_local_extents_get_id =
+       MARGO_REGISTER(mid, "unifyfs_node_local_extents_get_rpc",
+                      unifyfs_node_local_extents_get_in_t,
+                      unifyfs_node_local_extents_get_out_t,
+                      unifyfs_node_local_extents_get_rpc);
 }
 
 /* setup_local_target - Initializes the client-server margo target */
@@ -322,6 +328,11 @@ static void register_client_server_rpcs(margo_instance_id mid)
     MARGO_REGISTER(mid, "unifyfs_mread_rpc",
                    unifyfs_mread_in_t, unifyfs_mread_out_t,
                    unifyfs_mread_rpc);
+
+    MARGO_REGISTER(mid, "unifyfs_node_local_extents_get_rpc",
+                   unifyfs_node_local_extents_get_in_t,
+                   unifyfs_node_local_extents_get_out_t,
+                   unifyfs_node_local_extents_get_rpc);
 
     MARGO_REGISTER(mid, "unifyfs_get_gfids_rpc",
                    unifyfs_get_gfids_in_t, unifyfs_get_gfids_out_t,
@@ -559,82 +570,6 @@ hg_addr_t get_margo_server_address(int rank)
         }
     }
     return addr;
-}
-
-/* Use passed bulk handle to pull data into a newly allocated buffer.
- * If local_bulk is not NULL, will set to local bulk handle on success.
- * Returns bulk buffer, or NULL on failure. */
-void* pull_margo_bulk_buffer(hg_handle_t rpc_hdl,
-                             hg_bulk_t bulk_remote,
-                             hg_size_t bulk_sz,
-                             hg_bulk_t* local_bulk)
-{
-    if (0 == bulk_sz) {
-        return NULL;
-    }
-
-    size_t sz = (size_t) bulk_sz;
-    void* buffer = malloc(sz);
-    if (NULL == buffer) {
-        LOGERR("failed to allocate buffer(sz=%zu) for bulk transfer", sz);
-        return NULL;
-    }
-
-    /* get mercury info to set up bulk transfer */
-    const struct hg_info* hgi = margo_get_info(rpc_hdl);
-    assert(hgi);
-    margo_instance_id mid = margo_hg_info_get_instance(hgi);
-    assert(mid != MARGO_INSTANCE_NULL);
-
-    /* register local target buffer for bulk access */
-    hg_bulk_t bulk_local;
-    hg_return_t hret = margo_bulk_create(mid, 1, &buffer, &bulk_sz,
-                                         HG_BULK_READWRITE, &bulk_local);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_bulk_create() failed");
-        free(buffer);
-        return NULL;
-    }
-
-    /* execute the transfer to pull data from remote side
-     * into our local buffer.
-     *
-     * NOTE: mercury/margo bulk transfer does not check the maximum
-     * transfer size that the underlying transport supports, and a
-     * large bulk transfer may result in failure. */
-    int i = 0;
-    hg_size_t max_bulk = UNIFYFS_SERVER_MAX_BULK_TX_SIZE;
-    hg_size_t remain = bulk_sz;
-    do {
-        hg_size_t offset = i * max_bulk;
-        hg_size_t len = (remain < max_bulk) ? remain : max_bulk;
-        hret = margo_bulk_transfer(mid, HG_BULK_PULL, hgi->addr,
-                                   bulk_remote, offset,
-                                   bulk_local, offset, len);
-        if (hret != HG_SUCCESS) {
-            LOGERR("margo_bulk_transfer(buf_offset=%zu, len=%zu) failed",
-                   (size_t)offset, (size_t)len);
-            break;
-        }
-        remain -= len;
-        i++;
-    } while (remain > 0);
-
-    if (hret == HG_SUCCESS) {
-        LOGDBG("successful bulk transfer (%zu bytes)", bulk_sz);
-        if (local_bulk != NULL) {
-            *local_bulk = bulk_local;
-        } else {
-            /* deregister our bulk transfer buffer */
-            margo_bulk_free(bulk_local);
-        }
-        return buffer;
-    } else {
-        LOGERR("failed bulk transfer - transferred %zu of %zu bytes",
-               (bulk_sz - remain), bulk_sz);
-        free(buffer);
-        return NULL;
-    }
 }
 
 /* MARGO CLIENT-SERVER RPC INVOCATION FUNCTIONS */
