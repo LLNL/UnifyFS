@@ -12,23 +12,15 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
-#include <config.h>
 
+#include <getopt.h>
+#include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
-#include <errno.h>
-#include <limits.h>
-#include <sys/time.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <libgen.h>
-#include <getopt.h>
 #include <time.h>
+
+
 #include <mpi.h>
 #include <unifyfs.h>
 
@@ -84,7 +76,6 @@ int main(int argc, char** argv)
     int ret = 0;
     int ch = 0;
     int optidx = 0;
-    struct stat sb = { 0, };
 
     size_t srclen;
     char* srcpath;

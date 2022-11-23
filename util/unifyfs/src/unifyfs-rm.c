@@ -803,7 +803,7 @@ static int generic_stage(char* cmd, int run_argc, unifyfs_args_t* args)
     construct_stage_argv(args, argv + run_argc);
     if (args->debug) {
         for (int i = 0; i < (argc - 1); i++) {
-            fprintf(stdout, "UNIFYFS DEBUG: stage_argv[%d] = %s\n",
+            fprintf(stdout, "UNIFYFS STAGE DEBUG: stage_argv[%d] = %s\n",
                     i, argv[i]);
             fflush(stdout);
         }
@@ -853,6 +853,14 @@ static int jsrun_launch(unifyfs_resource_t* resource,
     argv[11] = strdup(n_cores);
     argv[12] = strdup("-a1");
     construct_server_argv(args, argv + jsrun_argc);
+
+    if (args->debug) {
+        for (int i = 0; i < (argc - 1); i++) {
+            fprintf(stdout, "UNIFYFS LAUNCH DEBUG: jsrun argv[%d] = %s\n",
+                    i, argv[i]);
+            fflush(stdout);
+        }
+    }
 
     execvp(argv[0], argv);
     perror("failed to execvp() jsrun to launch unifyfsd");
@@ -956,6 +964,14 @@ static int mpirun_launch(unifyfs_resource_t* resource,
     argv[4] = strdup("ppr:1:node");
     construct_server_argv(args, argv + mpirun_argc);
 
+    if (args->debug) {
+        for (int i = 0; i < (argc - 1); i++) {
+            fprintf(stdout, "UNIFYFS LAUNCH DEBUG: mpirun argv[%d] = %s\n",
+                    i, argv[i]);
+            fflush(stdout);
+        }
+    }
+
     execvp(argv[0], argv);
     perror("failed to execvp() mpirun to launch unifyfsd");
     return -errno;
@@ -1049,11 +1065,19 @@ static int srun_launch(unifyfs_resource_t* resource,
     argv = calloc(argc, sizeof(char*));
     argv[0] = strdup("srun");
     argv[1] = strdup("--exact");
-    argv[2] = strdup("--overcommit");
+    argv[2] = strdup("--overlap");
     argv[3] = strdup(n_nodes);
     argv[4] = strdup("--ntasks-per-node=1");
     argv[5] = strdup(n_cores);
     construct_server_argv(args, argv + srun_argc);
+
+    if (args->debug) {
+        for (int i = 0; i < (argc - 1); i++) {
+            fprintf(stdout, "UNIFYFS LAUNCH DEBUG: srun argv[%d] = %s\n",
+                    i, argv[i]);
+            fflush(stdout);
+        }
+    }
 
     execvp(argv[0], argv);
     perror("failed to execvp() srun to launch unifyfsd");

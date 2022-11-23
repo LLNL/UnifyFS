@@ -17,22 +17,18 @@
  * specifying filename) or non-interactively (specifying filename with offset
  * and length).
  */
-#include <config.h>
 
+#include <errno.h>
+#include <getopt.h>
+#include <libgen.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
-#include <errno.h>
-#include <limits.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <libgen.h>
-#include <getopt.h>
-#include <unifyfs.h>
 #include <time.h>
+#include <unistd.h>
+
+#include <unifyfs.h>
 
 #include "testutil.h"
 
@@ -115,6 +111,7 @@ static void random_offlen(uint64_t filesize, uint64_t maxoff, uint64_t maxlen,
 
 static void do_pread(int fd, size_t length, off_t offset)
 {
+    int err;
     ssize_t ret = 0;
     struct timespec ts1, ts2;
     double ts1nsec, ts2nsec;
@@ -122,11 +119,11 @@ static void do_pread(int fd, size_t length, off_t offset)
 
     alloc_buf(length);
 
-    errno = 0;
-
     clock_gettime(CLOCK_REALTIME, &ts1);
 
+    errno = 0;
     ret = pread(fd, buf, length, offset);
+    err = errno;
 
     clock_gettime(CLOCK_REALTIME, &ts2);
 
@@ -137,8 +134,8 @@ static void do_pread(int fd, size_t length, off_t offset)
     mbps = (1.0 * length / (1<<20)) / elapsed_sec;
 
     printf(" -> pread(off=%lu, len=%lu) = %zd", offset, length, ret);
-    if (errno) {
-        printf("  (err=%d, %s)\n", errno, strerror(errno));
+    if (err) {
+        printf("  (err=%d, %s)\n", err, strerror(err));
     } else {
         printf(" (%.3f sec, %.3lf MB/s)\n", elapsed_sec, mbps);
 

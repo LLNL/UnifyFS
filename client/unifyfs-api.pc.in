@@ -4,9 +4,8 @@ libdir=@libdir@
 includedir=@includedir@
 
 Name: UnifyFS
-Description: client library for UnifyFS unified burst buffer file system
+Description: API library for UnifyFS unified local storage file system
 Version: @LIBUNIFYFS_API_VERSION@
-Requires:
+Requires.private: margo
 Libs: -L${libdir} -lunifyfs_api
-Cflags: -I${includedir}
-
+Cflags: -I${includedir} -I${includedir}/unifyfs
