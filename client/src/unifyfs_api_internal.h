@@ -78,6 +78,8 @@ typedef struct unifyfs_client {
     size_t write_index_size;         /* size of metadata log */
     size_t max_write_index_entries;  /* max metadata log entries */
 
+    size_t unlink_usecs;             /* micrcosecs to sleep after unlink */
+
     /* tracks current working directory within namespace */
     char* cwd;
 
