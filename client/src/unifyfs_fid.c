@@ -12,6 +12,9 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
+#include <unistd.h>
+#include <stdlib.h>
+
 #include "unifyfs_fid.h"
 #include "margo_client.h"
 
@@ -653,6 +656,13 @@ int unifyfs_fid_unlink(unifyfs_client* client,
     rc = invoke_client_unlink_rpc(client, gfid);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
+    }
+
+    /* since we can't block until unlink is finished, sleep instead */
+    char* value = getenv("UNIFYFS_UNLINK_USECS");
+    if (value != NULL) {
+        int usecs = atoi(value);
+        usleep(usecs);
     }
 
     return UNIFYFS_SUCCESS;
