@@ -83,7 +83,7 @@ unifyfs_rc unifyfs_create(unifyfs_handle fshdl,
     off_t filepos = -1;
 
     mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    int create_flags = O_CREAT;
+    int create_flags = O_CREAT | O_EXCL;
     int rc = unifyfs_fid_open(client, filepath, create_flags, mode,
                               &fid, &filepos);
     if (UNIFYFS_SUCCESS == rc) {
