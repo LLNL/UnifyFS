@@ -62,18 +62,18 @@ a given section and key.
 .. table:: ``[client]`` section - client settings
    :widths: auto
 
-   ==================   ======  =================================================================
-   Key                  Type    Description
-   ==================   ======  =================================================================
-   cwd                  STRING  effective starting current working directory
-   fsync_persist        BOOL    persist data to storage on fsync() (default: on)
-   local_extents        BOOL    service reads from local data if possible (default: off)
-   max_files            INT     maximum number of open files per client process (default: 128)
-   node_local_extents   BOOL    service reads from node local data if possible for laminated files (default: off)
-   super_magic          BOOL    whether to return UNIFYFS (on) or TMPFS (off) statfs magic (default: on)
-   write_index_size     INT     maximum size (B) of memory buffer for storing write log metadata
-   write_sync           BOOL    sync data to server after every write (default: off)
-   ===================  ======  =================================================================
+   ==================  ======  =================================================================
+   Key                 Type    Description
+   ==================  ======  =================================================================
+   cwd                 STRING  effective starting current working directory
+   fsync_persist       BOOL    persist data to storage on fsync() (default: on)
+   local_extents       BOOL    service reads from local data (default: off)
+   max_files           INT     maximum number of open files per client process (default: 128)
+   node_local_extents  BOOL    service reads from node local data for laminated files (default: off)
+   super_magic         BOOL    whether to return UNIFYFS (on) or TMPFS (off) statfs magic (default: on)
+   write_index_size    INT     maximum size (B) of memory buffer for storing write log metadata
+   write_sync          BOOL    sync data to server after every write (default: off)
+   ==================  ======  =================================================================
 
 The ``cwd`` setting is used to emulate the behavior one
 expects when changing into a working directory before starting a job
