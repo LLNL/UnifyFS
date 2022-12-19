@@ -2,7 +2,7 @@ name: UnifyFS Build and Test
 
 on:
   pull_request:
-    branches: [ dev ]
+    branches: [ main, dev ]
   push:
 
 jobs:
@@ -37,7 +37,15 @@ jobs:
       CXX: g++-${{ matrix.gcc }}
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Push checkout
+      if: github.event_name == 'push'
+      uses: actions/checkout@v2
+
+    - name: PR checkout
+      if: github.event_name == 'pull_request'
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
 
     - name: Set up GCC
       uses: egor-tensin/setup-gcc@v1
