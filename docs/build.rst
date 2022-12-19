@@ -29,6 +29,7 @@ If you use a clone of the Spack develop branch, be sure to pull the latest chang
     unifyfs ^mochi-margo@0.9.6``).
 
 .. _build-label:
+
 Install Spack
 *************
 
@@ -277,6 +278,7 @@ configure option or provide the appropriate ``CPPFLAGS`` and ``LDFLAGS`` at
 configure time.
 
 .. _auto-mount-label:
+
 Transparent Mounting for MPI Applications
 *****************************************
 
@@ -288,6 +290,7 @@ the namespace mountpoint. To enable transparent mounting, use the
 ``--enable-mpi-mount`` configure option.
 
 .. _preload-label:
+
 Intercepting I/O Calls from Shell Commands
 ******************************************
 

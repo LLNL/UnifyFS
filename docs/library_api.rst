@@ -67,7 +67,7 @@ Library API Types
 The file system handle type is a pointer to an opaque client structure that
 records the associated mountpoint and configuration.
 
-.. code-block:: C
+.. code-block:: c
     :caption: File system handle type
 
     /* UnifyFS file system handle (opaque pointer) */
@@ -80,7 +80,7 @@ buffer and size. The structure also contains fields used for tracking the
 status of the request (``unifyfs_req_state``) and operation results
 (``unifyfs_ioreq_result``).
 
-.. code-block:: C
+.. code-block:: c
     :caption: File I/O request types
 
     /* I/O request structure */
@@ -135,7 +135,7 @@ indicating whether parallel file transfer should be used. Similar to I/O
 requests, the structure also contains fields used for tracking the request
 status and transfer operation result.
 
-.. code-block:: C
+.. code-block:: c
     :caption: File transfer request types
 
     /* File transfer request structure */
@@ -175,7 +175,7 @@ source code files that will make calls to API methods. You will also need to
 modify your client application build process to link with the
 ``libunifyfs_api`` library.
 
-.. code-block:: C
+.. code-block:: c
     :caption: Including the API header
 
     #include <unifyfs/unifyfs_api.h>
@@ -201,7 +201,7 @@ parameter, which controls the size of the log-based I/O data chunks, is set to
 the value of 32768. See :doc:`configuration`
 for further options for customizing the behavior of UnifyFS.
 
-.. code-block:: C
+.. code-block:: c
     :caption: UnifyFS handle initialization
 
     int n_configs = 1;
@@ -216,7 +216,7 @@ Once all UnifyFS operation using the handle have been completed, the client
 application should call ``unifyfs_finalize()`` as shown below to release the
 resources associated with the handle.
 
-.. code-block:: C
+.. code-block:: c
     :caption: UnifyFS handle finalization
 
     int rc = unifyfs_finalize(fshdl);
@@ -232,7 +232,7 @@ only one will succeed.
     Currently, the ``create_flags`` parameter is unused; it
     is reserved for future use to indicate file-specific UnifyFS behavior.
 
-.. code-block:: C
+.. code-block:: c
     :caption: UnifyFS file creation
 
     const char* filename = "/my/unifyfs/namespace/a/new/file";
@@ -242,7 +242,7 @@ only one will succeed.
 
 Existing files can be opened by any client process using ``unifyfs_open()``.
 
-.. code-block:: C
+.. code-block:: c
     :caption: UnifyFS file use
 
     const char* filename = "/my/unifyfs/namespace/an/existing/file";
@@ -252,7 +252,7 @@ Existing files can be opened by any client process using ``unifyfs_open()``.
 
 When no longer required, files can be deleted using ``unifyfs_remove()``.
 
-.. code-block:: C
+.. code-block:: c
     :caption: UnifyFS file removal
 
     const char* filename = "/my/unifyfs/namespace/an/existing/file";
@@ -283,7 +283,7 @@ a batch of requests including several rank-strided write operations followed by
 a metadata sync to make those writes visible to other clients, and then
 immediately waits for completion of the entire batch.
 
-.. code-block:: C
+.. code-block:: c
     :caption: Synchronous Batched I/O
 
     /* write and sync file metadata */
@@ -320,8 +320,9 @@ File transfer operations in the library API also use a batched request
 interface. A client application dispatches an array of file transfer
 requests, where each request identifies the source and destination file
 paths and the transfer mode. Two transfer modes are currently supported:
-    1. COPY - Copy source file to destination path.
-    2. MOVE - Copy source file to destination path, then remove source file.
+
+1. COPY - Copy source file to destination path.
+2. MOVE - Copy source file to destination path, then remove source file.
 
 Upon successful dispatch, the transfer operations will be executed by
 UnifyFS in an asynchronous manner that allows the client to overlap other
@@ -334,7 +335,7 @@ A simple use case for batched transfer is shown below, where the client
 dispatches a batch of requests and then immediately waits for completion of
 the entire batch.
 
-.. code-block:: C
+.. code-block:: c
     :caption: Synchronous Batched File Transfers
 
     /* move output files from UnifyFS to parallel file system */

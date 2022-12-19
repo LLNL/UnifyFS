@@ -32,7 +32,7 @@ Build
 
 Clone the ``pilgrim`` (default) branch of Recorder:
 
-.. code-block:: Bash
+.. code-block:: bash
     :caption: Clone
 
     $ git clone https://github.com/uiuc-hpc/Recorder.git
@@ -40,7 +40,7 @@ Clone the ``pilgrim`` (default) branch of Recorder:
 Determine the install locations of the MPI-IO and HDF5 libraries being used by
 the application and pass those paths to Recorder at configure time.
 
-.. code-block:: Bash
+.. code-block:: bash
     :caption: Configure, Make, and Install
 
     $ deps_prefix="${mpi_install};${hdf5_install}"
@@ -58,7 +58,7 @@ the application and pass those paths to Recorder at configure time.
 Python3 and the ``recorder-viz`` and ``networkx`` packages are also required to
 run the final VerifyIO verification code.
 
-.. code-block:: Bash
+.. code-block:: bash
     :caption: Install Python Packages
 
     $ module load python/3.x.x
@@ -72,7 +72,7 @@ Run
 Before capturing application traces, it is recommended to disable data sieving
 as VerifyIO will flag this as incompatible under commit semantics.
 
-.. code-block:: Bash
+.. code-block:: bash
     :caption: Disable Data Sieving
 
     echo -e "romio_ds_write disable\nromio_ds_read disable" > /path/to/romio_hints
@@ -83,7 +83,7 @@ as VerifyIO will flag this as incompatible under commit semantics.
 Run the application with Recorder to capture the traces using the appropriate
 environment variable export option for the available workload manager.
 
-.. code-block:: Bash
+.. code-block:: bash
     :caption: Capture Traces
 
     srun -N $nnodes -n $nprocs --export=ALL,LD_PRELOAD=$RECORDER_ROOT/lib/librecorder.so example_app_executable
@@ -92,10 +92,11 @@ Recorder places the trace files in a folder within the current working directory
 named ``hostname-username-appname-pid-starttime``.
 
 .. _recorder2text-label:
+
 If desired (e.g., for debugging), use the recorder2text tool to generate
 human-readable traces from the captured trace files.
 
-.. code-block:: Bash
+.. code-block:: bash
     :caption: Generate Human-readable Traces
 
     $RECORDER_ROOT/bin/recorder2text /path/to/traces &> recorder2text.out
@@ -106,7 +107,7 @@ Next, run the Recorder conflict detector to capture **potential** conflicts. The
 ``--semantics=`` option needs to match the semantics of the intended underlying
 file system. In the case of UnifyFS, use ``commit`` semantics.
 
-.. code-block:: Bash
+.. code-block:: bash
     :caption: Capture Potential Conflicts
 
     $RECORDER_ROOT/bin/conflict_detector /path/to/traces --semantics=commit &> conflict_detector_commit.out
@@ -118,7 +119,7 @@ Lastly, run VerifyIO with the traces and potential conflicts to determine
 whether all I/O operations are properly synchronized under the desired standard
 (e.g., POSIX, MPI).
 
-.. code-block:: Bash
+.. code-block:: bash
     :caption: Run VerifyIO
 
     # Evaluate using POSIX standard
