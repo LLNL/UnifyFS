@@ -32,7 +32,7 @@ Include the UnifyFS Header
 In C or C++ applications, include ``unifyfs.h``. See writeread.c_ for a full
 example.
 
-.. code-block:: C
+.. code-block:: c
     :caption: C
 
     #include <unifyfs.h>
@@ -40,7 +40,7 @@ example.
 In Fortran applications, include ``unifyfsf.h``. See writeread.f90_ for a
 full example.
 
-.. code-block:: Fortran
+.. code-block:: fortran
     :caption: Fortran
 
     include 'unifyfsf.h'
@@ -61,12 +61,13 @@ and it must be done before the client process attempts to access any UnifyFS fil
 For instance, to use UnifyFS on all path prefixes that begin with
 ``/unifyfs`` this would require a:
 
-.. code-block:: C
+.. code-block:: c
     :caption: C
 
-    unifyfs_mount('/unifyfs', rank, rank_num);
+    int rc = unifyfs_mount("/unifyfs", rank, rank_num);
 
-.. code-block:: Fortran
+
+.. code-block:: fortran
     :caption: Fortran
 
     call UNIFYFS_MOUNT('/unifyfs', rank, size, ierr);
@@ -81,12 +82,12 @@ Unmounting
 
 When the application is done using UnifyFS, it should call ``unifyfs_unmount``.
 
-.. code-block:: C
+.. code-block:: c
     :caption: C
 
     unifyfs_unmount();
 
-.. code-block:: Fortran
+.. code-block:: fortran
     :caption: Fortran
 
     call UNIFYFS_UNMOUNT(ierr);
