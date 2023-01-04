@@ -464,27 +464,8 @@ int unifyfs_rm_thrd_cleanup(reqmgr_thrd_t* thrd_ctrl)
         return EINVAL;
     }
 
-    /* grab the lock */
-    RM_LOCK(thrd_ctrl);
-
-    /* if reqmgr thread is waiting for work, tell it to go away
-     * and wake it up */
-    if (thrd_ctrl->waiting_for_work) {
-        rm_request_exit(thrd_ctrl);
-
-        /* signal reqmgr thread */
-        pthread_cond_signal(&thrd_ctrl->thrd_cond);
-    }
-
-    /* release the lock */
-    RM_UNLOCK(thrd_ctrl);
-
-    /* wait for reqmgr thread to exit */
-    int rc = pthread_join(thrd_ctrl->thrd, NULL);
-    if (0 == rc) {
-        pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
-        pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
-    }
+    /* ask RM to exit, if not already done */
+    rm_request_exit(thrd_ctrl);
 
     if (NULL != thrd_ctrl->client_reqs) {
         arraylist_free(thrd_ctrl->client_reqs);
@@ -528,7 +509,6 @@ int rm_request_exit(reqmgr_thrd_t* thrd_ctrl)
     if (0 == rc) {
         pthread_cond_destroy(&(thrd_ctrl->thrd_cond));
         pthread_mutex_destroy(&(thrd_ctrl->thrd_lock));
-        thrd_ctrl->exited = 1;
     }
     return UNIFYFS_SUCCESS;
 }
@@ -1828,7 +1808,7 @@ void* request_manager_thread(void* arg)
     }
 
     LOGDBG("RM[%d:%d] thread exiting", appid, clid);
-
+    thrd_ctrl->exited = 1;
     return NULL;
 }
 
