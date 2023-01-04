@@ -8,12 +8,12 @@ Required
 
 - `Automake <https://ftp.gnu.org/gnu/automake/>`_ version 1.15 (or later)
 
-- `GOTCHA <https://github.com/LLNL/GOTCHA/releases>`_ version 1.0.3 (or later)
+- `GOTCHA <https://github.com/LLNL/GOTCHA/releases>`_ version 1.0.4 (or later)
 
 - `Margo <https://github.com/mochi-hpc/mochi-margo/releases>`_ version 0.9.6 and its dependencies:
 
   - `Argobots <https://github.com/pmodels/argobots/releases>`_ version 1.1 (or later)
-  - `Mercury <https://github.com/mercury-hpc/mercury/releases>`_ version 2.0.1 (or later)
+  - `Mercury <https://github.com/mercury-hpc/mercury/releases>`_ version 2.0.1 to 2.1
 
     - `libfabric <https://github.com/ofiwg/libfabric>`_ (avoid versions 1.13 and 1.13.1) or `bmi <https://github.com/radix-io/bmi/>`_
 

@@ -64,10 +64,11 @@ variants.
                (``spack install <package>``)
    ==========  =============================  =======  ===========================
    Auto-mount  ``unifyfs+auto-mount``         True     Enable transparent mounting
-   Fortran     ``unifyfs+fortran``            False    Enable Fortran support
+   Boostsys    ``unifyfs+boostsys`            False    Have Mercury use Boost
+   Fortran     ``unifyfs+fortran``            True     Enable Fortran support
    PMI         ``unifyfs+pmi``                False    Enable PMI2 support
    PMIx        ``unifyfs+pmix``               False    Enable PMIx support
-   spath       ``unifyfs+spath``              True     Normalize relative paths
+   SPath       ``unifyfs+spath``              True     Normalize relative paths
    ==========  =============================  =======  ===========================
 
 .. attention::
