@@ -61,6 +61,13 @@ UNIFYFS_DEF(unlink, int,
 UNIFYFS_DEF(remove, int,
             (const char* path),
             (path))
+UNIFYFS_DEF(utimensat, int,
+            (int dirfd, const char* pathname, const struct timespec times[2],
+             int flags),
+            (dirfd, pathname, times, flags))
+UNIFYFS_DEF(futimens, int,
+            (int fd, const struct timespec times[2]),
+            (fd, times))
 
 UNIFYFS_DEF(stat, int,
             (const char* path, struct stat* buf),
@@ -144,6 +151,12 @@ UNIFYFS_DEF(pwrite64, ssize_t,
 UNIFYFS_DEF(close, int,
             (int fd),
             (fd))
+UNIFYFS_DEF(dup, int,
+            (int fd),
+            (fd))
+UNIFYFS_DEF(dup2, int,
+            (int fd, int desired_fd),
+            (fd, desired_fd))
 UNIFYFS_DEF(fchdir, int,
             (int fd),
             (fd))
@@ -349,6 +362,8 @@ struct gotcha_binding_t unifyfs_wrappers[] = {
     { "truncate", UNIFYFS_WRAP(truncate), &wrappee_handle_truncate },
     { "unlink", UNIFYFS_WRAP(unlink), &wrappee_handle_unlink },
     { "remove", UNIFYFS_WRAP(remove), &wrappee_handle_remove },
+    { "utimensat", UNIFYFS_WRAP(utimensat), &wrappee_handle_utimensat },
+    { "futimens", UNIFYFS_WRAP(futimens), &wrappee_handle_futimens },
     { "stat", UNIFYFS_WRAP(stat), &wrappee_handle_stat },
     { "fstat", UNIFYFS_WRAP(fstat), &wrappee_handle_fstat },
     { "__xstat", UNIFYFS_WRAP(__xstat), &wrappee_handle___xstat },
@@ -386,6 +401,8 @@ struct gotcha_binding_t unifyfs_wrappers[] = {
     { "munmap", UNIFYFS_WRAP(munmap), &wrappee_handle_munmap },
     { "mmap64", UNIFYFS_WRAP(mmap64), &wrappee_handle_mmap64 },
     { "close", UNIFYFS_WRAP(close), &wrappee_handle_close },
+    { "dup", UNIFYFS_WRAP(dup), &wrappee_handle_dup },
+    { "dup2", UNIFYFS_WRAP(dup2), &wrappee_handle_dup2 },
     { "opendir", UNIFYFS_WRAP(opendir), &wrappee_handle_opendir },
     { "fdopendir", UNIFYFS_WRAP(fdopendir), &wrappee_handle_fdopendir },
     { "closedir", UNIFYFS_WRAP(closedir), &wrappee_handle_closedir },

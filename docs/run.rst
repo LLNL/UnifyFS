@@ -254,3 +254,23 @@ Examples:
 
     $ srun -N 4 -n 8 unifyfs-stage --parallel $MY_MANIFEST_FILE
 
+
+UnifyFS LS Executable
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``unifyfs-ls`` program is installed in the same directory as the
+``unifyfs`` utility (i.e., ``$UNIFYFS_INSTALL/bin``).  This tool will provide
+information about any files the *local* server process knows about.  Users
+may find this helpful when debugging their applications and want to know if
+the files they think are being managed by UnifyFS really are.
+
+.. code-block:: Bash
+
+    [prompt]$ unifyfs-ls --help
+    Usage:
+      unifyfs-ls [ -v | --verbose ] [ -m <dir_name> | --mount_point_dir=<dir_name> ]
+
+      -v | --verbose: show verbose information(default: 0)
+      -m | --mount_point: the location where unifyfs is mounted (default: /unifyfs)
+
+

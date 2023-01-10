@@ -56,6 +56,8 @@ static void register_client_rpcs(client_rpc_context_t* ctx)
     CLIENT_REGISTER_RPC(laminate);
     CLIENT_REGISTER_RPC(fsync);
     CLIENT_REGISTER_RPC(mread);
+    CLIENT_REGISTER_RPC(node_local_extents_get);
+    CLIENT_REGISTER_RPC(get_gfids);
 
 #undef CLIENT_REGISTER_RPC
 
@@ -888,6 +890,88 @@ int invoke_client_mread_rpc(unifyfs_client* client,
     return ret;
 }
 
+/* invokes the client metaget rpc function */
+int invoke_client_node_local_extents_get_rpc(unifyfs_client* client,
+                                             int num_req,
+                                             extents_list_t* read_req,
+                                             size_t* extent_count,
+                                             unifyfs_client_index_t** extents)
+{
+    /* check that we have initialized margo */
+    if (NULL == client_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    size_t extents_size = num_req * sizeof(unifyfs_extent_t);
+    void* buffer = malloc(extents_size);
+    if (NULL == buffer) {
+        return ENOMEM;
+    }
+
+    unifyfs_extent_t* int_extents = (unifyfs_extent_t*)buffer;
+    extents_list_t* cur = read_req;
+    for (int i = 0; i < num_req; i++) {
+        unifyfs_extent_t* ext = int_extents + i;
+        ext->gfid = cur->value.gfid;
+        ext->offset = cur->value.file_pos;
+        ext->length = cur->value.length;
+        cur = cur->next;
+    }
+    /* get handle to rpc function */
+    hg_handle_t handle = create_handle(
+            client_rpc_context->rpcs.node_local_extents_get_id);
+
+    /* fill in input struct */
+    unifyfs_node_local_extents_get_in_t in;
+    hg_return_t hret = margo_bulk_create(client_rpc_context->mid,
+                                         1, &buffer, &extents_size,
+                                         HG_BULK_READ_ONLY, &in.bulk_data);
+    if (hret != HG_SUCCESS) {
+        return UNIFYFS_ERROR_MARGO;
+    }
+    in.app_id = (int32_t) client->state.app_id;
+    in.client_id = (int32_t) client->state.client_id;
+    in.num_req = num_req;
+    in.bulk_size = extents_size;
+
+    /* call rpc function */
+    LOGDBG("invoking the node_local_extents_get rpc function in client");
+    double timeout = client_rpc_context->timeout;
+    int rc = forward_to_server(handle, &in, timeout);
+    if (rc != UNIFYFS_SUCCESS) {
+        LOGERR("forward of metaget rpc to server failed");
+        margo_destroy(handle);
+        return rc;
+    }
+
+    /* decode response */
+    int ret;
+    unifyfs_node_local_extents_get_out_t out;
+    hret = margo_get_output(handle, &out);
+    if (hret == HG_SUCCESS) {
+        LOGDBG("Got response ret=%" PRIi32, out.ret);
+        ret = (int) out.ret;
+        if (ret == (int) UNIFYFS_SUCCESS) {
+            *extent_count = out.extent_count;
+            void* out_buffer = pull_margo_bulk_buffer(handle, out.bulk_data,
+                                                  out.bulk_size, NULL);
+            *extents = (unifyfs_client_index_t*) out_buffer;
+        }
+        margo_free_output(handle, &out);
+    } else {
+        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+    /* margo_forward serializes all data before
+     * returning, and it's safe to free the rpc params */
+    margo_bulk_free(in.bulk_data);
+    /* free resources */
+
+    margo_destroy(handle);
+    free(buffer);
+    return ret;
+}
+
 /*--- Handler methods for server-to-client RPCs ---*/
 
 /* simple heartbeat ping rpc */
@@ -1211,3 +1295,119 @@ static void unifyfs_unlink_callback_rpc(hg_handle_t handle)
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(unifyfs_unlink_callback_rpc)
+
+/* invokes the get_gfids rpc function */
+int invoke_client_get_gfids_rpc(unifyfs_client* client,
+                                int* num_gfids,
+                                int** gfid_list)
+{
+    /* check that we have initialized margo */
+    if (NULL == client_rpc_context) {
+        return UNIFYFS_FAILURE;
+    }
+
+    // Anything we check in the cleanup block needs to be initialized to a
+    // rational value up here.  Also, there are a couple of margo calls for
+    // which the only way to know if we need to clean up is to save their
+    // return values.  That's why we have separate hg_return_t's for them.
+    hg_return_t get_output_hret = HG_OTHER_ERROR;
+    hg_return_t bulk_create_hret = HG_OTHER_ERROR;
+    int ret = UNIFYFS_ERROR_MARGO;
+     int* _gfid_list = NULL;
+
+    /* get handle to rpc function */
+    hg_handle_t handle = create_handle(client_rpc_context->rpcs.get_gfids_id);
+
+    /* fill in input struct */
+    unifyfs_get_gfids_in_t in;
+    in.app_id     = (int32_t) client->state.app_id;
+    in.client_id  = (int32_t) client->state.client_id;
+    /* TODO: What are app_id and client_id for?!? */
+
+    /* call rpc function */
+    LOGDBG("invoking the get_gfids rpc function in client");
+    double timeout = client_rpc_context->timeout;
+    ret = forward_to_server(handle, &in, timeout);
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("forward of get_gfids rpc to server failed");
+        goto exit;
+    }
+
+    /* decode response */
+    unifyfs_get_gfids_out_t out;
+    get_output_hret = margo_get_output(handle, &out);
+    if (get_output_hret != HG_SUCCESS) {
+        LOGERR("margo_get_output() failed - %s",
+               HG_Error_to_string(get_output_hret));
+        ret = UNIFYFS_ERROR_MARGO;
+        goto exit;
+    }
+
+    LOGDBG("Got response ret=%" PRIi32, out.ret);
+    ret = (int) out.ret;
+    if (ret != (int)UNIFYFS_SUCCESS) {
+        goto exit;
+    }
+
+    LOGDBG("Number of GFIDs returned: %d", out.num_gfids);
+    *num_gfids = out.num_gfids;
+
+    // Pull the bulk data (the list of gfids) over from the server
+    hg_bulk_t local_bulk;
+    hg_size_t buf_size = out.num_gfids * sizeof(**gfid_list);
+
+    // Allocate local memory for the list of GFIDs
+    _gfid_list = calloc(out.num_gfids, sizeof(**gfid_list));
+
+    // Figure out some margo-specific info that we need for the transfer
+    const struct hg_info* info = margo_get_info(handle);
+    // TODO: Is this the correct handle??
+    hg_addr_t server_addr = info->addr;
+    // address of the bulk data on the server side
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    // TODO: Is this the correct handle??
+
+    bulk_create_hret = margo_bulk_create(mid, 1, (void**)&_gfid_list, &buf_size,
+                                         HG_BULK_WRITE_ONLY, &local_bulk);
+    if (bulk_create_hret != HG_SUCCESS) {
+        LOGERR("margo_bulk_create() failed - %s",
+               HG_Error_to_string(bulk_create_hret));
+        ret = UNIFYFS_ERROR_MARGO;
+        goto exit;
+    }
+
+    hg_return_t hret = margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
+                                           out.bulk_gfids, 0, local_bulk,
+                                           0, buf_size);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_bulk_transfer() failed - %s", HG_Error_to_string(hret));
+        ret = UNIFYFS_ERROR_MARGO;
+        goto exit;
+    }
+
+    // copy the pointer so it can be returned to the caller
+    // (Caller will need to eventually call free() on this pointer!)
+    *gfid_list = _gfid_list;
+
+exit:  // normally, we use "out", but that's also the name of a variable
+    /* free resources */
+    if (ret != UNIFYFS_SUCCESS) {
+        free(_gfid_list);
+    }
+
+    // If margo_bulk_create() succeeded, we need to free local_bulk
+    if (bulk_create_hret == HG_SUCCESS) {
+        hret = margo_bulk_free(local_bulk);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_bulk_free() failed - %s", HG_Error_to_string(hret));
+        }
+    }
+
+    // If margo_get_output() succeeded, we need to free out
+    if (get_output_hret == HG_SUCCESS) {
+        margo_free_output(handle, &out);
+    }
+
+    margo_destroy(handle);
+    return ret;
+}

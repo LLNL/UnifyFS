@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-20.04 ]
         compiler: [ gcc ]
         gcc: [ 7, 8, 9, 10, 11 ]
 
@@ -37,7 +37,15 @@ jobs:
       CXX: g++-${{ matrix.gcc }}
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Push checkout
+      if: github.event_name == 'push'
+      uses: actions/checkout@v2
+
+    - name: PR checkout
+      if: github.event_name == 'pull_request'
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
 
     - name: Set up GCC
       uses: egor-tensin/setup-gcc@v1

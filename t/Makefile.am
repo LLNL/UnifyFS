@@ -100,7 +100,7 @@ test_wrap_ldadd = \
 
 test_wrap_ldflags = \
   $(AM_LDFLAGS) \
-  $(CP_WRAPPERS) \
+  $(LINK_WRAPPERS) \
   -static
 
 # Per-target flags begin here
@@ -114,6 +114,7 @@ api_api_test_t_SOURCES  = \
   api/init-fini.c \
   api/create-open-remove.c \
   api/write-read-sync-stat.c \
+  api/gfid-metadata.c \
   api/laminate.c \
   api/storage-reuse.c \
   api/transfer.c

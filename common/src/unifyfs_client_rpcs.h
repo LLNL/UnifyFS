@@ -35,6 +35,7 @@ typedef enum {
     UNIFYFS_CLIENT_RPC_INVALID = 0,
     UNIFYFS_CLIENT_RPC_ATTACH,
     UNIFYFS_CLIENT_RPC_FILESIZE,
+    UNIFYFS_CLIENT_RPC_GET_GFIDS,
     UNIFYFS_CLIENT_RPC_LAMINATE,
     UNIFYFS_CLIENT_RPC_METAGET,
     UNIFYFS_CLIENT_RPC_METASET,
@@ -44,7 +45,8 @@ typedef enum {
     UNIFYFS_CLIENT_RPC_TRANSFER,
     UNIFYFS_CLIENT_RPC_TRUNCATE,
     UNIFYFS_CLIENT_RPC_UNLINK,
-    UNIFYFS_CLIENT_RPC_UNMOUNT
+    UNIFYFS_CLIENT_RPC_UNMOUNT,
+    UNIFYFS_CLIENT_RPC_NODE_LOCAL_EXTENTS_GET
 } client_rpc_e;
 
 typedef enum {
@@ -281,6 +283,46 @@ MERCURY_GEN_PROC(unifyfs_heartbeat_in_t,
                  ((int32_t)(client_id)))
 MERCURY_GEN_PROC(unifyfs_heartbeat_out_t, ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unifyfs_heartbeat_rpc)
+
+/* unifyfs_node_local_extents_get_rpc (client => server)
+ *
+ * returns node local extents for a file
+ * given a global file id */
+MERCURY_GEN_STRUCT_PROC(unifyfs_client_index_t,
+                 ((uint64_t)(file_pos))
+                 ((uint64_t)(log_pos))
+                 ((uint64_t)(length))
+                 ((int32_t)(gfid))
+                 ((int32_t)(log_app_id))
+                 ((int32_t)(log_client_id)))
+MERCURY_GEN_PROC(unifyfs_node_local_extents_get_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id))
+                 ((hg_size_t)(num_req))
+                 ((hg_bulk_t)(bulk_data))
+                 ((hg_size_t)(bulk_size)))
+
+MERCURY_GEN_PROC(unifyfs_node_local_extents_get_out_t,
+                 ((int32_t)(ret))
+                 ((hg_size_t)(extent_count))
+                 ((hg_bulk_t)(bulk_data))
+                 ((hg_size_t)(bulk_size)))
+DECLARE_MARGO_RPC_HANDLER(unifyfs_node_local_extents_get_rpc)
+
+/* unifyfs_get_gfids_rpc (client => server)
+ *
+ * returns gfids for all the files the server knows about */
+MERCURY_GEN_PROC(unifyfs_get_gfids_in_t,
+                 ((int32_t)(app_id))
+                 ((int32_t)(client_id)))
+MERCURY_GEN_PROC(unifyfs_get_gfids_out_t,
+                 ((int32_t)(ret))
+                 ((int32_t)(num_gfids))
+                 ((hg_size_t)(bulk_size))
+                 ((hg_bulk_t)(bulk_gfids))
+                 /* TODO: Do we need bulk_size in addition to num_gfids? */
+                )
+DECLARE_MARGO_RPC_HANDLER(unifyfs_get_gfids_rpc)
 
 #ifdef __cplusplus
 } // extern "C"

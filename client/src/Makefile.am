@@ -13,6 +13,10 @@ if USE_PMPI_WRAPPERS
 lib_LTLIBRARIES += libunifyfs_mpi_gotcha.la
 endif #USE_PMPI_WRAPPERS
 
+if ENABLE_LD_PRELOAD
+lib_LTLIBRARIES += libunifyfs_preload_gotcha.la
+endif #ENABLE_LD_PRELOAD
+
 if HAVE_FORTRAN
 lib_LTLIBRARIES += libunifyfsf.la
 endif #HAVE_FORTRAN
@@ -40,15 +44,13 @@ CLIENT_COMMON_CPPFLAGS = \
 
 CLIENT_COMMON_CFLAGS = \
   $(AM_CFLAGS) \
-  $(UNIFYFS_COMMON_FLAGS) \
-  $(MPI_CFLAGS)
+  $(UNIFYFS_COMMON_FLAGS)
 
 CLIENT_COMMON_LDFLAGS = \
   -version-info $(LIBUNIFYFS_LT_VERSION)
 
 CLIENT_COMMON_LIBADD = \
   $(UNIFYFS_COMMON_LIBS) \
-  $(MPI_CLDFLAGS) \
   -lm -lrt -lcrypto -lpthread
 
 if HAVE_SPATH
@@ -96,6 +98,8 @@ PMPI_SRC_FILES = \
   pmpi_wrappers.c \
   pmpi_wrappers.h
 
+PRELOAD_SRC_FILES = \
+  preload.c
 
 # Per-target flags begin here
 
@@ -118,8 +122,8 @@ libunifyfs_la_SOURCES  = \
 
 if USE_PMPI_WRAPPERS
 libunifyfs_mpi_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS)
-libunifyfs_mpi_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS)
-libunifyfs_mpi_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS)
+libunifyfs_mpi_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS) $(MPI_CFLAGS)
+libunifyfs_mpi_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS) $(MPI_CLDFLAGS)
 libunifyfs_mpi_la_LIBADD   = libunifyfs.la
 libunifyfs_mpi_la_SOURCES  = $(PMPI_SRC_FILES)
 endif #USE_PMPI_WRAPPERS
@@ -137,10 +141,18 @@ libunifyfs_gotcha_la_SOURCES  = \
   $(POSIX_CLIENT_SRC_FILES) \
   gotcha_map_unifyfs_list.c
 
+if ENABLE_LD_PRELOAD
+libunifyfs_preload_gotcha_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS)
+libunifyfs_preload_gotcha_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS)
+libunifyfs_preload_gotcha_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS)
+libunifyfs_preload_gotcha_la_LIBADD   = libunifyfs_gotcha.la
+libunifyfs_preload_gotcha_la_SOURCES  = $(PRELOAD_SRC_FILES)
+endif #ENABLE_LD_PRELOAD
+
 if USE_PMPI_WRAPPERS
 libunifyfs_mpi_gotcha_la_CPPFLAGS = $(CLIENT_COMMON_CPPFLAGS)
-libunifyfs_mpi_gotcha_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS)
-libunifyfs_mpi_gotcha_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS)
+libunifyfs_mpi_gotcha_la_CFLAGS   = $(CLIENT_COMMON_CFLAGS) $(MPI_CFLAGS)
+libunifyfs_mpi_gotcha_la_LDFLAGS  = $(CLIENT_COMMON_LDFLAGS) $(MPI_CLDFLAGS)
 libunifyfs_mpi_gotcha_la_LIBADD   = libunifyfs_gotcha.la
 libunifyfs_mpi_gotcha_la_SOURCES  = $(PMPI_SRC_FILES)
 endif #USE_PMPI_WRAPPERS

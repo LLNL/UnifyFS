@@ -43,6 +43,11 @@ int unifyfs_fpos_enabled = 1;
 unifyfs_fd_t unifyfs_fds[UNIFYFS_CLIENT_MAX_FILES];
 rlim_t unifyfs_fd_limit;
 
+/* dup/dup2() support - given a regular fd with a value up to
+ * UNIFYFS_CLIENT_MAX_FILES, the array holds the index of the
+ * corresponding entry in unifyfs_fds[] */
+int unifyfs_dup_fds[UNIFYFS_CLIENT_MAX_FILES];
+
 /* array of file streams */
 unifyfs_stream_t unifyfs_streams[UNIFYFS_CLIENT_MAX_FILES];
 
@@ -263,6 +268,7 @@ int unifyfs_intercept_path(const char* path, char* upath)
  * convert fd to new fd value if needed */
 int unifyfs_intercept_fd(int* fd)
 {
+    int newfd;
     int oldfd = *fd;
 
     /* don't intercept anything until we're initialized */
@@ -270,16 +276,27 @@ int unifyfs_intercept_fd(int* fd)
         return 0;
     }
 
-    if (oldfd < unifyfs_fd_limit) {
-        /* this fd is a real system fd, so leave it as is */
-        return 0;
-    } else if (oldfd < 0) {
+    if (oldfd < 0) {
         /* this is an invalid fd, so we should not intercept it */
         return 0;
-    } else {
+    } else if (oldfd < unifyfs_fd_limit) {
+        /* check if it has a valid entry in unifyfs_dup_fds[] */
+        if (oldfd < UNIFYFS_CLIENT_MAX_FILES) {
+            newfd = unifyfs_dup_fds[oldfd];
+            if (-1 != newfd) {
+                *fd = newfd;
+                LOGDBG("Changing fd from exposed dup2=%d to internal %d",
+                       oldfd, newfd);
+                return 1;
+            }
+        }
+
+        /* this fd is a real system fd, so leave it as is */
+        return 0;
+    } else { /* >= unifyfs_fd_limit */
         /* this is an fd we generated and returned to the user,
          * so intercept the call and shift the fd */
-        int newfd = oldfd - unifyfs_fd_limit;
+        newfd = oldfd - unifyfs_fd_limit;
         *fd = newfd;
         LOGDBG("Changing fd from exposed %d to internal %d", oldfd, newfd);
         return 1;
@@ -338,11 +355,19 @@ int unifyfs_fd_init(int fd)
     /* set fid to -1 to indicate fd is not active,
      * set file position to max value,
      * disable read and write flags */
-    filedesc->fid   = -1;
-    filedesc->pos   = (off_t) -1;
-    filedesc->read  = 0;
+    filedesc->fid = -1;
+    filedesc->pos = (off_t) -1;
+    filedesc->read = 0;
     filedesc->write = 0;
+    filedesc->use_count = 0;
 
+    return UNIFYFS_SUCCESS;
+}
+
+/* initialize duped internal fd for given array index */
+int unifyfs_dup_fd_init(int fd)
+{
+    unifyfs_dup_fds[fd] = -1;
     return UNIFYFS_SUCCESS;
 }
 
@@ -482,6 +507,7 @@ int posix_client_init(void)
         int num_fds = UNIFYFS_CLIENT_MAX_FILES;
         for (i = 0; i < num_fds; i++) {
             unifyfs_fd_init(i);
+            unifyfs_dup_fd_init(i);
         }
 
         /* initialize file stream structures */

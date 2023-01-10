@@ -15,6 +15,8 @@
 #ifndef UNIFYFS_UTIL_H
 #define UNIFYFS_UTIL_H
 
+#include <mercury_types.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -29,6 +31,13 @@ char* rpc_lookup_remote_server_addr(int srv_rank);
 
 /* remove server rpc address file */
 void rpc_clean_local_server_addr(void);
+
+/* use passed bulk handle to pull data into a newly allocated buffer.
+ * returns buffer, or NULL on failure. */
+void* pull_margo_bulk_buffer(hg_handle_t rpc_hdl,
+                             hg_bulk_t bulk_in,
+                             hg_size_t bulk_sz,
+                             hg_bulk_t* local_bulk);
 
 #ifdef __cplusplus
 } // extern "C"

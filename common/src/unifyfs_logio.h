@@ -41,18 +41,18 @@ typedef struct logio_context {
  *
  * @param app_id application id
  * @param client_id client id
- * @param mem_sz shared memory region size for storing data
- * @param spill_sz spillfile size for storing data
+ * @param mem_size shared memory region size for storing data
+ * @param spill_size spillfile size for storing data
  * @param spill_dir path to spillfile parent directory
- * @param[out] ctx address of logio context pointer, set to new context
+ * @param[out] pctx address of logio context pointer, set to new context
  * @return UNIFYFS_SUCCESS, or error code
  */
-int unifyfs_logio_init_server(const int app_id,
-                              const int client_id,
-                              const size_t mem_sz,
-                              const size_t spill_sz,
-                              const char* spill_dir,
-                              logio_context** ctx);
+int unifyfs_logio_init(const int app_id,
+                       const int client_id,
+                       const size_t mem_size,
+                       const size_t spill_size,
+                       const char* spill_dir,
+                       logio_context** pctx);
 
 /**
  * Initialize logio context for client.

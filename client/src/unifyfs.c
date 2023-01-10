@@ -202,20 +202,6 @@ static size_t get_superblock_size(unifyfs_client* client)
     return sb_size;
 }
 
-static inline
-char* next_page_align(char* ptr)
-{
-    size_t pgsz = get_page_size();
-    intptr_t orig = (intptr_t) ptr;
-    intptr_t aligned = orig;
-    intptr_t offset = orig % pgsz;
-    if (offset) {
-        aligned += (pgsz - offset);
-    }
-    LOGDBG("orig=0x%p, next-page-aligned=0x%p", ptr, (char*)aligned);
-    return (char*) aligned;
-}
-
 /* initialize our global pointers into the given superblock */
 static void init_superblock_pointers(unifyfs_client* client,
                                      void* superblock)
@@ -345,7 +331,8 @@ static int init_superblock_shm(unifyfs_client* client,
 
                 /* Reset our segment tree to track extents for all writes
                  * by this process, can be used to read back local data */
-                if (client->use_local_extents) {
+                if (client->use_local_extents ||
+                    client->use_node_local_extents) {
                     seg_tree_init(&meta->extents);
                 }
             }

@@ -1,3 +1,7 @@
+makefiledir = $(datadir)/makefiles
+
+makefile_DATA = Makefile.examples
+
 testutil_headers = \
   testutil.h \
   testutil_rdwr.h
@@ -61,8 +65,9 @@ endif #HAVE_FORTRAN
 
 endif #HAVE_GOTCHA
 
-CLEANFILES = $(libexec_PROGRAMS)
+CLEANFILES = Makefile.examples $(libexec_PROGRAMS)
 
+EXTRA_DIST = Makefile.examples.in
 
 # Common compile/link flag definitions
 
@@ -115,7 +120,7 @@ ex_posix_mpi_ldadd = $(ex_posix_ldadd) $(MPI_CLDFLAGS)
 
 ex_static_ldadd     = $(ex_static_lib) -lrt -lm
 ex_static_mpi_ldadd = $(ex_static_ldadd) $(MPI_CLDFLAGS)
-ex_static_ldflags   = $(AM_LDFLAGS) -static $(CP_WRAPPERS)
+ex_static_ldflags   = $(AM_LDFLAGS) $(LINK_WRAPPERS) -static
 
 # Per-target flags begin here
 

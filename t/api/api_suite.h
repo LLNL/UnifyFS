@@ -53,6 +53,11 @@ int api_write_read_sync_stat_test(char* unifyfs_root,
                                   size_t filesize,
                                   size_t chksize);
 
+/* Tests the get_gfid_list and get_server_file_metadata APIs */
+int api_get_gfids_and_metadata_test(char* unifyfs_root,
+                                    unifyfs_handle* fshdl,
+                                    size_t filesize);
+
 /* Tests file laminate, with subsequent write/read/stat */
 int api_laminate_test(char* unifyfs_root,
                       unifyfs_handle* fshdl);

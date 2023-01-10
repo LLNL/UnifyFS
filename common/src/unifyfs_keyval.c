@@ -29,6 +29,7 @@
 #include <dirent.h>
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -158,13 +159,24 @@ int unifyfs_pmi2_init(void)
     }
 
     if (-1 == pmi_world_rank) {
-        rc = PMI2_Job_GetRank(&rank);
-        if (rc != PMI2_SUCCESS) {
-            unifyfs_pmi2_errstr(rc);
-            LOGERR("PMI2_Job_GetRank() failed: %s", pmi2_errstr);
-            return (int)UNIFYFS_ERROR_PMI;
-        } else {
-            pmi_world_rank = rank;
+        char* environ_rank = NULL;
+        do {
+            /* using SLURM? */
+            environ_rank = getenv("SLURM_PROCID");
+            if (NULL != environ_rank) {
+                pmi_world_rank = atoi(environ_rank);
+                break;
+            }
+            /* using IBM Job Step Manager (JSM)? */
+            environ_rank = getenv("JSM_NAMESPACE_RANK");
+            if (NULL != environ_rank) {
+                pmi_world_rank = atoi(environ_rank);
+                break;
+            }
+        } while (0);
+        if (-1 == pmi_world_rank) {
+            pmi_world_rank = 0;
+            LOGERR("Failed to identify world rank for PMI2 - using rank=0");
         }
     }
 
@@ -186,22 +198,13 @@ int unifyfs_pmi2_init(void)
         pmi2_has_nameserv = val;
     }
 
-    char pmi_jobid[64];
-    memset(pmi_jobid, 0, sizeof(pmi_jobid));
-    rc = PMI2_Job_GetId(pmi_jobid, sizeof(pmi_jobid));
-    if (rc != PMI2_SUCCESS) {
-        unifyfs_pmi2_errstr(rc);
-        LOGERR("PMI2_Job_GetId() failed: %s", pmi2_errstr);
-        return (int)UNIFYFS_ERROR_PMI;
-    }
-
     kv_myrank = pmi_world_rank;
     kv_nranks = pmi_world_nprocs;
 
     glb_pmi_rank = kv_myrank;
     glb_pmi_size = kv_nranks;
 
-    LOGDBG("PMI2 Job Id: %s, Rank: %d of %d, hasNameServer=%d", pmi_jobid,
+    LOGDBG("PMI2 Rank: %d of %d, hasNameServer=%d",
            kv_myrank, kv_nranks, pmi2_has_nameserv);
 
     pmi2_initialized = 1;
@@ -240,7 +243,7 @@ static int unifyfs_pmi2_lookup(const char* key,
         return (int)UNIFYFS_ERROR_PMI;
     }
 
-    strncpy(pmi2_key, key, sizeof(pmi2_key));
+    strlcpy(pmi2_key, key, sizeof(pmi2_key));
     vallen = 0;
     rc = PMI2_KVS_Get(NULL, PMI2_ID_NULL, pmi2_key, pmi2_val,
                       sizeof(pmi2_val), &vallen);
@@ -285,8 +288,8 @@ static int unifyfs_pmi2_publish(const char* key,
         return (int)UNIFYFS_ERROR_PMI;
     }
 
-    strncpy(pmi2_key, key, sizeof(pmi2_key));
-    strncpy(pmi2_val, val, sizeof(pmi2_val));
+    strlcpy(pmi2_key, key, sizeof(pmi2_key));
+    strlcpy(pmi2_val, val, sizeof(pmi2_val));
 
     // HACK: replace ';' with '!' for SLURM PMI2
     // This assumes the value does not actually use "!"
