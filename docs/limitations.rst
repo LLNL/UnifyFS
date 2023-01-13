@@ -36,12 +36,8 @@ with ``close()`` or ``fclose()``.
 UnifyFS can be configured to behave more “POSIX like” by
 flushing newly written data to the server after every write operation.
 To do this, one can set ``UNIFYFS_CLIENT_WRITE_SYNC=ON``.
-
-.. Note::
-
-    ``UNIFYFS_CLIENT_WRITE_SYNC=ON`` can cause a significant
-    decrease in write performance as the amount of file sync operations
-    that are performed will be far more than necessary.
+``UNIFYFS_CLIENT_WRITE_SYNC=ON`` can decrease write performance
+as the number of file sync operations may be more than necessary.
 
 File Locking
 ************
@@ -124,7 +120,7 @@ all ``MPI_File_sync()`` calls required by the MPI standard.
 
     It may be labor intensive to identify and correct all places
     within an application where file synchronization calls are required.
-    The :doc:`VerifyIO <verifyio>` tool can assist with this effort.
+    The :doc:`VerifyIO <verifyio>` tool can assist developers in this effort.
 
 .. TODO: Mention use/need of ``romio_visibility_immediate`` hint once available.
 .. https://github.com/pmodels/mpich/issues/5902
@@ -163,6 +159,20 @@ the full sync-barrier-sync construct.
 
 This hint was added starting with the ROMIO version
 available in the MPICH v4.0 release.
+
+ROMIO Data Visibility
+"""""""""""""""""""""
+
+Starting with the ROMIO version available in the MPICH v4.1 release,
+a read-only hint was added to inform the caller as to whether
+it is necessary to call ``MPI_File_sync`` to manage data consistency.
+
+One can query the ``MPI_Info`` associated with a file.
+If this hint is defined and if its value is ``true``,
+then the underlying file system does not require the sync-barrier-sync
+construct in order for a process to read data written by another process.
+If the value is ``false`` or if the hint is not defined in the ``MPI_Info``
+object, then the sync-barrier-sync constrct is required.
 
 File Locking
 ************
@@ -259,18 +269,18 @@ For example::
 HDF5 FILE_SYNC
 """"""""""""""
 
-HDF5 provides a configuration option that internally calls ``MPI_File_sync()``
+Starting with the HDF5 v1.13.2 release,
+HDF can be configured to call ``MPI_File_sync()``
 after every collective HDF write operation.
-Set the environment variable ``HDF5_DO_MPI_FILE_SYNC=1`` to enable this option.
-This environment variable is available starting with the HDF v1.13.2 release.
+This configuration is enabled automatically if MPI-I/O
+defines the ``romio_visibility_immediate`` hint as ``false``.
+One can enable this option by setting the
+environment variable ``HDF5_DO_MPI_FILE_SYNC=1``.
 
 .. Note::
 
-    This causes a significant decrease in write performance as the amount
-    of file sync operations performed will likely be more than necessary.
-    Similar to but potentially more efficient than the ``WRITE_SYNC``
-    workaround as less overall file syncs may be performed in comparison,
-    but still likely more than needed.
+    Enabling this option can decrease write performance
+    since it may induce more file sync operations than necessary.
 
 .. explicit external hyperlink targets
 
