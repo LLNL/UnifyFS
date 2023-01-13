@@ -266,6 +266,13 @@ For example::
     MPI_Barrier(...)
     H5Fflush(...)
 
+.. Note::
+
+    If ``MPI_File_sync()`` is a synchronizing collective, as with
+    when enabling the ``romio_synchronizing_flush`` MPI-I/O hint,
+    then a single call to ``H5Fflush()`` suffices to accomplish
+    the sync-barrier-sync construct.
+
 HDF5 FILE_SYNC
 """"""""""""""
 
