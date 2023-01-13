@@ -40,6 +40,20 @@ typedef struct coll_request {
     margo_request  progress_req;
     margo_request* child_reqs;
     hg_handle_t*   child_hdls;
+
+    int            auto_cleanup;  /* if true, bcast_progress_rpc() will
+                                   * call collective_cleanup() on this
+                                   * struct.  This is the default behavior. */
+    ABT_cond       child_resp_valid; /* bcast_progress_rpc() will signal this
+                                      * condition variable when all the child
+                                      * responses have been processed.
+                                      * Intended to provide a mechanism for the
+                                      * server that originated a bcast RPC to
+                                      * wait for all the results to come
+                                      * back. */
+    ABT_mutex      child_resp_valid_mut;
+    /* The mutex associated with the above condition variable. */
+
 } coll_request;
 
 /* set collective output return value to local result value */
