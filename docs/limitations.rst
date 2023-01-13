@@ -140,8 +140,8 @@ When using ROMIO, an application having appropriate
 "sync-barrier-sync" constructs as required by the
 MPI standard will run correctly on UnifyFS.
 
-ROMIO Synchronizing Flush
-"""""""""""""""""""""""""
+ROMIO Synchronizing Flush Hint
+""""""""""""""""""""""""""""""
 
 Although ``MPI_File_sync()`` is an MPI collective,
 it is not required to be synchronizing.
@@ -160,8 +160,8 @@ the full sync-barrier-sync construct.
 This hint was added starting with the ROMIO version
 available in the MPICH v4.0 release.
 
-ROMIO Data Visibility
-"""""""""""""""""""""
+ROMIO Data Visibility Hint
+""""""""""""""""""""""""""
 
 Starting with the ROMIO version available in the MPICH v4.1 release,
 a read-only hint was added to inform the caller as to whether
