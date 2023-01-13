@@ -37,9 +37,11 @@ UnifyFS can be configured to behave more “POSIX like” by
 flushing newly written data to the server after every write operation.
 To do this, one can set ``UNIFYFS_CLIENT_WRITE_SYNC=ON``.
 
-**Cost:** ``UNIFYFS_CLIENT_WRITE_SYNC=ON`` can cause a significant
-decrease in write performance as the amount of file sync operations
-that are performed will be far more than necessary.
+.. Note::
+
+    ``UNIFYFS_CLIENT_WRITE_SYNC=ON`` can cause a significant
+    decrease in write performance as the amount of file sync operations
+    that are performed will be far more than necessary.
 
 File Locking
 ************
@@ -118,9 +120,11 @@ even when they are missing sufficient file consistency synchronization.
 To run correctly on UnifyFS, an application must make
 all ``MPI_File_sync()`` calls required by the MPI standard.
 
-**Cost:** It may be labor intensive to identify and correct all places
-within an application where file synchronization calls are required.
-The :doc:`VerifyIO <verifyio>` tool can assist with this effort.
+.. Note::
+
+    It may be labor intensive to identify and correct all places
+    within an application where file synchronization calls are required.
+    The :doc:`VerifyIO <verifyio>` tool can assist with this effort.
 
 .. TODO: Mention use/need of ``romio_visibility_immediate`` hint once available.
 .. https://github.com/pmodels/mpich/issues/5902
@@ -157,10 +161,8 @@ This configuration can be useful to applications that
 only call ``MPI_File_sync()`` once rather than execute
 the full sync-barrier-sync construct.
 
-**Cost:** Potentially more efficient than the ``WRITE_SYNC``
-workaround as this will cause the application to use the
-synchronization construct required by MPI everywhere that
-the application already intends them to occur.
+This hint was added starting with the ROMIO version
+available in the MPICH v4.0 release.
 
 File Locking
 ************
@@ -233,23 +235,42 @@ one should adhere to any limitations noted above for ROMIO.
 Data Consistency
 ****************
 
+In HDF5, ``H5Fflush()`` calls ``MPI_File_sync()``
+and ``H5Fclose()`` calls ``MPI_File_close()``.
+When running HDF5 on ROMIO or on other MPI-I/O implementations
+where these MPI routines flush newly written data to UnifyFS,
+one can invoke these HDF5 functions to properly manage data consistency.
+
+When using HDF5 with the MPI-I/O driver,
+for a process to read data written by another
+process without closing the HDF file,
+the writer must call ``H5Fflush()`` after writing its data.
+There must then be a synchronization operation between
+the writer and reader processes.
+Finally, the reader must call ``H5Fflush()``
+after the synchronization operation with the writer.
+This executes the sync-barrier-sync construct as required by MPI.
+For example::
+
+    H5Fflush(...)
+    MPI_Barrier(...)
+    H5Fflush(...)
+
 HDF5 FILE_SYNC
 """"""""""""""
 
 HDF5 provides a configuration option that internally calls ``MPI_File_sync()``
-after every collective HDF write operation as needed by MPI-I/O.
+after every collective HDF write operation.
 Set the environment variable ``HDF5_DO_MPI_FILE_SYNC=1`` to enable this option.
+This environment variable is available starting with the HDF v1.13.2 release.
 
 .. Note::
 
-    This option will soon be available in the `HDF5 develop branch`_ as well as
-    in the next HDF5 release.
-
-**Cost:** This causes a significant decrease in write performance as the amount
-of file sync operations performed will likely be more than necessary. Similar to
-but potentially more efficient than the ``WRITE_SYNC`` workaround as less
-overall file syncs may be performed in comparison, but still likely more than
-needed.
+    This causes a significant decrease in write performance as the amount
+    of file sync operations performed will likely be more than necessary.
+    Similar to but potentially more efficient than the ``WRITE_SYNC``
+    workaround as less overall file syncs may be performed in comparison,
+    but still likely more than needed.
 
 .. explicit external hyperlink targets
 
