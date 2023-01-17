@@ -1554,8 +1554,18 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
 {
 
     int  ret = UNIFYFS_SUCCESS;
+    int  bcast_ret = UNIFYFS_SUCCESS;
     int* gfid_list;
     int  num_gfids;
+
+    /* Submit a broadcast metaget_all request and wait for it to complete.
+     * That way, our gfid list will contain all the files that UnifyFS knows
+     * about.
+     * Storing its return code in a separate variable.  If we get an error
+     * from the broadcast, we'll continue to process the gfids request,
+     * and the client can print a warning about the results being
+     * incomplete. */
+    bcast_ret = unifyfs_invoke_broadcast_metaget_all();
 
     ret = unifyfs_fops_get_gfids(&gfid_list, &num_gfids);
     if (ret != UNIFYFS_SUCCESS) {
@@ -1589,6 +1599,15 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
     margo_destroy(req->handle);
     margo_bulk_free(out.bulk_gfids);
     free(gfid_list);
+
+    if (bcast_ret != UNIFYFS_SUCCESS) {
+        /* TODO: What do we do here?? We can log a warning of course,
+         *  but we need to make sure the fact that the results are
+         *  incomplete is conveyed back to the client.
+         */
+        LOGWARN("unifyfs_invoke_broadcast_metaget_all() returned %d. "
+                "GFID list is likely incomplete.", bcast_ret);
+    }
 
     return ret;
 

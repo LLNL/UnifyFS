@@ -27,6 +27,10 @@
  * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
+// TODO: any reason including these is a bad idea??
+#include "unifyfs_inode.h"
+#include "unifyfs_inode_tree.h"
+
 #include "unifyfs_global.h"
 #include "unifyfs_group_rpc.h"
 #include "unifyfs_p2p_rpc.h"
@@ -1322,6 +1326,79 @@ static int process_unlink_bcast_rpc(server_rpc_req_t* req)
     return ret;
 }
 
+static int process_metaget_bcast_rpc(server_rpc_req_t* req)
+{
+    int ret = UNIFYFS_SUCCESS;
+
+    /* TODO: IMPLEMENT ME! */
+    LOGERR("%s not yet implemented", __func__);
+
+    /* Iterate through the global_inode_tree and copy all the file
+     * attr structs for the files this server owns */
+
+    // TODO: Should we move this block of code over to unifyfs_inode.c?
+    //       If we did, we wouldn't need to include the *inode*.h headers
+    //       in this file.
+    unsigned int num_files = 0;
+    int attr_list_size = 64;
+    unifyfs_file_attr_t* attr_list =
+        malloc(sizeof(unifyfs_file_attr_t) * attr_list_size);
+    if (!attr_list) {
+        return ENOMEM;
+        // TODO: Umm... if we return here, we never call
+        // invoke_bcast_progress_rpc().  Is that a problem?
+    }
+
+    unifyfs_inode_tree_rdlock(global_inode_tree);
+    {
+        struct unifyfs_inode* node =
+            unifyfs_inode_tree_iter(global_inode_tree, NULL);
+        while (node) {
+            if (num_files == attr_list_size) {
+                attr_list_size *= 2;  // Double the list size each time
+                attr_list = realloc(attr_list,
+                                    sizeof(unifyfs_file_attr_t)*attr_list_size);
+                if (!attr_list) {
+                    unifyfs_inode_tree_unlock(global_inode_tree);
+                    return ENOMEM;
+                    // TODO: Umm... if we return here, we never call
+                    // invoke_bcast_progress_rpc().  Is that a problem?
+                }
+            }
+
+            /* We only want to copy file attrs that we're the owner of */
+            int owner_rank = hash_gfid_to_server(node->attr.gfid);
+            if (owner_rank == glb_pmi_rank) {
+                memcpy(&attr_list[num_files++], &node->attr,
+                    sizeof(unifyfs_file_attr_t));
+            }
+            node = unifyfs_inode_tree_iter(global_inode_tree, node);
+        }
+    }
+    unifyfs_inode_tree_unlock(global_inode_tree);
+
+
+    /* Now, how do we send this array back to the caller?!? */
+
+
+    /* As an experiment, try setting an error code as the return
+     * value for the  collective.  Want to see how it's actually
+     * handled when it gets back to the caller...*/
+    collective_set_local_retval(req->coll, UNIFYFS_ERROR_NYI);
+
+    /* Another experiment: this function implements a SUM
+     * operation on the num_files value in the output struct. */
+    collective_gather_results(req->coll, &num_files);
+
+
+    /* create a ULT to finish broadcast operation */
+    ret = invoke_bcast_progress_rpc(req->coll);
+    return ret;
+
+    /* TODO: How do I actually return bulk data to the caller?!? */
+
+}
+
 static int process_service_requests(void)
 {
     /* assume we'll succeed */
@@ -1402,6 +1479,9 @@ static int process_service_requests(void)
             break;
         case UNIFYFS_SERVER_BCAST_RPC_UNLINK:
             rret = process_unlink_bcast_rpc(req);
+            break;
+        case UNIFYFS_SERVER_BCAST_RPC_METAGET:
+            rret = process_metaget_bcast_rpc(req);
             break;
         default:
             LOGERR("unsupported server rpc request type %d", req->req_type);

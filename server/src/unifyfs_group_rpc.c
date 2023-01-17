@@ -138,6 +138,37 @@ static int get_child_response(coll_request* coll_req,
                 }
                 break;
             }
+            case UNIFYFS_SERVER_BCAST_RPC_METAGET: {
+                // NOTE: This case is different.  It's currently the only
+                // case that actually returns more than just a single error
+                // code up the tree.
+                LOGWARN(
+                    "Handling of child responses for "
+                    "UNIFYFS_SERVER_BCAST_RPC_METAGET is almost certainly "
+                    "incorrect and shouldn't be trusted!");
+                metaget_all_bcast_out_t* cmabo =
+                     (metaget_all_bcast_out_t*) out;
+                metaget_all_bcast_out_t* mabo  =
+                    (metaget_all_bcast_out_t*) output;
+                child_ret = cmabo->ret;
+                if ((NULL != mabo) && (child_ret != UNIFYFS_SUCCESS)) {
+                    mabo->ret = child_ret;
+                }
+                if ((NULL != cmabo) && (NULL != mabo)) {
+                    mabo->num_files += cmabo->num_files;
+                } else {
+                    /* One or both of the output structures is missing.
+                     * (This shouldn't ever happen.) */
+                    LOGERR(
+                        "Missing required output structs when handling "
+                        "UNIFYFS_SERVER_BCAST_RPC_METAGET child responses!");
+                    LOGERR("Parent output struct: 0x%lX", (uint64_t)mabo);
+                    LOGERR("Child output struct: 0x%lX", (uint64_t)cmabo);
+                    mabo->ret = UNIFYFS_ERROR_BADCONFIG;
+                    // TODO: Is BADCONFIG the proper error to use?
+                }
+                break;
+            }
             default:
                 child_ret = UNIFYFS_FAILURE;
                 LOGERR("invalid collective request type %d",
@@ -462,8 +493,52 @@ void collective_set_local_retval(coll_request* coll_req, int val)
         ubo->ret = val;
         break;
     }
+    case UNIFYFS_SERVER_BCAST_RPC_METAGET: {
+        metaget_all_bcast_out_t* mabo = (metaget_all_bcast_out_t*) output;
+        mabo->ret = val;
+    }
     default:
         LOGERR("invalid collective request type %d", coll_req->req_type);
+        break;
+    }
+}
+
+/* TODO: We need a function that will combine the results from
+ *  each process of a collective into a single array.
+ *  This function will probably have to be structured like
+ *  collective_set_local_retval() above.  That is, how it handles
+ *  the data argument will probably have to depend on the request
+ *  type.  */
+// NOTE: Trying to make this function work for any broadcast collective
+//       may not really be a good idea.  It might be better to have a
+//       specific "collective_gather_resuts_XXXXX" functions for each
+//       request type that needs one.  (Right now, only the metaget_all
+//       broadcast needs to return bulk data.)
+void collective_gather_results(coll_request* coll_req, void* data)
+{
+    LOGDBG("BCAST_RPC: collective(%p) gather results", coll_req);
+    LOGERR("BCAST_RPC: %s NOT IMPLEMENTED YET!", __func__);
+
+    void* output = coll_req->output;
+    if (NULL == output) {
+        return;
+    }
+
+    switch (coll_req->req_type) {
+    case UNIFYFS_SERVER_BCAST_RPC_METAGET: {
+        metaget_all_bcast_out_t* mabo = (metaget_all_bcast_out_t*) output;
+        // TODO: Sanity check mabo and throw a huge error if it's NULL
+
+        // Increment the number of files by the value passed in
+        unsigned int num_files = *(unsigned int*)data;
+        LOGDBG("BCAST_RPC (collective gather for "
+               "UNIFYFS_SERVER_BCAST_RPC_METAGET): Number of files: %d",
+               num_files);
+        mabo->num_files += num_files;
+        break;
+    }
+    default:
+        LOGERR("Invalid collective request type %d", coll_req->req_type);
         break;
     }
 }
@@ -1352,3 +1427,161 @@ int unifyfs_invoke_broadcast_unlink(int gfid)
     }
     return ret;
 }
+
+/*************************************************************************
+ * Broadcast metaget all request
+ *************************************************************************/
+
+/* metaget all broacast rpc handler */
+static void metaget_all_bcast_rpc(hg_handle_t handle)
+{
+    LOGDBG("BCAST_RPC: metaget_all handler");
+
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
+
+    coll_request* coll = NULL;
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
+    metaget_all_bcast_in_t* in = calloc(1, sizeof(*in));
+    metaget_all_bcast_out_t* out = calloc(1, sizeof(*out));
+    if ((NULL == req) || (NULL == in) || (NULL == out)) {
+        ret = ENOMEM;
+    } else {
+        /* get input params */
+        LOGDBG("BCAST_RPC: getting input params");
+        hg_return_t hret = margo_get_input(handle, in);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
+            ret = UNIFYFS_ERROR_MARGO;
+        } else {
+            LOGDBG("BCAST_RPC: creating collective");
+            hg_id_t op_hgid = unifyfsd_rpc_context->rpcs.metaget_all_bcast_id;
+            server_rpc_e rpc = UNIFYFS_SERVER_BCAST_RPC_METAGET;
+            coll = collective_create(rpc, handle, op_hgid, (int)(in->root),
+                                     (void*)in, (void*)out, sizeof(*out),
+                                     HG_BULK_NULL, HG_BULK_NULL, NULL);
+            if (NULL == coll) {
+                ret = ENOMEM;
+            } else {
+                LOGDBG("BCAST_RPC: forwarding collective");
+                ret = collective_forward(coll);
+                if (ret == UNIFYFS_SUCCESS) {
+                    req->req_type = rpc;
+                    req->coll = coll;
+                    req->handle = handle;
+                    req->input = (void*) in;
+                    req->bulk_buf = NULL;
+                    req->bulk_sz = 0;
+                    ret = sm_submit_service_request(req);
+                    if (ret != UNIFYFS_SUCCESS) {
+                        LOGERR("failed to submit coll request to svcmgr");
+                    }
+                }
+            }
+        }
+    }
+
+    if (ret != UNIFYFS_SUCCESS) {
+        /* report failure back to caller */
+        metaget_all_bcast_out_t mgabo;
+        mgabo.ret = (int32_t)ret;
+        hg_return_t hret = margo_respond(handle, &mgabo);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
+        }
+
+        if (NULL != coll) {
+            collective_cleanup(coll);
+        } else {
+            margo_destroy(handle);
+        }
+    }
+
+    LOGDBG("BCAST_RPC: exiting metaget_all handler");
+
+}
+
+DEFINE_MARGO_RPC_HANDLER(metaget_all_bcast_rpc)
+
+/* Execute broadcast tree for a metaget_all operation*/
+int unifyfs_invoke_broadcast_metaget_all(void)
+{
+    int ret = UNIFYFS_SUCCESS;
+    LOGDBG("BCAST_RPC: starting metaget_all broadcast");
+
+    coll_request* coll = NULL;
+    metaget_all_bcast_in_t* in = calloc(1, sizeof(*in));
+    metaget_all_bcast_out_t* out = calloc(1, sizeof(*out));
+    if (NULL == in) {
+        ret = ENOMEM;
+    } else {
+        /* get input params */
+        in->root = (int32_t) glb_pmi_rank;
+
+        hg_id_t op_hgid = unifyfsd_rpc_context->rpcs.metaget_all_bcast_id;
+        server_rpc_e rpc = UNIFYFS_SERVER_BCAST_RPC_METAGET;
+        coll = collective_create(rpc, HG_HANDLE_NULL, op_hgid,
+                                 glb_pmi_rank, (void*)in,
+                                 (void*)out, sizeof(metaget_all_bcast_out_t),
+                                 HG_BULK_NULL, HG_BULK_NULL, NULL);
+        /* Note: We are passing in HG_HANDLE_NULL for the response handle
+         * because we are the root of the tree and there's nobody for us to
+         * respond to. */
+
+        if (NULL == coll) {
+            ret = ENOMEM;
+        } else {
+            ret = collective_forward(coll);
+            if (ret == UNIFYFS_SUCCESS) {
+                /* We don't want the progress rpc to clean up for us because
+                 * we need to get the output data */
+                coll->auto_cleanup = 0;
+
+                ABT_mutex_lock(coll->child_resp_valid_mut);
+                /* Have to lock the mutex before the bcast_progress_rpc call
+                 * so that we're sure to be waiting on the condition
+                 * variable before the progress thread gets to the point
+                 * where it signals the CV. */
+                // TODO: Do we have any "smart" mutexes that will automatically
+                // unlock?  Or is that just a C++ thing?
+                ret = invoke_bcast_progress_rpc(coll);
+
+                if (UNIFYFS_SUCCESS == ret) {
+                    // Wait for all the child responses to come back
+                    ABT_cond_wait(coll->child_resp_valid,
+                                  coll->child_resp_valid_mut);
+                    ABT_mutex_unlock(coll->child_resp_valid_mut);
+
+                    // Now we can get the data from the output struct
+                    // TODO: implement this!!!
+                    if (sizeof(metaget_all_bcast_out_t) != coll->output_sz) {
+                        LOGERR("Unexpected size for collective output struct. "
+                               "Expected %d but value was %d",
+                               sizeof(metaget_all_bcast_out_t),
+                               coll->output_sz);
+                    }
+                    // TODO: This is a hack! I just want to see if I can
+                    // access the output struct...
+                    metaget_all_bcast_out_t* results = calloc(1, sizeof(*out));
+                    memcpy(results, coll->output, sizeof(*results));
+                    LOGINFO("Total number of files returned from children: %d",
+                            results->num_files);
+                    LOGINFO("Return code from children: %d", results->ret);
+                    free(results);
+
+                    // Done with the collective struct and can now clean
+                    // everything up.
+                    collective_cleanup(coll);
+                } else {
+                    /* invoke_bcast_progress_rpc() returned an error.
+                     * There's probably no recovery possible, so unlock the
+                     * mutex and clean up the collective struct. */
+                    ABT_mutex_unlock(coll->child_resp_valid_mut);
+                    collective_cleanup(coll);
+                }
+            }
+        }
+    }
+    return ret;
+}
+

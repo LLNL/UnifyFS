@@ -245,6 +245,10 @@ static void register_server_server_rpcs(margo_instance_id mid)
                       unifyfs_node_local_extents_get_in_t,
                       unifyfs_node_local_extents_get_out_t,
                       unifyfs_node_local_extents_get_rpc);
+    unifyfsd_rpc_context->rpcs.metaget_all_bcast_id =
+        MARGO_REGISTER(mid, "metaget_all_bcast_rpc",
+                       metaget_all_bcast_in_t, metaget_all_bcast_out_t,
+                       metaget_all_bcast_rpc);
 }
 
 /* setup_local_target - Initializes the client-server margo target */
