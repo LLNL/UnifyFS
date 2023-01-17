@@ -59,6 +59,10 @@ typedef struct coll_request {
 /* set collective output return value to local result value */
 void collective_set_local_retval(coll_request* coll_req, int val);
 
+/* Combine the results from each process of a collective into a
+ * single array. */
+void collective_gather_results(coll_request* coll_req, void* data);
+
 /* finish collective process by waiting for any child responses and
  * sending parent response (if applicable) */
 int collective_finish(coll_request* coll_req);
@@ -144,5 +148,11 @@ int unifyfs_invoke_broadcast_truncate(int gfid,
  */
 int unifyfs_invoke_broadcast_unlink(int gfid);
 
+/**
+ * @brief Fetch metadata for all files on all servers
+ *
+ * @return success|failure
+ */
+int unifyfs_invoke_broadcast_metaget_all(void);
 
 #endif // UNIFYFS_GROUP_RPC_H

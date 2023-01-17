@@ -49,7 +49,8 @@ typedef enum {
     UNIFYFS_SERVER_BCAST_RPC_LAMINATE,
     UNIFYFS_SERVER_BCAST_RPC_TRANSFER,
     UNIFYFS_SERVER_BCAST_RPC_TRUNCATE,
-    UNIFYFS_SERVER_BCAST_RPC_UNLINK
+    UNIFYFS_SERVER_BCAST_RPC_UNLINK,
+    UNIFYFS_SERVER_BCAST_RPC_METAGET
 } server_rpc_e;
 
 /* structure to track server-to-server rpc request state */
@@ -241,6 +242,20 @@ MERCURY_GEN_PROC(unlink_bcast_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unlink_bcast_rpc)
 
+/* Broadcast request for metadata to all servers */
+/* Sends a request to all servers to reply with a the metadata for
+ * all files that they own. */
+MERCURY_GEN_PROC(metaget_all_bcast_in_t,
+                 ((int32_t)(root)))
+/* TODO: Not sure what "root" is, but every RPC seems to have it... */
+MERCURY_GEN_PROC(metaget_all_bcast_out_t,
+                 ((int32_t)(num_files))
+                 ((hg_bulk_t)(file_meta))
+                 ((int32_t)(ret)))
+/* TODO: the bulk data is an array of file metadata structs from the replying
+ *       server(s).  Do we need to include a rank or pid or some other means
+ *       of identifying the particular server? */
+DECLARE_MARGO_RPC_HANDLER(metaget_all_bcast_rpc)
 
 #ifdef __cplusplus
 } // extern "C"
