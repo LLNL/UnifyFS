@@ -151,9 +151,6 @@ standard and execute a full sync-barrier-sync construct when possible.
 There exists potential optimizations such that
 future implementations of UnifyFS may require the full sequence of calls.
 
-.. TODO: Mention use/need of ``romio_visibility_immediate`` hint once available.
-.. https://github.com/pmodels/mpich/issues/5902
-
 ---------------------------
 ROMIO Limitations
 ---------------------------
@@ -193,15 +190,21 @@ ROMIO Data Visibility Hint
 """"""""""""""""""""""""""
 
 Starting with the ROMIO version available in the MPICH v4.1 release,
-a read-only hint was added to inform the caller as to whether
-it is necessary to call ``MPI_File_sync`` to manage data consistency.
+the read-only hint ``romio_visibility_immediate`` was added to inform
+the caller as to whether it is necessary to call ``MPI_File_sync``
+to manage data consistency.
+
+.. https://github.com/pmodels/mpich/issues/5902
 
 One can query the ``MPI_Info`` associated with a file.
 If this hint is defined and if its value is ``true``,
 then the underlying file system does not require the sync-barrier-sync
 construct in order for a process to read data written by another process.
-If the value is ``false`` or if the hint is not defined in the ``MPI_Info``
-object, then the sync-barrier-sync construct is required.
+Newly written data is visible to other processes as soon as the writer
+process returns from its write call.
+If the value of the hint is ``false``, or if the hint is not defined
+in the ``MPI_Info`` object, then a sync-barrier-sync construct is
+required.
 
 When using UnifyFS, an application must call ``MPI_File_sync()``
 in all situations where the MPI standard requires it.
