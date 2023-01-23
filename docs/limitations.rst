@@ -6,83 +6,77 @@ Limitations and Workarounds
 General Limitations
 -------------------
 
-.. rubric:: Synchronization Across Processes
+Data Consistency
+****************
 
-Any overlapping write operations or simultaneous read and write operations
-require proper synchronization within UnifyFS. This includes ensuring updates to
-a file are visible by other processes as well as proper inter-process
-communication to enforce ordering of conflicting I/O operations. Refer to the
-section on
+Overlapping write operations or simultaneous read and write operations
+require proper synchronization when using UnifyFS.
+This includes ensuring updates to a file are visible to other
+processes as well as inter-process communication to enforce
+ordering of conflicting I/O operations.
+Refer to the section on
 :ref:`commit consistency semantics in UnifyFS <commit_consistency_label>`
 for more detail.
 
-.. rubric:: File Locking
+In short, for a process to read data written by another process,
+the reader must wait for the writer to first flush any data it
+has written to the UnifyFS servers.
+After the writer flushes its data,
+there must be a synchronization operation between the writer
+and the reader processes,
+such that the reader does not attempt to read newly written data
+until the writer has completed its flush operation.
 
-UnifyFS does not support file locking (calls to ``fcntl()``). This results in
-some less obvious limitations when using some I/O libraries with UnifyFS
-(:ref:`see below <file-lock-label>`).
+UnifyFS can be configured to flush data to servers at various points.
+A common mechanism to flush data is for the writer process to
+call ``fsync()`` or ``fflush()``.
+Also, by default, data is flushed when a file is closed
+with ``close()`` or ``fclose()``.
 
-.. warning::
+UnifyFS can be configured to behave more “POSIX like” by
+flushing newly written data to the server during every write operation.
+To do this, one can set ``UNIFYFS_CLIENT_WRITE_SYNC=ON``.
+``UNIFYFS_CLIENT_WRITE_SYNC=ON`` can decrease write performance
+as the number of data flush operations may be more than necessary.
 
-    Any calls to ``fcntl()`` are not even intercepted by UnifyFS and calls to
-    such will be ignored, resulting in silent errors and possible data
-    corruption. Running the application through :doc:`VerifyIO <verifyio>` can
-    help determine if any file locking calls are made.
+File Locking
+************
 
-.. rubric:: Directories
+UnifyFS does not support file locking,
+and calls to ``fcntl()`` and ``flock()`` are not intercepted by UnifyFS.
+Any calls fall through to the underlying operating system,
+which should report the corresponding file descriptor as invalid.
+If not detected, an application will encounter data corruption
+if it depends on file locking semantics for correctness.
+Tracing application I/O calls with :doc:`VerifyIO <verifyio>` can
+help determine whether any file locking calls are used.
 
-UnifyFS does not currently support directory operations.
+Directory Operations
+********************
 
-----------
+UnifyFS does not support directory operations.
 
 ---------------------------
-MPI-IO and HDF5 Limitations
+MPI-IO Limitations
 ---------------------------
 
-Synchronization
-***************
+Data Consistency
+****************
 
-Applications that make use of inter-process communication (e.g., MPI) to enforce
-a particular order of potentially conflicting I/O operations from multiple
-processes must properly use synchronization calls (e.g., ``MPI_File_sync()``) to
-avoid possible data corruption. Within UnifyFS, this requires use of the
-:ref:`"sync-barrier-sync" construct <sync-barrier-sync-label>` to ensure proper
-synchronization.
-
-Properly synchronizing includes doing so between any less obvious MPI-I/O calls
-that also imply a write/read. For example, ``MPI_File_set_size()`` and
-``MPI_File_preallocate()`` act as write operations and ``MPI_File_get_size()``
-acts as a read operation. There may be other implied write/read calls as well.
-
-.. TODO: Mention use/need of ``romio_visibility_immediate`` hint once available.
-.. https://github.com/pmodels/mpich/issues/5902
-
-Synchronization Workarounds
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-If your application does not adhere to proper syncronization requirements there
-are four workaround options available to still allow UnifyFS intregration.
-
-UnifyFS Sync-per-write Configuration (``client.write_sync``)
-""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-
-UnifyFS provided config option that makes UnifyFS act more “POSIX like” by
-forcing a metadata sync to the server after **every** write operation. Set
-``UNIFYFS_CLIENT_WRITE_SYNC=ON`` to enable this option.
-
-**Cost:** Can cause a significant decrease in write performance as the amount of
-file sync operations that are performed will be far more than necessary.
-
-Manually Add Sync Operations
-""""""""""""""""""""""""""""
-
-Edit the application code and manually add the proper synchronization calls
-everywhere necessary. For example, wherever an ``MPI_File_sync()`` is required,
-the "sync-barrier-sync" construct needs to be used.
+When using MPI-I/O without atomic file consistency,
+the MPI standard requires the application to manage
+data consistency by calling ``MPI_File_sync()``.
+After data has been written, the writer must call ``MPI_File_sync()``.
+There must then be a synchronization operation between
+the writer and reader processes.
+Finally, the reader must call ``MPI_File_sync()``
+after its synchronization operation with the writer.
+A common approach is for the application to execute a
+:ref:`"sync-barrier-sync" construct <sync-barrier-sync-label>` as shown below:
 
 .. _sync-barrier-sync-label:
 
-.. code-block:: C
+.. code-block:: c
     :caption: Sync-barrier-sync Construct
 
     MPI_File_sync() //flush newly written bytes from MPI library to file system
@@ -92,100 +86,323 @@ the "sync-barrier-sync" construct needs to be used.
 .. Note::
 
     The "barrier" in "sync-barrier-sync" can be replaced by a send-recv or
-    certain collectives that are guaranteed to be synchronized. See the "Note on
-    the third step" in the `VerifyIO README`_ for more information.
+    certain collectives that are guaranteed to be synchronized.
+    The synchronization operation does not even need to be an MPI call.
+    See the "Note on the third step" in the `VerifyIO README`_
+    for more information.
 
-**Cost:** If making edits to the application source code is an option, the
-amount of time and effort required to track down all the places that proper
-synchonization calls are needed can be very labor intensive.
-:doc:`VerifyIO <verifyio>` can help with in this effort.
+Proper data consistency synchronization is also required
+between MPI-I/O calls that imply write or read operations.
+For example, ``MPI_File_set_size()`` and ``MPI_File_preallocate()``
+act as write operations,
+and ``MPI_File_get_size()`` acts as a read operation.
+There may be other MPI-I/O calls that imply write or read operations.
 
-HDF5 FILE_SYNC
-""""""""""""""
+Both ``MPI_File_open()`` and ``MPI_File_close()``
+implicitly call ``MPI_File_sync()``.
 
-HDF5 provided config option that forces HDF5 to add an ``MPI_File_sync()`` call
-after every collective write operation when needed by the underlying MPI-IO
-driver. Set ``HDF5_DO_MPI_FILE_SYNC=1`` to enable this option.
+Relaxed MPI_File_sync semantics
+"""""""""""""""""""""""""""""""
+
+Data consistency in UnifyFS is designed to be compatible
+with MPI-I/O application-managed file consistency semantics.
+An application that follows proper MPI-I/O file consistency
+semantics using ``MPI_File_sync()`` should run correctly on UnifyFS,
+provided that the ``MPI_File_sync()`` implementation flushes
+newly written data to UnifyFS.
+
+On POSIX-compliant parallel file systems like Lustre,
+many applications can run correctly
+even when they are missing sufficient file consistency synchronization.
+In contrast, to run correctly on UnifyFS, an application must make
+all ``MPI_File_sync()`` calls as required by the MPI standard.
 
 .. Note::
 
-    This option will soon be available in the `HDF5 develop branch`_ as well as
-    in the next HDF5 release.
+    It may be labor intensive to identify and correct all places
+    within an application where file synchronization calls are required.
+    The :doc:`VerifyIO <verifyio>` tool can assist developers in this effort.
 
-**Cost:** Can cause a significant decrease in write performance as the amount of
-file sync operations performed will likely be more than necessary. Similar to,
-but potentially more efficient than, the ``WRITE_SYNC`` workaround as less
-overall file syncs may be performed in comparision, but still likely more than
-needed.
+In the current UnifyFS implementation,
+it is actually sufficient to make a single call to ``MPI_File_sync()`` followed by
+a synchronizing call like ``MPI_Barrier()``, e.g.::
 
-ROMIO Driver Hint
-"""""""""""""""""
+    MPI_File_sync()
+    MPI_Barrier()
 
-A ROMIO provided hint that will cause the ROMIO driver (in a supported MPI
-library) to add an ``MPI_Barrier()`` call and an additional ``MPI_File_sync()``
-call after each already existing ``MPI_File_sync()`` call within the
-application. In other words, this hint converts each existing
-``MPI_File_sync()`` call into the "sync-barrier-sync" construct. Enable the
-``romio_synchronizing_flush`` hint to use this workaround.
+Assuming that ``MPI_File_sync()`` calls ``fsync()``,
+then information about any newly written data
+will be transferred to the UnifyFS servers.
+The ``MPI_Barrier()`` then ensures that ``fsync()`` will have been called
+by all clients that may have written data.
+After the ``MPI_Barrier()``, a process may read data from UnifyFS
+that was written by any other process before that other process
+called ``MPI_File_sync()``.
+A second call to ``MPI_File_sync()`` is not (currently) required in UnifyFS.
 
-**Cost:** Potentially more efficient that the ``WRITE_SYNC`` and HDF5
-``FILE_SYNC`` workarounds as this will cause the application to use the
-synchronization construct required by UnifyFS everywhere the application already
-intends them to occur (i.e., whenever there is already an ``MPI_File_sync()``).
-However, if (1) any existing ``MPI_File_sync()`` calls are only meant to make
-data visible to the other processes (rather than to avoid potential conflicts)
-or (2) the application contains a mix of lone ``MPI_File_sync()`` calls along
-with the "sync-barrier-sync" construct, then this approach will result in more
-syncs than necessary.
+Furthermore, if ``MPI_File_sync()`` is known to be a synchronizing collective,
+then a separate synchronization operation like ``MPI_Barrier()`` is not required.
+In this case, an application might simplify to just the following::
 
-----------
+    MPI_File_sync()
 
-.. _file-lock-label:
+Having stated those exceptions, it is best practice to adhere to the MPI
+standard and execute a full sync-barrier-sync construct when possible.
+There exists potential optimizations such that
+future implementations of UnifyFS may require the full sequence of calls.
+
+---------------------------
+ROMIO Limitations
+---------------------------
+
+Data Consistency
+****************
+
+In ROMIO, ``MPI_File_sync()`` calls ``fsync()``
+and ``MPI_File_close()`` calls ``close()``,
+each of which flush information about newly
+written data to the UnifyFS servers.
+When using ROMIO, an application having appropriate
+"sync-barrier-sync" constructs as required by the
+MPI standard will run correctly on UnifyFS.
+
+ROMIO Synchronizing Flush Hint
+""""""""""""""""""""""""""""""
+
+Although ``MPI_File_sync()`` is an MPI collective,
+it is not required to be synchronizing.
+One can configure ROMIO such that ``MPI_File_sync()``
+is also a synchronizing collective.
+To enable this behavior, one can set the following ROMIO hint
+through an ``MPI_Info`` object or within
+a `ROMIO hints file`_::
+
+    romio_synchronizing_flush true
+
+This configuration can be useful to applications that
+only call ``MPI_File_sync()`` once rather than execute
+the full sync-barrier-sync construct.
+
+This hint was added starting with the ROMIO version
+available in the MPICH v4.0 release.
+
+ROMIO Data Visibility Hint
+""""""""""""""""""""""""""
+
+Starting with the ROMIO version available in the MPICH v4.1 release,
+the read-only hint ``romio_visibility_immediate`` was added to inform
+the caller as to whether it is necessary to call ``MPI_File_sync``
+to manage data consistency.
+
+.. https://github.com/pmodels/mpich/issues/5902
+
+One can query the ``MPI_Info`` associated with a file.
+If this hint is defined and if its value is ``true``,
+then the underlying file system does not require the sync-barrier-sync
+construct in order for a process to read data written by another process.
+Newly written data is visible to other processes as soon as the writer
+process returns from its write call.
+If the value of the hint is ``false``, or if the hint is not defined
+in the ``MPI_Info`` object, then a sync-barrier-sync construct is
+required.
+
+When using UnifyFS, an application must call ``MPI_File_sync()``
+in all situations where the MPI standard requires it.
+However, since a sync-barrier-sync construct is costly on some file systems,
+and because POSIX-complaint file systems may not require it for correctness,
+one can use this hint to conditionally call ``MPI_File_sync()`` only when
+required by the underlying file system.
 
 File Locking
 ************
 
-UnifyFS not supporting file locks results in some I/O library features to not
-work with UnifyFS.
+ROMIO requires file locking with ``fcntl()`` to implement various functionality.
+Since ``fcntl()`` is not supported in UnifyFS,
+one must avoid any ROMIO features that require file locking.
 
-.. topic:: Atomicity
+MPI-I/O Atomic File Consistency
+"""""""""""""""""""""""""""""""
 
-    ROMIO uses ``fcntl()`` to implement atomicity. It is recommended to disable
-    atomicity when integrating with UnifyFS. To disable, run
-    ``MPI_File_set_atomicity(fh, 0)``.
+ROMIO uses ``fcntl()`` to implement atomic file consistency.
+One cannot use atomic mode when using UnifyFS.
+Provided an application still executes correctly without atomic mode,
+one can disable it by calling::
 
-.. topic:: Data Sieving
+    MPI_File_set_atomicity(fh, 0)
 
-    It is recommended to disable data sieving when integrating with UnifyFS.
-    Even with locking support, use of data sieving will drastically increase the
-    time and space overhead within UnifyFS, significantly decreasing application
-    performance. For ROMIO, set the hints ``romio_ds_write disable`` and
-    ``romio_ds_read disable`` to disable data sieving.
+Atomic mode is often disabled by default in ROMIO.
 
-.. topic:: Shared File Pointers
+Data Sieving
+""""""""""""
 
-    Avoid using shared file pointers in MPI-I/O under UnifyFS as they require
-    file locking to implement.
-    Functions that use shared file pointers include:
+ROMIO uses ``fcntl()`` to support its data sieving optimization.
+One must disable ROMIO data sieving when using UnifyFS.
+To disable data sieving, one can set the following ROMIO hints::
 
-    - ``MPI_File_write_shared()``
-    - ``MPI_File_read_shared()``
-    - ``MPI_File_write_ordered()``
-    - ``MPI_File_read_ordered()``
+    romio_ds_read disable
+    romio_ds_write disable
 
-File Locking Workarounds
-^^^^^^^^^^^^^^^^^^^^^^^^
+These hints can be set in the ``MPI_Info`` object when opening a file,
+e.g.,::
 
-UnifyFS doesn't provide any direct workarounds for anything that requires file
-locking. Simply disable atomicity and data sieving and avoid using shared file
-pointers to get around this.
+    MPI_Info info;
+    MPI_Info_create(&info);
+    MPI_Info_set(info, "romio_ds_read",  "disable");
+    MPI_Info_set(info, "romio_ds_write", "disable");
+    MPI_File_open(comm, filename, amode, info, &fh);
+    MPI_Info_free(&info);
 
-In the future, UnifyFS may add support for file locking. However, it is strongly
-suggested to avoid file locking unless the application cannot run properly
-without its use. Enabling file lock support within UnifyFS will result in
-decreased I/O performance for the application.
+or the hints may be listed in a `ROMIO hints file`_, e.g.,::
+
+    >>: cat romio_hints.txt
+    romio_ds_read disable
+    romio_ds_write disable
+
+    >>: export ROMIO_HINTS="romio_hints.txt"
+
+MPI-I/O Shared File Pointers
+""""""""""""""""""""""""""""
+
+ROMIO uses file locking to support MPI-I/O shared file pointers.
+One cannot use MPI-I/O shared file pointers when using UnifyFS.
+Functions that use shared file pointers include::
+
+    MPI_File_write_shared()
+    MPI_File_read_shared()
+    MPI_File_write_ordered()
+    MPI_File_read_ordered()
+
+---------------------------
+HDF5 Limitations
+---------------------------
+
+HDF5 uses MPI-I/O.
+In addition to restrictions that are specific to HDF5,
+one must follow any restrictions associated with the
+underlying MPI-I/O implementation.
+In particular, if the MPI library uses ROMIO for its MPI-I/O implementation,
+one should adhere to any limitations noted above
+for both ROMIO and MPI-I/O in general.
+
+Data Consistency
+****************
+
+In HDF5, ``H5Fflush()`` calls ``MPI_File_sync()``
+and ``H5Fclose()`` calls ``MPI_File_close()``.
+When running HDF5 on ROMIO or on other MPI-I/O implementations
+where these MPI routines flush newly written data to UnifyFS,
+one must invoke these HDF5 functions to properly manage data consistency.
+
+When using HDF5 with the MPI-I/O driver,
+for a process to read data written by another
+process without closing the HDF file,
+the writer must call ``H5Fflush()`` after writing its data.
+There must then be a synchronization operation between
+the writer and reader processes.
+Finally, the reader must call ``H5Fflush()``
+after the synchronization operation with the writer.
+This executes the sync-barrier-sync construct as required by MPI.
+For example::
+
+    H5Fflush(...)
+    MPI_Barrier(...)
+    H5Fflush(...)
+
+If ``MPI_File_sync()`` is a synchronizing collective, as with
+when enabling the ``romio_synchronizing_flush`` MPI-I/O hint,
+then a single call to ``H5Fflush()`` suffices to accomplish
+the sync-barrier-sync construct::
+
+    H5Fflush(...)
+
+HDF5 FILE_SYNC
+""""""""""""""
+
+Starting with the HDF5 v1.13.2 release,
+HDF can be configured to call ``MPI_File_sync()``
+after every HDF collective write operation.
+This configuration is enabled automatically if MPI-I/O
+defines the ``romio_visibility_immediate`` hint as ``false``.
+One can also enable this option manually by setting the
+environment variable ``HDF5_DO_MPI_FILE_SYNC=1``.
+Enabling this option can decrease write performance
+since it may induce more file flush operations than necessary.
+
+-------------------
+PnetCDF Limitations
+-------------------
+PnetCDF applications can utilize UnifyFS,
+and in fact, the semantics of the `PnetCDF API`_ align well with UnifyFS constraints.
+
+PnetCDF parallelizes access to NetCDF files using MPI.
+An MPI communicator is passed as an argument when opening a file.
+Any collective call in PnetCDF is global across the process group
+associated with the communicator used to open the file.
+
+In addition to any restrictions required when using UnifyFS with PnetCDF,
+one should also follow any recommendations regarding UnifyFS and the
+underlying MPI-IO implementation.
+
+Data Consistency
+****************
+
+PnetCDF uses MPI-IO to read and write files,
+and PnetCDF follows the data consistency model defined by MPI-IO.
+Specifically, from its documentation about `PnetCDF data consistency`_:
+
+.. Note::
+
+    PnetCDF follows the same parallel I/O data consistency as MPI-IO standard.
+
+    If users would like PnetCDF to enforce a stronger consistency,
+    they should add ``NC_SHARE`` flag when open/create the file.
+    By doing so, PnetCDF adds ``MPI_File_sync()`` after each MPI I/O calls.
+
+    If ``NC_SHARE`` is not set, then users are responsible for their
+    desired data consistency. To enforce a stronger consistency,
+    users can explicitly call ``ncmpi_sync()``. In ``ncmpi_sync()``,
+    ``MPI_File_sync()`` and ``MPI_Barrier()`` are called.
+
+Upon inspection of the PnetCDF implementation,
+the following PnetCDF functions include the following calls::
+
+    ncmpio_file_sync
+     - calls MPI_File_sync(ncp->independent_fh)
+     - calls MPI_File_sync(ncp->collective_fh)
+     - calls MPI_Barrier
+
+    ncmpio_sync
+     - calls ncmpio_file_sync
+
+    ncmpi__enddef
+     - calls ncmpio_file_sync if NC_doFsync (NC_SHARE)
+
+    ncmpio_enddef
+     - calls ncmpi__enddef
+
+    ncmpio_end_indep_data
+     - calls MPI_File_sync if NC_doFsync (NC_SHARE)
+
+    ncmpio_redef
+      - does *NOT* call ncmpio_file_sync
+
+    ncmpio_close
+     - calls ncmpio_file_sync if NC_doFsync (NC_SHARE)
+     - calls MPI_File_close (MPI_File_close calls MPI_File_sync by MPI standard)
+
+If a program must read data written by another process,
+PnetCDF users must do one of the following when using UnifyFS:
+
+1) Set ``UNIFYFS_CLIENT_WRITE_SYNC=1``, in which case each POSIX
+   write operation invokes a flush.
+2) Use ``NC_SHARE`` when opening files so that the PnetCDF library invokes
+   ``MPI_File_sync()`` and ``MPI_Barrier()`` calls after its MPI-IO operations.
+3) Add explicit calls to ``ncmpi_sync()`` after writing and before reading.
 
 .. explicit external hyperlink targets
 
 .. _HDF5 develop branch: https://github.com/HDFGroup/hdf5
 .. _VerifyIO README: https://github.com/uiuc-hpc/Recorder/tree/pilgrim/tools/verifyio#note-on-the-third-step
+.. _ROMIO hints file: https://wordpress.cels.anl.gov/romio/2008/09/26/system-hints-hints-via-config-file
+.. _PnetCDF API: https://parallel-netcdf.github.io/wiki/pnetcdf-api.pdf
+.. _PnetCDF data consistency: https://github.com/Parallel-NetCDF/PnetCDF/blob/master/doc/README.consistency
