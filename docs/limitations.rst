@@ -77,7 +77,6 @@ A common approach is for the application to execute a
 .. _sync-barrier-sync-label:
 
 .. code-block:: c
-    :caption: Sync-barrier-sync Construct
 
     MPI_File_sync() //flush newly written bytes from MPI library to file system
     MPI_Barrier()   //ensure all ranks have finished the previous sync
