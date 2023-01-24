@@ -183,6 +183,18 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
     client->max_write_index_entries =
         client->write_index_size / sizeof(unifyfs_index_t);
 
+    /* Number of microsecs to sleep after calling client-to-server unlink rpc.
+     * This is a work around (hack) to try to give the unlink operation time
+     * to complete before the client returns from calling its unlink wrapper. */
+    client->unlink_usecs = 0;
+    cfgval = client_cfg->client_unlink_usecs;
+    if (cfgval != NULL) {
+        rc = configurator_int_val(cfgval, &l);
+        if (rc == 0) {
+            client->unlink_usecs = (int)l;
+        }
+    }
+
     /* Timeout to wait on rpc calls to server, in milliseconds */
     double timeout_msecs = UNIFYFS_MARGO_CLIENT_SERVER_TIMEOUT_MSEC;
     cfgval = client_cfg->margo_client_timeout;

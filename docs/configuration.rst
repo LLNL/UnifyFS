@@ -74,6 +74,7 @@ a given section and key.
    max_files           INT     maximum number of open files per client process (default: 128)
    node_local_extents  BOOL    service reads from node local data for laminated files (default: off)
    super_magic         BOOL    whether to return UNIFYFS (on) or TMPFS (off) statfs magic (default: on)
+   unlink_usecs        INT     number of microseconds to sleep after initiating unlink rpc (default: 0)
    write_index_size    INT     maximum size (B) of memory buffer for storing write log metadata
    write_sync          BOOL    sync data to server after every write (default: off)
    ==================  ======  =================================================================
