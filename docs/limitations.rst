@@ -114,7 +114,7 @@ newly written data to UnifyFS.
 On POSIX-compliant parallel file systems like Lustre,
 many applications can run correctly
 even when they are missing sufficient file consistency synchronization.
-In contrast, to run correctly on UnifyFS, an application must make
+In contrast, to run correctly on UnifyFS, an application should make
 all ``MPI_File_sync()`` calls as required by the MPI standard.
 
 .. Note::
@@ -147,8 +147,8 @@ In this case, an application might simplify to just the following::
     MPI_File_sync()
 
 Having stated those exceptions, it is best practice to adhere to the MPI
-standard and execute a full sync-barrier-sync construct when possible.
-There exists potential optimizations such that
+standard and execute a full sync-barrier-sync construct.
+There exist potential optimizations such that
 future implementations of UnifyFS may require the full sequence of calls.
 
 ---------------------------
@@ -181,7 +181,7 @@ a `ROMIO hints file`_::
 
 This configuration can be useful to applications that
 only call ``MPI_File_sync()`` once rather than execute
-the full sync-barrier-sync construct.
+a full sync-barrier-sync construct.
 
 This hint was added starting with the ROMIO version
 available in the MPICH v4.0 release.
@@ -398,6 +398,20 @@ PnetCDF users must do one of the following when using UnifyFS:
 2) Use ``NC_SHARE`` when opening files so that the PnetCDF library invokes
    ``MPI_File_sync()`` and ``MPI_Barrier()`` calls after its MPI-IO operations.
 3) Add explicit calls to ``ncmpi_sync()`` after writing and before reading.
+
+Note that ``ncmpi_sync()`` calls ``MPI_File_sync()`` and ``MPI_Barrier()``,
+but it does not call ``MPI_File_sync()`` again after calling ``MPI_Barrier()``.
+To execute a full sync-barrier-sync construct,
+one technically must call ``ncmpi_sync()`` twice::
+
+    // to accomplish sync-barrier-sync
+    ncmpi_sync(...) // call MPI_File_sync and MPI_Barrier
+    ncmpi_sync(...) // call MPI_File_sync again
+
+When using UnifyFS,
+a single call to ``ncmpi_sync()`` should suffice since UnifyFS
+does not (currently) require the second call to ``MPI_File_sync()``
+as noted above.
 
 .. explicit external hyperlink targets
 
