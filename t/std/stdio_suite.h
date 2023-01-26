@@ -45,4 +45,7 @@ int fflush_test(char* unifyfs_root);
 /* Tests for UNIFYFS_WRAP(size) */
 int size_test(char* unifyfs_root);
 
+/* Tests for UNIFYFS_WRAP(fopen) truncate */
+int truncate_on_open(char* unifyfs_root);
+
 #endif /* STDIO_SUITE_H */

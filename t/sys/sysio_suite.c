@@ -101,6 +101,7 @@ int main(int argc, char* argv[])
     truncate_empty_read(unifyfs_root, 2020);
     truncate_ftrunc_before_sync(unifyfs_root);
     truncate_trunc_before_sync(unifyfs_root);
+    truncate_twice(unifyfs_root);
 
     unlink_test(unifyfs_root);
 
