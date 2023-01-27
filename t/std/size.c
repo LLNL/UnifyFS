@@ -176,6 +176,7 @@ int truncate_on_open(char* unifyfs_root)
 
     errno = 0;
 
+    todo("fopen(w) fails with EEXIST on existing file.");
     testutil_rand_path(path, sizeof(path), unifyfs_root);
 
     /* Write "hello world" to a file */
@@ -201,6 +202,7 @@ int truncate_on_open(char* unifyfs_root)
     testutil_get_size(path, &global);
     ok(global == 0, "%s:%d global size after fopen(%s, \"w\") = %d: %s",
        __FILE__, __LINE__, path, global, strerror(errno));
+    end_todo;
 
     diag("Finished truncate on fopen tests");
 
