@@ -78,6 +78,7 @@ int main(int argc, char* argv[])
     fflush_test(unifyfs_root);
 
     size_test(unifyfs_root);
+    truncate_on_open(unifyfs_root);
 
     rc = unifyfs_unmount();
     ok(rc == 0, "unifyfs_unmount(%s) (rc=%d)", unifyfs_root, rc);

@@ -782,3 +782,65 @@ int truncate_trunc_before_sync(char* unifyfs_root)
 
     return 0;
 }
+
+int truncate_twice(char* unifyfs_root)
+{
+    char path[64];
+    int err, rc;
+    int fd;
+    ssize_t szrc;
+    size_t global;
+
+    size_t bufsize = 1024*1024;
+    char* buf = (char*) malloc(bufsize);
+
+    testutil_rand_path(path, sizeof(path), unifyfs_root);
+
+    /* Open a new file for writing */
+    errno = 0;
+    fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0222);
+    err = errno;
+    ok(fd != -1, "%s:%d open(%s) (fd=%d): %s",
+        __FILE__, __LINE__, path, fd, strerror(err));
+
+    /* file should be 0 bytes at this point */
+    testutil_get_size(path, &global);
+    ok(global == 0, "%s:%d global size is %zu, expected 0",
+        __FILE__, __LINE__, global);
+
+    /* write 1MB and fsync, expect 1MB */
+    errno = 0;
+    szrc = write(fd, buf, bufsize);
+    err = errno;
+    ok(szrc == bufsize, "%s:%d write(%zu) (rc=%zd): %s",
+        __FILE__, __LINE__, bufsize, szrc, strerror(err));
+
+    errno = 0;
+    rc = fsync(fd);
+    err = errno;
+    ok(rc == 0, "%s:%d fsync() (rc=%d): %s",
+        __FILE__, __LINE__, rc, strerror(err));
+
+    testutil_get_size(path, &global);
+    ok(global == bufsize, "%s:%d global size is %zu, expected %zu",
+        __FILE__, __LINE__, global, bufsize);
+
+    close(fd);
+
+    /* Open same file with O_TRUNC, should now be 0 bytes */
+    errno = 0;
+    fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0222);
+    err = errno;
+    ok(fd != -1, "%s:%d open(%s) (fd=%d): %s",
+        __FILE__, __LINE__, path, fd, strerror(err));
+
+    testutil_get_size(path, &global);
+    ok(global == 0, "%s:%d global size is %zu, expected 0",
+        __FILE__, __LINE__, global);
+
+    close(fd);
+
+    free(buf);
+
+    return 0;
+}

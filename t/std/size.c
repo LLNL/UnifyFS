@@ -165,3 +165,48 @@ int size_test(char* unifyfs_root)
 
     return 0;
 }
+
+int truncate_on_open(char* unifyfs_root)
+{
+    diag("Starting truncate on fopen tests");
+
+    char path[64];
+    FILE* fp = NULL;
+    size_t global;
+
+    errno = 0;
+
+    testutil_rand_path(path, sizeof(path), unifyfs_root);
+
+    /* Write "hello world" to a file */
+    fp = fopen(path, "w");
+    ok(fp != NULL, "%s:%d fopen(%s): %s",
+       __FILE__, __LINE__, path, strerror(errno));
+    ok(fwrite("hello world", 12, 1, fp) == 1,
+       "%s:%d fwrite(\"hello world\": %s", __FILE__, __LINE__, strerror(errno));
+    ok(fclose(fp) == 0, "%s:%d fclose(): %s",
+       __FILE__, __LINE__, strerror(errno));
+
+    testutil_get_size(path, &global);
+    ok(global == 12, "%s:%d global size after fwrite(\"hello world\") = %d: %s",
+       __FILE__, __LINE__, global, strerror(errno));
+
+    /* Opening an existing file for writing with fopen should truncate file */
+    todo("fopen(w) fails with EEXIST on existing file.");
+    fp = fopen(path, "w");
+    ok(fp != NULL, "%s:%d fopen(%s): %s",
+       __FILE__, __LINE__, path, strerror(errno));
+    end_todo;
+    skip(fp == NULL, 2, "enable when fopen(w) EEXIST is fixed.");
+    ok(fclose(fp) == 0, "%s:%d fclose(): %s",
+       __FILE__, __LINE__, strerror(errno));
+
+    testutil_get_size(path, &global);
+    ok(global == 0, "%s:%d global size after fopen(%s, \"w\") = %d: %s",
+       __FILE__, __LINE__, path, global, strerror(errno));
+    end_skip;
+
+    diag("Finished truncate on fopen tests");
+
+    return 0;
+}
