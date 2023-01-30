@@ -65,6 +65,7 @@ typedef struct unifyfs_client {
     /* mountpoint configuration */
     unifyfs_cfg_t cfg;               /* user-provided configuration */
 
+    bool use_excl_private;           /* O_EXCL creates private files */
     bool use_fsync_persist;          /* persist data to storage on fsync() */
     bool use_local_extents;          /* enable tracking of local extents */
     bool use_node_local_extents;     /* enable tracking of extents within
