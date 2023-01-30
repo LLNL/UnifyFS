@@ -135,6 +135,17 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
         }
     }
 
+    /* Create node-local private files, rather than globally shared files
+     * when given O_EXCL during file open/create operations. */
+    client->use_excl_private = true;
+    cfgval = client_cfg->client_excl_private;
+    if (cfgval != NULL) {
+        rc = configurator_bool_val(cfgval, &b);
+        if (rc == 0) {
+            client->use_excl_private = (bool)b;
+        }
+    }
+
     /* Determine whether we persist data to storage device on fsync().
      * Turning this setting off speeds up fsync() by only syncing the
      * extent metadata, but it violates POSIX semanatics. */
