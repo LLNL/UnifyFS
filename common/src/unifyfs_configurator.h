@@ -69,6 +69,7 @@
     UNIFYFS_CFG_CLI(unifyfs, daemonize, BOOL, off, "enable server daemonization", NULL, 'D', "on|off") \
     UNIFYFS_CFG_CLI(unifyfs, mountpoint, STRING, /unifyfs, "mountpoint directory", NULL, 'm', "specify full path to desired mountpoint") \
     UNIFYFS_CFG(client, cwd, STRING, NULLSTRING, "current working directory", NULL) \
+    UNIFYFS_CFG(client, excl_private, BOOL, on, "create node-local private files when given O_EXCL", NULL) \
     UNIFYFS_CFG(client, fsync_persist, BOOL, on, "persist written data to storage on fsync()", NULL) \
     UNIFYFS_CFG(client, local_extents, BOOL, off, "use client-cached extents to service local reads without consulting local server", NULL) \
     UNIFYFS_CFG(client, node_local_extents, BOOL, off, \

@@ -415,6 +415,9 @@ int unifyfs_fid_open(
 
     int exclusive = flags & O_EXCL;
 
+    /* whether to create shared or non-shared files */
+    int private = (exclusive && client->use_excl_private);
+
     /* struct to hold global metadata for file */
     unifyfs_file_attr_t gfattr = { 0, };
 
@@ -437,7 +440,7 @@ int unifyfs_fid_open(
      * if we don't already have one */
     if (!found_local) {
         /* initialize local metadata for this file */
-        fid = unifyfs_fid_create_file(client, path, exclusive);
+        fid = unifyfs_fid_create_file(client, path, private);
         if (fid < 0) {
             LOGERR("failed to create a new file %s", path);
             return -fid;
