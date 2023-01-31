@@ -77,15 +77,9 @@ unifyfs_rc unifyfs_create(unifyfs_handle fshdl,
     /* NOTE: the 'flags' parameter is not currently used. it is reserved
      * for future indication of file-specific behavior */
 
-    /* the output parameters of unifyfs_fid_open() are not used here, but
-     * must be provided */
-    int fid = -1;
-    off_t filepos = -1;
-
     mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    int create_flags = O_CREAT | O_EXCL;
-    int rc = unifyfs_fid_open(client, filepath, create_flags, mode,
-                              &fid, &filepos);
+    int create_flags = O_CREAT;
+    int rc = unifyfs_fid_open2(client, filepath, create_flags, mode);
     if (UNIFYFS_SUCCESS == rc) {
         *gfid = unifyfs_generate_gfid(filepath);
     }
@@ -112,13 +106,8 @@ unifyfs_rc unifyfs_open(unifyfs_handle fshdl,
         return (unifyfs_rc)EINVAL;
     }
 
-    /* the output parameters of unifyfs_fid_open() are not used here, but
-     * must be provided */
-    int fid = -1;
-    off_t filepos = -1;
-
     mode_t mode = 0;
-    int rc = unifyfs_fid_open(client, filepath, flags, mode, &fid, &filepos);
+    int rc = unifyfs_fid_open2(client, filepath, flags, mode);
     if (UNIFYFS_SUCCESS == rc) {
         *gfid = unifyfs_generate_gfid(filepath);
     }
