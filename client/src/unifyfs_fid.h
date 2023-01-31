@@ -52,6 +52,12 @@ int unifyfs_fid_open(unifyfs_client* client,
                      int* outfid,
                      off_t* outpos);
 
+/* Opens a file with specified path, access flags, and permissions. */
+int unifyfs_fid_open2(unifyfs_client* client,
+                      const char* path,
+                      int flags,
+                      mode_t mode);
+
 /* Close file with given file id */
 int unifyfs_fid_close(unifyfs_client* client,
                       int fid);
