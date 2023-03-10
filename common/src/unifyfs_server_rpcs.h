@@ -251,10 +251,14 @@ MERCURY_GEN_PROC(metaget_all_bcast_in_t,
 MERCURY_GEN_PROC(metaget_all_bcast_out_t,
                  ((int32_t)(num_files))
                  ((hg_bulk_t)(file_meta))
+                 ((hg_string_t)(filenames))
                  ((int32_t)(ret)))
-/* TODO: the bulk data is an array of file metadata structs from the replying
- *       server(s).  Do we need to include a rank or pid or some other means
- *       of identifying the particular server? */
+/* file_meta will be an array of unifyfs_file_attr_t structs.  Since
+ * these structs store the filename in separately allocated memory, we'll
+ * have to send all the filenames separately from the array of structs.
+ * That's what filenames is for: we'll concatenate all the filenames into
+ * a single hg_string_t, send that and then recreate correct
+ * unifyfs_file_attr_t structs at the receiving end. */
 DECLARE_MARGO_RPC_HANDLER(metaget_all_bcast_rpc)
 
 #ifdef __cplusplus

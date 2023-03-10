@@ -59,10 +59,6 @@ typedef struct coll_request {
 /* set collective output return value to local result value */
 void collective_set_local_retval(coll_request* coll_req, int val);
 
-/* Combine the results from each process of a collective into a
- * single array. */
-void collective_gather_results(coll_request* coll_req, void* data);
-
 /* finish collective process by waiting for any child responses and
  * sending parent response (if applicable) */
 int collective_finish(coll_request* coll_req);
@@ -151,8 +147,15 @@ int unifyfs_invoke_broadcast_unlink(int gfid);
 /**
  * @brief Fetch metadata for all files on all servers
  *
+ * @param file_attrs list of file metadata
+ * @param num_file_attrs number of files in the list
+ *
  * @return success|failure
  */
-int unifyfs_invoke_broadcast_metaget_all(void);
+/* Upon success, file_attrs will hold data that has been allocated with
+ * malloc() and must be freed by the caller with free().  In the event of an
+ * error, the caller must *NOT* free the pointer. */
+int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
+                                         int* num_file_attrs);
 
 #endif // UNIFYFS_GROUP_RPC_H
