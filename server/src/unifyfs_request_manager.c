@@ -1556,20 +1556,46 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
     int  ret = UNIFYFS_SUCCESS;
     int  bcast_ret = UNIFYFS_SUCCESS;
     int* gfid_list;
+    unifyfs_file_attr_t* remote_file_attrs;
     int  num_gfids;
+    int  num_file_attrs;
 
-    /* Submit a broadcast metaget_all request and wait for it to complete.
-     * That way, our gfid list will contain all the files that UnifyFS knows
-     * about.
-     * Storing its return code in a separate variable.  If we get an error
-     * from the broadcast, we'll continue to process the gfids request,
-     * and the client can print a warning about the results being
-     * incomplete. */
-    bcast_ret = unifyfs_invoke_broadcast_metaget_all();
+    /* Submit a broadcast metaget_all request and wait for it to complete. */
+    // TODO: This is actually horribly wasteful: we're fetching all the
+    //       metadata for all files, but then just save the gfids and issue a
+    //       separate request for each gfid.
+    //       Now that we have all the metadata from remote servers, we
+    //       need to completely re-work how the the unifyfs-ls util works.
+    // TODO: Also, it would be nice if could let the broadcast complete in the
+    // backgound, but it's probably not a big deal.
+
+    bcast_ret = unifyfs_invoke_broadcast_metaget_all(&remote_file_attrs,
+                                                     &num_file_attrs);
+    if (UNIFYFS_SUCCESS != bcast_ret) {
+        LOGERR("unifyfs_invoke_broadcast_metaget_all() failed");
+        // make sure we have a sane value even if the broadcast fails
+        num_file_attrs = 0;
+    }
 
     ret = unifyfs_fops_get_gfids(&gfid_list, &num_gfids);
-    if (ret != UNIFYFS_SUCCESS) {
+    if (UNIFYFS_SUCCESS != ret) {
         LOGERR("unifyfs_fops_get_gfids() failed");
+        num_gfids = 0;
+    }
+
+    // Package all the gfids up into one list
+    int* new_gfid_list = calloc(num_gfids + num_file_attrs, sizeof(int));
+    // TODO: error checking!
+    memcpy(new_gfid_list, gfid_list, num_gfids*sizeof(int));
+    for (unsigned int i = 0; i < num_file_attrs; i++) {
+        new_gfid_list[num_gfids+i] = remote_file_attrs[i].gfid;
+    }
+
+    free(gfid_list);
+
+    if (UNIFYFS_SUCCESS == bcast_ret) {
+        // Only free the pointer if the broadcast was successful
+        free(remote_file_attrs);
     }
 
     /* send rpc response */
@@ -1577,19 +1603,19 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
     unifyfs_get_gfids_out_t out;
 
     /* initialize bulk handle for the gfid_list */
-    hg_size_t segment_sizes[1] = { num_gfids * sizeof(int) };
-    void* segment_ptrs[1] = { (void*)gfid_list };
+    hg_size_t segment_sizes[1] = { (num_gfids + num_file_attrs) * sizeof(int) };
+    void* segment_ptrs[1] = { (void*)new_gfid_list };
     hg_return_t hret = margo_bulk_create(unifyfsd_rpc_context->shm_mid,
                                          1, segment_ptrs, segment_sizes,
                                          HG_BULK_READ_ONLY, &out.bulk_gfids);
     /* Note: unifyfsd_rpc_context defined in margo_server.h */
     if (hret != HG_SUCCESS) {
-        free(gfid_list);
+        free(new_gfid_list);
         return UNIFYFS_ERROR_MARGO;
     }
 
     out.ret = (int32_t) ret;
-    out.num_gfids = num_gfids;
+    out.num_gfids = num_gfids + num_file_attrs;
     hret = margo_respond(req->handle, &out);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_respond() failed");
@@ -1598,7 +1624,7 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
     /* cleanup req */
     margo_destroy(req->handle);
     margo_bulk_free(out.bulk_gfids);
-    free(gfid_list);
+    free(new_gfid_list);
 
     if (bcast_ret != UNIFYFS_SUCCESS) {
         /* TODO: What do we do here?? We can log a warning of course,
@@ -1610,8 +1636,6 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
     }
 
     return ret;
-
-
 }
 
 /* iterate over list of chunk reads and send responses */

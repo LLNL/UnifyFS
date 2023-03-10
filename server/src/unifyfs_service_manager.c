@@ -1329,8 +1329,8 @@ static int process_unlink_bcast_rpc(server_rpc_req_t* req)
 static int process_metaget_bcast_rpc(server_rpc_req_t* req)
 {
     int ret = UNIFYFS_SUCCESS;
-
-    /* TODO: IMPLEMENT ME! */
+    /* TODO: Error handling is incomplete and is likely to return from
+     * the function without freeing allocated memory!! */
     LOGERR("%s not yet implemented", __func__);
 
     /* Iterate through the global_inode_tree and copy all the file
@@ -1339,11 +1339,33 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
     // TODO: Should we move this block of code over to unifyfs_inode.c?
     //       If we did, we wouldn't need to include the *inode*.h headers
     //       in this file.
+
+    /* The file names in the unifyfs_file_attr_t have to pointers to separately
+     * allocated memory, and thus have to be handled specially.  We'll copy
+     * the filenames into a separate char[] that we append to the array of
+     * unifyfs_file_attr_t structs.  We use this variable to keep track of
+     * how big that buffer needs to be. */
+    uint64_t total_name_len = 0;
+    //  Note: 64 bits because it's going to get cast to a char* and must
+    // therefore be the same size as a pointer.
+    char* concatenated_names = NULL;
+    unsigned int concatenated_names_size = 4 * 1024 * 1024;
+    // Pick the initial size such that most of the time we'll never
+    // need to re-allocate it.
+
     unsigned int num_files = 0;
+
     int attr_list_size = 64;
     unifyfs_file_attr_t* attr_list =
         malloc(sizeof(unifyfs_file_attr_t) * attr_list_size);
     if (!attr_list) {
+        return ENOMEM;
+        // TODO: Umm... if we return here, we never call
+        // invoke_bcast_progress_rpc().  Is that a problem?
+    }
+
+    concatenated_names = calloc(concatenated_names_size, sizeof(char));
+    if (!concatenated_names) {
         return ENOMEM;
         // TODO: Umm... if we return here, we never call
         // invoke_bcast_progress_rpc().  Is that a problem?
@@ -1369,34 +1391,94 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
             /* We only want to copy file attrs that we're the owner of */
             int owner_rank = hash_gfid_to_server(node->attr.gfid);
             if (owner_rank == glb_pmi_rank) {
-                memcpy(&attr_list[num_files++], &node->attr,
+                memcpy(&attr_list[num_files], &node->attr,
                     sizeof(unifyfs_file_attr_t));
+
+                /* filename is a pointer.  Since sending pointers over the
+                 * network is useless, we're going to abuse this value by
+                 * using it to store the offset into the separate char array
+                 * that will hold the filenames.
+                 * We only need the offset of the START of the filename.  The
+                 * end of the filename is assumed to be 1 character before the
+                 * start of the next filename (or the end of the string if
+                 * this is the last file). */
+                attr_list[num_files].filename = (char*)total_name_len;
+                total_name_len += strlen(node->attr.filename);
+
+                if (concatenated_names_size <= total_name_len) {
+                    // Need more memory for our concatenated file names
+                    concatenated_names_size *= 2;  // Double the size
+                    concatenated_names =
+                        realloc(concatenated_names,
+                                sizeof(char)*concatenated_names_size);
+                    if (!concatenated_names) {
+                        unifyfs_inode_tree_unlock(global_inode_tree);
+                        return ENOMEM;
+                        // TODO: Umm... if we return here, we never call
+                        // invoke_bcast_progress_rpc().  Is that a problem?
+                    }
+                }
+
+                strcat(concatenated_names, node->attr.filename);
+                num_files++;
             }
             node = unifyfs_inode_tree_iter(global_inode_tree, node);
         }
     }
     unifyfs_inode_tree_unlock(global_inode_tree);
 
+    coll_request* coll = (coll_request*)req->coll;
+    // Do a couple of sanity checks
+    if (UNIFYFS_SERVER_BCAST_RPC_METAGET != coll->req_type) {
+        LOGERR("invalid collective request type %d",
+               coll->req_type);
+        return UNIFYFS_ERROR_MARGO;
+        // TODO: Umm... is returning here a problem??
+    }
+    if (sizeof(metaget_all_bcast_out_t) != coll->output_sz) {
+        LOGERR("Unexpected size for collective output struct. "
+                "Expected %d but value was %d",
+                sizeof(metaget_all_bcast_out_t),
+                coll->output_sz);
+        return UNIFYFS_ERROR_MARGO;
+        // TODO: Umm... is returning here a problem??
+    }
 
-    /* Now, how do we send this array back to the caller?!? */
+    // If there are any files, then setup the bulk transfer
+    if (num_files) {
+        hg_size_t buf_size = num_files * sizeof(unifyfs_file_attr_t);
+        hg_bulk_t file_attrs_bulk;
+        hg_return_t hret =
+            margo_bulk_create(unifyfsd_rpc_context->svr_mid, 1,
+                              (void**)&attr_list, &buf_size,
+                              HG_BULK_READ_ONLY, &file_attrs_bulk);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_bulk_create() failed - %s", HG_Error_to_string(hret));
+            return UNIFYFS_ERROR_MARGO;
+            // TODO: Umm... is returning here a problem??
+        }
 
+        /* set the output params */
+        metaget_all_bcast_out_t* mabo = (metaget_all_bcast_out_t*)coll->output;
+        mabo->file_meta = file_attrs_bulk;
+        mabo->num_files = num_files;
+        mabo->filenames = concatenated_names;
+    } else {
+        /* There's no files to transfer - set output params appropriately */
+        metaget_all_bcast_out_t* mabo = (metaget_all_bcast_out_t*)coll->output;
+        mabo->file_meta = HG_BULK_NULL;
+        mabo->num_files = 0;
+        mabo->filenames = NULL;
+    }
 
-    /* As an experiment, try setting an error code as the return
-     * value for the  collective.  Want to see how it's actually
-     * handled when it gets back to the caller...*/
-    collective_set_local_retval(req->coll, UNIFYFS_ERROR_NYI);
-
-    /* Another experiment: this function implements a SUM
-     * operation on the num_files value in the output struct. */
-    collective_gather_results(req->coll, &num_files);
-
+    // TODO: Does it make sense to call
+    // collective_set_local_retval(req->coll, ret) ??
+    // If so, we should probably do that here.
 
     /* create a ULT to finish broadcast operation */
     ret = invoke_bcast_progress_rpc(req->coll);
+
     return ret;
-
-    /* TODO: How do I actually return bulk data to the caller?!? */
-
 }
 
 static int process_service_requests(void)
