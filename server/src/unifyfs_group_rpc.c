@@ -247,11 +247,34 @@ static coll_request* collective_create(server_rpc_e req_type,
         coll_req->app_id        = -1;
         coll_req->client_id     = -1;
         coll_req->client_req_id = -1;
+        coll_req->auto_cleanup  =  1;
+        /* Default behavior is for bcast_progress_rpc() to automatically
+         * call collective_cleanup() on the instance.  In cases where such
+         * behavior is incorrect - such as when results need to be returned
+         * from the collective's children - this variable can be changed
+         * before calling bcast_progress_rpc(). */
 
-        int rc = unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, tree_root_rank,
+
+        int rc = ABT_mutex_create(&coll_req->child_resp_valid_mut);
+        if (ABT_SUCCESS != rc) {
+            LOGERR("ABT_mutex_create failed");
+            free(coll_req);
+            return NULL;
+        }
+        rc = ABT_cond_create(&coll_req->child_resp_valid);
+        if (ABT_SUCCESS != rc) {
+            LOGERR("ABT_cond_create failed");
+            ABT_mutex_free(&coll_req->child_resp_valid_mut);
+            free(coll_req);
+            return NULL;
+        }
+
+        rc = unifyfs_tree_init(glb_pmi_rank, glb_pmi_size, tree_root_rank,
                                    UNIFYFS_BCAST_K_ARY, &(coll_req->tree));
         if (rc) {
             LOGERR("unifyfs_tree_init() failed");
+            ABT_mutex_free(&coll_req->child_resp_valid_mut);
+            ABT_cond_free(&coll_req->child_resp_valid);
             free(coll_req);
             return NULL;
         }
@@ -262,6 +285,11 @@ static coll_request* collective_create(server_rpc_e req_type,
             if ((NULL == coll_req->child_hdls) ||
                 (NULL == coll_req->child_reqs)) {
                 LOGERR("allocation of children state failed");
+                free(coll_req->child_hdls);
+                free(coll_req->child_reqs);
+                /* Note: calling free() on NULL is explicitly allowed */
+                ABT_mutex_free(&coll_req->child_resp_valid_mut);
+                ABT_cond_free(&coll_req->child_resp_valid);
                 free(coll_req);
                 return NULL;
             }
@@ -337,6 +365,10 @@ void collective_cleanup(coll_request* coll_req)
     if (HG_BULK_NULL != coll_req->bulk_forward) {
         margo_bulk_free(coll_req->bulk_forward);
     }
+
+    /* Release the Argobots mutex and condition variable */
+    ABT_cond_free(&coll_req->child_resp_valid);
+    ABT_mutex_free(&coll_req->child_resp_valid_mut);
 
     /* free allocated memory */
     if (NULL != coll_req->input) {
@@ -449,8 +481,11 @@ int collective_finish(coll_request* coll_req)
         ret = rc;
     }
 
-    if (NULL != coll_req->output) {
-        /* send output back to caller */
+    /* If there's output data AND there's a caller to send it back to,
+     * then send the output back to the caller.  If we're at the root
+     * of the tree, though, there might be output data, but no place
+     * to send it. */
+    if ((NULL != coll_req->output) && (NULL != coll_req->resp_hdl)) {
         hg_return_t hret = margo_respond(coll_req->resp_hdl, coll_req->output);
         if (hret != HG_SUCCESS) {
             LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
@@ -459,6 +494,17 @@ int collective_finish(coll_request* coll_req)
         LOGDBG("BCAST_RPC: collective(%p, op=%d) responded",
                coll_req, (int)(coll_req->req_type));
     }
+
+    /* Signal the condition variable in case there are other threads
+     * waiting for the child responses */
+    ABT_mutex_lock(coll_req->child_resp_valid_mut);
+    ABT_cond_signal(coll_req->child_resp_valid);
+    /* There should only be a single thread waiting on the CV, so we don't
+     * need to use ABT_cond_broadcast() */
+    ABT_mutex_unlock(coll_req->child_resp_valid_mut);
+    /* Locking the mutex before signaling is required in order to ensure
+     * that the waiting thread has had a chance to actually call
+     * ABT_cond_wait() before this thread signals the CV. */
 
     return ret;
 }
@@ -535,7 +581,7 @@ static void bcast_progress_rpc(hg_handle_t handle)
         LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
     }
 
-    if (NULL != coll) {
+    if ((NULL != coll) && (coll->auto_cleanup)) {
         collective_cleanup(coll);
     }
 
