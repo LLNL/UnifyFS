@@ -1326,11 +1326,6 @@ static int process_unlink_bcast_rpc(server_rpc_req_t* req)
 
 static int process_metaget_bcast_rpc(server_rpc_req_t* req)
 {
-    int ret = UNIFYFS_SUCCESS;
-    /* TODO: Error handling is incomplete and is likely to return from
-     * the function without freeing allocated memory!! */
-    LOGERR("%s not yet implemented", __func__);
-
     /* Iterate through the global_inode_tree and copy all the file
      * attr structs for the files this server owns */
 
@@ -1340,11 +1335,12 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
 
     /* The file names in the unifyfs_file_attr_t have to pointers to separately
      * allocated memory, and thus have to be handled specially.  We'll copy
-     * the filenames into a separate char[] that we append to the array of
-     * unifyfs_file_attr_t structs.  We use this variable to keep track of
-     * how big that buffer needs to be. */
+     * the filenames into a separate char[] that will be sent as an hg_string_t
+     * seprate from the bulk transfer of the unifyfs_file_attr_t structs.  We
+     * use this variable to keep track of how big that buffer needs to be.
+     */
     uint64_t total_name_len = 0;
-    //  Note: 64 bits because it's going to get cast to a char* and must
+    // Note: It's 64 bits because it's going to get cast to a char* and must
     // therefore be the same size as a pointer.
     char* concatenated_names = NULL;
     unsigned int concatenated_names_size = 4 * 1024 * 1024;
@@ -1358,15 +1354,12 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
         malloc(sizeof(unifyfs_file_attr_t) * attr_list_size);
     if (!attr_list) {
         return ENOMEM;
-        // TODO: Umm... if we return here, we never call
-        // invoke_bcast_progress_rpc().  Is that a problem?
     }
 
     concatenated_names = calloc(concatenated_names_size, sizeof(char));
     if (!concatenated_names) {
+        free(attr_list);
         return ENOMEM;
-        // TODO: Umm... if we return here, we never call
-        // invoke_bcast_progress_rpc().  Is that a problem?
     }
 
     unifyfs_inode_tree_rdlock(global_inode_tree);
@@ -1380,9 +1373,9 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
                                     sizeof(unifyfs_file_attr_t)*attr_list_size);
                 if (!attr_list) {
                     unifyfs_inode_tree_unlock(global_inode_tree);
+                    free(attr_list);
+                    free(concatenated_names);
                     return ENOMEM;
-                    // TODO: Umm... if we return here, we never call
-                    // invoke_bcast_progress_rpc().  Is that a problem?
                 }
             }
 
@@ -1411,9 +1404,9 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
                                 sizeof(char)*concatenated_names_size);
                     if (!concatenated_names) {
                         unifyfs_inode_tree_unlock(global_inode_tree);
+                        free(attr_list);
+                        free(concatenated_names);
                         return ENOMEM;
-                        // TODO: Umm... if we return here, we never call
-                        // invoke_bcast_progress_rpc().  Is that a problem?
                     }
                 }
 
@@ -1430,16 +1423,18 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
     if (UNIFYFS_SERVER_BCAST_RPC_METAGET != coll->req_type) {
         LOGERR("invalid collective request type %d",
                coll->req_type);
+        free(attr_list);
+        free(concatenated_names);
         return UNIFYFS_ERROR_MARGO;
-        // TODO: Umm... is returning here a problem??
     }
     if (sizeof(metaget_all_bcast_out_t) != coll->output_sz) {
         LOGERR("Unexpected size for collective output struct. "
                 "Expected %d but value was %d",
                 sizeof(metaget_all_bcast_out_t),
                 coll->output_sz);
+        free(attr_list);
+        free(concatenated_names);
         return UNIFYFS_ERROR_MARGO;
-        // TODO: Umm... is returning here a problem??
     }
 
     // If there are any files, then setup the bulk transfer
@@ -1452,8 +1447,10 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
                               HG_BULK_READ_ONLY, &file_attrs_bulk);
         if (hret != HG_SUCCESS) {
             LOGERR("margo_bulk_create() failed - %s", HG_Error_to_string(hret));
+            free(attr_list);
+            free(concatenated_names);
+            collective_set_local_retval(req->coll, UNIFYFS_ERROR_MARGO);
             return UNIFYFS_ERROR_MARGO;
-            // TODO: Umm... is returning here a problem??
         }
 
         /* set the output params */
@@ -1469,14 +1466,10 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
         mabo->filenames = NULL;
     }
 
-    // TODO: Does it make sense to call
-    // collective_set_local_retval(req->coll, ret) ??
-    // If so, we should probably do that here.
+    collective_set_local_retval(req->coll, UNIFYFS_SUCCESS);
 
     /* create a ULT to finish broadcast operation */
-    ret = invoke_bcast_progress_rpc(req->coll);
-
-    return ret;
+    return invoke_bcast_progress_rpc(req->coll);
 }
 
 static int process_service_requests(void)
