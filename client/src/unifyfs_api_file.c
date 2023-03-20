@@ -110,12 +110,6 @@ unifyfs_rc unifyfs_open(unifyfs_handle fshdl,
         return (unifyfs_rc)EINVAL;
     }
 
-    /* check that pathname is within bounds */
-    size_t pathlen = strlen(filepath) + 1;
-    if (pathlen > UNIFYFS_MAX_FILENAME) {
-        return (unifyfs_rc)ENAMETOOLONG;
-    }
-
     /* Ensure that only read/write access flags are set.
      * In particular, do not allow flag like:
      * O_CREAT, O_EXCL, O_TRUNC, O_DIRECTORY */
