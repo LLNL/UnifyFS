@@ -80,7 +80,7 @@ unifyfs_rc unifyfs_create(unifyfs_handle fshdl,
     int exclusive = 1;
     int private = ((flags & O_EXCL) && client->use_excl_private);
     int truncate = 0;
-    mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+    mode_t mode = UNIFYFS_STAT_DEFAULT_FILE_MODE;
     int ret = unifyfs_gfid_create(client, filepath,
         exclusive, private, truncate, mode);
     if (UNIFYFS_SUCCESS != ret) {
