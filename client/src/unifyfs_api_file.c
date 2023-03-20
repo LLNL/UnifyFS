@@ -77,13 +77,17 @@ unifyfs_rc unifyfs_create(unifyfs_handle fshdl,
     /* NOTE: the 'flags' parameter is not currently used. it is reserved
      * for future indication of file-specific behavior */
 
+    int exclusive = 1;
+    int private = ((flags & O_EXCL) && client->use_excl_private);
+    int truncate = 0;
     mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    int create_flags = O_CREAT;
-    int rc = unifyfs_fid_open2(client, filepath, create_flags, mode);
-    if (UNIFYFS_SUCCESS == rc) {
-        *gfid = unifyfs_generate_gfid(filepath);
+    int ret = unifyfs_gfid_create(client, filepath,
+        exclusive, private, truncate, mode);
+    if (UNIFYFS_SUCCESS != ret) {
+        return (unifyfs_rc)ret;
     }
-    return (unifyfs_rc)rc;
+
+    return unifyfs_open(fshdl, flags, filepath, gfid);
 }
 
 /* Open an existing file in UnifyFS */
@@ -106,10 +110,31 @@ unifyfs_rc unifyfs_open(unifyfs_handle fshdl,
         return (unifyfs_rc)EINVAL;
     }
 
-    mode_t mode = 0;
-    int rc = unifyfs_fid_open2(client, filepath, flags, mode);
+    /* check that pathname is within bounds */
+    size_t pathlen = strlen(filepath) + 1;
+    if (pathlen > UNIFYFS_MAX_FILENAME) {
+        return (unifyfs_rc)ENAMETOOLONG;
+    }
+
+    /* Ensure that only read/write access flags are set.
+     * In particular, do not allow flag like:
+     * O_CREAT, O_EXCL, O_TRUNC, O_DIRECTORY */
+    int allowed = O_RDONLY | O_RDWR | O_WRONLY;
+    int remaining = flags & ~(allowed);
+    if (remaining) {
+        LOGERR("Valid flags limited to {O_RDONLY, O_RDWR, O_WRONLY} %s",
+               filepath);
+        return (unifyfs_rc)EINVAL;
+    }
+
+    /* File should exist at this point,
+     * update our cache with its metadata. */
+    int rc = unifyfs_fid_fetch(client, filepath);
     if (UNIFYFS_SUCCESS == rc) {
         *gfid = unifyfs_generate_gfid(filepath);
+    } else {
+        LOGERR("Failed to get metadata on file %s",
+               filepath);
     }
     return (unifyfs_rc)rc;
 }
