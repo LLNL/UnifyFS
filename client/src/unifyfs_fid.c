@@ -546,6 +546,15 @@ int unifyfs_fid_open(
 
     /* attempt to create file if requested */
     if (flags & O_CREAT) {
+        /* Ensure that we're only creating a regular file. */
+        int type = mode & S_IFMT;
+        if (type & ~S_IFREG) {
+            LOGERR("Only regular files can be created %s S_IFMT bits %x",
+                   path, type);
+            return EINVAL;
+        }
+        mode |= S_IFREG;
+
         int exclusive = (flags & O_EXCL);
         int private   = (exclusive && client->use_excl_private);
         int truncate  = (flags & O_TRUNC);
