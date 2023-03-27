@@ -108,24 +108,20 @@ int fopen_fclose_test(char* unifyfs_root)
     diag("Finished UNIFYFS_WRAP(fopen/fclose) tests");
 
     /* Verify we can open an existing file for writing */
-    todo("fopen(w) fails with EEXIST on existing files.");
     errno = 0;
     fd = fopen(path, "w");
     err = errno;
     ok(fd != NULL && err == 0,
        "%s:%d fopen existing file %s w/ mode w: %s",
        __FILE__, __LINE__, path, strerror(err));
-    end_todo;
 
     /* Verify close succeeds. */
-    skip(fd == NULL, 1, "fopen(w) fails with EEXIST on existing files.");
     errno = 0;
     rc = fclose(fd);
     err = errno;
     ok(rc == 0 && err == 0,
        "%s:%d fclose existing file: %s",
        __FILE__, __LINE__, strerror(err));
-    end_skip;
 
     return 0;
 }

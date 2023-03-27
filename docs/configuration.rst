@@ -69,6 +69,7 @@ a given section and key.
    Key                 Type    Description
    ==================  ======  =================================================================
    cwd                 STRING  effective starting current working directory
+   excl_private        BOOL    create node-local private files when given O_EXCL (default: on)
    fsync_persist       BOOL    persist data to storage on fsync() (default: on)
    local_extents       BOOL    service reads from local data (default: off)
    max_files           INT     maximum number of open files per client process (default: 128)

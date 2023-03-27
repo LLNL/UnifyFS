@@ -55,10 +55,17 @@ int api_create_open_remove_test(char* unifyfs_root,
 
     diag("Starting API open tests");
 
+    int invalid_flags = O_WRONLY | O_TRUNC;
     int rdwr_flags = O_RDWR;
     int rd_flags = O_RDONLY;
+    unifyfs_gfid dummy2_gfid = UNIFYFS_INVALID_GFID;
     unifyfs_gfid t3_gfid = UNIFYFS_INVALID_GFID;
     unifyfs_gfid t4_gfid = UNIFYFS_INVALID_GFID;
+
+    rc = unifyfs_open(*fshdl, invalid_flags, testfile1, &dummy2_gfid);
+    ok(rc != UNIFYFS_SUCCESS && dummy2_gfid == UNIFYFS_INVALID_GFID,
+       "%s:%d unifyfs_open(%s) with O_TRUNC fails: rc=%d (%s)",
+       __FILE__, __LINE__, testfile1, rc, unifyfs_rc_enum_description(rc));
 
     rc = unifyfs_open(*fshdl, rdwr_flags, testfile1, &t3_gfid);
     ok(rc == UNIFYFS_SUCCESS && t3_gfid == t1_gfid,
