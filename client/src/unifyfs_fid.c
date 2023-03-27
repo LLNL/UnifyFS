@@ -428,18 +428,6 @@ int unifyfs_gfid_create(
         return ret;
     }
 
-#if 0
-    /* TODO: If we allow truncate on create, and if file is already
-     * laminated, return an error.  It will be easier to check this
-     * status on the server. */
-    if (truncate) {
-        ret = invoke_client_truncate_rpc(client, gfid, 0);
-        if (ret != UNIFYFS_SUCCESS) {
-            LOGERR("Failed to truncate file %s", path);
-        }
-    }
-#endif
-
     return ret;
 }
 
