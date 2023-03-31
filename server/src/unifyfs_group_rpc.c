@@ -69,7 +69,6 @@ static int forward_child_request(void* input_ptr,
 /* Helper function for the UNIFYFS_SERVER_BCAST_RPC_METAGET case in
  * get_child_response().  Handles merging the output from a child
  * with that from the parent. */
-// TODO: where should this function live permanently?
 static int merge_metaget_all_bcast_outputs(
             metaget_all_bcast_out_t* p_out,
             metaget_all_bcast_out_t* c_out,
@@ -82,32 +81,45 @@ static int merge_metaget_all_bcast_outputs(
 
     int32_t parent_num_files = p_out->num_files;
     int32_t child_num_files = c_out->num_files;
-
-    // Pull the bulk data (the list of file_attr structs) over
-    hg_bulk_t local_bulk;
     hg_size_t child_buf_size = child_num_files * sizeof(unifyfs_file_attr_t);
-    unifyfs_file_attr_t* child_attr_list =
-        calloc(child_num_files, sizeof(unifyfs_file_attr_t));
-    // TODO: error checking!!
 
-    // Figure out some margo-specific info that we need for the transfer
-    const struct hg_info* info = margo_get_info(c_hdl);
-    hg_addr_t server_addr = info->addr;
+    /* Quick optimization:  If there's no files for the child or
+     * parent, we can exit now.  (In fact, trying to perform a bulk transfer
+     * of size 0 will fail, so if we don't bail now, we'd just have to have
+     * more checks for this case down below.) */
+    if ((0 == parent_num_files) && (0 == child_num_files)) {
+        return UNIFYFS_SUCCESS;
+    }
 
-    /****************************************************************/
-    // TODO: What is the correct mid to use here? The one returned by
-    // margo_ht_handle_get_instance(c_hdl) gives us an HG_INVALID_ARG
-    // error when we call margo_bulk_create()...
-
-    // address of the bulk data on the server side
-    //margo_instance_id mid = margo_hg_handle_get_instance(c_hdl);
-    margo_instance_id mid = unifyfsd_rpc_context->svr_mid;
-    /****************************************************************/
-
+    // Some variables we'll need for the bulk transfer(s)
+    unifyfs_file_attr_t* child_attr_list = NULL;
+    hg_bulk_t local_bulk;
+    const struct hg_info* info = NULL;
+    hg_addr_t server_addr;
+    margo_instance_id mid;
 
     // If the number of child files is 0, don't bother with the bulk
     // transfer - it will just fail with HG_INVALID_ARG
     if (child_num_files) {
+
+        // Pull the bulk data (the list of file_attr structs) over
+        child_attr_list = calloc(child_num_files, sizeof(unifyfs_file_attr_t));
+        if (!child_attr_list) {
+            return ENOMEM;
+        }
+
+        // Figure out some margo-specific info that we need for the transfer
+        info = margo_get_info(c_hdl);
+        server_addr = info->addr;
+
+        /****************************************************************/
+        // TODO: What is the correct mid to use here?
+
+        // address of the bulk data on the server side
+        //mid = margo_hg_handle_get_instance(c_hdl);
+        mid = unifyfsd_rpc_context->svr_mid;
+        /****************************************************************/
+
         hg_size_t segment_sizes[1] = { child_buf_size };
         void* segment_ptrs[1] = { (void*)child_attr_list };
         bulk_create_hret =
@@ -116,8 +128,8 @@ static int merge_metaget_all_bcast_outputs(
         if (HG_SUCCESS != bulk_create_hret) {
             LOGERR("margo_bulk_create() failed - %s",
                 HG_Error_to_string(bulk_create_hret));
+            free(child_attr_list);
             return UNIFYFS_ERROR_MARGO;
-            // TODO: Umm... is returning here a problem??
         }
 
         hret = margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
@@ -126,29 +138,36 @@ static int merge_metaget_all_bcast_outputs(
         if (HG_SUCCESS != hret) {
             LOGERR("margo_bulk_transfer() failed - %s",
                    HG_Error_to_string(hret));
+            margo_bulk_free(local_bulk);
+            free(child_attr_list);
             return UNIFYFS_ERROR_MARGO;
-            // TODO: Umm... is returning here a problem??
         }
 
         margo_bulk_free(local_bulk);
     }
 
-    // OK, file attr's from the child (assuming there were any files) are now
-    // stored in child_attr_list
+    /* OK, file attrs from the child (assuming there were any files) are now
+     * stored in child_attr_list.  And if there were 0 files, then
+     * child_attr_list is NULL. */
 
     // Now get the bulk data from the parent (assuming there is any)
     unifyfs_file_attr_t* parent_attr_list =
         calloc(parent_num_files + child_num_files,
                sizeof(unifyfs_file_attr_t));
-    // Note: deliberatly allocating enough space for the child file attrs,
-    // since we're going to be copying them in anyway.
-    // TODO: error checking!!
+    /* Note: Deliberately allocating enough space for the child file attrs,
+     * since we're going to be copying them in anyway. */
+    if (!parent_attr_list) {
+        free(child_attr_list);
+        return ENOMEM;
+    }
 
-    if (p_out->file_meta) {
+    if (parent_num_files) {
         hg_size_t parent_buf_size =
             parent_num_files * sizeof(unifyfs_file_attr_t);
 
         // Figure out some margo-specific info that we need for the transfer
+        // TODO: I'm still not sure this is the proper way to get the Margo
+        // instance ID
         info = margo_get_info(p_hdl);
         server_addr = info->addr;
         // address of the bulk data on the server side
@@ -159,43 +178,48 @@ static int merge_metaget_all_bcast_outputs(
         bulk_create_hret =
             margo_bulk_create(mid, 1, segment_ptrs, segment_sizes,
                               HG_BULK_WRITE_ONLY, &local_bulk);
+
         if (HG_SUCCESS != bulk_create_hret) {
             LOGERR("margo_bulk_create() failed - %s",
                 HG_Error_to_string(bulk_create_hret));
+            free(parent_attr_list);
+            free(child_attr_list);
             return UNIFYFS_ERROR_MARGO;
-            // TODO: Umm... is returning here a problem??
         }
 
-        hret =
-            margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
-                                p_out->file_meta, 0, local_bulk, 0,
-                                parent_buf_size);
+        hret = margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
+                                   p_out->file_meta, 0, local_bulk, 0,
+                                   parent_buf_size);
         if (HG_SUCCESS != hret) {
             LOGERR("margo_bulk_transfer() failed - %s",
                    HG_Error_to_string(hret));
+            margo_bulk_free(local_bulk);
+            free(parent_attr_list);
+            free(child_attr_list);
             return UNIFYFS_ERROR_MARGO;
-            // TODO: Umm... is returning here a problem??
         }
         margo_bulk_free(local_bulk);
-
-        // Since we're going to be making a new one below, delete
-        // the parent's bulk object, too.
-        margo_bulk_free(p_out->file_meta);
     }
 
-    /* Now we need to append the child file attrs to the parent file attrs,
-     * create a new hg_bulk and replace the old parent bulk with the new one.
-     * First, though, append the child filenames string to the parent's, and
-     * update the string offsets stored in the child file attrs' filename
-     * members.
-     * Lastly, update the num_files value */
+    /* OK, file attrs from the parent (assuming there were any files) are now
+     * stored in parent_attr_list.  And parent_attr_list is actually big
+     * enough to hold all the file attrs from the parent and child.
+     *
+     * The next step is to append the child filenames string to the parent's,
+     * and update the string offsets stored in the child file attrs' filename
+     * members. */
 
     uint64_t parent_filenames_len = p_out->filenames?strlen(p_out->filenames):0;
     uint64_t child_filenames_len = c_out->filenames?strlen(c_out->filenames):0;
 
     char* new_filenames = calloc(parent_filenames_len + child_filenames_len +1,
                                  sizeof(char));
-    // TODO: check for errors!
+    if (!new_filenames) {
+        free(parent_attr_list);
+        free(child_attr_list);
+        return ENOMEM;
+    }
+
     if (p_out->filenames) {
         strcpy(new_filenames, p_out->filenames);
     }
@@ -212,27 +236,39 @@ static int merge_metaget_all_bcast_outputs(
         child_attr_list[i].filename = (char*)new_offset;
     }
 
-    // Now we can append the child list to the paren list
+    /* Now we need to append the child file attrs to the parent file attrs,
+     * create a new hg_bulk and replace the old parent bulk with the new one.
+     */
     memcpy(&parent_attr_list[parent_num_files], child_attr_list,
            child_buf_size);
-
-    p_out->num_files += child_num_files;
 
     size_t parent_buf_size =
         (parent_num_files + child_num_files) * sizeof(unifyfs_file_attr_t);
     hg_size_t segment_sizes[1] = { parent_buf_size };
     void* segment_ptrs[1] = { (void*)parent_attr_list };
+
+    // Save the parent's old bulk so that we can restore it if the
+    // bulk create fails, or free it if the create succeeds
+    hg_bulk_t parent_old_bulk = p_out->file_meta;
+
     hret = margo_bulk_create(unifyfsd_rpc_context->svr_mid, 1,
                              segment_ptrs, segment_sizes,
                              HG_BULK_READ_ONLY, &p_out->file_meta);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_bulk_create() failed - %s", HG_Error_to_string(hret));
+        p_out->file_meta = parent_old_bulk;
+        free(parent_attr_list);
+        free(child_attr_list);
         return UNIFYFS_ERROR_MARGO;
         // TODO: Umm... is returning here a problem??
     }
 
-    return ret;
+    margo_bulk_free(parent_old_bulk);
 
+    /* Lastly, update the num_files value */
+    p_out->num_files += child_num_files;
+
+    return ret;
 }
 
 static int get_child_response(coll_request* coll_req,
@@ -311,10 +347,6 @@ static int get_child_response(coll_request* coll_req,
                 // NOTE: This case is different.  It's currently the only
                 // case that actually returns more than just a single error
                 // code up the tree.
-                LOGWARN(
-                    "Handling of child responses for "
-                    "UNIFYFS_SERVER_BCAST_RPC_METAGET is almost certainly "
-                    "incorrect and shouldn't be trusted!");
                 metaget_all_bcast_out_t* cmabo =
                      (metaget_all_bcast_out_t*) out;
                 metaget_all_bcast_out_t* mabo  =
@@ -337,7 +369,6 @@ static int get_child_response(coll_request* coll_req,
                     LOGERR("Parent output struct: 0x%lX", (uint64_t)mabo);
                     LOGERR("Child output struct: 0x%lX", (uint64_t)cmabo);
                     mabo->ret = UNIFYFS_ERROR_BADCONFIG;
-                    // TODO: Is BADCONFIG the proper error to use?
                 }
                 break;
             }
@@ -766,6 +797,16 @@ static void bcast_progress_rpc(hg_handle_t handle)
     int32_t ret = UNIFYFS_SUCCESS;
     coll_request* coll = NULL;
 
+    bool cleanup_collective = ((NULL != coll) && (coll->auto_cleanup));
+    /* We have to check the auto_cleanup variable now because in the case
+     * where auto_cleanup is false, another thread will be freeing the
+     * collective.  And once the memory is freed, we can't read the
+     * auto_cleanup variable.
+     *
+     * There's a condition variable that's signaled by collective_finish(),
+     * and the memory won't be freed until some time after that happens, so
+     * it's safe to check the variable up here. */
+
     bcast_progress_in_t in;
     hg_return_t hret = margo_get_input(handle, &in);
     if (hret != HG_SUCCESS) {
@@ -790,7 +831,7 @@ static void bcast_progress_rpc(hg_handle_t handle)
         LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
     }
 
-    if ((NULL != coll) && (coll->auto_cleanup)) {
+    if (cleanup_collective) {
         collective_cleanup(coll);
     }
 
@@ -1638,11 +1679,21 @@ DEFINE_MARGO_RPC_HANDLER(metaget_all_bcast_rpc)
 /* Execute broadcast tree for a metaget_all operation*/
 /* Upon success, file_attrs will hold data that has been allocated with
  * malloc() and must be freed by the caller with free().  In the event of an
- * error, the caller must *NOT* free the pointer. */
+ * error, the caller must *NOT* free the pointer.
+ *
+ * Note that 0 files is still considered a successful result.  In that case,
+ * num_file_attrs will point to 0 and *file_attrs will point to NULL. */
 int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
                                          int* num_file_attrs)
 {
     int ret = UNIFYFS_SUCCESS;
+    hg_return_t bulk_create_hret = HG_NOMEM;
+    hg_return_t bulk_transfer_hret = HG_OTHER_ERROR;
+    /* Have to assume the bulk create and bulk transfer operations failed or
+     * else we might try to clean up non-existent data down in the clean-up
+     * section. */
+
+    hg_bulk_t local_bulk;
 
     LOGDBG("BCAST_RPC: starting metaget_all broadcast");
 
@@ -1709,71 +1760,78 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
 
     // Pull the bulk data (the list of file_attr structs) over
     metaget_all_bcast_out_t* results = (metaget_all_bcast_out_t*)coll->output;
-    hg_bulk_t local_bulk;
-    hg_size_t buf_size = results->num_files * sizeof(unifyfs_file_attr_t);
-    attr_list = calloc(results->num_files, sizeof(unifyfs_file_attr_t));
-    if (NULL == attr_list) {
-        ret = ENOMEM;
-        goto Exit;
-    }
 
-    // Figure out some margo-specific info that we need for the transfer
-    const struct hg_info* info = margo_get_info(coll->progress_hdl);
-    hg_addr_t server_addr = info->addr;
-    // address of the bulk data on the server side
-    margo_instance_id mid = margo_hg_handle_get_instance(coll->progress_hdl);
+    /* Now check the number of files - if it's 0, then we don't need to
+     * bother with the bulk tranfser.  (In fact, if we were to try, we'd
+     * get an error.) */
 
-    hg_return_t bulk_create_hret =
-        margo_bulk_create(mid, 1, (void**)&attr_list, &buf_size,
-                          HG_BULK_WRITE_ONLY, &local_bulk);
-    if (HG_SUCCESS != bulk_create_hret) {
-        LOGERR("margo_bulk_create() failed - %s",
-               HG_Error_to_string(bulk_create_hret));
-        ret = UNIFYFS_ERROR_MARGO;
-        goto Exit;
-    }
-
-    hg_return_t bulk_transfer_hret =
-        margo_bulk_transfer(mid, HG_BULK_PULL, server_addr, results->file_meta,
-                            0, local_bulk, 0, buf_size);
-    if (HG_SUCCESS != bulk_transfer_hret) {
-        LOGERR("margo_bulk_transfer() failed - %s",
-               HG_Error_to_string(bulk_transfer_hret));
-        ret = UNIFYFS_ERROR_MARGO;
-        goto Exit;
-    }
-
-    // At this point, attr_list should have the file_attr_t
-    // structs from all the other servers.  However, we still
-    // need to assign the filename values for each struct.
-
-    for (unsigned int i = 0; i < results->num_files; i++) {
-        // Remember that we abused the filename pointer to
-        // actually hold an offset into the filenames string
-        // that we sent separately
-        uint64_t start_offset = (uint64_t)attr_list[i].filename;
-        uint64_t name_len;
-        if (i < (results->num_files-1)) {
-            name_len = ((uint64_t)attr_list[i+1].filename) - start_offset;
-        } else {
-            // length is calculated differently for the last file in file_attrs
-            name_len = strlen(&results->filenames[start_offset]);
-        }
-        attr_list[i].filename =
-            strndup(&results->filenames[start_offset], name_len);
-        if (NULL == attr_list[i].filename) {
+    if (results->num_files) {
+        hg_size_t buf_size = results->num_files * sizeof(unifyfs_file_attr_t);
+        attr_list = calloc(results->num_files, sizeof(unifyfs_file_attr_t));
+        if (NULL == attr_list) {
             ret = ENOMEM;
-            LOGERR("strdup() failed processing filename");
-            // If we're actually getting ENOMEM from strdup(), the error log
-            // is probably also going to fail...
             goto Exit;
-            /* Technically, attr_list probably contains valid data and we
-             * could try to return a partial list.  If we did, though, then
-             * we'd have ensure we checked for NULL before dereferencing the
-             * filename pointer *EVERYWHERE* else.  Additionally, if we've
-             * really run out of memory, then other things are probably going
-             * to start failing pretty quickly.  In short, trying to salvage
-             * this situation isn't worth the hassle. */
+        }
+
+        // Figure out some margo-specific info that we need for the transfer
+        const struct hg_info* info = margo_get_info(coll->progress_hdl);
+        hg_addr_t server_addr = info->addr;
+        // address of the bulk data on the server side
+        margo_instance_id mid =
+            margo_hg_handle_get_instance(coll->progress_hdl);
+
+        bulk_create_hret =
+            margo_bulk_create(mid, 1, (void**)&attr_list, &buf_size,
+                            HG_BULK_WRITE_ONLY, &local_bulk);
+        if (HG_SUCCESS != bulk_create_hret) {
+            LOGERR("margo_bulk_create() failed - %s",
+                HG_Error_to_string(bulk_create_hret));
+            ret = UNIFYFS_ERROR_MARGO;
+            goto Exit;
+        }
+
+        bulk_transfer_hret =
+            margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
+                                results->file_meta, 0, local_bulk, 0, buf_size);
+        if (HG_SUCCESS != bulk_transfer_hret) {
+            LOGERR("margo_bulk_transfer() failed - %s",
+                HG_Error_to_string(bulk_transfer_hret));
+            ret = UNIFYFS_ERROR_MARGO;
+            goto Exit;
+        }
+
+        /* At this point, attr_list should have the file_attr_t  structs from
+         * all the other servers.  However, we still need to assign the
+         * filename values for each struct. */
+
+        for (unsigned int i = 0; i < results->num_files; i++) {
+            /* Remember that we abused the filename pointer to actually hold
+             * an offset into the filenames string that we sent separately */
+            uint64_t start_offset = (uint64_t)attr_list[i].filename;
+            uint64_t name_len;
+            if (i < (results->num_files-1)) {
+                name_len = ((uint64_t)attr_list[i+1].filename) - start_offset;
+            } else {
+                /* length is calculated differently for the last file in
+                 * file_attrs */
+                name_len = strlen(&results->filenames[start_offset]);
+            }
+            attr_list[i].filename =
+                strndup(&results->filenames[start_offset], name_len);
+            if (NULL == attr_list[i].filename) {
+                ret = ENOMEM;
+                LOGERR("strdup() failed processing filename");
+                /* If we're actually getting ENOMEM from strdup(), the error
+                 * log is probably also going to fail... */
+                goto Exit;
+                /* Technically, attr_list probably contains valid data and we
+                 * could try to return a partial list.  If we did, though, then
+                 * we'd have ensure we checked for NULL before dereferencing
+                 * the filename pointer *EVERYWHERE* else.  Additionally, if
+                 * we've really run out of memory, then other things are
+                 * probably going to start failing pretty quickly.  In short,
+                 * trying to salvage this situation isn't worth the hassle. */
+            }
         }
     }
 
@@ -1786,47 +1844,51 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
     *num_file_attrs = results->num_files;
 
 Exit:
-    // If we hit an error somewhere, then there's a bunch of clean-up
-    // that we need to do...
+    /* If we hit an error somewhere, then there's a bunch of clean-up
+     * that we need to do... */
     if (UNIFYFS_SUCCESS != ret) {
         if (HG_SUCCESS == bulk_transfer_hret) {
-            // We made it past the bulk transfer before failing, which means
-            // we probably called strdup() on a bunch of filename strings.
-            // Have to free all of those...
+            /* We made it past the bulk transfer before failing, which means
+             * we probably called strdup() on a bunch of filename strings.
+             * Have to free all of those... */
             for (unsigned int i = 0; i < results->num_files; i++) {
                 free(attr_list[i].filename);
             }
         }
-        // If there's been an error, we won't be returning the attr_list
-        // pointer to the caller, so make sure it's freed.
+        /* If there's been an error, we won't be returning the attr_list
+         * pointer to the caller, so make sure it's freed. */
         free(attr_list);
 
         if (coll) {
-            // If we have a collective struct, then there's some more
-            // clean-up to do
-
-            // Depending on where any errors occurred above, the mutex
-            // might have been left in a locked state.  Argobots doesn't
-            // provide a way to test this, so we'll do a trylock() followed
-            // by an unlock to ensure it's unlocked.
+            /* If we have a collective struct, then there's some more
+             * clean-up to do:
+             *
+             * Depending on where any errors occurred above, the mutex
+             * might have been left in a locked state.  Argobots doesn't
+             * provide a way to test this, so we'll do a trylock() followed
+             * by an unlock to ensure it's unlocked. */
             ABT_mutex_trylock(coll->child_resp_valid_mut);
             ABT_mutex_unlock(coll->child_resp_valid_mut);
-
-            collective_cleanup(coll);
         } else {
-            // If we never got as far as creating the collective, then just
-            // free the input and output structs.  (These were all initialized
-            // to NULL, so it's safe to call free() on them even if we never
-            // actually got around to allocating them.)
+            /* If we never got as far as creating the collective, then just
+             * free the input and output structs.  (These were all initialized
+             * to NULL, so it's safe to call free() on them even if we never
+             * actually got around to allocating them.) */
             free(in);
             free(out);
         }
     }
 
-    if (HG_SUCCESS != bulk_create_hret) {
-        // If we successfully created the bulk, then we need to free it
-        // (regardless of the overall success of the function).
+    if (HG_SUCCESS == bulk_create_hret) {
+        /* If we successfully created the bulk, then we need to free it
+         * (regardless of the overall success of the function). */
         margo_bulk_free(local_bulk);
+    }
+
+    if (coll) {
+        /* If we successfully created the collective, then we need to
+         * clean it up.  */
+        collective_cleanup(coll);
     }
 
     return ret;
