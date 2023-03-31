@@ -1329,23 +1329,19 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
     /* Iterate through the global_inode_tree and copy all the file
      * attr structs for the files this server owns */
 
-    // TODO: Should we move this block of code over to unifyfs_inode.c?
-    //       If we did, we wouldn't need to include the *inode*.h headers
-    //       in this file.
-
-    /* The file names in the unifyfs_file_attr_t have to pointers to separately
+    /* The file names in the unifyfs_file_attr_t are pointers to separately
      * allocated memory, and thus have to be handled specially.  We'll copy
      * the filenames into a separate char[] that will be sent as an hg_string_t
      * seprate from the bulk transfer of the unifyfs_file_attr_t structs.  We
      * use this variable to keep track of how big that buffer needs to be.
      */
     uint64_t total_name_len = 0;
-    // Note: It's 64 bits because it's going to get cast to a char* and must
-    // therefore be the same size as a pointer.
+    /* Note: It's 64 bits because it's going to get cast to a char* and must
+     * therefore be the same size as a pointer. */
     char* concatenated_names = NULL;
     unsigned int concatenated_names_size = 4 * 1024 * 1024;
-    // Pick the initial size such that most of the time we'll never
-    // need to re-allocate it.
+    /* Pick the initial size such that most of the time we'll never need
+     * to re-allocate it. */
 
     unsigned int num_files = 0;
 
@@ -1464,6 +1460,11 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
         mabo->file_meta = HG_BULK_NULL;
         mabo->num_files = 0;
         mabo->filenames = NULL;
+
+        /* Also need to free attr_list and concatenated_names since they're
+         * not actually being used */
+        free(attr_list);
+        free(concatenated_names);
     }
 
     collective_set_local_retval(req->coll, UNIFYFS_SUCCESS);
