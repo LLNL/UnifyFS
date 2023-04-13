@@ -111,14 +111,8 @@ static int merge_metaget_all_bcast_outputs(
         // Figure out some margo-specific info that we need for the transfer
         info = margo_get_info(c_hdl);
         server_addr = info->addr;
-
-        /****************************************************************/
-        // TODO: What is the correct mid to use here?
-
         // address of the bulk data on the server side
-        //mid = margo_hg_handle_get_instance(c_hdl);
-        mid = unifyfsd_rpc_context->svr_mid;
-        /****************************************************************/
+        mid = margo_hg_handle_get_instance(c_hdl);
 
         hg_size_t segment_sizes[1] = { child_buf_size };
         void* segment_ptrs[1] = { (void*)child_attr_list };
@@ -166,8 +160,6 @@ static int merge_metaget_all_bcast_outputs(
             parent_num_files * sizeof(unifyfs_file_attr_t);
 
         // Figure out some margo-specific info that we need for the transfer
-        // TODO: I'm still not sure this is the proper way to get the Margo
-        // instance ID
         info = margo_get_info(p_hdl);
         server_addr = info->addr;
         // address of the bulk data on the server side
@@ -187,6 +179,9 @@ static int merge_metaget_all_bcast_outputs(
             return UNIFYFS_ERROR_MARGO;
         }
 
+        // TODO: It seems like we shouldn't have to actually do a margo
+        // transfer here.  This code is running on the parent server, right?
+        // Can't we just do a memcpy?
         hret = margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
                                    p_out->file_meta, 0, local_bulk, 0,
                                    parent_buf_size);
@@ -241,6 +236,7 @@ static int merge_metaget_all_bcast_outputs(
      */
     memcpy(&parent_attr_list[parent_num_files], child_attr_list,
            child_buf_size);
+    free(child_attr_list);
 
     size_t parent_buf_size =
         (parent_num_files + child_num_files) * sizeof(unifyfs_file_attr_t);
@@ -262,6 +258,12 @@ static int merge_metaget_all_bcast_outputs(
         return UNIFYFS_ERROR_MARGO;
         // TODO: Umm... is returning here a problem??
     }
+
+    // TODO: Note that although we did a margo bulk transfer to pull
+    // the data from the parent, we aren't doing any kind of push back
+    // to the parent.  We do seem to get the correct results, which implies
+    // that we must be in the same address space as the parent.  So again,
+    // do we really need to do the pull operation above??
 
     margo_bulk_free(parent_old_bulk);
 
