@@ -10,10 +10,10 @@ Required
 
 - `GOTCHA <https://github.com/LLNL/GOTCHA/releases>`_ version 1.0.4 (or later)
 
-- `Margo <https://github.com/mochi-hpc/mochi-margo/releases>`_ version 0.9.6 and its dependencies:
+- `Margo <https://github.com/mochi-hpc/mochi-margo/releases>`_ version 0.13.1 and its dependencies:
 
   - `Argobots <https://github.com/pmodels/argobots/releases>`_ version 1.1 (or later)
-  - `Mercury <https://github.com/mercury-hpc/mercury/releases>`_ version 2.0.1 to 2.1
+  - `Mercury <https://github.com/mercury-hpc/mercury/releases>`_ version 2.2.0 (or later)
 
     - `libfabric <https://github.com/ofiwg/libfabric>`_ (avoid versions 1.13 and 1.13.1) or `bmi <https://github.com/radix-io/bmi/>`_
 
@@ -26,7 +26,7 @@ Required
     Margo uses pkg-config to ensure it compiles and links correctly with all of
     its dependencies' libraries. When building manually, you'll need to set the
     ``PKG_CONFIG_PATH`` environment variable to include the paths of the
-    directories containing the ``.pc`` files for Mercury, Argobots, and Margo.
+    directories containing the ``.pc`` files for Margo, Mercury, Argobots, and OpenSSL.
 
 --------
 Optional
