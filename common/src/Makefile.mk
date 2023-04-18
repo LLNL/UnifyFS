@@ -48,7 +48,7 @@ UNIFYFS_COMMON_BASE_FLAGS = \
   $(MARGO_CFLAGS)
 
 UNIFYFS_COMMON_BASE_LIBS = \
-  $(MARGO_LDFLAGS) $(MARGO_LIBS) \
+  $(MARGO_LDFLAGS) $(MARGO_LIBS) -lmercury_util \
   -lm -lrt -lcrypto -lpthread
 
 UNIFYFS_COMMON_OPT_FLAGS =
