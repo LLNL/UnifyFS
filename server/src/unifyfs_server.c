@@ -63,6 +63,11 @@ static app_config* app_configs[UNIFYFS_SERVER_MAX_NUM_APPS]; /* list of apps */
 static size_t clients_per_app = UNIFYFS_SERVER_MAX_APP_CLIENTS;
 
 
+/* arraylist and mutex to track pending remote metaget() requests */
+arraylist_t* pending_metagets; // = NULL
+static ABT_mutex pending_metagets_abt_sync;
+
+
 static int unifyfs_exit(void);
 
 #if defined(UNIFYFS_MULTIPLE_DELEGATORS)
@@ -461,6 +466,12 @@ int main(int argc, char* argv[])
     failed_clients = arraylist_create(0);
     ABT_mutex_unlock(app_configs_abt_sync);
 
+    ABT_mutex_create(&pending_metagets_abt_sync);
+
+    ABT_mutex_lock(pending_metagets_abt_sync);
+    pending_metagets = arraylist_create(256);
+    ABT_mutex_unlock(pending_metagets_abt_sync);
+
     /* launch the service manager (note: must happen after ABT_init) */
     LOGDBG("launching service manager thread");
     rc = svcmgr_init();
@@ -705,6 +716,13 @@ static int unifyfs_exit(void)
     }
     ABT_mutex_unlock(app_configs_abt_sync);
 
+    ABT_mutex_lock(pending_metagets_abt_sync);
+    if (NULL != pending_metagets) {
+        arraylist_free(pending_metagets);
+        pending_metagets = NULL;
+    }
+    ABT_mutex_unlock(pending_metagets_abt_sync);
+
     /* TODO: notify the service threads to exit */
 
     /* finalize kvstore service*/
@@ -712,6 +730,11 @@ static int unifyfs_exit(void)
     unifyfs_keyval_fini();
 
     ret = ABT_mutex_free(&app_configs_abt_sync);
+    if (ret != ABT_SUCCESS) {
+        LOGERR("Error returned from ABT_mutex_free(): %d", ret);
+    }
+
+    ret = ABT_mutex_free(&pending_metagets_abt_sync);
     if (ret != ABT_SUCCESS) {
         LOGERR("Error returned from ABT_mutex_free(): %d", ret);
     }
@@ -1110,15 +1133,105 @@ unifyfs_rc add_failed_client(int app_id, int client_id)
     if (NULL == client) {
         return EINVAL;
     }
+
     unifyfs_rc ret = UNIFYFS_SUCCESS;
     ABT_mutex_lock(app_configs_abt_sync);
     if (NULL != failed_clients) {
         int rc = arraylist_add(failed_clients, client);
         if (rc == -1) {
-            LOGERR("failed to add client to failed_clients arraylist");
+            LOGERR("failed to add client[%d:%d] to failed_clients arraylist",
+                   app_id, client_id);
             ret = UNIFYFS_FAILURE;
         }
+    } else {
+        LOGERR("failed_clients is NULL!");
+        ret = UNIFYFS_FAILURE;
     }
     ABT_mutex_unlock(app_configs_abt_sync);
+    return ret;
+}
+
+unifyfs_rc add_pending_metaget(int gfid)
+{
+    int* pending_gfid = (int*) malloc(sizeof(gfid));
+    if (NULL == pending_gfid) {
+        return ENOMEM;
+    }
+    *pending_gfid = gfid;
+
+    unifyfs_rc ret = UNIFYFS_SUCCESS;
+    ABT_mutex_lock(pending_metagets_abt_sync);
+    if (NULL != pending_metagets) {
+        int num_pending = arraylist_size(pending_metagets);
+        if (num_pending > 0) {
+            for (int i = 0; i < num_pending; i++) {
+                int* pending = (int*) arraylist_get(pending_metagets, i);
+                if ((NULL != pending) && (*pending == gfid)) {
+                    ret = EEXIST;
+                    break;
+                }
+            }
+        }
+        if (ret == UNIFYFS_SUCCESS) {
+            int rc = arraylist_add(pending_metagets, pending_gfid);
+            if (rc == -1) {
+                LOGERR("failed to add gfid=%d to pending_metagets arraylist",
+                       gfid);
+                ret = UNIFYFS_FAILURE;
+            }
+
+        }
+    } else {
+        LOGERR("pending_metagets is NULL!");
+        ret = UNIFYFS_FAILURE;
+    }
+    ABT_mutex_unlock(pending_metagets_abt_sync);
+    return ret;
+}
+
+bool check_pending_metaget(int gfid)
+{
+    bool is_pending = false;
+    ABT_mutex_lock(pending_metagets_abt_sync);
+    if (NULL != pending_metagets) {
+        int num_pending = arraylist_size(pending_metagets);
+        if (num_pending > 0) {
+            for (int i = 0; i < num_pending; i++) {
+                int* pending = (int*) arraylist_get(pending_metagets, i);
+                if ((NULL != pending) && (*pending == gfid)) {
+                    is_pending = true;
+                    break;
+                }
+            }
+        }
+    } else {
+        LOGERR("pending_metagets is NULL!");
+    }
+    ABT_mutex_unlock(pending_metagets_abt_sync);
+    return is_pending;
+}
+
+unifyfs_rc clear_pending_metaget(int gfid)
+{
+    unifyfs_rc ret = UNIFYFS_FAILURE;
+    ABT_mutex_lock(pending_metagets_abt_sync);
+    if (NULL != pending_metagets) {
+        int num_pending = arraylist_size(pending_metagets);
+        if (num_pending > 0) {
+            for (int i = 0; i < num_pending; i++) {
+                int* pending = (int*) arraylist_get(pending_metagets, i);
+                if ((NULL != pending) && (*pending == gfid)) {
+                    pending = (int*) arraylist_remove(pending_metagets, i);
+                    free(pending);
+                    ret = UNIFYFS_SUCCESS;
+                    break;
+                }
+            }
+        }
+    } else {
+        LOGERR("pending_metagets is NULL!");
+        ret = UNIFYFS_FAILURE;
+    }
+    ABT_mutex_unlock(pending_metagets_abt_sync);
     return ret;
 }

@@ -606,7 +606,7 @@ static int forward_to_client(hg_handle_t hdl, void* input_ptr)
     double timeout_msec = margo_client_server_timeout_msec;
     hg_return_t hret = margo_forward_timed(hdl, input_ptr, timeout_msec);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward_timed() failed - %s", HG_Error_to_string(hret));
+        LOGWARN("margo_forward_timed() failed - %s", HG_Error_to_string(hret));
         return UNIFYFS_ERROR_MARGO;
     }
     return UNIFYFS_SUCCESS;
@@ -637,7 +637,7 @@ int invoke_client_heartbeat_rpc(int app_id,
            app_id, client_id);
     int rc = forward_to_client(handle, &in);
     if (rc != UNIFYFS_SUCCESS) {
-        LOGERR("forward of heartbeat rpc to client failed");
+        LOGINFO("forward of heartbeat rpc to client failed");
         margo_destroy(handle);
         return rc;
     }

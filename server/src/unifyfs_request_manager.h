@@ -97,6 +97,9 @@ typedef struct reqmgr_thrd {
     /* list of client callback requests */
     arraylist_t* client_callbacks;
 
+    /* flag set when client has fully attached */
+    int attached;
+
     /* flag set to indicate request manager thread should exit */
     int exit_flag;
 
