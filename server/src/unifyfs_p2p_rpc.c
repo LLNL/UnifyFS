@@ -780,64 +780,91 @@ int unifyfs_invoke_metaget_rpc(int gfid,
         /* use cached attributes if within threshold */
         struct timespec tp = {0};
         clock_gettime(CLOCK_REALTIME, &tp);
-        time_t expire = attrs->ctime.tv_sec + UNIFYFS_METADATA_CACHE_SECONDS;
+        time_t expire = attrs->last_update + UNIFYFS_METADATA_CACHE_SECONDS;
         if (tp.tv_sec <= expire) {
             LOGINFO("using cached attributes for gfid=%d", gfid);
             return UNIFYFS_SUCCESS;
         } else {
-            LOGINFO("cached attributes for gfid=%d have expired", gfid);
+            LOGINFO("cached attributes for gfid=%d have expired "
+                    "(now=%d, expiration=%d)", gfid, tp.tv_sec, expire);
         }
     } else if (rc == ENOENT) {
-        /* metaget above failed with ENOENT, need to create inode */
+        /* local metaget gave ENOENT, need to create inode if file exists */
         need_local_metadata = 1;
     }
 
-    /* forward request to file owner */
-    p2p_request preq;
-    hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.metaget_id;
-    rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
-    if (rc != UNIFYFS_SUCCESS) {
-        return rc;
-    }
+    int ret = UNIFYFS_SUCCESS;
+    rc = add_pending_metaget(gfid);
+    if (EEXIST == rc) {
+        /* wait for pending to finish */
+        do {
+            LOGDBG("waiting for pending metaget gfid=%d", gfid);
+            usleep(10000); /* sleep 10 ms */
+        } while (check_pending_metaget(gfid));
 
-    /* fill rpc input struct and forward request */
-    metaget_in_t in;
-    in.gfid = (int32_t) gfid;
-    rc = forward_p2p_request((void*)&in, &preq);
-    if (rc != UNIFYFS_SUCCESS) {
-        margo_destroy(preq.handle);
+        /* should have local copy now if file existed */
+        rc = sm_get_fileattr(gfid, attrs);
         return rc;
-    }
-
-    /* wait for request completion */
-    rc = wait_for_p2p_request(&preq);
-    if (rc != UNIFYFS_SUCCESS) {
-        margo_destroy(preq.handle);
-        return rc;
-    }
-
-    /* get the output of the rpc */
-    int ret;
-    metaget_out_t out;
-    hg_return_t hret = margo_get_output(preq.handle, &out);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
-        ret = UNIFYFS_ERROR_MARGO;
     } else {
-        /* set return value */
-        ret = out.ret;
-        if (ret == UNIFYFS_SUCCESS) {
-            *attrs = out.attr;
-            if (out.attr.filename != NULL) {
-                attrs->filename = strdup(out.attr.filename);
-            }
-            if (need_local_metadata) {
-                sm_set_fileattr(gfid, UNIFYFS_FILE_ATTR_OP_CREATE, attrs);
-            }
+        LOGDBG("added pending metaget gfid=%d", gfid);
+
+        /* forward request to file owner */
+        p2p_request preq;
+        hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.metaget_id;
+        rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
+        if (rc != UNIFYFS_SUCCESS) {
+            ret = rc;
+            goto clear_pending_metaget;
         }
-        margo_free_output(preq.handle, &out);
+
+        /* fill rpc input struct and forward request */
+        metaget_in_t in;
+        in.gfid = (int32_t) gfid;
+        rc = forward_p2p_request((void*)&in, &preq);
+        if (rc != UNIFYFS_SUCCESS) {
+            ret = rc;
+            goto clear_pending_metaget;
+        }
+
+        /* wait for request completion */
+        rc = wait_for_p2p_request(&preq);
+        if (rc != UNIFYFS_SUCCESS) {
+            ret = rc;
+            goto clear_pending_metaget;
+        }
+
+        /* get the output of the rpc */
+        metaget_out_t out;
+        hg_return_t hret = margo_get_output(preq.handle, &out);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
+            ret = UNIFYFS_ERROR_MARGO;
+        } else {
+            /* set return value */
+            ret = out.ret;
+            if (ret == UNIFYFS_SUCCESS) {
+                *attrs = out.attr;
+                if (out.attr.filename != NULL) {
+                    attrs->filename = strdup(out.attr.filename);
+                }
+                if (need_local_metadata) {
+                    sm_set_fileattr(gfid, UNIFYFS_FILE_ATTR_OP_CREATE, attrs);
+                } else {
+                    sm_set_fileattr(gfid, UNIFYFS_FILE_ATTR_OP_UTIME, attrs);
+                }
+            }
+            margo_free_output(preq.handle, &out);
+        }
+
+clear_pending_metaget:
+        LOGDBG("clearing pending metaget gfid=%d", gfid);
+        rc = clear_pending_metaget(gfid);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGWARN("failed to clear pending metaget for gfid=%d", gfid);
+        }
+
+        margo_destroy(preq.handle);
     }
-    margo_destroy(preq.handle);
 
     return ret;
 }
@@ -908,62 +935,100 @@ int unifyfs_invoke_filesize_rpc(int gfid,
     if (NULL == filesize) {
         return EINVAL;
     }
+    *filesize = 0;
 
     int owner_rank = hash_gfid_to_server(gfid);
+    int need_local_metadata = 0;
+
+    unifyfs_file_attr_t attrs;
+    memset(&attrs, 0, sizeof(attrs));
 
     /* do local inode metadata lookup to check for laminated */
-    unifyfs_file_attr_t attrs;
     int rc = sm_get_fileattr(gfid, &attrs);
-    if ((rc == UNIFYFS_SUCCESS) && (attrs.is_laminated)) {
-        /* if laminated, we already have final metadata stored locally */
-        *filesize = (size_t) attrs.size;
-        return UNIFYFS_SUCCESS;
-    }
     if (owner_rank == glb_pmi_rank) {
         *filesize = (size_t) attrs.size;
         return rc;
-    }
-
-    /* forward request to file owner */
-    p2p_request preq;
-    hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.filesize_id;
-    rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
-    if (rc != UNIFYFS_SUCCESS) {
-        return rc;
-    }
-
-    /* fill rpc input struct and forward request */
-    filesize_in_t in;
-    in.gfid = (int32_t)gfid;
-    rc = forward_p2p_request((void*)&in, &preq);
-    if (rc != UNIFYFS_SUCCESS) {
-        margo_destroy(preq.handle);
-        return rc;
-    }
-
-    /* wait for request completion */
-    rc = wait_for_p2p_request(&preq);
-    if (rc != UNIFYFS_SUCCESS) {
-        margo_destroy(preq.handle);
-        return rc;
-    }
-
-    /* get the output of the rpc */
-    int ret;
-    filesize_out_t out;
-    hg_return_t hret = margo_get_output(preq.handle, &out);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
-        ret = UNIFYFS_ERROR_MARGO;
-    } else {
-        /* set return value */
-        ret = out.ret;
-        if (ret == UNIFYFS_SUCCESS) {
-            *filesize = (size_t) out.filesize;
+    } else if (rc == UNIFYFS_SUCCESS) {
+        if (attrs.is_laminated) {
+            /* if laminated, we already have final metadata stored locally */
+            *filesize = (size_t) attrs.size;
+            return UNIFYFS_SUCCESS;
         }
-        margo_free_output(preq.handle, &out);
+
+        /* NOTE: unlike metaget above, we don't use cached metadata
+         *       for explicit file size lookups */
+    } else if (rc == ENOENT) {
+        /* local metaget gave ENOENT, need to create inode if file exists */
+        need_local_metadata = 1;
     }
-    margo_destroy(preq.handle);
+
+    int ret = UNIFYFS_SUCCESS;
+    rc = add_pending_metaget(gfid);
+    if (EEXIST == rc) {
+        /* wait for pending to finish */
+        do {
+            usleep(10000); /* sleep 10 ms */
+        } while (check_pending_metaget(gfid));
+
+        /* should have local copy now if file existed */
+        rc = sm_get_fileattr(gfid, &attrs);
+        *filesize = (size_t) attrs.size;
+        return rc;
+    } else {
+        /* forward request to file owner */
+        p2p_request preq;
+        hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.metaget_id;
+        rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
+        if (rc != UNIFYFS_SUCCESS) {
+            ret = rc;
+            goto clear_pending_fileattr;
+        }
+
+        /* fill rpc input struct and forward request */
+        metaget_in_t in;
+        in.gfid = (int32_t) gfid;
+        rc = forward_p2p_request((void*)&in, &preq);
+        if (rc != UNIFYFS_SUCCESS) {
+            ret = rc;
+            goto clear_pending_fileattr;
+        }
+
+        /* wait for request completion */
+        rc = wait_for_p2p_request(&preq);
+        if (rc != UNIFYFS_SUCCESS) {
+            ret = rc;
+            goto clear_pending_fileattr;
+        }
+
+        /* get the output of the rpc */
+        metaget_out_t out;
+        hg_return_t hret = margo_get_output(preq.handle, &out);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_get_output() failed - %s", HG_Error_to_string(hret));
+            ret = UNIFYFS_ERROR_MARGO;
+        } else {
+            /* set return value */
+            ret = out.ret;
+            if (ret == UNIFYFS_SUCCESS) {
+                attrs = out.attr;
+                *filesize = (size_t) attrs.size;
+                if (need_local_metadata) {
+                    sm_set_fileattr(gfid, UNIFYFS_FILE_ATTR_OP_CREATE, &attrs);
+                } else {
+                    sm_set_fileattr(gfid, UNIFYFS_FILE_ATTR_OP_UTIME, &attrs);
+                }
+            }
+            margo_free_output(preq.handle, &out);
+        }
+
+clear_pending_fileattr:
+        rc = clear_pending_metaget(gfid);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGWARN("failed to clear pending metaget for gfid=%d", gfid);
+        }
+
+        margo_destroy(preq.handle);
+    }
 
     return ret;
 }

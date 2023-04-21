@@ -498,6 +498,12 @@ int sm_set_fileattr(int gfid,
             LOGERR("failed to set attributes for gfid=%d (rc=%d, is_owner=%d)",
                    gfid, ret, is_owner);
         }
+    } else if (is_owner && (file_op == UNIFYFS_FILE_ATTR_OP_CREATE)) {
+        /* start a broadcast rpc to inform other servers of new file */
+        int rc = unifyfs_invoke_broadcast_fileattr(gfid, file_op, attrs);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to broadcast new file (gfid=%d) creation", gfid);
+        }
     }
     return ret;
 }
@@ -1032,7 +1038,9 @@ static int process_metaset_rpc(server_rpc_req_t* req)
     int gfid = (int) in->gfid;
     int attr_op = (int) in->fileop;
     unifyfs_file_attr_t* attrs = &(in->attr);
+
     int ret = sm_set_fileattr(gfid, attr_op, attrs);
+
     margo_free_input(req->handle, in);
     free(in);
 
@@ -1171,8 +1179,13 @@ static int process_fileattr_bcast_rpc(server_rpc_req_t* req)
     /* update file attributes */
     int ret = sm_set_fileattr(gfid, attr_op, attrs);
     if (ret != UNIFYFS_SUCCESS) {
-        LOGERR("set_fileattr(gfid=%d, op=%d) failed - rc=%d",
-               gfid, attr_op, ret);
+        if ((attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) && (ret == EEXIST)) {
+            /* ignore duplicate creates */
+            ret = UNIFYFS_SUCCESS;
+        } else {
+            LOGWARN("set_fileattr(gfid=%d, op=%d) failed - rc=%d (%s)",
+                    gfid, attr_op, ret, unifyfs_rc_enum_description(ret));
+        }
     }
     collective_set_local_retval(req->coll, ret);
 

@@ -161,6 +161,7 @@ reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id, int client_id)
     thrd_ctrl->client_id = client_id;
 
     /* initialize flow control flags */
+    thrd_ctrl->attached = 0;
     thrd_ctrl->exit_flag = 0;
     thrd_ctrl->exited = 0;
     thrd_ctrl->waiting_for_work = 0;
@@ -1072,6 +1073,8 @@ static int process_attach_rpc(reqmgr_thrd_t* reqmgr,
                                 in->meta_size);
         if (ret != UNIFYFS_SUCCESS) {
             LOGERR("attach_app_client() failed");
+        } else {
+            reqmgr->attached = 1;
         }
     } else {
         LOGERR("client not found (app_id=%d, client_id=%d)",
@@ -1709,6 +1712,10 @@ static int rm_heartbeat(reqmgr_thrd_t* reqmgr)
     static int check_interval = 30; /* seconds */
 
     int ret = UNIFYFS_SUCCESS;
+
+    if (!reqmgr->attached) {
+        return ret;
+    }
 
     /* send a heartbeat rpc to associated client every 30 seconds */
     time_t now = time(NULL);

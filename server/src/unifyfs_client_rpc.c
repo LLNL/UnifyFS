@@ -67,6 +67,7 @@ static void create_mountpoint_dir(int app_id,
     fattr.atime = tp;
     fattr.mtime = tp;
     fattr.ctime = tp;
+    fattr.last_update = tp.tv_sec;
 
     /* capture current uid and gid */
     fattr.uid = getuid();

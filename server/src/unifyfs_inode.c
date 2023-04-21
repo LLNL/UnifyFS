@@ -40,8 +40,10 @@ struct unifyfs_inode* unifyfs_inode_alloc(int gfid, unifyfs_file_attr_t* attr)
         extent_tree_init(tree);
         ino->extents = tree;
         ino->gfid = gfid;
-        ino->attr = *attr;
-        ino->attr.filename = strdup(attr->filename);
+
+        unifyfs_file_attr_set_invalid(&(ino->attr));
+        unifyfs_file_attr_update(UNIFYFS_FILE_ATTR_OP_CREATE,
+                                 &(ino->attr), attr);
 
         pthread_rwlock_init(&(ino->rwlock), NULL);
         ABT_mutex_create(&(ino->abt_sync));

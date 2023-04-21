@@ -36,6 +36,8 @@ extern "C" {
 # define UNIFYFS_METADATA_CACHE_SECONDS 5
 #endif
 
+/* a valid gfid generated via MD5 hash will never be zero */
+#define INVALID_GFID (0)
 
 /* extent slice size used for metadata */
 extern size_t meta_slice_sz;
@@ -109,6 +111,9 @@ typedef struct {
     struct timespec atime;
     struct timespec mtime;
     struct timespec ctime;
+
+    /* metadata caching timestamp */
+    time_t last_update;
 } unifyfs_file_attr_t;
 
 enum {
@@ -123,7 +128,7 @@ void unifyfs_file_attr_set_invalid(unifyfs_file_attr_t* attr)
 {
     memset(attr, 0, sizeof(*attr));
     attr->filename     = NULL;
-    attr->gfid         = -1;
+    attr->gfid         = INVALID_GFID;
     attr->is_laminated = -1;
     attr->is_shared    = -1;
     attr->mode         = (uint32_t) -1;
@@ -173,9 +178,17 @@ int unifyfs_file_attr_update(int attr_op,
 {
     if (!dst || !src
         || (attr_op == UNIFYFS_FILE_ATTR_OP_INVALID)
-        || (dst->gfid != src->gfid)) {
+        || (src->gfid == INVALID_GFID)) {
         return EINVAL;
     }
+
+    if (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) {
+        dst->gfid = src->gfid;
+    }
+
+    struct timespec tp = {0};
+    clock_gettime(CLOCK_REALTIME, &tp);
+    dst->last_update = tp.tv_sec;
 
     LOGDBG("updating attributes for gfid=%d", dst->gfid);
 
