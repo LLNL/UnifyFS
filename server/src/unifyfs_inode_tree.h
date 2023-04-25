@@ -12,10 +12,9 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
-#ifndef __UNIFYFS_INODE_TREE_H
-#define __UNIFYFS_INODE_TREE_H
+#ifndef UNIFYFS_INODE_TREE_H
+#define UNIFYFS_INODE_TREE_H
 
-#include <pthread.h>
 #include "tree.h"
 #include "extent_tree.h"
 #include "unifyfs_meta.h"
@@ -31,7 +30,7 @@
  */
 struct unifyfs_inode_tree {
     RB_HEAD(rb_inode_tree, unifyfs_inode) head;  /** inode RB tree */
-    pthread_rwlock_t rwlock;                     /** lock for accessing tree */
+    ABT_rwlock rwlock;                     /** lock for accessing tree */
 };
 
 /**
@@ -80,14 +79,14 @@ int unifyfs_inode_tree_insert(struct unifyfs_inode_tree* tree,
  * @return 0 on success, errno otherwise
  */
 int unifyfs_inode_tree_remove(struct unifyfs_inode_tree* tree,
-                              int gfid, struct unifyfs_inode** removed);
+                              int gfid,
+                              struct unifyfs_inode** removed);
 
 /* Search for and return extents for given gfid on specified tree.
  * If not found, return NULL, assumes caller has lock on tree */
 struct unifyfs_inode* unifyfs_inode_tree_search(
     struct unifyfs_inode_tree* tree, /* tree to search */
-    int gfid                         /* global file id to find */
-);
+    int gfid);                       /* global file id to find */
 
 /**
  * @brief Iterate the inode tree.
@@ -143,9 +142,10 @@ struct unifyfs_inode* unifyfs_inode_tree_iter(struct unifyfs_inode_tree* tree,
  *
  * @return 0 on success, errno otherwise
  */
-static inline int unifyfs_inode_tree_rdlock(struct unifyfs_inode_tree* tree)
+static inline
+int unifyfs_inode_tree_rdlock(struct unifyfs_inode_tree* tree)
 {
-    return pthread_rwlock_rdlock(&tree->rwlock);
+    return ABT_rwlock_rdlock(tree->rwlock);
 }
 
 /**
@@ -157,9 +157,10 @@ static inline int unifyfs_inode_tree_rdlock(struct unifyfs_inode_tree* tree)
  *
  * @return 0 on success, errno otherwise
  */
-static inline int unifyfs_inode_tree_wrlock(struct unifyfs_inode_tree* tree)
+static inline
+int unifyfs_inode_tree_wrlock(struct unifyfs_inode_tree* tree)
 {
-    return pthread_rwlock_wrlock(&tree->rwlock);
+    return ABT_rwlock_wrlock(tree->rwlock);
 }
 
 /**
@@ -169,10 +170,11 @@ static inline int unifyfs_inode_tree_wrlock(struct unifyfs_inode_tree* tree)
  *
  * @param tree inode tree
  */
-static inline void unifyfs_inode_tree_unlock(struct unifyfs_inode_tree* tree)
+static inline
+void unifyfs_inode_tree_unlock(struct unifyfs_inode_tree* tree)
 {
-    pthread_rwlock_unlock(&tree->rwlock);
+    ABT_rwlock_unlock(tree->rwlock);
 }
 
-#endif /* __UNIFYFS_INODE_TREE_H */
+#endif /* UNIFYFS_INODE_TREE_H */
 

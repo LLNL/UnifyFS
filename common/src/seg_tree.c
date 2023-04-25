@@ -38,7 +38,8 @@
 #endif
 
 static int
-compare_func(struct seg_tree_node* node1, struct seg_tree_node* node2)
+stn_compare_func(struct seg_tree_node* node1,
+                 struct seg_tree_node* node2)
 {
     if (node1->start > node2->end) {
         return 1;
@@ -49,14 +50,14 @@ compare_func(struct seg_tree_node* node1, struct seg_tree_node* node2)
     }
 }
 
-RB_PROTOTYPE(inttree, seg_tree_node, entry, compare_func)
-RB_GENERATE(inttree, seg_tree_node, entry, compare_func)
+RB_PROTOTYPE(inttree, seg_tree_node, entry, stn_compare_func)
+RB_GENERATE(inttree, seg_tree_node, entry, stn_compare_func)
 
 /* Returns 0 on success, positive non-zero error code otherwise */
 int seg_tree_init(struct seg_tree* seg_tree)
 {
     memset(seg_tree, 0, sizeof(*seg_tree));
-    pthread_rwlock_init(&seg_tree->rwlock, NULL);
+    ABT_rwlock_create(&(seg_tree->rwlock));
     RB_INIT(&seg_tree->head);
 
     return 0;
@@ -68,6 +69,7 @@ int seg_tree_init(struct seg_tree* seg_tree)
 void seg_tree_destroy(struct seg_tree* seg_tree)
 {
     seg_tree_clear(seg_tree);
+    ABT_rwlock_free(&(seg_tree->rwlock));
 }
 
 /* Allocate a node for the range tree.  Free node with free() when finished */
@@ -523,9 +525,9 @@ seg_tree_iter(struct seg_tree* seg_tree, struct seg_tree_node* start)
 void
 seg_tree_rdlock(struct seg_tree* seg_tree)
 {
-    int rc = pthread_rwlock_rdlock(&seg_tree->rwlock);
+    int rc = ABT_rwlock_rdlock(seg_tree->rwlock);
     if (rc) {
-        LOGERR("pthread_rwlock_rdlock() failed - rc=%d", rc);
+        LOGERR("ABT_rwlock_rdlock() failed - rc=%d", rc);
     }
 }
 
@@ -537,9 +539,9 @@ seg_tree_rdlock(struct seg_tree* seg_tree)
 void
 seg_tree_wrlock(struct seg_tree* seg_tree)
 {
-    int rc = pthread_rwlock_wrlock(&seg_tree->rwlock);
+    int rc = ABT_rwlock_wrlock(seg_tree->rwlock);
     if (rc) {
-        LOGERR("pthread_rwlock_wrlock() failed - rc=%d", rc);
+        LOGERR("ABT_rwlock_wrlock() failed - rc=%d", rc);
     }
 }
 
@@ -551,9 +553,9 @@ seg_tree_wrlock(struct seg_tree* seg_tree)
 void
 seg_tree_unlock(struct seg_tree* seg_tree)
 {
-    int rc = pthread_rwlock_unlock(&seg_tree->rwlock);
+    int rc = ABT_rwlock_unlock(seg_tree->rwlock);
     if (rc) {
-        LOGERR("pthread_rwlock_unlock() failed - rc=%d", rc);
+        LOGERR("ABT_rwlock_unlock() failed - rc=%d", rc);
     }
 }
 
@@ -589,6 +591,7 @@ void seg_tree_clear(struct seg_tree* seg_tree)
 
     seg_tree->count = 0;
     seg_tree->max = 0;
+
     seg_tree_unlock(seg_tree);
 }
 

@@ -33,7 +33,6 @@
 #include "unifyfs_global.h"
 #include "unifyfs_inode.h"
 #include "unifyfs_fops.h"
-#include "unifyfs_metadata_mdhim.h"
 
 typedef struct {
     client_callback_e req_type;
@@ -41,14 +40,6 @@ typedef struct {
     int client_id;
     int gfid;
 } client_callback_req;
-
-typedef struct {
-    client_rpc_e req_type;
-    hg_handle_t handle;
-    void* input;
-    void* bulk_buf;
-    size_t bulk_sz;
-} client_rpc_req_t;
 
 typedef struct {
     readreq_status_e status;   /* aggregate request status */
@@ -117,13 +108,6 @@ typedef struct reqmgr_thrd {
 server_read_req_t* rm_reserve_read_req(reqmgr_thrd_t* thrd_ctrl);
 int rm_release_read_req(reqmgr_thrd_t* thrd_ctrl,
                         server_read_req_t* rdreq);
-
-/* issue remote chunk read requests for extent chunks
- * listed within keyvals */
-int rm_create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
-                             server_read_req_t* rdreq,
-                             int num_vals,
-                             unifyfs_keyval_t* keyvals);
 
 /* create Request Manager thread for application client */
 reqmgr_thrd_t* unifyfs_rm_thrd_create(int app_id,

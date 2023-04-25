@@ -28,7 +28,7 @@ int hash_gfid_to_server(int gfid)
 }
 
 /* helper method to initialize peer request rpc handle */
-int get_p2p_request_handle(hg_id_t request_hgid,
+int init_p2p_request_handle(hg_id_t request_hgid,
                            int peer_rank,
                            p2p_request* req)
 {
@@ -119,7 +119,7 @@ int invoke_chunk_read_request_rpc(int dst_srvr_rank,
     /* forward request to file owner */
     p2p_request preq;
     hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.chunk_read_request_id;
-    int rc = get_p2p_request_handle(req_hgid, dst_srvr_rank, &preq);
+    int rc = init_p2p_request_handle(req_hgid, dst_srvr_rank, &preq);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
     }
@@ -185,8 +185,8 @@ static void chunk_read_request_rpc(hg_handle_t handle)
     hg_return_t hret;
 
     /* get input params */
-    chunk_read_request_in_t* in = malloc(sizeof(*in));
-    server_rpc_req_t* req = malloc(sizeof(*req));
+    chunk_read_request_in_t* in = calloc(1, sizeof(*in));
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
     if ((NULL == in) || (NULL == req)) {
         ret = ENOMEM;
     } else {
@@ -263,7 +263,7 @@ int invoke_chunk_read_response_rpc(server_chunk_reads_t* scr)
     /* forward response to requesting server */
     p2p_request preq;
     hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.chunk_read_response_id;
-    int rc = get_p2p_request_handle(req_hgid, dst_rank, &preq);
+    int rc = init_p2p_request_handle(req_hgid, dst_rank, &preq);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
     }
@@ -423,7 +423,7 @@ int unifyfs_invoke_add_extents_rpc(int gfid,
     /* forward request to file owner */
     p2p_request preq;
     hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.extent_add_id;
-    int rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
+    int rc = init_p2p_request_handle(req_hgid, owner_rank, &preq);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
     }
@@ -488,8 +488,8 @@ static void add_extents_rpc(hg_handle_t handle)
     int ret = UNIFYFS_SUCCESS;
 
     /* get input params */
-    add_extents_in_t* in = malloc(sizeof(*in));
-    server_rpc_req_t* req = malloc(sizeof(*req));
+    add_extents_in_t* in = calloc(1, sizeof(*in));
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
     if ((NULL == in) || (NULL == req)) {
         ret = ENOMEM;
     } else {
@@ -503,7 +503,7 @@ static void add_extents_rpc(hg_handle_t handle)
 
             /* allocate memory for extents */
             void* extents_buf = pull_margo_bulk_buffer(handle, in->extents,
-                                                      bulk_sz, NULL);
+                                                       bulk_sz, NULL);
             if (NULL == extents_buf) {
                 LOGERR("failed to get bulk extents");
                 ret = UNIFYFS_ERROR_MARGO;
@@ -607,7 +607,7 @@ int unifyfs_invoke_find_extents_rpc(int gfid,
     p2p_request preq;
     margo_instance_id mid = unifyfsd_rpc_context->svr_mid;
     hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.extent_lookup_id;
-    int rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
+    int rc = init_p2p_request_handle(req_hgid, owner_rank, &preq);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
     }
@@ -688,8 +688,8 @@ static void find_extents_rpc(hg_handle_t handle)
     int32_t ret;
 
     /* get input params */
-    find_extents_in_t* in = malloc(sizeof(*in));
-    server_rpc_req_t* req = malloc(sizeof(*req));
+    find_extents_in_t* in = calloc(1, sizeof(*in));
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
     if ((NULL == in) || (NULL == req)) {
         ret = ENOMEM;
     } else {
@@ -811,7 +811,7 @@ int unifyfs_invoke_metaget_rpc(int gfid,
         /* forward request to file owner */
         p2p_request preq;
         hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.metaget_id;
-        rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
+        rc = init_p2p_request_handle(req_hgid, owner_rank, &preq);
         if (rc != UNIFYFS_SUCCESS) {
             ret = rc;
             goto clear_pending_metaget;
@@ -877,8 +877,8 @@ static void metaget_rpc(hg_handle_t handle)
     int ret = UNIFYFS_SUCCESS;
 
     /* get input params */
-    metaget_in_t* in = malloc(sizeof(*in));
-    server_rpc_req_t* req = malloc(sizeof(*req));
+    metaget_in_t* in = calloc(1, sizeof(*in));
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
     if ((NULL == in) || (NULL == req)) {
         ret = ENOMEM;
     } else {
@@ -978,7 +978,7 @@ int unifyfs_invoke_filesize_rpc(int gfid,
         /* forward request to file owner */
         p2p_request preq;
         hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.metaget_id;
-        rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
+        rc = init_p2p_request_handle(req_hgid, owner_rank, &preq);
         if (rc != UNIFYFS_SUCCESS) {
             ret = rc;
             goto clear_pending_fileattr;
@@ -1041,8 +1041,8 @@ static void filesize_rpc(hg_handle_t handle)
     int ret = UNIFYFS_SUCCESS;
 
     /* get input params */
-    filesize_in_t* in = malloc(sizeof(*in));
-    server_rpc_req_t* req = malloc(sizeof(*req));
+    filesize_in_t* in = calloc(1, sizeof(*in));
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
     if ((NULL == in) || (NULL == req)) {
         ret = ENOMEM;
     } else {
@@ -1115,7 +1115,7 @@ int unifyfs_invoke_metaset_rpc(int gfid,
     /* forward request to file owner */
     p2p_request preq;
     hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.metaset_id;
-    int rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
+    int rc = init_p2p_request_handle(req_hgid, owner_rank, &preq);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
     }
@@ -1162,8 +1162,8 @@ static void metaset_rpc(hg_handle_t handle)
     int ret = UNIFYFS_SUCCESS;
 
     /* get input params */
-    metaset_in_t* in = malloc(sizeof(*in));
-    server_rpc_req_t* req = malloc(sizeof(*req));
+    metaset_in_t* in = calloc(1, sizeof(*in));
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
     if ((NULL == in) || (NULL == req)) {
         ret = ENOMEM;
     } else {
@@ -1225,7 +1225,7 @@ int unifyfs_invoke_laminate_rpc(int gfid)
     /* forward request to file owner */
     p2p_request preq;
     hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.laminate_id;
-    int rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
+    int rc = init_p2p_request_handle(req_hgid, owner_rank, &preq);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
     }
@@ -1270,8 +1270,8 @@ static void laminate_rpc(hg_handle_t handle)
     int ret = UNIFYFS_SUCCESS;
 
     /* get input params */
-    laminate_in_t* in = malloc(sizeof(*in));
-    server_rpc_req_t* req = malloc(sizeof(*req));
+    laminate_in_t* in = calloc(1, sizeof(*in));
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
     if ((NULL == in) || (NULL == req)) {
         ret = ENOMEM;
     } else {
@@ -1337,7 +1337,7 @@ int unifyfs_invoke_transfer_rpc(int client_app,
     /* forward request to file owner */
     p2p_request preq;
     hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.transfer_id;
-    int rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
+    int rc = init_p2p_request_handle(req_hgid, owner_rank, &preq);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
     }
@@ -1389,8 +1389,8 @@ static void transfer_rpc(hg_handle_t handle)
     int ret = UNIFYFS_SUCCESS;
 
     /* get input params */
-    transfer_in_t* in = malloc(sizeof(*in));
-    server_rpc_req_t* req = malloc(sizeof(*req));
+    transfer_in_t* in = calloc(1, sizeof(*in));
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
     if ((NULL == in) || (NULL == req)) {
         ret = ENOMEM;
     } else {
@@ -1451,7 +1451,7 @@ int unifyfs_invoke_truncate_rpc(int gfid,
     /* forward request to file owner */
     p2p_request preq;
     hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.truncate_id;
-    int rc = get_p2p_request_handle(req_hgid, owner_rank, &preq);
+    int rc = init_p2p_request_handle(req_hgid, owner_rank, &preq);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
     }
@@ -1498,8 +1498,8 @@ static void truncate_rpc(hg_handle_t handle)
     int ret = UNIFYFS_SUCCESS;
 
     /* get input params */
-    truncate_in_t* in = malloc(sizeof(*in));
-    server_rpc_req_t* req = malloc(sizeof(*req));
+    truncate_in_t* in = calloc(1, sizeof(*in));
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
     if ((NULL == in) || (NULL == req)) {
         ret = ENOMEM;
     } else {
@@ -1552,7 +1552,7 @@ int unifyfs_invoke_server_pid_rpc(void)
     /* forward pid to server rank 0 */
     p2p_request preq;
     hg_id_t req_hgid = unifyfsd_rpc_context->rpcs.server_pid_id;
-    int rc = get_p2p_request_handle(req_hgid, 0, &preq);
+    int rc = init_p2p_request_handle(req_hgid, 0, &preq);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
     }
@@ -1598,8 +1598,8 @@ static void server_pid_rpc(hg_handle_t handle)
     int ret = UNIFYFS_SUCCESS;
 
     /* get input params */
-    server_pid_in_t* in = malloc(sizeof(*in));
-    server_rpc_req_t* req = malloc(sizeof(*req));
+    server_pid_in_t* in = calloc(1, sizeof(*in));
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
     if ((NULL == in) || (NULL == req)) {
         ret = ENOMEM;
     } else {

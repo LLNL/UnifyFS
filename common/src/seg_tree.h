@@ -15,7 +15,7 @@
 #ifndef __SEG_TREE_H__
 #define __SEG_TREE_H__
 
-#include <pthread.h>
+#include <abt.h>
 #include "tree.h"
 
 struct seg_tree_node {
@@ -28,7 +28,7 @@ struct seg_tree_node {
 
 struct seg_tree {
     RB_HEAD(inttree, seg_tree_node) head;
-    pthread_rwlock_t rwlock;
+    ABT_rwlock rwlock;
     unsigned long count;     /* number of segments stored in tree */
     unsigned long max;       /* maximum logical offset value in the tree */
 };

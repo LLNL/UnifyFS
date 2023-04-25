@@ -349,16 +349,6 @@ int compare_name_rank_pair(const void* a, const void* b)
     return cmp;
 }
 
-/* qsort comparison function for int */
-static inline
-int compare_int(const void* a, const void* b)
-{
-    int aval = *(const int*)a;
-    int bval = *(const int*)b;
-    return aval - bval;
-}
-
-
 /*
  * Hash a file path to a uint64_t using MD5
  * @param path absolute file path
@@ -367,7 +357,7 @@ int compare_int(const void* a, const void* b)
 uint64_t compute_path_md5(const char* path);
 
 /*
- * Hash a file path to an integer gfid
+ * Hash a file path to a positive integer gfid
  * @param path absolute file path
  * @return gfid
  */
@@ -378,12 +368,8 @@ int unifyfs_generate_gfid(const char* path)
     uint64_t hash64 = compute_path_md5(path);
     uint32_t hash32 = (uint32_t)(hash64 >> 32);
 
-    /* TODO: Remove next statement once we get rid of MDHIM.
-     *
-     * MDHIM requires positive values for integer keys, due to the way
-     * slice servers are calculated. We use an integer key for the
-     * gfid -> file attributes index. To guarantee a positive value, we
-     * shift right one bit to make sure the top bit is zero. */
+    /* To guarantee a positive value, we shift right one bit
+     * to make sure the top bit is zero. */
     hash32 = hash32 >> 1;
 
     return (int)hash32;

@@ -20,6 +20,7 @@
  */
 
 #include <time.h>
+#include <abt.h>
 #include <margo.h>
 #include <mercury.h>
 #include <mercury_proc_string.h>
@@ -47,10 +48,11 @@ typedef enum {
     UNIFYFS_SERVER_BCAST_RPC_EXTENTS,
     UNIFYFS_SERVER_BCAST_RPC_FILEATTR,
     UNIFYFS_SERVER_BCAST_RPC_LAMINATE,
+    UNIFYFS_SERVER_BCAST_RPC_METAGET,
     UNIFYFS_SERVER_BCAST_RPC_TRANSFER,
     UNIFYFS_SERVER_BCAST_RPC_TRUNCATE,
     UNIFYFS_SERVER_BCAST_RPC_UNLINK,
-    UNIFYFS_SERVER_BCAST_RPC_METAGET
+    UNIFYFS_SERVER_PENDING_SYNC
 } server_rpc_e;
 
 /* structure to track server-to-server rpc request state */
