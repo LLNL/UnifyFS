@@ -35,6 +35,10 @@ int rpc_metaget(unifyfs_fops_ctx_t* ctx,
                 int gfid,
                 unifyfs_file_attr_t* attr)
 {
+    if (gfid == ctx->app_id) {
+        /* should always have a local copy of mountpoint attrs */
+        return sm_get_fileattr(gfid, attr);
+    }
     return unifyfs_invoke_metaget_rpc(gfid, attr);
 }
 
@@ -52,7 +56,8 @@ int rpc_metaset(unifyfs_fops_ctx_t* ctx,
  */
 static
 int rpc_fsync(unifyfs_fops_ctx_t* ctx,
-              int gfid)
+              int gfid,
+              client_rpc_req_t* client_req)
 {
     size_t i;
 
@@ -86,9 +91,11 @@ int rpc_fsync(unifyfs_fops_ctx_t* ctx,
     /* the sync rpc now contains extents from a single file/gfid */
     assert(gfid == index_entry[0].gfid);
 
+    server_rpc_req_t* svr_req = malloc(sizeof(*svr_req));
+    int* pending_gfid = malloc(sizeof(int));
     extent_metadata* extents = calloc(num_extents, sizeof(*extents));
-    if (NULL == extents) {
-        LOGERR("failed to allocate memory for local_extents");
+    if ((NULL == svr_req) || (NULL == pending_gfid) || (NULL == extents)) {
+        LOGERR("failed to allocate memory for local extents sync");
         return ENOMEM;
     }
 
@@ -104,19 +111,24 @@ int rpc_fsync(unifyfs_fops_ctx_t* ctx,
     }
 
     /* update local inode state first */
-    ret = unifyfs_inode_add_extents(gfid, num_extents, extents);
+    ret = unifyfs_inode_add_pending_extents(gfid, client_req,
+                                            num_extents, extents);
     if (ret) {
-        LOGERR("failed to add local extents (gfid=%d, ret=%d)", gfid, ret);
+        LOGERR("failed to add pending local extents (gfid=%d, ret=%d)",
+               gfid, ret);
+        free(pending_gfid);
+        free(svr_req);
         return ret;
+    } else {
+        /* then ask svcmgr to process the pending extent sync(s) */
+        *pending_gfid = gfid;
+        svr_req->req_type = UNIFYFS_SERVER_PENDING_SYNC;
+        svr_req->handle   = HG_HANDLE_NULL;
+        svr_req->input    = (void*) pending_gfid;
+        svr_req->bulk_buf = NULL;
+        svr_req->bulk_sz  = 0;
+        ret = sm_submit_service_request(svr_req);
     }
-
-    /* then update owner inode state */
-    ret = unifyfs_invoke_add_extents_rpc(gfid, num_extents, extents);
-    if (ret) {
-        LOGERR("failed to add extents (gfid=%d, ret=%d)", gfid, ret);
-    }
-
-    free(extents);
 
     return ret;
 }

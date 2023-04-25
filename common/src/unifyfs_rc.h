@@ -43,8 +43,6 @@
     ENUMITEM(GOTCHA, "Gotcha operation error")                         \
     ENUMITEM(KEYVAL, "Key-value store operation error")                \
     ENUMITEM(MARGO, "Mercury/Argobots operation error")                \
-    ENUMITEM(MDHIM, "MDHIM operation error")                           \
-    ENUMITEM(META, "Metadata store operation error")                   \
     ENUMITEM(NYI, "Not yet implemented")                               \
     ENUMITEM(PMI, "PMI2/PMIx error")                                   \
     ENUMITEM(SHMEM, "Shared memory region init/access error")          \

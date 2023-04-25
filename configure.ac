@@ -105,15 +105,6 @@ AS_IF([test "x$enable_pmi" = "xyes"],[
     AM_CONDITIONAL([USE_PMI2], [false])
 ])
 
-# MDHIM support build option
-AC_ARG_ENABLE([mdhim],[AS_HELP_STRING([--enable-mdhim],[Enable MDHIM build options.])])
-AS_IF([test "x$enable_mdhim" = "xyes"],[
-    AM_CONDITIONAL([USE_MDHIM], [true])
-    UNIFYFS_AC_LEVELDB
-],[
-    AM_CONDITIONAL([USE_MDHIM], [false])
-])
-
 AC_ARG_WITH(pkgconfigdir,
     [AS_HELP_STRING([--with-pkgconfigdir=DIR],[pkgconfig file in DIR @<:@LIBDIR/pkgconfig@:>@])],
             [pkgconfigdir=$withval],
@@ -386,8 +377,6 @@ AC_SUBST(unifyfs_bin_path)
 AC_SUBST(LINK_WRAPPERS)
 
 AC_CONFIG_FILES([Makefile
-                 meta/Makefile
-                 meta/src/Makefile
                  server/Makefile
                  server/src/Makefile
                  client/Makefile

@@ -32,7 +32,6 @@
 
 // server components
 #include "unifyfs_inode_tree.h"
-#include "unifyfs_metadata_mdhim.h"
 #include "unifyfs_request_manager.h"
 #include "unifyfs_service_manager.h"
 
@@ -286,127 +285,6 @@ static void signal_new_responses(reqmgr_thrd_t* reqmgr)
         }
         RM_UNLOCK(reqmgr);
     }
-}
-
-/* issue remote chunk read requests for extent chunks
- * listed within keyvals */
-int rm_create_chunk_requests(reqmgr_thrd_t* thrd_ctrl,
-                             server_read_req_t* rdreq,
-                             int num_vals,
-                             unifyfs_keyval_t* keyvals)
-{
-    LOGDBG("creating chunk requests for rdreq %d", rdreq->req_ndx);
-
-    /* allocate read request structures */
-    chunk_read_req_t* all_chunk_reads = (chunk_read_req_t*)
-        calloc((size_t)num_vals, sizeof(chunk_read_req_t));
-    if (NULL == all_chunk_reads) {
-        LOGERR("failed to allocate chunk-reads array");
-        return ENOMEM;
-    }
-    rdreq->chunks = all_chunk_reads;
-
-    /* iterate over write index values and create read requests
-     * for each one, also count up number of servers that we'll
-     * forward read requests to */
-    int i;
-    int prev_del = -1;
-    int num_del = 0;
-    for (i = 0; i < num_vals; i++) {
-        /* get target server for this request */
-        int curr_del = keyvals[i].val.delegator_rank;
-
-        /* if target server is different from last target,
-         * increment our server count */
-        if ((prev_del == -1) || (curr_del != prev_del)) {
-            num_del++;
-        }
-        prev_del = curr_del;
-
-        /* get pointer to next read request structure */
-        debug_log_key_val(__func__, &keyvals[i].key, &keyvals[i].val);
-        chunk_read_req_t* chk = all_chunk_reads + i;
-
-        /* fill in chunk read request */
-        chk->gfid          = keyvals[i].key.gfid;
-        chk->nbytes        = keyvals[i].val.len;
-        chk->offset        = keyvals[i].key.offset;
-        chk->log_offset    = keyvals[i].val.addr;
-        chk->log_app_id    = keyvals[i].val.app_id;
-        chk->log_client_id = keyvals[i].val.rank;
-    }
-
-    /* allocate per-delgator chunk-reads */
-    int num_dels = num_del;
-    rdreq->num_server_reads = num_dels;
-    rdreq->remote_reads = (server_chunk_reads_t*)
-        calloc((size_t)num_dels, sizeof(server_chunk_reads_t));
-    if (NULL == rdreq->remote_reads) {
-        LOGERR("failed to allocate remote-reads array");
-        return ENOMEM;
-    }
-
-    /* get pointer to start of chunk read request array */
-    server_chunk_reads_t* reads = rdreq->remote_reads;
-
-    /* iterate over write index values again and now create
-     * per-server chunk-reads info, for each server
-     * that we'll request data from, this totals up the number
-     * of read requests and total read data size from that
-     * server  */
-    prev_del = -1;
-    size_t del_data_sz = 0;
-    for (i = 0; i < num_vals; i++) {
-        /* get target server for this request */
-        int curr_del = keyvals[i].val.delegator_rank;
-
-        /* if target server is different from last target,
-         * close out the total number of bytes for the last
-         * server, note this assumes our write index values are
-         * sorted by server rank */
-        if ((prev_del != -1) && (curr_del != prev_del)) {
-            /* record total data for previous server */
-            reads->total_sz = del_data_sz;
-
-            /* advance to read request for next server */
-            reads += 1;
-
-            /* reset our running tally of bytes to 0 */
-            del_data_sz = 0;
-        }
-        prev_del = curr_del;
-
-        /* update total read data size for current server */
-        del_data_sz += keyvals[i].val.len;
-
-        /* if this is the first read request for this server,
-         * initialize fields on the per-server read request
-         * structure */
-        if (0 == reads->num_chunks) {
-            reads->rank     = curr_del;
-            reads->rdreq_id = rdreq->req_ndx;
-            reads->reqs     = all_chunk_reads + i;
-            reads->resp     = NULL;
-        }
-
-        /* increment number of read requests we're sending
-         * to this server */
-        reads->num_chunks++;
-    }
-
-    /* record total data size for final server (if any),
-     * would have missed doing this in the above loop */
-    if (num_vals > 0) {
-        reads->total_sz = del_data_sz;
-    }
-
-    /* mark request as ready to be started */
-    rdreq->status = READREQ_READY;
-
-    /* wake up the request manager thread for the requesting client */
-    signal_new_requests(thrd_ctrl);
-
-    return UNIFYFS_SUCCESS;
 }
 
 int rm_submit_read_request(server_read_req_t* req)
@@ -1154,21 +1032,21 @@ static int process_fsync_rpc(reqmgr_thrd_t* reqmgr,
         .app_id = reqmgr->app_id,
         .client_id = reqmgr->client_id,
     };
-    ret = unifyfs_fops_fsync(&ctx, gfid);
+    ret = unifyfs_fops_fsync(&ctx, gfid, req);
     if (ret != UNIFYFS_SUCCESS) {
         LOGERR("unifyfs_fops_fsync() failed");
-    }
 
-    /* send rpc response */
-    unifyfs_fsync_out_t out;
-    out.ret = (int32_t) ret;
-    hg_return_t hret = margo_respond(req->handle, &out);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_respond() failed");
-    }
+        /* send rpc response */
+        unifyfs_fsync_out_t out;
+        out.ret = (int32_t) ret;
+        hg_return_t hret = margo_respond(req->handle, &out);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_respond() failed");
+        }
 
-    /* cleanup req */
-    margo_destroy(req->handle);
+        /* cleanup req */
+        margo_destroy(req->handle);
+    }
 
     return ret;
 }
@@ -1666,6 +1544,9 @@ static int rm_process_client_requests(reqmgr_thrd_t* reqmgr)
             rret = process_read_rpc(reqmgr, req);
             break;
         case UNIFYFS_CLIENT_RPC_SYNC:
+            /* we remove this req since it will be finished by the svcmgr and
+             * we don't want it deleted below as part of arraylist_free() */
+            req = arraylist_remove(client_reqs, i);
             rret = process_fsync_rpc(reqmgr, req);
             break;
         case UNIFYFS_CLIENT_RPC_TRANSFER:

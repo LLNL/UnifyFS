@@ -18,15 +18,11 @@
 #include "unifyfs_global.h"
 #include "extent_tree.h"
 
-/**
- * @brief file extent descriptor
- */
-struct unifyfs_inode_extent {
-    int gfid;
-    unsigned long offset;
-    unsigned long length;
-};
-typedef struct unifyfs_inode_extent unifyfs_inode_extent_t;
+typedef struct pending_extents_item {
+    client_rpc_req_t* client_req; /* req details, including response handle */
+    unsigned int num_extents;     /* number of extents in array */
+    extent_metadata* extents;     /* array of extent metadata */
+} pending_extents_item;
 
 /**
  * @brief file and directory inode structure. this holds:
@@ -38,9 +34,9 @@ struct unifyfs_inode {
     int gfid;                     /* global file identifier */
     unifyfs_file_attr_t attr;     /* file attributes */
     struct extent_tree* extents;  /* extent information */
+    arraylist_t* pending_extents; /* list of pending_extents_item */
 
-    pthread_rwlock_t rwlock;      /* rwlock for pthread access */
-    ABT_mutex abt_sync;           /* mutex for argobots ULT access */
+    ABT_rwlock rwlock;            /* reader-writer lock */
 };
 
 /**
@@ -134,13 +130,50 @@ int unifyfs_inode_get_extents(int gfid,
                               extent_metadata** extents);
 
 /**
- * @brief add new extents to the inode
+ * @brief add extents pending sync to the inode
  *
  * @param gfid               the global file identifier
- * @param num_extents        the number of new extents in @nodes
- * @param extents            an array of extents to be added
+ * @param client_req         the client req to sync the extents
+ * @param num_extents        the number of extents in @extents
+ * @param extents            an array of extents to be added as pending
  *
- * @return
+ * @return 0 on success, errno otherwise
+ */
+int unifyfs_inode_add_pending_extents(int gfid,
+                                      client_rpc_req_t* client_req,
+                                      int num_extents,
+                                      extent_metadata* extents);
+
+/**
+ * @brief check if inode has pending extents to sync
+ *
+ * @param   gfid    the global file identifier
+ *
+ * @return true if pending extents exist, false otherwise
+ */
+bool unifyfs_inode_has_pending_extents(int gfid);
+
+/**
+ * @brief retrieve pending extents list for the inode
+ *        (future adds will go to a new pending list)
+ *
+ * @param       gfid            the global file identifier
+ * @param[out]  pending_list    the list of pending extents (if any)
+ *
+ * @return 0 on success, errno otherwise
+ */
+
+int unifyfs_inode_get_pending_extents(int gfid,
+                                      arraylist_t** pending_list);
+
+/**
+ * @brief add new extents to the inode
+ *
+ * @param gfid          the global file identifier
+ * @param num_extents   the number of extents in @extents
+ * @param extents       an array of extents to be added
+ *
+ * @return 0 on success, errno otherwise
  */
 int unifyfs_inode_add_extents(int gfid,
                               int num_extents,
@@ -199,33 +232,6 @@ int unifyfs_inode_resolve_extent_chunks(unsigned int n_extents,
                                         unsigned int* n_locs,
                                         chunk_read_req_t** chunklocs,
                                         int* full_coverage);
-
-/**
- * @brief calls extents_tree_span, which will do:
- *
- * given an extent tree and starting and ending logical offsets, fill in
- * key/value entries that overlap that range, returns at most max entries
- * starting from lowest starting offset, sets outnum with actual number of
- * entries returned
- *
- * @param      gfid    global file id
- * @param      start   starting logical offset
- * @param      end     ending logical offset
- * @param      max     maximum number of key/vals to return
- *
- * @param[out] keys    array of length max for output keys
- * @param[out] vals    array of length max for output values
- * @param[out] outnum  output number of entries returned
- *
- * @return
- */
-int unifyfs_inode_span_extents(int gfid,
-                               unsigned long start,
-                               unsigned long end,
-                               int max,
-                               void* keys,
-                               void* vals,
-                               int* outnum);
 
 /**
  * @brief prints the inode information to the log stream

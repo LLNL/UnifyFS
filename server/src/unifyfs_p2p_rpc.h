@@ -34,7 +34,7 @@ typedef struct {
 } p2p_request;
 
 /* helper method to initialize peer request rpc handle */
-int get_p2p_request_handle(hg_id_t request_hgid,
+int init_p2p_request_handle(hg_id_t request_hgid,
                            int peer_rank,
                            p2p_request* req);
 

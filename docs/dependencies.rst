@@ -55,11 +55,9 @@ UnifyFS specific error codes are defined as follows:
     1002   GOTCHA     Gotcha operation error
     1003   KEYVAL     Key-value store operation error
     1004   MARGO      Mercury/Argobots operation error
-    1005   MDHIM      MDHIM operation error
-    1006   META       Metadata store operation error
-    1007   NYI        Not yet implemented
-    1008   PMI        PMI2/PMIx error
-    1009   SHMEM      Shared memory region init/access error
-    1010   THREAD     POSIX thread operation failed
-    1011   TIMEOUT    Timed out
+    1005   NYI        Not yet implemented
+    1006   PMI        PMI2/PMIx error
+    1007   SHMEM      Shared memory region init/access error
+    1008   THREAD     POSIX thread operation failed
+    1009   TIMEOUT    Operation timed out
     =====  =========  ======================================

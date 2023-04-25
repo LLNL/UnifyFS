@@ -46,6 +46,7 @@
 
 // common headers
 #include "arraylist.h"
+#include "compare_fn.h"
 #include "tree.h"
 #include "unifyfs_client.h"
 #include "unifyfs_const.h"
