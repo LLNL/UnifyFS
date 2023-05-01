@@ -26,7 +26,7 @@ If you use a clone of the Spack develop branch, be sure to pull the latest chang
     versions in the Mochi Suite, SDS Repo, and ``mochi-thallium`` Spack
     packages. It is likely that a different version of ``mochi-margo`` will need
     to be specified in the install command of UnifyFS (E.g.: ``spack install
-    unifyfs ^mochi-margo@0.9.6``).
+    unifyfs ^mochi-margo@0.13.1``).
 
 .. _build-label:
 
@@ -106,7 +106,7 @@ the UnifyFS dependencies can then be installed.
 .. code-block:: Bash
 
     $ spack install gotcha
-    $ spack install mochi-margo@0.9.6 ^libfabric fabrics=rxm,sockets,tcp
+    $ spack install mochi-margo@0.13.1 ^libfabric fabrics=rxm,sockets,tcp
     $ spack install spath~mpi
 
 .. tip::

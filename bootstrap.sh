@@ -49,15 +49,15 @@ while [ $# -ge 1 ]; do
 done
 
 if [ $use_old_margo -eq 1 ]; then
-    argobots_version="v1.0"
-    libfabric_version="v1.9.1"
-    mercury_version="v1.0.1"
-    margo_version="v0.4.3"
+    argobots_version="v1.1"
+    libfabric_version="v1.13.2"
+    mercury_version="v2.1.0"
+    margo_version="v0.9.6"
 else
     argobots_version="v1.1"
-    libfabric_version="v1.12.1"
-    mercury_version="v2.0.1"
-    margo_version="v0.9.6"
+    libfabric_version="v1.13.2"
+    mercury_version="v2.2.0"
+    margo_version="v0.13.1"
     repos+=(https://github.com/json-c/json-c.git)
 fi
 

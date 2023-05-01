@@ -1025,7 +1025,6 @@ static void unifyfs_mread_req_data_rpc(hg_handle_t handle)
 {
     int ret = UNIFYFS_SUCCESS;
 
-
     /* get input params */
     unifyfs_mread_req_data_in_t in;
     hg_return_t hret = margo_get_input(handle, &in);
@@ -1065,7 +1064,8 @@ static void unifyfs_mread_req_data_rpc(hg_handle_t handle)
                     /* get margo/mercury info to set up bulk transfer */
                     const struct hg_info* hgi = margo_get_info(handle);
                     assert(hgi);
-                    margo_instance_id mid = margo_hg_info_get_instance(hgi);
+                    margo_instance_id mid =
+                        margo_hg_handle_get_instance(handle);
                     assert(mid != MARGO_INSTANCE_NULL);
 
                     /* register user buffer for bulk access */

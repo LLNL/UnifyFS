@@ -147,7 +147,7 @@ void* pull_margo_bulk_buffer(hg_handle_t rpc_hdl,
     /* get mercury info to set up bulk transfer */
     const struct hg_info* hgi = margo_get_info(rpc_hdl);
     assert(hgi);
-    margo_instance_id mid = margo_hg_info_get_instance(hgi);
+    margo_instance_id mid = margo_hg_handle_get_instance(rpc_hdl);
     assert(mid != MARGO_INSTANCE_NULL);
 
     /* register local target buffer for bulk access */
