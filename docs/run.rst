@@ -17,6 +17,8 @@ Overall, the steps to run an application with UnifyFS include:
 
     5. Terminate the UnifyFS servers using ``unifyfs``
 
+----------
+
 -------------
 Start UnifyFS
 -------------
@@ -95,6 +97,8 @@ Only applications that explicitly call ``unifyfs_mount()`` and access files
 under the specified mountpoint prefix will utilize UnifyFS for their I/O. All
 other applications will operate unchanged.
 
+----------
+
 ------------
 Stop UnifyFS
 ------------
@@ -103,6 +107,8 @@ After all UnifyFS-enabled applications have completed running, use
 ``unifyfs terminate`` to terminate the servers. Pass the ``--cleanup`` option to
 ``unifyfs start`` to have the servers remove temporary data locally stored on
 each node after termination.
+
+----------
 
 --------------------------------
 Resource Manager Job Integration
@@ -121,9 +127,11 @@ within the source repository at ``util/scripts/lsfcsm``.
 
 Support for the SLURM resource manager is under development.
 
------------------------------------------
+----------
+
+---------------------------------------
 Transferring Data In and Out of UnifyFS
------------------------------------------
+---------------------------------------
 
 Data can be transferred in/out of UnifyFS during server startup and termination,
 or at any point during a job using two stand-alone applications.
@@ -254,9 +262,11 @@ Examples:
 
     $ srun -N 4 -n 8 unifyfs-stage --parallel $MY_MANIFEST_FILE
 
+----------
 
+---------------------
 UnifyFS LS Executable
-^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------
 
 The ``unifyfs-ls`` program is installed in the same directory as the
 ``unifyfs`` utility (i.e., ``$UNIFYFS_INSTALL/bin``).  This tool will provide
