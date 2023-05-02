@@ -7,6 +7,8 @@ build into static, GOTCHA, and pure POSIX (not linked with UnifyFS) versions
 depending on how they are linked. Several of the example programs are also used
 in the UnifyFS :doc:`intregraton testing <testing>`.
 
+----------
+
 Locations of Examples
 =====================
 
@@ -173,6 +175,8 @@ One form of running this example could be:
 .. code-block:: Bash
 
     $ srun -N4 -n4 write-static -m /unifyfs -f myTestFile
+
+----------
 
 Producer-Consumer Workflow
 ==========================
