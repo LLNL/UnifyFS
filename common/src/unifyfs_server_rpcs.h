@@ -247,7 +247,6 @@ DECLARE_MARGO_RPC_HANDLER(unlink_bcast_rpc)
  * all files that they own. */
 MERCURY_GEN_PROC(metaget_all_bcast_in_t,
                  ((int32_t)(root)))
-/* TODO: Not sure what "root" is, but every RPC seems to have it... */
 MERCURY_GEN_PROC(metaget_all_bcast_out_t,
                  ((int32_t)(num_files))
                  ((hg_bulk_t)(file_meta))

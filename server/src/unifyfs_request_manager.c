@@ -1554,7 +1554,6 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
 {
 
     int  ret = UNIFYFS_SUCCESS;
-    int  bcast_ret = UNIFYFS_SUCCESS;
     int* gfid_list;
     unifyfs_file_attr_t* remote_file_attrs;
     int  num_gfids;
@@ -1569,12 +1568,11 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
     // TODO: Also, it would be nice if could let the broadcast complete in the
     // backgound, but it's probably not a big deal.
 
-    bcast_ret = unifyfs_invoke_broadcast_metaget_all(&remote_file_attrs,
-                                                     &num_file_attrs);
-    if (UNIFYFS_SUCCESS != bcast_ret) {
+    ret = unifyfs_invoke_broadcast_metaget_all(&remote_file_attrs,
+                                               &num_file_attrs);
+    if (UNIFYFS_SUCCESS != ret) {
         LOGERR("unifyfs_invoke_broadcast_metaget_all() failed");
-        // make sure we have a sane value even if the broadcast fails
-        num_file_attrs = 0;
+        return ret;
     }
 
     ret = unifyfs_fops_get_gfids(&gfid_list, &num_gfids);
@@ -1592,11 +1590,6 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
     }
 
     free(gfid_list);
-
-    if (UNIFYFS_SUCCESS == bcast_ret) {
-        // Only free the pointer if the broadcast was successful
-        free(remote_file_attrs);
-    }
 
     /* send rpc response */
 
@@ -1625,15 +1618,6 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
     margo_destroy(req->handle);
     margo_bulk_free(out.bulk_gfids);
     free(new_gfid_list);
-
-    if (bcast_ret != UNIFYFS_SUCCESS) {
-        /* TODO: What do we do here?? We can log a warning of course,
-         *  but we need to make sure the fact that the results are
-         *  incomplete is conveyed back to the client.
-         */
-        LOGWARN("unifyfs_invoke_broadcast_metaget_all() returned %d. "
-                "GFID list is likely incomplete.", bcast_ret);
-    }
 
     return ret;
 }
