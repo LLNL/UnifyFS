@@ -256,7 +256,6 @@ static int merge_metaget_all_bcast_outputs(
         free(parent_attr_list);
         free(child_attr_list);
         return UNIFYFS_ERROR_MARGO;
-        // TODO: Umm... is returning here a problem??
     }
 
     // TODO: Note that although we did a margo bulk transfer to pull
