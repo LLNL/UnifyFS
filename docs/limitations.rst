@@ -56,6 +56,8 @@ Directory Operations
 
 UnifyFS does not support directory operations.
 
+----------
+
 ---------------------------
 MPI-IO Limitations
 ---------------------------
@@ -150,6 +152,8 @@ Having stated those exceptions, it is best practice to adhere to the MPI
 standard and execute a full sync-barrier-sync construct.
 There exist potential optimizations such that
 future implementations of UnifyFS may require the full sequence of calls.
+
+----------
 
 ---------------------------
 ROMIO Limitations
@@ -272,6 +276,8 @@ Functions that use shared file pointers include::
     MPI_File_write_ordered()
     MPI_File_read_ordered()
 
+----------
+
 ---------------------------
 HDF5 Limitations
 ---------------------------
@@ -327,6 +333,8 @@ One can also enable this option manually by setting the
 environment variable ``HDF5_DO_MPI_FILE_SYNC=1``.
 Enabling this option can decrease write performance
 since it may induce more file flush operations than necessary.
+
+----------
 
 -------------------
 PnetCDF Limitations

@@ -2,8 +2,10 @@
 Build UnifyFS
 =============
 
-This section describes how to build UnifyFS and its dependencies.
-There are three options:
+This section describes how to build UnifyFS and its dependencies, and what
+:ref:`configure time options <configure-options-label>` are available.
+
+There are three build options:
 
 * build both UnifyFS and dependencies with Spack,
 * build the dependencies with Spack, but build UnifyFS with autotools
@@ -22,7 +24,7 @@ If you use a clone of the Spack develop branch, be sure to pull the latest chang
 .. warning:: **Thallium, Mochi Suite, and SDS Repo Users**
 
     The available and UnifyFS-compatible Mochi-Margo versions that are in the
-    ``mochi-margo`` Spack package do not match up with the latest/default
+    ``mochi-margo`` Spack package may not match up with the latest/default
     versions in the Mochi Suite, SDS Repo, and ``mochi-thallium`` Spack
     packages. It is likely that a different version of ``mochi-margo`` will need
     to be specified in the install command of UnifyFS (E.g.: ``spack install
@@ -60,17 +62,18 @@ variants.
 .. table:: UnifyFS Build Variants
    :widths: auto
 
-   ==========  =============================  =======  ===========================
+   ==========  =============================  =======  =================================
       Variant  Command                        Default  Description
                (``spack install <package>``)
-   ==========  =============================  =======  ===========================
+   ==========  =============================  =======  =================================
    Auto-mount  ``unifyfs+auto-mount``         True     Enable transparent mounting
-   Boostsys    ``unifyfs+boostsys`            False    Have Mercury use Boost
+   Boostsys    ``unifyfs+boostsys``           False    Have Mercury use Boost
    Fortran     ``unifyfs+fortran``            True     Enable Fortran support
    PMI         ``unifyfs+pmi``                False    Enable PMI2 support
    PMIx        ``unifyfs+pmix``               False    Enable PMIx support
+   Preload     ``unifyfs+preload``            False    Enable LD_PRELOAD library support
    SPath       ``unifyfs+spath``              True     Normalize relative paths
-   ==========  =============================  =======  ===========================
+   ==========  =============================  =======  =================================
 
 .. attention::
 
@@ -219,6 +222,7 @@ after ``./autogen.sh`` has been run.
 
 ----------
 
+.. _configure-options-label:
 -----------------
 Configure Options
 -----------------
