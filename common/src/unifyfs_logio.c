@@ -586,24 +586,32 @@ int unifyfs_logio_alloc(logio_context* ctx,
             return UNIFYFS_SUCCESS;
         }
 
-        /* could not get full allocation in shmem, reserve any available
-         * chunks at the end of the shmem log */
-        size_t log_end_chunks = chunkmap->total_slots -
-                                (chunkmap->last_used_slot + 1);
-        if (log_end_chunks > 0) {
-            res_chunks = log_end_chunks;
-            res_slot = slotmap_reserve(chunkmap, res_chunks);
-            if (-1 != res_slot) {
-                /* reserved all chunks at end of shmem log */
-                allocated_bytes = res_chunks * chunk_sz;
-                needed_bytes -= allocated_bytes;
-                res_off = (off_t)(res_slot * chunk_sz);
-                mem_allocation = allocated_bytes;
-                mem_res_slot = res_slot;
-                mem_res_nchk = res_chunks;
-                mem_res_at_end = 1;
+        if (NULL != ctx->spill_hdr) {
+            /* could not get full allocation in shmem, try to reserve any
+             * available chunks at the end of the shmem log before asking
+             * for chunks at the beginning of the spill log */
+            size_t log_end_chunks = chunkmap->total_slots -
+                                    (chunkmap->last_used_slot + 1);
+            if (log_end_chunks > 0) {
+                res_chunks = log_end_chunks;
+                res_slot = slotmap_reserve(chunkmap, res_chunks);
+                if (-1 != res_slot) {
+                    /* reserved all chunks at end of shmem log */
+                    allocated_bytes = res_chunks * chunk_sz;
+                    needed_bytes -= allocated_bytes;
+                    res_off = (off_t)(res_slot * chunk_sz);
+                    mem_allocation = allocated_bytes;
+                    mem_res_slot = res_slot;
+                    mem_res_nchk = res_chunks;
+                    mem_res_at_end = 1;
+                }
             }
-        } else {
+        }
+
+        /* NOTE: when we have a reservation of chunks at the end of the shmem
+         *       log we don't unlock the shmem_hdr here because we need to
+         *       keep it locked through the spill alloc attempt */
+        if (!mem_res_at_end) {
             UNLOCK_LOG_HEADER(shmem_hdr);
         }
     }
