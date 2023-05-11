@@ -244,5 +244,19 @@ int unifyfs_inode_dump(int gfid);
  */
 int unifyfs_get_gfids(int* num_gfids, int** gfid_list);
 
+
+/**
+ * @brief Walk the tree and return a list file_attr_t structs for all files
+ * that we own.
+ *
+ * Upon success, the caller will be responsible for freeing attr_list.  If
+ * this function returns an error code, then the caller must *NOT* free
+ * attr_list.
+ *
+ * @return 0 on success, errno otherwise
+ */
+int unifyfs_get_owned_files(unsigned int* num_files,
+                            unifyfs_file_attr_t** attr_list);
+
 #endif /* __UNIFYFS_INODE_H */
 

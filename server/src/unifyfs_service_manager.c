@@ -27,10 +27,6 @@
  * Please read https://github.com/llnl/burstfs/LICENSE for full license text.
  */
 
-// TODO: any reason including these is a bad idea??
-#include "unifyfs_inode.h"
-#include "unifyfs_inode_tree.h"
-
 #include "unifyfs_global.h"
 #include "unifyfs_group_rpc.h"
 #include "unifyfs_p2p_rpc.h"
@@ -1337,84 +1333,47 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
      * seprate from the bulk transfer of the unifyfs_file_attr_t structs.  We
      * use this variable to keep track of how big that buffer needs to be.
      */
-    uint64_t total_name_len = 0;
-    /* Note: It's 64 bits because it's going to get cast to a char* and must
+    uintptr_t total_name_len = 0;
+    /* Note: Using uintptr_t because this value get cast to a char* and must
      * therefore be the same size as a pointer. */
     char* concatenated_names = NULL;
-    unsigned int concatenated_names_size = 4 * 1024 * 1024;
-    /* Pick the initial size such that most of the time we'll never need
-     * to re-allocate it. */
+    size_t concatenated_names_size = 0;
 
     unsigned int num_files = 0;
+    unifyfs_file_attr_t* attr_list;
 
-    int attr_list_size = 64;
-    unifyfs_file_attr_t* attr_list =
-        malloc(sizeof(unifyfs_file_attr_t) * attr_list_size);
-    if (!attr_list) {
-        return ENOMEM;
+    int ret = unifyfs_get_owned_files(&num_files, &attr_list);
+    if (UNIFYFS_SUCCESS != ret) {
+        return ret;
     }
 
-    concatenated_names = calloc(concatenated_names_size, sizeof(char));
+    /* Loop through the attr list and calculate the total length
+     * of all the filenames.  We'll need this down below...*/
+    for (unsigned int i = 0; i < num_files; i++) {
+        concatenated_names_size += strlen(attr_list[i].filename);
+    }
+
+    concatenated_names = calloc(concatenated_names_size+1, sizeof(char));
+    // +1 to allow space for the null terminator
     if (!concatenated_names) {
         free(attr_list);
         return ENOMEM;
     }
 
-    unifyfs_inode_tree_rdlock(global_inode_tree);
-    {
-        struct unifyfs_inode* node =
-            unifyfs_inode_tree_iter(global_inode_tree, NULL);
-        while (node) {
-            if (num_files == attr_list_size) {
-                attr_list_size *= 2;  // Double the list size each time
-                attr_list = realloc(attr_list,
-                                    sizeof(unifyfs_file_attr_t)*attr_list_size);
-                if (!attr_list) {
-                    unifyfs_inode_tree_unlock(global_inode_tree);
-                    free(attr_list);
-                    free(concatenated_names);
-                    return ENOMEM;
-                }
-            }
-
-            /* We only want to copy file attrs that we're the owner of */
-            int owner_rank = hash_gfid_to_server(node->attr.gfid);
-            if (owner_rank == glb_pmi_rank) {
-                memcpy(&attr_list[num_files], &node->attr,
-                    sizeof(unifyfs_file_attr_t));
-
-                /* filename is a pointer.  Since sending pointers over the
-                 * network is useless, we're going to abuse this value by
-                 * using it to store the offset into the separate char array
-                 * that will hold the filenames.
-                 * We only need the offset of the START of the filename.  The
-                 * end of the filename is assumed to be 1 character before the
-                 * start of the next filename (or the end of the string if
-                 * this is the last file). */
-                attr_list[num_files].filename = (char*)total_name_len;
-                total_name_len += strlen(node->attr.filename);
-
-                if (concatenated_names_size <= total_name_len) {
-                    // Need more memory for our concatenated file names
-                    concatenated_names_size *= 2;  // Double the size
-                    concatenated_names =
-                        realloc(concatenated_names,
-                                sizeof(char)*concatenated_names_size);
-                    if (!concatenated_names) {
-                        unifyfs_inode_tree_unlock(global_inode_tree);
-                        free(attr_list);
-                        free(concatenated_names);
-                        return ENOMEM;
-                    }
-                }
-
-                strcat(concatenated_names, node->attr.filename);
-                num_files++;
-            }
-            node = unifyfs_inode_tree_iter(global_inode_tree, node);
-        }
+    /* unifyfs_file_attr_t.filename is a pointer.  Since sending pointers over
+     * the network is useless, we're going to abuse this value by using it to
+     * store the offset into the separate char array that will hold the
+     * filenames.
+     * We only need the offset of the START of the filename.  The end of the
+     * filename is assumed to be 1 character before the start of the next
+     * filename (or the end of the string if this is the last file). */
+    for (unsigned int i = 0; i < num_files; i++) {
+        size_t filename_len = strlen(attr_list[i].filename);
+        strcat(concatenated_names, attr_list[i].filename);
+        free(attr_list[i].filename);
+        attr_list[i].filename = (char*)total_name_len;
+        total_name_len += filename_len;
     }
-    unifyfs_inode_tree_unlock(global_inode_tree);
 
     coll_request* coll = (coll_request*)req->coll;
     // Do a couple of sanity checks
