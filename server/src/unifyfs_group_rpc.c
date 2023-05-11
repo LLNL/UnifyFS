@@ -1702,7 +1702,7 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
     metaget_all_bcast_out_t* out = calloc(1, sizeof(*out));
     if ((NULL == in) || (NULL == out)) {
         ret = ENOMEM;
-        goto Exit;
+        goto Exit_Invoke_BMA;
     }
 
     /* get input params */
@@ -1720,12 +1720,12 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
 
     if (NULL == coll) {
         ret = ENOMEM;
-        goto Exit;
+        goto Exit_Invoke_BMA;
     }
 
     ret = collective_forward(coll);
     if (UNIFYFS_SUCCESS != ret) {
-        goto Exit;
+        goto Exit_Invoke_BMA;
     }
 
     /* We don't want the progress rpc to clean up for us because
@@ -1741,7 +1741,7 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
     ret = invoke_bcast_progress_rpc(coll);
     if (UNIFYFS_SUCCESS != ret) {
         LOGERR("invoke_bcast_progress_rpc() failed with error %d", ret);
-        goto Exit;
+        goto Exit_Invoke_BMA;
     }
 
     // Wait for all the child responses to come back
@@ -1769,7 +1769,7 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
         attr_list = calloc(results->num_files, sizeof(unifyfs_file_attr_t));
         if (NULL == attr_list) {
             ret = ENOMEM;
-            goto Exit;
+            goto Exit_Invoke_BMA;
         }
 
         // Figure out some margo-specific info that we need for the transfer
@@ -1786,7 +1786,7 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
             LOGERR("margo_bulk_create() failed - %s",
                 HG_Error_to_string(bulk_create_hret));
             ret = UNIFYFS_ERROR_MARGO;
-            goto Exit;
+            goto Exit_Invoke_BMA;
         }
 
         bulk_transfer_hret =
@@ -1796,7 +1796,7 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
             LOGERR("margo_bulk_transfer() failed - %s",
                 HG_Error_to_string(bulk_transfer_hret));
             ret = UNIFYFS_ERROR_MARGO;
-            goto Exit;
+            goto Exit_Invoke_BMA;
         }
 
         /* At this point, attr_list should have the file_attr_t  structs from
@@ -1822,7 +1822,7 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
                 LOGERR("strdup() failed processing filename");
                 /* If we're actually getting ENOMEM from strdup(), the error
                  * log is probably also going to fail... */
-                goto Exit;
+                goto Exit_Invoke_BMA;
                 /* Technically, attr_list probably contains valid data and we
                  * could try to return a partial list.  If we did, though, then
                  * we'd have ensure we checked for NULL before dereferencing
@@ -1842,7 +1842,7 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
     *file_attrs = attr_list;
     *num_file_attrs = results->num_files;
 
-Exit:
+Exit_Invoke_BMA:
     /* If we hit an error somewhere, then there's a bunch of clean-up
      * that we need to do... */
     if (UNIFYFS_SUCCESS != ret) {
