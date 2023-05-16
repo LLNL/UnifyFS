@@ -1700,6 +1700,10 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
 
     coll_request* coll = NULL;
     unifyfs_file_attr_t* attr_list = NULL;
+    unifyfs_file_attr_t* local_file_attrs = NULL;
+    /* attr_list holds the metadata we received from other server processes
+     * via the broadcast RPC.  local_file_attrs holds metadata for files
+     * that the current server process owns. */
     metaget_all_bcast_in_t* in = calloc(1, sizeof(*in));
     metaget_all_bcast_out_t* out = calloc(1, sizeof(*out));
     if ((NULL == in) || (NULL == out)) {
@@ -1743,6 +1747,15 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
     ret = invoke_bcast_progress_rpc(coll);
     if (UNIFYFS_SUCCESS != ret) {
         LOGERR("invoke_bcast_progress_rpc() failed with error %d", ret);
+        goto Exit_Invoke_BMA;
+    }
+
+    /* While the broadcast RPC is running, let's fetch the metadata for
+     * all the files the server we're currently running as owns. */
+    unsigned int num_local_files = 0;
+    ret = unifyfs_get_owned_files(&num_local_files, &local_file_attrs);
+    if (UNIFYFS_SUCCESS != ret) {
+        LOGERR("unifyfs_get_owned_files() failed with error %d", ret);
         goto Exit_Invoke_BMA;
     }
 
@@ -1807,7 +1820,8 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
 
         for (unsigned int i = 0; i < results->num_files; i++) {
             /* Remember that we abused the filename pointer to actually hold
-             * an offset into the filenames string that we sent separately */
+             * an offset into the filenames string that we sent separately.
+             * (See the comments in process_metaget_bcast_rpc()) */
             uint64_t start_offset = (uint64_t)attr_list[i].filename;
             uint64_t name_len;
             if (i < (results->num_files-1)) {
@@ -1836,13 +1850,33 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
         }
     }
 
+    LOGINFO("Total number of files owned by the current server: %d",
+            num_local_files);
     LOGINFO("Total number of files returned from children: %d",
             results->num_files);
     LOGINFO("Return code from children: %d", results->ret);
 
+    /* Need to merge the metadata for the local files with the metadata
+     * returned by the RPC */
+    if (num_local_files) {
+        size_t new_size = (results->num_files + num_local_files) *
+                          sizeof(unifyfs_file_attr_t);
+        unifyfs_file_attr_t* merged_attr_list = realloc(attr_list, new_size);
+        if (merged_attr_list) {
+            attr_list = merged_attr_list;
+        } else {
+            LOGERR("Failed to realloc() file attr list!");
+            ret = ENOMEM;
+            goto Exit_Invoke_BMA;
+            //TODO:  Make sure we clean this up in the event of an error!
+        }
+        memcpy(&attr_list[results->num_files], local_file_attrs,
+               num_local_files * sizeof(unifyfs_file_attr_t));
+    }
+
     // Make the results visible to the caller
     *file_attrs = attr_list;
-    *num_file_attrs = results->num_files;
+    *num_file_attrs = results->num_files + num_local_files;
 
 Exit_Invoke_BMA:
     /* If we hit an error somewhere, then there's a bunch of clean-up
@@ -1878,6 +1912,12 @@ Exit_Invoke_BMA:
             free(in);
             free(out);
         }
+    }
+
+    if (local_file_attrs) {
+        /* If we successfully allocated memory for local_file_attrs,
+         * then we need to free it. */
+        free(local_file_attrs);
     }
 
     if (HG_SUCCESS == bulk_create_hret) {
