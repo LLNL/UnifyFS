@@ -1554,9 +1554,7 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
 {
 
     int  ret = UNIFYFS_SUCCESS;
-    int* gfid_list;
     unifyfs_file_attr_t* remote_file_attrs;
-    int  num_gfids;
     int  num_file_attrs;
 
     /* Submit a broadcast metaget_all request and wait for it to complete. */
@@ -1565,8 +1563,6 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
     //       separate request for each gfid.
     //       Now that we have all the metadata from remote servers, we
     //       need to completely re-work how the the unifyfs-ls util works.
-    // TODO: Also, it would be nice if could let the broadcast complete in the
-    // backgound, but it's probably not a big deal.
 
     ret = unifyfs_invoke_broadcast_metaget_all(&remote_file_attrs,
                                                &num_file_attrs);
@@ -1575,28 +1571,19 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
         return ret;
     }
 
-    ret = unifyfs_fops_get_gfids(&gfid_list, &num_gfids);
-    if (UNIFYFS_SUCCESS != ret) {
-        LOGERR("unifyfs_fops_get_gfids() failed");
-        num_gfids = 0;
-    }
-
     // Package all the gfids up into one list
-    int* new_gfid_list = calloc(num_gfids + num_file_attrs, sizeof(int));
+    int* new_gfid_list = calloc(num_file_attrs, sizeof(int));
     // TODO: error checking!
-    memcpy(new_gfid_list, gfid_list, num_gfids*sizeof(int));
     for (unsigned int i = 0; i < num_file_attrs; i++) {
-        new_gfid_list[num_gfids+i] = remote_file_attrs[i].gfid;
+        new_gfid_list[i] = remote_file_attrs[i].gfid;
     }
-
-    free(gfid_list);
 
     /* send rpc response */
 
     unifyfs_get_gfids_out_t out;
 
     /* initialize bulk handle for the gfid_list */
-    hg_size_t segment_sizes[1] = { (num_gfids + num_file_attrs) * sizeof(int) };
+    hg_size_t segment_sizes[1] = { num_file_attrs * sizeof(int) };
     void* segment_ptrs[1] = { (void*)new_gfid_list };
     hg_return_t hret = margo_bulk_create(unifyfsd_rpc_context->shm_mid,
                                          1, segment_ptrs, segment_sizes,
@@ -1608,7 +1595,7 @@ static int process_get_gfids(reqmgr_thrd_t* reqmgr,
     }
 
     out.ret = (int32_t) ret;
-    out.num_gfids = num_gfids + num_file_attrs;
+    out.num_gfids = num_file_attrs;
     hret = margo_respond(req->handle, &out);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_respond() failed");

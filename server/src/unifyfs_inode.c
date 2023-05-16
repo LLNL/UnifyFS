@@ -838,21 +838,28 @@ int unifyfs_get_owned_files(unsigned int* num_files,
     }
     unifyfs_inode_tree_unlock(global_inode_tree);
 
-    /* realloc() the array list space down to only what we need */
+    /* realloc() the array list space down to only what we need.
+     *
+     * Note that corner cases get a little odd here:
+     * 1) If num_files_int is 0, this will conveniently free() the list for
+     *    us.  The pointer we get back from realloc() will be NULL and that's
+     *    exactly what we should return to the caller.
+     * 2) If the realloc actually fails (and it's unclear how that could
+     *    happen given that we're reducing the size of the allocation), then
+     *    the original memory will be left untouched and we we can return the
+     *    original pointer.   That wastes some space, but the pointer is
+     *    valid and the memory will eventually be freed by the caller.  */
     unifyfs_file_attr_t* attr_list_int2 = realloc(
         attr_list_int, num_files_int * sizeof(unifyfs_file_attr_t));
     if (NULL == attr_list_int2) {
-        /* Don't see how the realloc() call could actually fail since we're
-         * decreasing the size, but it did.  The man page says that in such a
-         * case, the original pointer is left untouched. That means we can
-         * still use the original pointer - we'll just be wasting some RAM.
-         * This isn't a memory leak since the pointer will eventually be
-         * freed. */
-        attr_list_int2 = attr_list_int;
+        if (0 != num_files_int) {
+            /* realloc() actually failed. Wow. */
+            attr_list_int2 = attr_list_int;
+        }
     }
 
-    /* We walked the tree with no errors, so update the return parameters
-     * and return. */
+    /* If we made it here, then we walked the tree with no errors, so update
+     * the return parameters and return. */
     *attr_list = attr_list_int2;
     *num_files = num_files_int;
     return UNIFYFS_SUCCESS;
