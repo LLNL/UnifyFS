@@ -36,6 +36,7 @@ void* UNIFYFS_WRAP(mmap64)(void *addr, size_t length, int prot, int flags, int f
 int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat *buf)
 int UNIFYFS_WRAP(close)(int fd)
 FILE* UNIFYFS_WRAP(fopen)(const char *path, const char *mode)
+FILE* UNIFYFS_WRAP(fopen64)(const char *path, const char *mode)
 FILE* UNIFYFS_WRAP(freopen)(const char *path, const char *mode, FILE *stream)
 int UNIFYFS_WRAP(setvbuf)(FILE* stream, char* buf, int type, size_t size)
 void* UNIFYFS_WRAP(setbuf)(FILE* stream, char* buf)
