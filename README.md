@@ -29,5 +29,10 @@ Status of UnifyFS development branch (dev):
 
 [![Read the Docs](https://readthedocs.org/projects/unifyfs/badge/?version=dev)](https://unifyfs.readthedocs.io)
 
+## UnifyFS Citation
+We recommend that you use this citation for UnifyFS:
+
+  * Michael Brim, Adam Moody, Seung-Hwan Lim, Ross Miller, Swen Boehm, Cameron Stanavige, Kathryn Mohror, Sarp Oral, “UnifyFS: A User-level Shared File System for Unified Access to Distributed Local Storage,” 37th IEEE International Parallel & Distributed Processing Symposium (IPDPS 2023), St. Petersburg, FL, May 2023.
+
 ## Contribute and Develop
 If you would like to help, please see our [contributing guidelines](https://unifyfs.readthedocs.io/en/dev/contribute-ways.html).
