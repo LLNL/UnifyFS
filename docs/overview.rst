@@ -1,6 +1,6 @@
-================
+========
 Overview
-================
+========
 
 UnifyFS is a user-level file system under active development
 that supports shared file I/O over distributed storage on HPC systems,
@@ -25,10 +25,11 @@ Users must copy files that need to be persisted beyond the lifetime of the
 job from UnifyFS to a permanent file system.
 UnifyFS provides an API and a utility to perform these copies.
 
+-----
 
----------------------------
+-----------------
 High Level Design
----------------------------
+-----------------
 
 .. image:: images/design-high-lvl.png
 
@@ -52,3 +53,14 @@ the job allocation. The UnifyFS server handles the I/O
 requests from the UnifyFS library.
 The UnifyFS server uses ECP `Mochi <https://mochi.readthedocs.io/en/latest>`_
 to communicate with user application processes and server processes on other nodes.
+
+-----
+
+----------------
+UnifyFS Citation
+----------------
+
+We recommend that you use this as the primary citation for UnifyFS as well as a
+reference for further details on the UnifyFS architecture and semantics:
+
+    Michael Brim, Adam Moody, Seung-Hwan Lim, Ross Miller, Swen Boehm, Cameron Stanavige, Kathryn Mohror, Sarp Oral, “UnifyFS: A User-level Shared File System for Unified Access to Distributed Local Storage,” 37th IEEE International Parallel & Distributed Processing Symposium (IPDPS 2023), St. Petersburg, FL, May 2023.
