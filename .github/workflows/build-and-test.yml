@@ -10,7 +10,7 @@ jobs:
     runs-on: [ ubuntu-latest ]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         fetch-depth: 2
 
@@ -39,11 +39,11 @@ jobs:
     steps:
     - name: Push checkout
       if: github.event_name == 'push'
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: PR checkout
       if: github.event_name == 'pull_request'
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
@@ -61,6 +61,8 @@ jobs:
 
     - name: Install Spack
       uses: kzscisoft/install-spack@v1
+      with:
+        version: develop
 
     - name: Set up packages.yaml
       run: |
@@ -80,11 +82,6 @@ jobs:
             externals:
             - spec: "automake@1.16.1"
               prefix: /usr
-          cmake:
-            buildable: False
-            externals:
-            - spec: "cmake@3.22.1"
-              prefix: /usr
           libtool:
             buildable: False
             externals:
@@ -99,6 +96,11 @@ jobs:
             buildable: False
             externals:
             - spec: "openmpi@4.0.3"
+              prefix: /usr
+          openssl:
+            buildable: False
+            externals:
+            - spec: "openssl@1.1.1f"
               prefix: /usr
           pkg-config:
             buildable: False
@@ -118,17 +120,21 @@ jobs:
         else
           spack config add "packages:all:compiler:[gcc@10.3.0]"
         fi
+        spack external find
+        spack config add modules:prefix_inspections:lib64:[LD_LIBRARY_PATH]
+        spack config add modules:prefix_inspections:lib:[LD_LIBRARY_PATH]
 
     - name: Install UnifyFS dependencies
       run: |
-        spack install gotcha@develop
-        spack install mochi-margo@0.9.6 ^mercury~boostsys ^libfabric@1.12.1 fabrics=rxm,sockets,tcp
+        spack install gotcha@1.0.4
+        spack install mochi-margo@0.13.1 ^mercury~boostsys ^libfabric@1.13.2 fabrics=rxm,sockets,tcp
         spack install spath~mpi
         echo "GOTCHA_INSTALL=$(spack location -i gotcha)" >> $GITHUB_ENV
         echo "SPATH_INSTALL=$(spack location -i spath)" >> $GITHUB_ENV
 
     - name: Configure and Build
       run: |
+        export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
         source $GITHUB_WORKSPACE/.spack/share/spack/setup-env.sh
         spack load gotcha && spack load argobots && spack load mercury && spack load mochi-margo && spack load spath
         ./autogen.sh

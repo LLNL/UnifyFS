@@ -12,6 +12,9 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
+/* for usleep */
+#include <unistd.h>
+
 #include "unifyfs_fid.h"
 #include "margo_client.h"
 
@@ -368,23 +371,76 @@ int unifyfs_fid_delete(unifyfs_client* client,
     return UNIFYFS_SUCCESS;
 }
 
-/* opens a new file id with specified path, access flags, and permissions,
- * fills outfid with file id and outpos with position for current file pointer,
- * returns UNIFYFS error code
- */
-int unifyfs_fid_open(
+/* Given a file name, allocate a gfid entry on the server for the file. */
+int unifyfs_gfid_create(
     unifyfs_client* client,
-    const char* path, /* path of file to be opened */
-    int flags,        /* flags bits as from open(2) */
-    mode_t mode,      /* mode bits as from open(2) */
-    int* outfid,      /* allocated local file id if open is successful */
-    off_t* outpos)    /* initial file position if open is successful */
+    const char* path, /* path of file to be created */
+    int exclusive,    /* return EEXIST if gfid already exists */
+    int private,      /* create node-local (non-shared) file */
+    int truncate,     /* truncate file to 0 length if already exists */
+    mode_t mode)      /* mode bits as from open(2) */
 {
-    int rc;
-    int ret = UNIFYFS_SUCCESS;
+    /* check that pathname is within bounds */
+    size_t pathlen = strlen(path) + 1;
+    if (pathlen > UNIFYFS_MAX_FILENAME) {
+        return ENAMETOOLONG;
+    }
 
-    /* set the pointer to the start of the file */
-    off_t pos = 0;
+    int gfid = unifyfs_generate_gfid(path);
+
+    /* initialize file attributes */
+    unifyfs_file_attr_t gfattr = { 0, };
+    unifyfs_file_attr_set_invalid(&gfattr);
+
+    gfattr.gfid = gfid;
+    gfattr.size = 0;
+    gfattr.mode = mode;
+    gfattr.is_laminated = 0;
+    gfattr.is_shared = !private;
+    gfattr.filename = (char*) path;
+
+    /* use client user/group */
+    gfattr.uid = getuid();
+    gfattr.gid = getgid();
+
+    /* use current time for atime/mtime/ctime */
+    struct timespec tp = {0};
+    clock_gettime(CLOCK_REALTIME, &tp);
+    gfattr.atime = tp;
+    gfattr.mtime = tp;
+    gfattr.ctime = tp;
+
+    /* TODO: process O_CREAT, O_EXCL, and O_TRUNC at server */
+
+    /* Attempt to create gfid entry for file on server */
+    unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_CREATE;
+    int ret = unifyfs_set_global_file_meta(client, gfid, op, &gfattr);
+    if (ret == EEXIST) {
+        LOGINFO("Attempt to create existing file %s (gfid:%d)", path, gfid);
+        if (!exclusive) {
+            ret = UNIFYFS_SUCCESS;
+        } else {
+            LOGERR("Failed create of existing private/exclusive file %s",
+                   path);
+        }
+    }
+    if (ret != UNIFYFS_SUCCESS) {
+        return ret;
+    }
+
+    return ret;
+}
+
+/* Given a file name, this fetches the metadata for the corresponding gfid.
+ * If a local entry already exists, it updates the local entry.
+ * Otherwise, it allocates a local fid and caches the metadata.
+ * Returns UNIFYFS error code.
+ */
+int unifyfs_fid_fetch(
+    unifyfs_client* client,
+    const char* path)
+{
+    int ret = UNIFYFS_SUCCESS;
 
     /* check that pathname is within bounds */
     size_t pathlen = strlen(path) + 1;
@@ -399,211 +455,154 @@ int unifyfs_fid_open(
      * the broadcast for cache invalidation has not been implemented, yet.
      */
 
-    /* look for local and global file ids */
-    int fid  = unifyfs_fid_from_path(client, path);
     int gfid = unifyfs_generate_gfid(path);
-    LOGDBG("unifyfs_fid_from_path() gave %d (gfid = %d)", fid, gfid);
 
     /* test whether we have info for file in our local file list */
+    int fid = unifyfs_fid_from_path(client, path);
     int found_local = (fid >= 0);
 
-    /* determine whether any write flags are specified */
-    int open_for_write = flags & (O_RDWR | O_WRONLY);
+    LOGDBG("unifyfs_fid_from_path() gave %d (gfid = %d)", fid, gfid);
 
-    int exclusive = flags & O_EXCL;
-
-    /* struct to hold global metadata for file */
+    /* fetch metadata for file */
     unifyfs_file_attr_t gfattr = { 0, };
+    ret = unifyfs_get_global_file_meta(client, gfid, &gfattr);
+    if (ret != UNIFYFS_SUCCESS) {
+        /* bail out if we failed to find global file */
+        if (found_local) {
+            /* Have a local entry, but there is no global entry.
+             * Perhaps global file was unlinked?
+             * Invalidate our local entry. */
+            LOGDBG("file found locally, but seems to be deleted globally. "
+                   "invalidating the local cache.");
+            unifyfs_fid_delete(client, fid);
+        }
+        return ret;
+    }
 
-    /* if O_CREAT,
-     *   if not local, allocate fid and storage
-     *   create local fid meta
-     *   attempt to create global inode
-     *   if EEXIST and O_EXCL, error and release fid/storage
-     *   lookup global meta
-     *   check that local and global info are consistent
-     *   if O_TRUNC and not laminated, truncate
-     * else
-     *   lookup global meta
-     *     if not found, error
-     *   check that local and global info are consistent
-     * if O_APPEND, set pos to file size
-     */
-
-    /* flag indicating whether file should be truncated */
-    int need_truncate = 0;
-
-    /* determine whether we are creating a new file
-     * or opening an existing one */
-    if (flags & O_CREAT) {
-        /* user wants to create a new file,
-         * allocate a local file id structure if needed */
-        if (!found_local) {
-            /* initialize local metadata for this file */
-            fid = unifyfs_fid_create_file(client, path, exclusive);
-            if (fid < 0) {
-                LOGERR("failed to create a new file %s", path);
-                return -fid;
-            }
-
-            /* initialize local storage for this file */
-            rc = fid_storage_alloc(client, fid);
-            if (rc != UNIFYFS_SUCCESS) {
-                LOGERR("failed to allocate storage space for file %s (fid=%d)",
-                    path, fid);
-                unifyfs_fid_delete(client, fid);
-                return ENOMEM;
-            }
-
-            /* TODO: set meta->mode bits to mode variable */
+    /* allocate a fid structure and storage for the fid
+     * if we don't already have one */
+    if (!found_local) {
+        /* initialize local metadata for this file */
+        int private = !(gfattr.is_shared);
+        fid = unifyfs_fid_create_file(client, path, private);
+        if (fid < 0) {
+            LOGERR("failed to create a new file %s", path);
+            return -fid;
         }
 
-        /* create global file metadata */
-        unifyfs_file_attr_op_e op = UNIFYFS_FILE_ATTR_OP_CREATE;
-        ret = unifyfs_set_global_file_meta_from_fid(client, fid, op);
-        if (ret == EEXIST) {
-            LOGINFO("Attempt to create existing file %s (fid:%d)", path, fid);
-            if (!exclusive) {
-                /* File didn't exist before, but now it does.
-                 * Another process beat us to the punch in creating it.
-                 * Read its metadata to update our cache. */
-                rc = unifyfs_get_global_file_meta(client, gfid, &gfattr);
-                if (rc == UNIFYFS_SUCCESS) {
-                    /* check for truncate if the file exists already */
-                    if ((flags & O_TRUNC) && open_for_write) {
-                        if (gfattr.is_laminated) {
-                            ret = EROFS;
-                        } else {
-                            need_truncate = 1;
-                        }
-                    }
-
-                    /* append writes are ok on existing files too */
-                    if ((flags & O_APPEND) && open_for_write) {
-                        ret = UNIFYFS_SUCCESS;
-                    }
-
-                    /* Successful in fetching metadata for existing file.
-                     * Update our local cache using that metadata. */
-                    unifyfs_fid_update_file_meta(client, fid, &gfattr);
-
-                    if (!found_local) {
-                        /* it's ok if another client created the shared file */
-                        ret = UNIFYFS_SUCCESS;
-                    }
-                } else {
-                    /* Failed to get metadata for a file that should exist.
-                     * Perhaps it was since deleted.  We could try to create
-                     * it again and loop through these steps, but for now
-                     * consider this situation to be an error. */
-                    LOGERR("Failed to get metadata on existing file %s", path);
-                }
-            } else {
-                LOGERR("Failed create of existing private/exclusive file %s",
-                       path);
-            }
-        }
+        /* initialize local storage for this file */
+        ret = fid_storage_alloc(client, fid);
         if (ret != UNIFYFS_SUCCESS) {
-            if (!found_local) {
-                /* free fid resources we just allocated above,
-                 * but don't do that by calling fid_unlink */
-                unifyfs_fid_delete(client, fid);
-            }
-            return ret;
+            LOGERR("failed to allocate storage space for file %s (fid=%d)",
+                path, fid);
+            unifyfs_fid_delete(client, fid);
+            return ENOMEM;
         }
     } else {
-        /* trying to open without creating, file must already exist,
-         * lookup global metadata for file */
-        ret = unifyfs_get_global_file_meta(client, gfid, &gfattr);
+        /* TODO: already have a local entry for this path and found
+         * a global entry, check that they are consistent */
+    }
+
+    /* Successful in fetching metadata for existing file.
+     * Update our local cache using that metadata. */
+    unifyfs_fid_update_file_meta(client, fid, &gfattr);
+
+    return UNIFYFS_SUCCESS;
+}
+
+/* opens a new file id with specified path, access flags, and permissions,
+ * fills outfid with file id and outpos with position for current file pointer,
+ * returns UNIFYFS error code
+ */
+int unifyfs_fid_open(
+    unifyfs_client* client,
+    const char* path, /* path of file to be opened */
+    int flags,        /* flags bits as from open(2) */
+    mode_t mode,      /* mode bits as from open(2) */
+    int* outfid,      /* allocated local file id if open is successful */
+    off_t* outpos)    /* initial file position if open is successful */
+{
+    int ret = UNIFYFS_SUCCESS;
+
+    /* check that pathname is within bounds */
+    size_t pathlen = strlen(path) + 1;
+    if (pathlen > UNIFYFS_MAX_FILENAME) {
+        return ENAMETOOLONG;
+    }
+
+    int gfid = unifyfs_generate_gfid(path);
+
+    /* attempt to create file if requested */
+    if (flags & O_CREAT) {
+        /* Ensure that we're only creating a regular file. */
+        int type = mode & S_IFMT;
+        if (type & ~S_IFREG) {
+            LOGERR("Only regular files can be created %s S_IFMT bits %x",
+                   path, type);
+            return EINVAL;
+        }
+        mode |= S_IFREG;
+
+        int exclusive = (flags & O_EXCL);
+        int private   = (exclusive && client->use_excl_private);
+        int truncate  = (flags & O_TRUNC);
+        ret = unifyfs_gfid_create(client, path,
+            exclusive, private, truncate, mode);
         if (ret != UNIFYFS_SUCCESS) {
-            /* bail out if we failed to find global file */
-            if (found_local && ret == ENOENT) {
-                /* Have a local entry, but there is no global entry.
-                 * Perhaps global file was unlinked?
-                 * Invalidate our local entry. */
-                LOGDBG("file found locally, but seems to be deleted globally. "
-                       "invalidating the local cache.");
-                unifyfs_fid_delete(client, fid);
-            }
-
             return ret;
-        }
-
-        /* succeeded in global lookup for file,
-         * allocate a local file id structure if needed */
-        if (!found_local) {
-            /* initialize local metadata for this file */
-            fid = unifyfs_fid_create_file(client, path, 0);
-            if (fid < 0) {
-                LOGERR("failed to create a new file %s", path);
-                return -fid;
-            }
-
-            /* initialize local storage for this file */
-            ret = fid_storage_alloc(client, fid);
-            if (ret != UNIFYFS_SUCCESS) {
-                LOGERR("failed to allocate storage space for file %s (fid=%d)",
-                       path, fid);
-                /* free fid we just allocated above,
-                 * but don't do that by calling fid_unlink */
-                unifyfs_fid_delete(client, fid);
-                return ret;
-            }
-        } else {
-            /* TODO: already have a local entry for this path and found
-             * a global entry, check that they are consistent */
-        }
-
-        /* Successful in fetching metadata for existing file.
-         * Update our local cache using that metadata. */
-        unifyfs_fid_update_file_meta(client, fid, &gfattr);
-
-        /* check if we need to truncate the existing file */
-        if ((flags & O_TRUNC) && open_for_write && !gfattr.is_laminated) {
-            need_truncate = 1;
         }
     }
 
+    /* File should exist at this point,
+     * update our cache with its metadata. */
+    ret = unifyfs_fid_fetch(client, path);
+    if (ret != UNIFYFS_SUCCESS) {
+        /* Failed to get metadata for a file that should exist.
+         * Perhaps it was since deleted.  We could try to create
+         * it again and loop through these steps, but for now
+         * consider this situation to be an error. */
+        LOGERR("Failed to get metadata on existing file %s", path);
+        return ret;
+    }
+
+    int fid = unifyfs_fid_from_path(client, path);
+    LOGDBG("unifyfs_fid_from_path() gave %d (gfid = %d)", fid, gfid);
+
     /* if given O_DIRECTORY, the named file must be a directory */
     if ((flags & O_DIRECTORY) && !unifyfs_fid_is_dir(client, fid)) {
-        if (!found_local) {
-            /* free fid we just allocated above,
-             * but don't do that by calling fid_unlink */
-            unifyfs_fid_delete(client, fid);
-        }
+        /* delete entry from cache,
+         * but don't do that by calling fid_unlink */
+        unifyfs_fid_delete(client, fid);
         return ENOTDIR;
     }
 
     /* TODO: does O_DIRECTORY really have to be given to open a directory? */
     if (!(flags & O_DIRECTORY) && unifyfs_fid_is_dir(client, fid)) {
-        if (!found_local) {
-            /* free fid we just allocated above,
-             * but don't do that by calling fid_unlink */
-            unifyfs_fid_delete(client, fid);
-        }
+        /* delete entry from cache,
+         * but don't do that by calling fid_unlink */
+        unifyfs_fid_delete(client, fid);
         return EISDIR;
     }
 
-    /*
-     * Catch any case where we could potentially want to write to a laminated
-     * file.
-     */
-    if (gfattr.is_laminated &&
+    /* Catch any case where we could potentially want to write to a laminated
+     * file. */
+    if (unifyfs_fid_is_laminated(client, fid) &&
         ((flags & (O_CREAT | O_TRUNC | O_APPEND | O_WRONLY)) ||
          ((mode & 0222) && (flags != O_RDONLY)))) {
             LOGDBG("Can't open laminated file %s with a writable flag.", path);
-            /* TODO: free fid we just allocated above,
+            /* free fid we just allocated above,
              * but don't do that by calling fid_unlink */
-            if (!found_local) {
-                /* free fid we just allocated above,
-                 * but don't do that by calling fid_unlink */
-                unifyfs_fid_delete(client, fid);
-            }
+            unifyfs_fid_delete(client, fid);
             return EROFS;
     }
 
-    /* truncate the file, if we have to */
-    if (need_truncate) {
+    /* determine whether any write flags are specified */
+    int open_for_write = flags & (O_RDWR | O_WRONLY);
+
+    /* check if we need to truncate the existing file */
+    /* Note: even if supported in gfid_create,
+     * we may need to truncate local data for file. */
+    if ((flags & O_TRUNC) && open_for_write) {
         ret = unifyfs_fid_truncate(client, fid, 0);
         if (ret != UNIFYFS_SUCCESS) {
             LOGERR("Failed to truncate the file %s", path);
@@ -611,7 +610,8 @@ int unifyfs_fid_open(
         }
     }
 
-    /* for appends, update position to EOF */
+    /* for append mode, set starting position to EOF */
+    off_t pos = 0;
     if ((flags & O_APPEND) && open_for_write) {
         pos = unifyfs_fid_logical_size(client, fid);
     }
@@ -653,6 +653,11 @@ int unifyfs_fid_unlink(unifyfs_client* client,
     rc = invoke_client_unlink_rpc(client, gfid);
     if (rc != UNIFYFS_SUCCESS) {
         return rc;
+    }
+
+    /* since we can't block until unlink is finished, sleep instead */
+    if (client->unlink_usecs > 0) {
+        usleep(client->unlink_usecs);
     }
 
     return UNIFYFS_SUCCESS;

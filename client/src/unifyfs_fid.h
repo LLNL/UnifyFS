@@ -70,6 +70,13 @@ int unifyfs_fid_unlink(unifyfs_client* client,
 int unifyfs_fid_delete(unifyfs_client* client,
                        int fid);
 
+/* Given a file name, this fetches the metadata for the corresponding gfid.
+ * If a local entry already exists, it updates the local entry.
+ * Otherwise, it allocates a local fid and caches the metadata.
+ * Returns UNIFYFS error code. */
+int unifyfs_fid_fetch(unifyfs_client* client,
+                      const char* path);
+
 /* Use local file metadata to update global metadata */
 int unifyfs_set_global_file_meta_from_fid(unifyfs_client* client,
                                           int fid,
@@ -153,6 +160,14 @@ int unifyfs_fid_sync_data(unifyfs_client* client,
 int unifyfs_fid_sync_extents(unifyfs_client* client,
                              int fid);
 
-
+/* Given a file name, allocate a gfid entry on the server for the file.
+ * Returns UNIFYFS_SUCCESS if successful. */
+int unifyfs_gfid_create(
+    unifyfs_client* client,
+    const char* path, /* path of file to be created */
+    int exclusive,    /* return EEXIST if gfid already exists */
+    int private,      /* create node-local (non-shared) file */
+    int truncate,     /* truncate file to 0 length if already exists */
+    mode_t mode);     /* mode bits as from open(2) */
 
 #endif /* UNIFYFS_FID_H */

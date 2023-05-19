@@ -7,7 +7,7 @@ The UnifyFS library contains symbols for the UnifyFS API, like unifyfs_mount,
 as well as wrappers for I/O routines, like open, write, and close.
 In the examples below, replace <unifyfs> with the path to your UnifyFS install.
 
----------------------------
+----------
 
 -----------
 Static link
@@ -24,6 +24,8 @@ To make this easier, UnifyFS installs a unifyfs-config script that one should in
           `<unifyfs>/bin/unifyfs-config --pre-ld-flags` \
           test_write.c \
           `<unifyfs>/bin/unifyfs-config --post-ld-flags`
+
+----------
 
 ------------
 Dynamic link

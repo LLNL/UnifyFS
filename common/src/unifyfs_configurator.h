@@ -69,14 +69,16 @@
     UNIFYFS_CFG_CLI(unifyfs, daemonize, BOOL, off, "enable server daemonization", NULL, 'D', "on|off") \
     UNIFYFS_CFG_CLI(unifyfs, mountpoint, STRING, /unifyfs, "mountpoint directory", NULL, 'm', "specify full path to desired mountpoint") \
     UNIFYFS_CFG(client, cwd, STRING, NULLSTRING, "current working directory", NULL) \
+    UNIFYFS_CFG(client, excl_private, BOOL, on, "create node-local private files when given O_EXCL", NULL) \
     UNIFYFS_CFG(client, fsync_persist, BOOL, on, "persist written data to storage on fsync()", NULL) \
     UNIFYFS_CFG(client, local_extents, BOOL, off, "use client-cached extents to service local reads without consulting local server", NULL) \
     UNIFYFS_CFG(client, node_local_extents, BOOL, off, \
         "use node-local extents to service node-local reads", NULL) \
     UNIFYFS_CFG(client, max_files, INT, UNIFYFS_CLIENT_MAX_FILES, "client max file count", NULL) \
+    UNIFYFS_CFG(client, super_magic, BOOL, on, "return UnifyFS super magic from statfs, TMPFS otherwise", NULL) \
+    UNIFYFS_CFG(client, unlink_usecs, INT, 0, "number of microsecs to sleep after initiating unlink rpc", NULL) \
     UNIFYFS_CFG(client, write_index_size, INT, UNIFYFS_CLIENT_WRITE_INDEX_SIZE, "write metadata index buffer size", NULL) \
     UNIFYFS_CFG(client, write_sync, BOOL, off, "sync every write to server", NULL) \
-    UNIFYFS_CFG(client, super_magic, BOOL, on, "return UnifyFS super magic from statfs, TMPFS otherwise", NULL) \
     UNIFYFS_CFG_CLI(log, verbosity, INT, 0, "log verbosity level", NULL, 'v', "specify logging verbosity level") \
     UNIFYFS_CFG_CLI(log, file, STRING, unifyfsd.log, "log file name", NULL, 'l', "specify log file name") \
     UNIFYFS_CFG_CLI(log, dir, STRING, LOGDIR, "log file directory", configurator_directory_check, 'L', "specify full path to directory to contain log file") \

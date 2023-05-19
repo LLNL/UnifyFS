@@ -539,8 +539,6 @@ static coll_request* collective_create(server_rpc_e req_type,
                 if (rc != UNIFYFS_SUCCESS) {
                     LOGERR("failed to get child request handle");
                     *chdl = HG_HANDLE_NULL;
-                // TODO: We don't return here.  Why not? Can we really
-                // continue working without a child request handle>
                 }
             }
         }

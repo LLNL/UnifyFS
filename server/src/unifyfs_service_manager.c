@@ -906,9 +906,7 @@ static int process_find_extents_rpc(server_rpc_req_t* req)
     hg_bulk_t bulk_resp_handle = HG_BULK_NULL;
     if (ret == UNIFYFS_SUCCESS) {
         if (num_chunks > 0) {
-            const struct hg_info* hgi = margo_get_info(req->handle);
-            assert(hgi);
-            margo_instance_id mid = margo_hg_info_get_instance(hgi);
+            margo_instance_id mid = margo_hg_handle_get_instance(req->handle);
             assert(mid != MARGO_INSTANCE_NULL);
 
             void* buf = (void*) chunk_locs;

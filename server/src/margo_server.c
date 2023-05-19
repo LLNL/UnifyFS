@@ -410,7 +410,6 @@ int margo_server_rpc_init(void)
     }
     if (NULL != mercury_log_level) {
         HG_Set_log_level(mercury_log_level);
-        NA_Set_log_level(mercury_log_level);
     }
     if (NULL != unifyfs_log_stream) {
         hg_log_set_stream_debug(unifyfs_log_stream);
