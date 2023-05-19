@@ -1366,7 +1366,7 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
      * filenames.
      * We only need the offset of the START of the filename.  The end of the
      * filename is assumed to be 1 character before the start of the next
-     * filename (or the end of the string if this is the last file). */
+     * filename or - if this is the last file - the end of the string. */
     for (unsigned int i = 0; i < num_files; i++) {
         size_t filename_len = strlen(attr_list[i].filename);
         strcat(concatenated_names, attr_list[i].filename);

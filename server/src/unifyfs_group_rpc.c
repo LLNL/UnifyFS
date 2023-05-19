@@ -111,7 +111,6 @@ static int merge_metaget_all_bcast_outputs(
         // Figure out some margo-specific info that we need for the transfer
         info = margo_get_info(c_hdl);
         server_addr = info->addr;
-        // address of the bulk data on the server side
         mid = margo_hg_handle_get_instance(c_hdl);
 
         hg_size_t segment_sizes[1] = { child_buf_size };
@@ -145,14 +144,20 @@ static int merge_metaget_all_bcast_outputs(
      * child_attr_list is NULL. */
 
     // Now get the bulk data from the parent (assuming there is any)
-    unifyfs_file_attr_t* parent_attr_list =
-        calloc(parent_num_files + child_num_files,
-               sizeof(unifyfs_file_attr_t));
-    /* Note: Deliberately allocating enough space for the child file attrs,
-     * since we're going to be copying them in anyway. */
-    if (!parent_attr_list) {
-        free(child_attr_list);
-        return ENOMEM;
+    unifyfs_file_attr_t* parent_attr_list = NULL;
+    if (parent_num_files + child_num_files > 0) {
+        parent_attr_list = calloc(parent_num_files + child_num_files,
+                                  sizeof(unifyfs_file_attr_t));
+        /* Note: Deliberately allocating enough space for the child file attrs,
+         * since we're going to be copying them in anyway.
+         * Also, we had to check to see if there actually was any need to
+         * allocate memory because if you pass 0 into calloc(), you'll likely
+         * get a NULL back, and that would confuse the error checking on the
+         * next lines. */
+        if (!parent_attr_list) {
+            free(child_attr_list);
+            return ENOMEM;
+        }
     }
 
     if (parent_num_files) {
@@ -179,9 +184,12 @@ static int merge_metaget_all_bcast_outputs(
             return UNIFYFS_ERROR_MARGO;
         }
 
-        // TODO: It seems like we shouldn't have to actually do a margo
-        // transfer here.  This code is running on the parent server, right?
-        // Can't we just do a memcpy?
+        /* It would be nice if we didn't have to actually do a margo transfer
+         * here.  The data we need exists in our current address space
+         * somewhere.  Unfortunately, we don't know where because that's
+         * hidden from us by Margo.  The best we can do is hope that Margo is
+         * optimized for this case and this transfer ends up just being a
+         * mem copy. */
         hret = margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
                                    p_out->file_meta, 0, local_bulk, 0,
                                    parent_buf_size);
@@ -257,12 +265,6 @@ static int merge_metaget_all_bcast_outputs(
         free(child_attr_list);
         return UNIFYFS_ERROR_MARGO;
     }
-
-    // TODO: Note that although we did a margo bulk transfer to pull
-    // the data from the parent, we aren't doing any kind of push back
-    // to the parent.  We do seem to get the correct results, which implies
-    // that we must be in the same address space as the parent.  So again,
-    // do we really need to do the pull operation above??
 
     margo_bulk_free(parent_old_bulk);
 
@@ -359,8 +361,6 @@ static int get_child_response(coll_request* coll_req,
                 if ((NULL != cmabo) && (NULL != mabo)) {
                     merge_metaget_all_bcast_outputs(
                         mabo, cmabo, coll_req->progress_hdl, chdl);
-                    // TODO: I'm not sure coll_req->progress_hdl is the
-                    // correct thing to use here.
                 } else {
                     /* One or both of the output structures is missing.
                      * (This shouldn't ever happen.) */
