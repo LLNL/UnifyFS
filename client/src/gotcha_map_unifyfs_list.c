@@ -222,6 +222,9 @@ UNIFYFS_DEF(seekdir, void,
 UNIFYFS_DEF(fopen, FILE*,
             (const char* path, const char* mode),
             (path, mode))
+UNIFYFS_DEF(fopen64, FILE*,
+            (const char* path, const char* mode),
+            (path, mode))
 UNIFYFS_DEF(freopen, FILE*,
             (const char* path, const char* mode, FILE* stream),
             (path, mode, stream))
@@ -413,6 +416,7 @@ struct gotcha_binding_t unifyfs_wrappers[] = {
     { "scandir", UNIFYFS_WRAP(scandir), &wrappee_handle_scandir },
     { "seekdir", UNIFYFS_WRAP(seekdir), &wrappee_handle_seekdir },
     { "fopen", UNIFYFS_WRAP(fopen), &wrappee_handle_fopen },
+    { "fopen64", UNIFYFS_WRAP(fopen64), &wrappee_handle_fopen64 },
     { "freopen", UNIFYFS_WRAP(freopen), &wrappee_handle_freopen },
     { "setvbuf", UNIFYFS_WRAP(setvbuf), &wrappee_handle_setvbuf },
     { "setbuf", UNIFYFS_WRAP(setbuf), &wrappee_handle_setbuf },
