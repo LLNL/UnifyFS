@@ -110,7 +110,7 @@ int stat_test(char* unifyfs_root)
     errno = 0;
     rc = fstat(fd, &sb);
     err = errno;
-    ok(rc == -1 && err == ENOENT,
+    ok(rc == -1 && err == EBADF,
        "%s:%d fstat() after unlink fails (errno=%d): %s",
        __FILE__, __LINE__, err, strerror(err));
 
