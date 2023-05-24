@@ -13,7 +13,7 @@
  */
 
  /*
-  * Test stat, lstat, fstat, __xstat, __lxstst, __fxstat
+  * Test stat, lstat, and fstat
   */
 #include <fcntl.h>
 #include <string.h>
@@ -80,13 +80,11 @@ int stat_test(char* unifyfs_root)
     ok(rc == 0 && err == 0, "%s:%d lstat(): %s",
        __FILE__, __LINE__, strerror(err));
 
-    /*
     errno = 0;
     rc = fstat(fd, &sb);
     err = errno;
     ok(rc == 0 && err == 0, "%s:%d fstat(): %s",
        __FILE__, __LINE__, strerror(err));
-    */
 
     errno = 0;
     rc = unlink(path);
@@ -109,14 +107,12 @@ int stat_test(char* unifyfs_root)
        "%s:%d lstat() after unlink fails (errno=%d): %s",
        __FILE__, __LINE__, err, strerror(err));
 
-    /*
     errno = 0;
     rc = fstat(fd, &sb);
     err = errno;
     ok(rc == -1 && err == ENOENT,
        "%s:%d fstat() after unlink fails (errno=%d): %s",
        __FILE__, __LINE__, err, strerror(err));
-    */
 
     diag("Finished UNIFYFS_WRAP(stat) tests");
 
