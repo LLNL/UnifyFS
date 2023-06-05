@@ -144,5 +144,18 @@ int unifyfs_invoke_broadcast_truncate(int gfid,
  */
 int unifyfs_invoke_broadcast_unlink(int gfid);
 
+/**
+ * @brief Fetch metadata for all files on all servers
+ *
+ * @param file_attrs list of file metadata
+ * @param num_file_attrs number of files in the list
+ *
+ * @return success|failure
+ */
+/* Upon success, file_attrs will hold data that has been allocated with
+ * malloc() and must be freed by the caller with free().  In the event of an
+ * error, the caller must *NOT* free the pointer. */
+int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
+                                         int* num_file_attrs);
 
 #endif // UNIFYFS_GROUP_RPC_H

@@ -1320,6 +1320,118 @@ static int process_unlink_bcast_rpc(server_rpc_req_t* req)
     return ret;
 }
 
+static int process_metaget_bcast_rpc(server_rpc_req_t* req)
+{
+    /* Iterate through the global_inode_tree and copy all the file
+     * attr structs for the files this server owns */
+
+    /* The file names in the unifyfs_file_attr_t are pointers to separately
+     * allocated memory, and thus have to be handled specially.  We'll copy
+     * the filenames into a separate char[] that will be sent as an hg_string_t
+     * seprate from the bulk transfer of the unifyfs_file_attr_t structs.  We
+     * use this variable to keep track of how big that buffer needs to be.
+     */
+    uintptr_t total_name_len = 0;
+    /* Note: Using uintptr_t because this value get cast to a char* and must
+     * therefore be the same size as a pointer. */
+    char* concatenated_names = NULL;
+    size_t concatenated_names_size = 0;
+
+    unsigned int num_files = 0;
+    unifyfs_file_attr_t* attr_list;
+
+    int ret = unifyfs_get_owned_files(&num_files, &attr_list);
+    if (UNIFYFS_SUCCESS != ret) {
+        return ret;
+    }
+
+    /* Loop through the attr list and calculate the total length
+     * of all the filenames.  We'll need this down below...*/
+    for (unsigned int i = 0; i < num_files; i++) {
+        concatenated_names_size += strlen(attr_list[i].filename);
+    }
+
+    concatenated_names = calloc(concatenated_names_size+1, sizeof(char));
+    // +1 to allow space for the null terminator
+    if (!concatenated_names) {
+        free(attr_list);
+        return ENOMEM;
+    }
+
+    /* unifyfs_file_attr_t.filename is a pointer.  Since sending pointers over
+     * the network is useless, we're going to abuse this value by using it to
+     * store the offset into the separate char array that will hold the
+     * filenames.
+     * We only need the offset of the START of the filename.  The end of the
+     * filename is assumed to be 1 character before the start of the next
+     * filename or - if this is the last file - the end of the string. */
+    for (unsigned int i = 0; i < num_files; i++) {
+        size_t filename_len = strlen(attr_list[i].filename);
+        strcat(concatenated_names, attr_list[i].filename);
+        free(attr_list[i].filename);
+        attr_list[i].filename = (char*)total_name_len;
+        total_name_len += filename_len;
+    }
+
+    coll_request* coll = (coll_request*)req->coll;
+    // Do a couple of sanity checks
+    if (UNIFYFS_SERVER_BCAST_RPC_METAGET != coll->req_type) {
+        LOGERR("invalid collective request type %d",
+               coll->req_type);
+        free(attr_list);
+        free(concatenated_names);
+        return UNIFYFS_ERROR_MARGO;
+    }
+    if (sizeof(metaget_all_bcast_out_t) != coll->output_sz) {
+        LOGERR("Unexpected size for collective output struct. "
+                "Expected %d but value was %d",
+                sizeof(metaget_all_bcast_out_t),
+                coll->output_sz);
+        free(attr_list);
+        free(concatenated_names);
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    // If there are any files, then setup the bulk transfer
+    if (num_files) {
+        hg_size_t buf_size = num_files * sizeof(unifyfs_file_attr_t);
+        hg_bulk_t file_attrs_bulk;
+        hg_return_t hret =
+            margo_bulk_create(unifyfsd_rpc_context->svr_mid, 1,
+                              (void**)&attr_list, &buf_size,
+                              HG_BULK_READ_ONLY, &file_attrs_bulk);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_bulk_create() failed - %s", HG_Error_to_string(hret));
+            free(attr_list);
+            free(concatenated_names);
+            collective_set_local_retval(req->coll, UNIFYFS_ERROR_MARGO);
+            return UNIFYFS_ERROR_MARGO;
+        }
+
+        /* set the output params */
+        metaget_all_bcast_out_t* mabo = (metaget_all_bcast_out_t*)coll->output;
+        mabo->file_meta = file_attrs_bulk;
+        mabo->num_files = num_files;
+        mabo->filenames = concatenated_names;
+    } else {
+        /* There's no files to transfer - set output params appropriately */
+        metaget_all_bcast_out_t* mabo = (metaget_all_bcast_out_t*)coll->output;
+        mabo->file_meta = HG_BULK_NULL;
+        mabo->num_files = 0;
+        mabo->filenames = NULL;
+
+        /* Also need to free attr_list and concatenated_names since they're
+         * not actually being used */
+        free(attr_list);
+        free(concatenated_names);
+    }
+
+    collective_set_local_retval(req->coll, UNIFYFS_SUCCESS);
+
+    /* create a ULT to finish broadcast operation */
+    return invoke_bcast_progress_rpc(req->coll);
+}
+
 static int process_service_requests(void)
 {
     /* assume we'll succeed */
@@ -1400,6 +1512,9 @@ static int process_service_requests(void)
             break;
         case UNIFYFS_SERVER_BCAST_RPC_UNLINK:
             rret = process_unlink_bcast_rpc(req);
+            break;
+        case UNIFYFS_SERVER_BCAST_RPC_METAGET:
+            rret = process_metaget_bcast_rpc(req);
             break;
         default:
             LOGERR("unsupported server rpc request type %d", req->req_type);

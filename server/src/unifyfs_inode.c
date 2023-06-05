@@ -21,6 +21,7 @@
 #include "unifyfs_inode.h"
 #include "unifyfs_inode_tree.h"
 #include "unifyfs_request_manager.h"
+#include "unifyfs_p2p_rpc.h"  // for hash_gfid_to_server()
 
 struct unifyfs_inode_tree _global_inode_tree;
 struct unifyfs_inode_tree* global_inode_tree = &_global_inode_tree;
@@ -778,4 +779,88 @@ int unifyfs_get_gfids(int* num_gfids, int** gfid_list)
     *num_gfids = _num_gfids;
     *gfid_list = _gfid_list;
     return ret;
+}
+
+
+int unifyfs_get_owned_files(unsigned int* num_files,
+                            unifyfs_file_attr_t** attr_list)
+{
+    /* Iterate through the global_inode_tree and copy all the file
+     * attr structs for the files this server owns.
+     * Note: the file names in the unifyfs_file_attr_t are pointers to
+     * separately allocated memory, so they will be created using strdup(). */
+
+    unsigned int attr_list_size = 64;
+    unsigned int num_files_int = 0;
+    unifyfs_file_attr_t* attr_list_int;
+    /* _int suffix is short for "internal".  If everything succeeds, then
+     * before returning, we'll copy num_files_int to num_files and
+     * attr_list_int to attr_list. */
+
+    attr_list_int =  malloc(sizeof(unifyfs_file_attr_t) * attr_list_size);
+    if (!attr_list_int) {
+        return ENOMEM;
+    }
+
+    unifyfs_inode_tree_rdlock(global_inode_tree);
+    {
+        struct unifyfs_inode* node =
+            unifyfs_inode_tree_iter(global_inode_tree, NULL);
+        while (node) {
+            if (num_files_int == attr_list_size) {
+                attr_list_size *= 2;  // Double the list size each time
+                attr_list_int =
+                    realloc(attr_list_int,
+                            sizeof(unifyfs_file_attr_t)*attr_list_size);
+                if (!attr_list_int) {
+                    unifyfs_inode_tree_unlock(global_inode_tree);
+                    free(attr_list_int);
+                    return ENOMEM;
+                }
+            }
+
+            /* We only want to copy file attrs that we're the owner of */
+            int owner_rank = hash_gfid_to_server(node->attr.gfid);
+            if (owner_rank == glb_pmi_rank) {
+                memcpy(&attr_list_int[num_files_int], &node->attr,
+                    sizeof(unifyfs_file_attr_t));
+
+                /* filename is a pointer to separately allocated memory.
+                 *  We need to do a deep copy, so create a new string with
+                 *  strdup(). */
+                attr_list_int[num_files_int].filename =
+                    strdup(node->attr.filename);
+
+                num_files_int++;
+            }
+            node = unifyfs_inode_tree_iter(global_inode_tree, node);
+        }
+    }
+    unifyfs_inode_tree_unlock(global_inode_tree);
+
+    /* realloc() the array list space down to only what we need.
+     *
+     * Note that corner cases get a little odd here:
+     * 1) If num_files_int is 0, this will conveniently free() the list for
+     *    us.  The pointer we get back from realloc() will be NULL and that's
+     *    exactly what we should return to the caller.
+     * 2) If the realloc actually fails (and it's unclear how that could
+     *    happen given that we're reducing the size of the allocation), then
+     *    the original memory will be left untouched and we we can return the
+     *    original pointer.   That wastes some space, but the pointer is
+     *    valid and the memory will eventually be freed by the caller.  */
+    unifyfs_file_attr_t* attr_list_int2 = realloc(
+        attr_list_int, num_files_int * sizeof(unifyfs_file_attr_t));
+    if (NULL == attr_list_int2) {
+        if (0 != num_files_int) {
+            /* realloc() actually failed. Wow. */
+            attr_list_int2 = attr_list_int;
+        }
+    }
+
+    /* If we made it here, then we walked the tree with no errors, so update
+     * the return parameters and return. */
+    *attr_list = attr_list_int2;
+    *num_files = num_files_int;
+    return UNIFYFS_SUCCESS;
 }
