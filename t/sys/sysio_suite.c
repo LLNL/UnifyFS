@@ -107,6 +107,8 @@ int main(int argc, char* argv[])
 
     chdir_test(unifyfs_root);
 
+    stat_test(unifyfs_root);
+
     rc = unifyfs_unmount();
     ok(rc == 0, "unifyfs_unmount(%s) (rc=%d)", unifyfs_root, rc);
 

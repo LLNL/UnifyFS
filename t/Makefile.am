@@ -134,7 +134,8 @@ test_sysio_sources = \
   sys/write-read-hole.c \
   sys/truncate.c \
   sys/unlink.c \
-  sys/chdir.c
+  sys/chdir.c \
+  sys/stat.c
 
 sys_sysio_gotcha_t_CPPFLAGS = $(test_cppflags)
 sys_sysio_gotcha_t_LDADD    = $(test_gotcha_ldadd)

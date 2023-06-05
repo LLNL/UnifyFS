@@ -808,6 +808,11 @@ int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
         int fid = unifyfs_get_fid_from_fd(fd);
+        /* check if the file is still active (e.g., not closed)*/
+        if (fid == -1) {
+            errno = EBADF;
+            return -1;
+        }
         const char* path = unifyfs_path_from_fid(posix_client, fid);
         int ret = __stat(path, buf);
         return ret;
@@ -892,6 +897,11 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
         }
 
         int fid = unifyfs_get_fid_from_fd(fd);
+        /* check if the file is still active (e.g., not closed) */
+        if (fid == -1) {
+            errno = EBADF;
+            return -1;
+        }
         const char* path = unifyfs_path_from_fid(posix_client, fid);
         int ret = __stat(path, buf);
         return ret;
