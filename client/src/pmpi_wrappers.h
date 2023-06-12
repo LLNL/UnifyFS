@@ -18,9 +18,11 @@
 #include <mpi.h>
 
 /* MPI_Init PMPI wrapper */
-int unifyfs_mpi_init(int* argc, char*** argv);
+int unifyfs_mpi_init(int* argc, char*** argv, int required, int* provided);
 int MPI_Init(int* argc, char*** argv);
+int MPI_Init_thread(int* argc, char*** argv, int required, int* provided);
 void mpi_init_(MPI_Fint* ierr);
+void mpi_init_thread_(int required, int* provided, MPI_Fint* ierr);
 
 /* MPI_Finalize PMPI wrapper */
 int unifyfs_mpi_finalize(void);
