@@ -263,16 +263,16 @@ int unifyfs_file_attr_update(int attr_op,
     return 0;
 }
 
-/* 
- * Convert UnifyFS file attr to sturct stat/stat64
+/*
+ * Convert UnifyFS file attr to struct stat/stat64
  *
  * fattr is type of unifyfs_file_attr_t*
  * sb is type of struct stat* or struct stat64*
  */
 #define unifyfs_file_attr_to_stat(fattr, sb)                                  \
-{                                                                             \
+do {                                                                          \
     unifyfs_file_attr_t* _fattr = (fattr);                                    \
-    if (_fattr && (NULL != (void*)(sb))) {                     \
+    if (_fattr && (NULL != (void*)(sb))) {                                    \
         debug_print_file_attr(_fattr);                                        \
         (sb)->st_dev  = UNIFYFS_STAT_DEFAULT_DEV;                             \
         (sb)->st_ino  = _fattr->gfid;                                         \
@@ -298,7 +298,7 @@ int unifyfs_file_attr_update(int attr_op,
         (sb)->st_mtim = _fattr->mtime;                                        \
         (sb)->st_ctim = _fattr->ctime;                                        \
     }                                                                         \
-}
+} while (0)
 
 
 /* given an input mode, mask it with umask and return.
