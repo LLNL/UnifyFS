@@ -284,10 +284,10 @@ AC_CHECK_FUNCS(__xstat64,[
     LINK_WRAPPERS+=",-wrap,__xstat64"
 ],[])
 AC_CHECK_FUNCS(__fxstat,[
-    LINK_WRAPPERS+=",-wrap,__fxstat64"
+    LINK_WRAPPERS+=",-wrap,__fxstat"
 ],[])
 AC_CHECK_FUNCS(__fxstat64,[
-    LINK_WRAPPERS+=",-wrap,__fxstat"
+    LINK_WRAPPERS+=",-wrap,__fxstat64"
 ],[])
 
 AC_CHECK_FUNCS(posix_fadvise, [
