@@ -263,40 +263,43 @@ int unifyfs_file_attr_update(int attr_op,
     return 0;
 }
 
-static inline
-void unifyfs_file_attr_to_stat(unifyfs_file_attr_t* fattr, struct stat* sb)
-{
-    if (fattr && sb) {
-        debug_print_file_attr(fattr);
+/*
+ * Convert UnifyFS file attr to struct stat/stat64
+ *
+ * fattr is type of unifyfs_file_attr_t*
+ * sb is type of struct stat* or struct stat64*
+ */
+#define unifyfs_file_attr_to_stat(fattr, sb)                                  \
+do {                                                                          \
+    unifyfs_file_attr_t* _fattr = (fattr);                                    \
+    if (_fattr && (NULL != (void*)(sb))) {                                    \
+        debug_print_file_attr(_fattr);                                        \
+        (sb)->st_dev  = UNIFYFS_STAT_DEFAULT_DEV;                             \
+        (sb)->st_ino  = _fattr->gfid;                                         \
+        (sb)->st_mode = _fattr->mode;                                         \
+        (sb)->st_uid  = _fattr->uid;                                          \
+        (sb)->st_gid  = _fattr->gid;                                          \
+        (sb)->st_rdev = UNIFYFS_STAT_DEFAULT_DEV;                             \
+        (sb)->st_size = _fattr->size;                                         \
+                                                                              \
+        /* TODO: use cfg.logio_chunk_size here for st_blksize     */          \
+        /*       and report actual chunks allocated for st_blocks */          \
+        (sb)->st_blksize = UNIFYFS_STAT_DEFAULT_BLKSIZE;                      \
+        (sb)->st_blocks = _fattr->size / UNIFYFS_STAT_DEFAULT_BLKSIZE;        \
+        if (_fattr->size % UNIFYFS_STAT_DEFAULT_BLKSIZE > 0) {                \
+            (sb)->st_blocks += 1;                                             \
+        }                                                                     \
+        /* Re-purpose st_nlink to tell us if the file is laminated or not. */ \
+        /* That way, if we do eventually make /unifyfs mountable, we can   */ \
+        /* easily see with 'ls -l' or stat if the file is laminated or not.*/ \
+        (sb)->st_nlink = _fattr->is_laminated ? 1 : 0;                        \
+                                                                              \
+        (sb)->st_atim = _fattr->atime;                                        \
+        (sb)->st_mtim = _fattr->mtime;                                        \
+        (sb)->st_ctim = _fattr->ctime;                                        \
+    }                                                                         \
+} while (0)
 
-        sb->st_dev = UNIFYFS_STAT_DEFAULT_DEV;
-        sb->st_ino = fattr->gfid;
-        sb->st_mode = fattr->mode;
-        sb->st_uid = fattr->uid;
-        sb->st_gid = fattr->gid;
-        sb->st_rdev = UNIFYFS_STAT_DEFAULT_DEV;
-        sb->st_size = fattr->size;
-
-        /* TODO: use cfg.logio_chunk_size here for st_blksize
-         *       and report actual chunks allocated for st_blocks */
-        sb->st_blksize = UNIFYFS_STAT_DEFAULT_BLKSIZE;
-        sb->st_blocks = fattr->size / UNIFYFS_STAT_DEFAULT_BLKSIZE;
-        if (fattr->size % UNIFYFS_STAT_DEFAULT_BLKSIZE > 0) {
-            sb->st_blocks += 1;
-        }
-
-        /*
-         * Re-purpose st_nlink to tell us if the file is laminated or not.
-         * That way, if we do eventually make /unifyfs mountable, we can easily
-         * see with 'ls -l' or stat if the file is laminated or not.
-         */
-        sb->st_nlink = fattr->is_laminated ? 1 : 0;
-
-        sb->st_atim = fattr->atime;
-        sb->st_mtim = fattr->mtime;
-        sb->st_ctim = fattr->ctime;
-    }
-}
 
 /* given an input mode, mask it with umask and return.
  * set perms=0 to request all read/write bits */

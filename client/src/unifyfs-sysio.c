@@ -783,13 +783,63 @@ static int __stat(const char* path, struct stat* buf)
 
     /* copy attributes to stat struct */
     unifyfs_file_attr_to_stat(&fattr, buf);
+
     errno = 0;
     return 0;
 }
 
+static int __stat64(const char* path, struct stat64* buf)
+{
+    /* check that caller gave us a buffer to write to */
+    if (!buf) {
+        /* forgot buffer for stat */
+        LOGDBG("invalid stat buffer");
+        errno = EINVAL;
+        return -1;
+    }
+
+    /* flush any pending writes if needed */
+    int fid = unifyfs_fid_from_path(posix_client, path);
+    if (fid != -1) {
+        int sync_rc = unifyfs_fid_sync_extents(posix_client, fid);
+        if (sync_rc != UNIFYFS_SUCCESS) {
+            errno = unifyfs_rc_errno(sync_rc);
+            return -1;
+        }
+    }
+
+    /* clear the user buffer */
+    memset(buf, 0, sizeof(*buf));
+
+    /* get global file id for given path */
+    int gfid = unifyfs_generate_gfid(path);
+
+    /* get stat information for file */
+    unifyfs_file_attr_t fattr;
+    memset(&fattr, 0, sizeof(fattr));
+    int ret = unifyfs_get_meta_with_size(gfid, &fattr);
+    if (ret != UNIFYFS_SUCCESS) {
+        errno = unifyfs_rc_errno(ret);
+        return -1;
+    }
+
+    /* update local file metadata (if applicable) */
+    if (fid != -1) {
+        unifyfs_fid_update_file_meta(posix_client, fid, &fattr);
+    }
+
+    /* copy attributes to stat struct */
+    unifyfs_file_attr_to_stat(&fattr, buf);
+
+    errno = 0;
+    return 0;
+}
+
+
 int UNIFYFS_WRAP(stat)(const char* path, struct stat* buf)
 {
     LOGDBG("stat was called for %s", path);
+
     char upath[UNIFYFS_MAX_FILENAME];
     if (unifyfs_intercept_path(path, upath)) {
         int ret = __stat(upath, buf);
@@ -801,6 +851,22 @@ int UNIFYFS_WRAP(stat)(const char* path, struct stat* buf)
     }
 }
 
+int UNIFYFS_WRAP(stat64)(const char* path, struct stat64* buf)
+{
+    LOGDBG("stat64 was called for %s", path);
+
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        int ret = __stat64(upath, buf);
+        return ret;
+    } else {
+        MAP_OR_FAIL(stat64);
+        int ret = UNIFYFS_REAL(stat64)(path, buf);
+        return ret;
+    }
+    return 0;
+}
+
 int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
 {
     LOGDBG("fstat was called for fd: %d", fd);
@@ -808,7 +874,7 @@ int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
         int fid = unifyfs_get_fid_from_fd(fd);
-        /* check if the file is still active (e.g., not closed)*/
+        /* check if the file is still active (e.g., not closed) */
         if (fid == -1) {
             errno = EBADF;
             return -1;
@@ -819,6 +885,23 @@ int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
     } else {
         MAP_OR_FAIL(fstat);
         int ret = UNIFYFS_REAL(fstat)(fd, buf);
+        return ret;
+    }
+}
+
+int UNIFYFS_WRAP(fstat64)(int fd, struct stat64* buf)
+{
+    LOGDBG("fstat64 was called for fd: %d", fd);
+
+    /* check whether we should intercept this file descriptor */
+    if (unifyfs_intercept_fd(&fd)) {
+        int fid = unifyfs_get_fid_from_fd(fd);
+        const char* path = unifyfs_path_from_fid(posix_client, fid);
+        int ret = __stat64(path, buf);
+        return ret;
+    } else {
+        MAP_OR_FAIL(fstat64);
+        int ret = UNIFYFS_REAL(fstat64)(fd, buf);
         return ret;
     }
 }
@@ -863,6 +946,27 @@ int UNIFYFS_WRAP(__xstat)(int vers, const char* path, struct stat* buf)
 }
 #endif
 
+#ifdef HAVE___XSTAT64
+int UNIFYFS_WRAP(__xstat64)(int vers, const char* path, struct stat64* buf)
+{
+    LOGDBG("xstat64 was called for %s", path);
+
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        if (vers != _STAT_VER) {
+            errno = EINVAL;
+            return -1;
+        }
+        int ret = __stat64(upath, buf);
+        return ret;
+    } else {
+        MAP_OR_FAIL(__xstat64);
+        int ret = UNIFYFS_REAL(__xstat64)(vers, path, buf);
+        return ret;
+    }
+}
+#endif
+
 #ifdef HAVE___LXSTAT
 int UNIFYFS_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
 {
@@ -879,6 +983,27 @@ int UNIFYFS_WRAP(__lxstat)(int vers, const char* path, struct stat* buf)
     } else {
         MAP_OR_FAIL(__lxstat);
         int ret = UNIFYFS_REAL(__lxstat)(vers, path, buf);
+        return ret;
+    }
+}
+#endif
+
+#ifdef HAVE___LXSTAT64
+int UNIFYFS_WRAP(__lxstat64)(int vers, const char* path, struct stat64* buf)
+{
+    LOGDBG("lxstat64 was called for %s", path);
+
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        if (vers != _STAT_VER) {
+            errno = EINVAL;
+            return -1;
+        }
+        int ret = __stat64(upath, buf);
+        return ret;
+    } else {
+        MAP_OR_FAIL(__lxstat64);
+        int ret = UNIFYFS_REAL(__lxstat64)(vers, path, buf);
         return ret;
     }
 }
@@ -908,6 +1033,30 @@ int UNIFYFS_WRAP(__fxstat)(int vers, int fd, struct stat* buf)
     } else {
         MAP_OR_FAIL(__fxstat);
         int ret = UNIFYFS_REAL(__fxstat)(vers, fd, buf);
+        return ret;
+    }
+}
+#endif
+
+#ifdef HAVE___FXSTAT64
+int UNIFYFS_WRAP(__fxstat64)(int vers, int fd, struct stat64* buf)
+{
+    LOGDBG("fxstat64 was called for fd %d", fd);
+
+    /* check whether we should intercept this file descriptor */
+    if (unifyfs_intercept_fd(&fd)) {
+        if (vers != _STAT_VER) {
+            errno = EINVAL;
+            return -1;
+        }
+
+        int fid = unifyfs_get_fid_from_fd(fd);
+        const char* path = unifyfs_path_from_fid(posix_client, fid);
+        int ret = __stat64(path, buf);
+        return ret;
+    } else {
+        MAP_OR_FAIL(__fxstat64);
+        int ret = UNIFYFS_REAL(__fxstat64)(vers, fd, buf);
         return ret;
     }
 }
