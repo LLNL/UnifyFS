@@ -89,11 +89,6 @@ int unifyfs_mpi_finalize(void)
 {
     int rc, ret;
 
-    rc = unifyfs_unmount();
-    if (UNIFYFS_SUCCESS != rc) {
-        fprintf(stderr, "UNIFYFS ERROR: unifyfs_unmount() failed with '%s'\n",
-                unifyfs_rc_enum_description((unifyfs_rc)rc));
-    }
 
     //fprintf(stderr, "DEBUG: %s - before PMPI_Finalize()\n", __func__);
 
@@ -101,6 +96,12 @@ int unifyfs_mpi_finalize(void)
 
     //fprintf(stderr, "DEBUG: %s - after PMPI_Finalize(), ret=%d\n",
     //        __func__, ret);
+
+    rc = unifyfs_unmount();
+    if (UNIFYFS_SUCCESS != rc) {
+        fprintf(stderr, "UNIFYFS ERROR: unifyfs_unmount() failed with '%s'\n",
+                unifyfs_rc_enum_description((unifyfs_rc)rc));
+    }
 
     return ret;
 }
