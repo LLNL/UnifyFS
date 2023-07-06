@@ -788,6 +788,11 @@ static int __stat(const char* path, struct stat* buf)
     return 0;
 }
 
+#if defined(HAVE_STAT64)     || \
+    defined(HAVE_FSTAT64)    || \
+    defined(HAVE___XSTAT64)  || \
+    defined(HAVE___LXSTAT64) || \
+    defined(HAVE___FXSTAT64)
 static int __stat64(const char* path, struct stat64* buf)
 {
     /* check that caller gave us a buffer to write to */
@@ -834,6 +839,7 @@ static int __stat64(const char* path, struct stat64* buf)
     errno = 0;
     return 0;
 }
+#endif
 
 int UNIFYFS_WRAP(stat)(const char* path, struct stat* buf)
 {
