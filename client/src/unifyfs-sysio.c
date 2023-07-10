@@ -788,6 +788,11 @@ static int __stat(const char* path, struct stat* buf)
     return 0;
 }
 
+#if defined(HAVE_STAT64)     || \
+    defined(HAVE_FSTAT64)    || \
+    defined(HAVE___XSTAT64)  || \
+    defined(HAVE___LXSTAT64) || \
+    defined(HAVE___FXSTAT64)
 static int __stat64(const char* path, struct stat64* buf)
 {
     /* check that caller gave us a buffer to write to */
@@ -834,7 +839,7 @@ static int __stat64(const char* path, struct stat64* buf)
     errno = 0;
     return 0;
 }
-
+#endif
 
 int UNIFYFS_WRAP(stat)(const char* path, struct stat* buf)
 {
@@ -851,6 +856,7 @@ int UNIFYFS_WRAP(stat)(const char* path, struct stat* buf)
     }
 }
 
+#ifdef HAVE_STAT64
 int UNIFYFS_WRAP(stat64)(const char* path, struct stat64* buf)
 {
     LOGDBG("stat64 was called for %s", path);
@@ -864,8 +870,8 @@ int UNIFYFS_WRAP(stat64)(const char* path, struct stat64* buf)
         int ret = UNIFYFS_REAL(stat64)(path, buf);
         return ret;
     }
-    return 0;
 }
+#endif
 
 int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
 {
@@ -873,12 +879,13 @@ int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
 
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
-        int fid = unifyfs_get_fid_from_fd(fd);
         /* check if the file is still active (e.g., not closed) */
+        int fid = unifyfs_get_fid_from_fd(fd);
         if (fid == -1) {
             errno = EBADF;
             return -1;
         }
+
         const char* path = unifyfs_path_from_fid(posix_client, fid);
         int ret = __stat(path, buf);
         return ret;
@@ -889,13 +896,20 @@ int UNIFYFS_WRAP(fstat)(int fd, struct stat* buf)
     }
 }
 
+#ifdef HAVE_FSTAT64
 int UNIFYFS_WRAP(fstat64)(int fd, struct stat64* buf)
 {
     LOGDBG("fstat64 was called for fd: %d", fd);
 
     /* check whether we should intercept this file descriptor */
     if (unifyfs_intercept_fd(&fd)) {
+        /* check if the file is still active (e.g., not closed) */
         int fid = unifyfs_get_fid_from_fd(fd);
+        if (fid == -1) {
+            errno = EBADF;
+            return -1;
+        }
+
         const char* path = unifyfs_path_from_fid(posix_client, fid);
         int ret = __stat64(path, buf);
         return ret;
@@ -905,6 +919,7 @@ int UNIFYFS_WRAP(fstat64)(int fd, struct stat64* buf)
         return ret;
     }
 }
+#endif
 
 /*
  * NOTE on __xstat(2), __lxstat(2), and __fxstat(2)
