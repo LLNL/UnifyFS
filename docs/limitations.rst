@@ -340,22 +340,22 @@ since it may induce more file flush operations than necessary.
 PnetCDF Limitations
 -------------------
 PnetCDF applications can utilize UnifyFS,
-and in fact, the semantics of the `PnetCDF API`_ align well with UnifyFS constraints.
+and the semantics of the `PnetCDF API`_ align well with UnifyFS constraints.
+
+PnetCDF uses MPI-IO to read and write files.
+In addition to any restrictions required when using UnifyFS with PnetCDF,
+one must follow any recommendations regarding UnifyFS and the
+underlying MPI-IO implementation.
+
+Data Consistency
+****************
 
 PnetCDF parallelizes access to NetCDF files using MPI.
 An MPI communicator is passed as an argument when opening a file.
 Any collective call in PnetCDF is global across the process group
 associated with the communicator used to open the file.
 
-In addition to any restrictions required when using UnifyFS with PnetCDF,
-one should also follow any recommendations regarding UnifyFS and the
-underlying MPI-IO implementation.
-
-Data Consistency
-****************
-
-PnetCDF uses MPI-IO to read and write files,
-and PnetCDF follows the data consistency model defined by MPI-IO.
+PnetCDF follows the data consistency model defined by MPI-IO.
 Specifically, from its documentation about `PnetCDF data consistency`_:
 
 .. Note::
@@ -371,7 +371,7 @@ Specifically, from its documentation about `PnetCDF data consistency`_:
     users can explicitly call ``ncmpi_sync()``. In ``ncmpi_sync()``,
     ``MPI_File_sync()`` and ``MPI_Barrier()`` are called.
 
-Upon inspection of the PnetCDF implementation,
+Upon inspection of the implementation of the PnetCDF v1.12.3 release,
 the following PnetCDF functions include the following calls::
 
     ncmpio_file_sync
@@ -401,11 +401,30 @@ the following PnetCDF functions include the following calls::
 If a program must read data written by another process,
 PnetCDF users must do one of the following when using UnifyFS:
 
-1) Set ``UNIFYFS_CLIENT_WRITE_SYNC=1``, in which case each POSIX
+1) Add explicit calls to ``ncmpi_sync()`` after writing and before reading.
+2) Set ``UNIFYFS_CLIENT_WRITE_SYNC=1``, in which case each POSIX
    write operation invokes a flush.
-2) Use ``NC_SHARE`` when opening files so that the PnetCDF library invokes
+3) Use ``NC_SHARE`` when opening files so that the PnetCDF library invokes
    ``MPI_File_sync()`` and ``MPI_Barrier()`` calls after its MPI-IO operations.
-3) Add explicit calls to ``ncmpi_sync()`` after writing and before reading.
+
+Of these options,
+it is recommended that one add ``ncmpi_sync()`` calls where necessary.
+Setting ``UNIFYFS_CLIENT_WRITE_SYNC=1`` is convenient since one does not
+need to change the application, but it may have a larger impact on performance.
+Opening or creating a file with ``NC_SHARE`` may work for some applications,
+but it depends on whether the PnetCDF implementation
+internally calls ``MPI_File_sync()`` at all appropriate places,
+which is not guaranteed.
+
+A number of PnetCDF calls invoke write operations on the underlying file.
+In addition to the ``ncmpi_put_*`` collection of calls
+that write data to variables or attributes,
+``ncmpi_enddef`` updates variable definitions,
+and it can fill variables with default values.
+Users may also explicitly fill variables by calling ``ncmpi_fill_var_rec()``.
+One must ensure necessary ``ncmpi_sync()`` calls are placed between
+any fill and write operations in case
+they happen to write to overlapping regions of a file.
 
 Note that ``ncmpi_sync()`` calls ``MPI_File_sync()`` and ``MPI_Barrier()``,
 but it does not call ``MPI_File_sync()`` again after calling ``MPI_Barrier()``.
@@ -427,4 +446,4 @@ as noted above.
 .. _VerifyIO README: https://github.com/uiuc-hpc/Recorder/tree/pilgrim/tools/verifyio#note-on-the-third-step
 .. _ROMIO hints file: https://wordpress.cels.anl.gov/romio/2008/09/26/system-hints-hints-via-config-file
 .. _PnetCDF API: https://parallel-netcdf.github.io/wiki/pnetcdf-api.pdf
-.. _PnetCDF data consistency: https://github.com/Parallel-NetCDF/PnetCDF/blob/master/doc/README.consistency
+.. _PnetCDF data consistency: https://github.com/Parallel-NetCDF/PnetCDF/blob/e47596438326bfa7b9ed0b3857800d3a0d09ff1a/doc/README.consistency.md
