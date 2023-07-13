@@ -360,8 +360,11 @@ int write_pre_existing_file_test(char* unifyfs_root)
 {
     diag("Starting write-to-pre-existing-file tests");
 
+#define TEST_LEN 300
+#define TEST_LEN_SHORT 100
+/* TEST_LEN_SHORT must be less than TEST_LEN */
     char path[64];
-    char buf[300] = {0};
+    char buf[TEST_LEN] = {0};
     int fd = -1;
     int err, rc;
     size_t global;
@@ -374,13 +377,13 @@ int write_pre_existing_file_test(char* unifyfs_root)
     ok(fd != -1 && err == 0, "%s:%d open(%s) (fd=%d): %s",
        __FILE__, __LINE__, path, fd, strerror(err));
 
-    /* Write 300 bytes to a file */
+    /* Write TEST_LEN bytes to a file */
     errno = 0;
-    rc = (int) write(fd, "a", 300);
+    rc = (int) write(fd, buf, TEST_LEN);
     err = errno;
-    ok(rc == 300 && err == 0,
-       "%s:%d write() a 300 byte file: %s",
-       __FILE__, __LINE__, strerror(err));
+    ok(rc == TEST_LEN && err == 0,
+       "%s:%d write() a %d byte file: %s",
+       __FILE__, __LINE__, TEST_LEN, strerror(err));
 
     errno = 0;
     rc = close(fd);
@@ -388,10 +391,10 @@ int write_pre_existing_file_test(char* unifyfs_root)
     ok(rc == 0 && err == 0, "%s:%d close() worked: %s",
        __FILE__, __LINE__, strerror(err));
 
-    /* Check global size is 300 */
+    /* Check global size is correct */
     testutil_get_size(path, &global);
-    ok(global == 300, "%s:%d global size of 300 byte file is %zu: %s",
-       __FILE__, __LINE__, global, strerror(err));
+    ok(global == TEST_LEN, "%s:%d global size of %d byte file is %zu: %s",
+       __FILE__, __LINE__, TEST_LEN, global, strerror(err));
 
     /* Reopen the same file */
     errno = 0;
@@ -400,13 +403,13 @@ int write_pre_existing_file_test(char* unifyfs_root)
     ok(fd != -1 && err == 0, "%s:%d open(%s) (fd=%d): %s",
        __FILE__, __LINE__, path, fd, strerror(err));
 
-    /* Overwrite the first 100 bytes of same file */
+    /* Overwrite the first part of same file */
     errno = 0;
-    rc = (int) write(fd, buf, 100);
+    rc = (int) write(fd, buf, TEST_LEN_SHORT);
     err = errno;
-    ok(rc == 100 && err == 0,
-       "%s:%d overwrite first 100 bytes of same file: %s",
-       __FILE__, __LINE__, strerror(err));
+    ok(rc == TEST_LEN_SHORT && err == 0,
+       "%s:%d overwrite first %d bytes of same file: %s",
+       __FILE__, __LINE__, TEST_LEN_SHORT, strerror(err));
 
     errno = 0;
     rc = close(fd);
@@ -414,10 +417,10 @@ int write_pre_existing_file_test(char* unifyfs_root)
     ok(rc == 0 && err == 0, "%s:%d close() worked: %s",
        __FILE__, __LINE__, strerror(err));
 
-    /* Check global size is 300 */
+    /* Check global size is still correct */
     testutil_get_size(path, &global);
-    ok(global == 300, "%s:%d global size of 300 byte file is %zu: %s",
-       __FILE__, __LINE__, global, strerror(err));
+    ok(global == TEST_LEN, "%s:%d global size of %d byte file is %zu: %s",
+       __FILE__, __LINE__, TEST_LEN, global, strerror(err));
 
     errno = 0;
     rc = unlink(path);
