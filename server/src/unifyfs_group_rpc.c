@@ -262,7 +262,6 @@ static int merge_metaget_all_bcast_outputs(
         LOGERR("margo_bulk_create() failed - %s", HG_Error_to_string(hret));
         p_out->file_meta = parent_old_bulk;
         free(parent_attr_list);
-        free(child_attr_list);
         return UNIFYFS_ERROR_MARGO;
     }
 
