@@ -553,15 +553,15 @@ int unifyfs_fid_open(
         }
     }
 
-    /* File should exist at this point,
-     * update our cache with its metadata. */
+    /* Update our cache with its metadata. */
     ret = unifyfs_fid_fetch(client, path);
     if (ret != UNIFYFS_SUCCESS) {
-        /* Failed to get metadata for a file that should exist.
-         * Perhaps it was since deleted.  We could try to create
-         * it again and loop through these steps, but for now
-         * consider this situation to be an error. */
-        LOGERR("Failed to get metadata on existing file %s", path);
+        /* Failed to get metadata.
+         * Perhaps it was opened without O_CREAT or it
+         * was since deleted.  For the latter, we could
+         * try to create it again and loop through these
+         * steps. */
+        LOGDBG("Failed to get metadata on file %s", path);
         return ret;
     }
 
