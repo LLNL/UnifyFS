@@ -36,6 +36,8 @@ extern "C" {
 # define UNIFYFS_METADATA_CACHE_SECONDS 5
 #endif
 
+/* a valid gfid generated via MD5 hash will never be zero */
+#define INVALID_GFID (0)
 
 /* extent slice size used for metadata */
 extern size_t meta_slice_sz;
@@ -109,6 +111,9 @@ typedef struct {
     struct timespec atime;
     struct timespec mtime;
     struct timespec ctime;
+
+    /* metadata caching timestamp */
+    time_t last_update;
 } unifyfs_file_attr_t;
 
 enum {
@@ -123,7 +128,7 @@ void unifyfs_file_attr_set_invalid(unifyfs_file_attr_t* attr)
 {
     memset(attr, 0, sizeof(*attr));
     attr->filename     = NULL;
-    attr->gfid         = -1;
+    attr->gfid         = INVALID_GFID;
     attr->is_laminated = -1;
     attr->is_shared    = -1;
     attr->mode         = (uint32_t) -1;
@@ -173,9 +178,17 @@ int unifyfs_file_attr_update(int attr_op,
 {
     if (!dst || !src
         || (attr_op == UNIFYFS_FILE_ATTR_OP_INVALID)
-        || (dst->gfid != src->gfid)) {
+        || (src->gfid == INVALID_GFID)) {
         return EINVAL;
     }
+
+    if (attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) {
+        dst->gfid = src->gfid;
+    }
+
+    struct timespec tp = {0};
+    clock_gettime(CLOCK_REALTIME, &tp);
+    dst->last_update = tp.tv_sec;
 
     LOGDBG("updating attributes for gfid=%d", dst->gfid);
 
@@ -336,16 +349,6 @@ int compare_name_rank_pair(const void* a, const void* b)
     return cmp;
 }
 
-/* qsort comparison function for int */
-static inline
-int compare_int(const void* a, const void* b)
-{
-    int aval = *(const int*)a;
-    int bval = *(const int*)b;
-    return aval - bval;
-}
-
-
 /*
  * Hash a file path to a uint64_t using MD5
  * @param path absolute file path
@@ -354,7 +357,7 @@ int compare_int(const void* a, const void* b)
 uint64_t compute_path_md5(const char* path);
 
 /*
- * Hash a file path to an integer gfid
+ * Hash a file path to a positive integer gfid
  * @param path absolute file path
  * @return gfid
  */
@@ -365,12 +368,8 @@ int unifyfs_generate_gfid(const char* path)
     uint64_t hash64 = compute_path_md5(path);
     uint32_t hash32 = (uint32_t)(hash64 >> 32);
 
-    /* TODO: Remove next statement once we get rid of MDHIM.
-     *
-     * MDHIM requires positive values for integer keys, due to the way
-     * slice servers are calculated. We use an integer key for the
-     * gfid -> file attributes index. To guarantee a positive value, we
-     * shift right one bit to make sure the top bit is zero. */
+    /* To guarantee a positive value, we shift right one bit
+     * to make sure the top bit is zero. */
     hash32 = hash32 >> 1;
 
     return (int)hash32;

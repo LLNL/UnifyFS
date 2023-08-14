@@ -185,9 +185,9 @@ unifyfs_unmount_t_LDADD    = $(test_wrap_ldadd)
 unifyfs_unmount_t_LDFLAGS  = $(test_wrap_ldflags)
 unifyfs_unmount_t_SOURCES  = unifyfs_unmount.c
 
-common_seg_tree_test_t_CPPFLAGS = $(test_cppflags)
+common_seg_tree_test_t_CPPFLAGS = $(test_cppflags) $(MARGO_CFLAGS)
 common_seg_tree_test_t_LDADD    = $(test_common_ldadd)
-common_seg_tree_test_t_LDFLAGS  = $(test_common_ldflags)
+common_seg_tree_test_t_LDFLAGS  = $(test_common_ldflags) $(MARGO_LIBS)
 common_seg_tree_test_t_SOURCES  = \
   common/seg_tree_test.c \
   ../common/src/seg_tree.c \

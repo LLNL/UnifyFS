@@ -19,7 +19,6 @@
  */
 
 #include "extent_tree.h"
-#include "unifyfs_metadata_mdhim.h"
 
 #undef MIN
 #define MIN(a, b) (a < b ? a : b)
@@ -46,7 +45,7 @@ RB_GENERATE(ext_tree, extent_tree_node, entry, etn_compare_func)
 int extent_tree_init(struct extent_tree* tree)
 {
     memset(tree, 0, sizeof(*tree));
-    pthread_rwlock_init(&(tree->rwlock), NULL);
+    ABT_rwlock_create(&(tree->rwlock));
     RB_INIT(&(tree->head));
     return 0;
 }
@@ -57,7 +56,7 @@ int extent_tree_init(struct extent_tree* tree)
 void extent_tree_destroy(struct extent_tree* tree)
 {
     extent_tree_clear(tree);
-    pthread_rwlock_destroy(&(tree->rwlock));
+    ABT_rwlock_free(&(tree->rwlock));
 }
 
 /* Allocate a node for the range tree.  Free node with free() when finished */
@@ -356,7 +355,7 @@ int extent_tree_truncate(
         return 0;
     }
 
-    /* lock the tree for reading */
+    /* lock the tree */
     extent_tree_wrlock(tree);
 
     /* lookup node with the extent that has the maximum offset */
@@ -402,7 +401,7 @@ int extent_tree_truncate(
         tree->max = 0;
     }
 
-    /* done reading the tree */
+    /* done updating the tree */
     extent_tree_unlock(tree);
 
     return 0;
@@ -462,9 +461,9 @@ struct extent_tree_node* extent_tree_iter(
  */
 void extent_tree_rdlock(struct extent_tree* tree)
 {
-    int rc = pthread_rwlock_rdlock(&(tree->rwlock));
+    int rc = ABT_rwlock_rdlock(tree->rwlock);
     if (rc) {
-        LOGERR("pthread_rwlock_rdlock() failed - rc=%d", rc);
+        LOGERR("ABT_rwlock_rdlock() failed - rc=%d", rc);
     }
 }
 
@@ -475,9 +474,9 @@ void extent_tree_rdlock(struct extent_tree* tree)
  */
 void extent_tree_wrlock(struct extent_tree* tree)
 {
-    int rc = pthread_rwlock_wrlock(&(tree->rwlock));
+    int rc = ABT_rwlock_wrlock(tree->rwlock);
     if (rc) {
-        LOGERR("pthread_rwlock_wrlock() failed - rc=%d", rc);
+        LOGERR("ABT_rwlock_wrlock() failed - rc=%d", rc);
     }
 }
 
@@ -488,9 +487,9 @@ void extent_tree_wrlock(struct extent_tree* tree)
  */
 void extent_tree_unlock(struct extent_tree* tree)
 {
-    int rc = pthread_rwlock_unlock(&(tree->rwlock));
+    int rc = ABT_rwlock_unlock(tree->rwlock);
     if (rc) {
-        LOGERR("pthread_rwlock_unlock() failed - rc=%d", rc);
+        LOGERR("ABT_rwlock_unlock() failed - rc=%d", rc);
     }
 }
 
@@ -545,65 +544,6 @@ unsigned long extent_tree_max_offset(struct extent_tree* tree)
     unsigned long max = tree->max;
     extent_tree_unlock(tree);
     return max;
-}
-
-/* Given an extent tree and starting and ending logical offsets,
- * fill in key/value entries that overlap that range.
- * Returns at most max entries starting from lowest starting offset.
- * Sets outnum with actual number of entries returned */
-int extent_tree_span(
-    struct extent_tree* tree, /* extent tree to search */
-    int gfid,                 /* global file id we're looking in */
-    unsigned long start,      /* starting logical offset */
-    unsigned long end,        /* ending logical offset */
-    int max,                  /* maximum number of key/vals to return */
-    void* _keys,              /* array of length max for output keys */
-    void* _vals,              /* array of length max for output values */
-    int* outnum)              /* number of entries returned */
-{
-    unifyfs_key_t* keys = (unifyfs_key_t*) _keys;
-    unifyfs_val_t* vals = (unifyfs_val_t*) _vals;
-
-    /* initialize output parameters */
-    *outnum = 0;
-
-    /* lock the tree for reading */
-    extent_tree_rdlock(tree);
-
-    int count = 0;
-    struct extent_tree_node* next = extent_tree_find(tree, start, end);
-    while ((NULL != next) &&
-           (next->extent.start <= end) &&
-           (count < max)) {
-        /* got an entry that overlaps with given range */
-
-        /* fill in key */
-        unifyfs_key_t* key = &keys[count];
-        key->gfid   = gfid;
-        key->offset = next->extent.start;
-
-        /* fill in value */
-        unifyfs_val_t* val = &vals[count];
-        val->addr           = next->extent.log_pos;
-        val->len            = next->extent.end - next->extent.start + 1;
-        val->delegator_rank = next->extent.svr_rank;
-        val->app_id         = next->extent.app_id;
-        val->rank           = next->extent.cli_id;
-
-        /* increment the number of key/values we found */
-        count++;
-
-        /* get the next element in the tree */
-        next = extent_tree_iter(tree, next);
-    }
-
-    /* return to user the number of key/values we set */
-    *outnum = count;
-
-    /* done reading the tree */
-    extent_tree_unlock(tree);
-
-    return 0;
 }
 
 static void chunk_req_from_extent(

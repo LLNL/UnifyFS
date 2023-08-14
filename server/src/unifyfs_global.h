@@ -46,6 +46,7 @@
 
 // common headers
 #include "arraylist.h"
+#include "compare_fn.h"
 #include "tree.h"
 #include "unifyfs_client.h"
 #include "unifyfs_const.h"
@@ -141,7 +142,6 @@ typedef struct {
 struct reqmgr_thrd;
 
 
-
 /**
  * Structure to maintain application client state, including
  * logio and shared memory contexts, margo rpc address, etc.
@@ -198,6 +198,14 @@ unifyfs_rc disconnect_app_client(app_client* clnt);
 unifyfs_rc cleanup_app_client(app_config* app, app_client* clnt);
 
 unifyfs_rc add_failed_client(int app_id, int client_id);
+
+
+/* methods for pending remote metaget() bookkeeping */
+unifyfs_rc add_pending_metaget(int gfid);
+
+bool check_pending_metaget(int gfid);
+
+unifyfs_rc clear_pending_metaget(int gfid);
 
 
 /* publish the pids of all servers to a shared file */

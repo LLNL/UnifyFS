@@ -37,7 +37,6 @@
 
 // server components
 #include "unifyfs_global.h"
-#include "unifyfs_metadata_mdhim.h"
 #include "unifyfs_request_manager.h"
 #include "unifyfs_service_manager.h"
 #include "unifyfs_inode_tree.h"
@@ -61,6 +60,11 @@ arraylist_t* failed_clients; // = NULL
 static ABT_mutex app_configs_abt_sync;
 static app_config* app_configs[UNIFYFS_SERVER_MAX_NUM_APPS]; /* list of apps */
 static size_t clients_per_app = UNIFYFS_SERVER_MAX_APP_CLIENTS;
+
+
+/* arraylist and mutex to track pending remote metaget() requests */
+arraylist_t* pending_metagets; // = NULL
+static ABT_mutex pending_metagets_abt_sync;
 
 
 static int unifyfs_exit(void);
@@ -210,18 +214,7 @@ static int get_server_rank_and_size(const unifyfs_cfg_t* cfg)
 {
     int rc;
 
-#if defined(UNIFYFSD_USE_MPI)
-    /* use rank and size of MPI communicator */
-    rc = MPI_Comm_rank(MPI_COMM_WORLD, &glb_pmi_rank);
-    if (rc != MPI_SUCCESS) {
-        exit(1);
-    }
-
-    rc = MPI_Comm_size(MPI_COMM_WORLD, &glb_pmi_size);
-    if (rc != MPI_SUCCESS) {
-        exit(1);
-    }
-#elif !defined(USE_PMIX) && !defined(USE_PMI2)
+#if !defined(USE_PMIX) && !defined(USE_PMI2)
     /* if not using PMIX or PMI2,
      * initialize rank/size to assume a singleton job */
     glb_pmi_rank = 0;
@@ -361,15 +354,8 @@ int main(int argc, char* argv[])
     // print config
     unifyfs_config_print(&server_cfg, unifyfs_log_stream);
 
-    // initialize MPI and PMI if we're using them
-#if defined(UNIFYFSD_USE_MPI)
-    int provided;
-    rc = MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
-    if (rc != MPI_SUCCESS) {
-        LOGERR("failed to initialize MPI");
-        exit(1);
-    }
-#elif defined(USE_PMIX)
+    // initialize PMI if we're using it
+#if defined(USE_PMIX)
     rc = unifyfs_pmix_init();
     if (rc != (int)UNIFYFS_SUCCESS) {
         LOGERR("failed to initialize PMIX");
@@ -461,6 +447,12 @@ int main(int argc, char* argv[])
     failed_clients = arraylist_create(0);
     ABT_mutex_unlock(app_configs_abt_sync);
 
+    ABT_mutex_create(&pending_metagets_abt_sync);
+
+    ABT_mutex_lock(pending_metagets_abt_sync);
+    pending_metagets = arraylist_create(256);
+    ABT_mutex_unlock(pending_metagets_abt_sync);
+
     /* launch the service manager (note: must happen after ABT_init) */
     LOGDBG("launching service manager thread");
     rc = svcmgr_init();
@@ -517,166 +509,6 @@ int main(int argc, char* argv[])
     return unifyfs_exit();
 }
 
-#if defined(UNIFYFSD_USE_MPI)
-#if defined(UNIFYFS_MULTIPLE_DELEGATORS)
-/* count the number of delegators per node, and
- * the rank of each delegator, the results are stored
- * in local_rank_cnt and local_rank_lst.
- * @param numTasks: number of processes in the communicator
- * @return success/error code */
-static int CountTasksPerNode(int rank, int numTasks)
-{
-    char localhost[UNIFYFS_MAX_HOSTNAME];
-    char hostname[UNIFYFS_MAX_HOSTNAME];
-    int resultsLen = UNIFYFS_MAX_HOSTNAME;
-
-    MPI_Status status;
-    int i, j, rc;
-
-    if (numTasks < 0) {
-        return -1;
-    }
-
-    rc = MPI_Get_processor_name(localhost, &resultsLen);
-    if (rc != 0) {
-        return -1;
-    }
-
-    if (rank == 0) {
-        /* a container of (rank, host) mappings */
-        name_rank_pair_t* host_set =
-            (name_rank_pair_t*)calloc(numTasks, sizeof(name_rank_pair_t));
-        /* MPI_Recv all hostnames, and compare to local hostname */
-        for (i = 1; i < numTasks; i++) {
-            rc = MPI_Recv(hostname, UNIFYFS_MAX_HOSTNAME,
-                          MPI_CHAR, MPI_ANY_SOURCE,
-                          MPI_ANY_TAG,
-                          MPI_COMM_WORLD, &status);
-            if (rc != 0) {
-                return -1;
-            }
-            strcpy(host_set[i].hostname, hostname);
-            host_set[i].rank = status.MPI_SOURCE;
-        }
-        strcpy(host_set[0].hostname, localhost);
-        host_set[0].rank = 0;
-
-        /* sort by hostname */
-        qsort(host_set, numTasks, sizeof(name_rank_pair_t),
-              compare_name_rank_pair);
-
-        /* rank_cnt: records the number of processes on each host
-         * rank_set: the list of ranks for each host */
-        int** rank_set = (int**)calloc(numTasks, sizeof(int*));
-        int* rank_cnt = (int*)calloc(numTasks, sizeof(int));
-
-        int cursor = 0;
-        int set_counter = 0;
-        for (i = 1; i < numTasks; i++) {
-            if (strcmp(host_set[i].hostname,
-                       host_set[i - 1].hostname) != 0) {
-                // found a different host, so switch to a new set
-                int hiter, riter = 0;
-                rank_set[set_counter] =
-                    (int*)calloc((i - cursor), sizeof(int));
-                rank_cnt[set_counter] = i - cursor;
-                for (hiter = cursor; hiter < i; hiter++, riter++) {
-                    rank_set[set_counter][riter] =  host_set[hiter].rank;
-                }
-
-                set_counter++;
-                cursor = i;
-            }
-        }
-
-        /* fill rank_cnt and rank_set entry for the last host */
-
-        rank_set[set_counter] =
-            (int*)calloc((i - cursor), sizeof(int));
-        rank_cnt[set_counter] = numTasks - cursor;
-        j = 0;
-        for (i = cursor; i < numTasks; i++, j++) {
-            rank_set[set_counter][j] = host_set[i].rank;
-        }
-        set_counter++;
-
-        /* broadcast rank_set information */
-        int root_set_no = -1;
-        for (i = 0; i < set_counter; i++) {
-            /* send rank set to each of its ranks */
-            for (j = 0; j < rank_cnt[i]; j++) {
-                if (rank_set[i][j] != 0) {
-                    rc = MPI_Send(&rank_cnt[i], 1, MPI_INT,
-                                  rank_set[i][j], 0, MPI_COMM_WORLD);
-                    if (rc != 0) {
-                        return -1;
-                    }
-                    rc = MPI_Send(rank_set[i], rank_cnt[i], MPI_INT,
-                                  rank_set[i][j], 0, MPI_COMM_WORLD);
-                    if (rc != 0) {
-                        return -1;
-                    }
-                } else {
-                    root_set_no = i;
-                    local_rank_cnt = rank_cnt[i];
-                    local_rank_lst = (int*)calloc(rank_cnt[i], sizeof(int));
-                    memcpy(local_rank_lst, rank_set[i],
-                           (local_rank_cnt * sizeof(int)))
-                }
-            }
-        }
-
-        for (i = 0; i < set_counter; i++) {
-            free(rank_set[i]);
-        }
-        free(rank_cnt);
-        free(host_set);
-        free(rank_set);
-    } else { /* non-root rank */
-        /* MPI_Send hostname to root */
-        rc = MPI_Send(localhost, UNIFYFS_MAX_HOSTNAME, MPI_CHAR,
-                      0, 0, MPI_COMM_WORLD);
-        if (rc != 0) {
-            return -1;
-        }
-        /* receive the local rank set count */
-        rc = MPI_Recv(&local_rank_cnt, 1, MPI_INT, 0,
-                      0, MPI_COMM_WORLD, &status);
-        if (rc != 0) {
-            return -1;
-        }
-        /* receive the the local rank set */
-        local_rank_lst = (int*)calloc(local_rank_cnt, sizeof(int));
-        rc = MPI_Recv(local_rank_lst, local_rank_cnt, MPI_INT, 0,
-                      0, MPI_COMM_WORLD, &status);
-        if (rc != 0) {
-            free(local_rank_lst);
-            return -1;
-        }
-    }
-
-    /* sort by rank */
-    qsort(local_rank_lst, local_rank_cnt, sizeof(int), compare_int);
-
-    return 0;
-}
-
-static int find_rank_idx(int my_rank)
-{
-    int i;
-    assert(local_rank_lst != NULL);
-    for (i = 0; i < local_rank_cnt; i++) {
-        if (local_rank_lst[i] == my_rank) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-#endif // UNIFYFS_MULTIPLE_DELEGATORS
-#endif // UNIFYFSD_USE_MPI
-
-
 static int unifyfs_exit(void)
 {
     int ret = UNIFYFS_SUCCESS;
@@ -705,6 +537,13 @@ static int unifyfs_exit(void)
     }
     ABT_mutex_unlock(app_configs_abt_sync);
 
+    ABT_mutex_lock(pending_metagets_abt_sync);
+    if (NULL != pending_metagets) {
+        arraylist_free(pending_metagets);
+        pending_metagets = NULL;
+    }
+    ABT_mutex_unlock(pending_metagets_abt_sync);
+
     /* TODO: notify the service threads to exit */
 
     /* finalize kvstore service*/
@@ -716,21 +555,15 @@ static int unifyfs_exit(void)
         LOGERR("Error returned from ABT_mutex_free(): %d", ret);
     }
 
+    ret = ABT_mutex_free(&pending_metagets_abt_sync);
+    if (ret != ABT_SUCCESS) {
+        LOGERR("Error returned from ABT_mutex_free(): %d", ret);
+    }
+
     /* shutdown rpc service
      * (note: this needs to happen after app-client cleanup above) */
     LOGDBG("stopping rpc service");
     margo_server_rpc_finalize();
-
-#if defined(USE_MDHIM)
-    /* shutdown the metadata service*/
-    LOGDBG("stopping metadata service");
-    meta_sanitize();
-#endif
-
-#if defined(UNIFYFSD_USE_MPI)
-    LOGDBG("finalizing MPI");
-    MPI_Finalize();
-#endif
 
     /* Finalize the config variables */
     LOGDBG("Finalizing config variables");
@@ -1110,15 +943,105 @@ unifyfs_rc add_failed_client(int app_id, int client_id)
     if (NULL == client) {
         return EINVAL;
     }
+
     unifyfs_rc ret = UNIFYFS_SUCCESS;
     ABT_mutex_lock(app_configs_abt_sync);
     if (NULL != failed_clients) {
         int rc = arraylist_add(failed_clients, client);
         if (rc == -1) {
-            LOGERR("failed to add client to failed_clients arraylist");
+            LOGERR("failed to add client[%d:%d] to failed_clients arraylist",
+                   app_id, client_id);
             ret = UNIFYFS_FAILURE;
         }
+    } else {
+        LOGERR("failed_clients is NULL!");
+        ret = UNIFYFS_FAILURE;
     }
     ABT_mutex_unlock(app_configs_abt_sync);
+    return ret;
+}
+
+unifyfs_rc add_pending_metaget(int gfid)
+{
+    int* pending_gfid = (int*) malloc(sizeof(gfid));
+    if (NULL == pending_gfid) {
+        return ENOMEM;
+    }
+    *pending_gfid = gfid;
+
+    unifyfs_rc ret = UNIFYFS_SUCCESS;
+    ABT_mutex_lock(pending_metagets_abt_sync);
+    if (NULL != pending_metagets) {
+        int num_pending = arraylist_size(pending_metagets);
+        if (num_pending > 0) {
+            for (int i = 0; i < num_pending; i++) {
+                int* pending = (int*) arraylist_get(pending_metagets, i);
+                if ((NULL != pending) && (*pending == gfid)) {
+                    ret = EEXIST;
+                    break;
+                }
+            }
+        }
+        if (ret == UNIFYFS_SUCCESS) {
+            int rc = arraylist_add(pending_metagets, pending_gfid);
+            if (rc == -1) {
+                LOGERR("failed to add gfid=%d to pending_metagets arraylist",
+                       gfid);
+                ret = UNIFYFS_FAILURE;
+            }
+
+        }
+    } else {
+        LOGERR("pending_metagets is NULL!");
+        ret = UNIFYFS_FAILURE;
+    }
+    ABT_mutex_unlock(pending_metagets_abt_sync);
+    return ret;
+}
+
+bool check_pending_metaget(int gfid)
+{
+    bool is_pending = false;
+    ABT_mutex_lock(pending_metagets_abt_sync);
+    if (NULL != pending_metagets) {
+        int num_pending = arraylist_size(pending_metagets);
+        if (num_pending > 0) {
+            for (int i = 0; i < num_pending; i++) {
+                int* pending = (int*) arraylist_get(pending_metagets, i);
+                if ((NULL != pending) && (*pending == gfid)) {
+                    is_pending = true;
+                    break;
+                }
+            }
+        }
+    } else {
+        LOGERR("pending_metagets is NULL!");
+    }
+    ABT_mutex_unlock(pending_metagets_abt_sync);
+    return is_pending;
+}
+
+unifyfs_rc clear_pending_metaget(int gfid)
+{
+    unifyfs_rc ret = UNIFYFS_FAILURE;
+    ABT_mutex_lock(pending_metagets_abt_sync);
+    if (NULL != pending_metagets) {
+        int num_pending = arraylist_size(pending_metagets);
+        if (num_pending > 0) {
+            for (int i = 0; i < num_pending; i++) {
+                int* pending = (int*) arraylist_get(pending_metagets, i);
+                if ((NULL != pending) && (*pending == gfid)) {
+                    pending = (int*) arraylist_remove(pending_metagets, i);
+                    free(pending);
+                    ret = UNIFYFS_SUCCESS;
+                    break;
+                }
+            }
+        }
+    } else {
+        LOGERR("pending_metagets is NULL!");
+        ret = UNIFYFS_FAILURE;
+    }
+    ABT_mutex_unlock(pending_metagets_abt_sync);
     return ret;
 }

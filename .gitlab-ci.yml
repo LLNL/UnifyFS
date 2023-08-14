@@ -107,7 +107,7 @@ stages:
   script:
     - cd unifyfs-build/t && $JOB_LAUNCH_COMMAND make check
   after_script:
-    - rm -rf /tmp/unify* /tmp/tmp.* /tmp/mdhim* /tmp/na_sm | true
+    - rm -rf /tmp/unify* /tmp/tmp.* /tmp/na_sm | true
 
 # Run the integration test suite with the options provided from the specific
 # job.

@@ -498,6 +498,12 @@ int sm_set_fileattr(int gfid,
             LOGERR("failed to set attributes for gfid=%d (rc=%d, is_owner=%d)",
                    gfid, ret, is_owner);
         }
+    } else if (is_owner && (file_op == UNIFYFS_FILE_ATTR_OP_CREATE)) {
+        /* start a broadcast rpc to inform other servers of new file */
+        int rc = unifyfs_invoke_broadcast_fileattr(gfid, file_op, attrs);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to broadcast new file (gfid=%d) creation", gfid);
+        }
     }
     return ret;
 }
@@ -1032,7 +1038,9 @@ static int process_metaset_rpc(server_rpc_req_t* req)
     int gfid = (int) in->gfid;
     int attr_op = (int) in->fileop;
     unifyfs_file_attr_t* attrs = &(in->attr);
+
     int ret = sm_set_fileattr(gfid, attr_op, attrs);
+
     margo_free_input(req->handle, in);
     free(in);
 
@@ -1171,8 +1179,13 @@ static int process_fileattr_bcast_rpc(server_rpc_req_t* req)
     /* update file attributes */
     int ret = sm_set_fileattr(gfid, attr_op, attrs);
     if (ret != UNIFYFS_SUCCESS) {
-        LOGERR("set_fileattr(gfid=%d, op=%d) failed - rc=%d",
-               gfid, attr_op, ret);
+        if ((attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) && (ret == EEXIST)) {
+            /* ignore duplicate creates */
+            ret = UNIFYFS_SUCCESS;
+        } else {
+            LOGWARN("set_fileattr(gfid=%d, op=%d) failed - rc=%d (%s)",
+                    gfid, attr_op, ret, unifyfs_rc_enum_description(ret));
+        }
     }
     collective_set_local_retval(req->coll, ret);
 
@@ -1432,6 +1445,103 @@ static int process_metaget_bcast_rpc(server_rpc_req_t* req)
     return invoke_bcast_progress_rpc(req->coll);
 }
 
+static int process_pending_sync(server_rpc_req_t* req)
+{
+    int ret = UNIFYFS_SUCCESS;
+
+    /* get target file */
+    int* pending_gfid = req->input;
+    int gfid = *pending_gfid;
+    free(pending_gfid);
+
+    int owner_rank = hash_gfid_to_server(gfid);
+    int is_owner = (owner_rank == glb_pmi_rank);
+
+    bool has_pending = unifyfs_inode_has_pending_extents(gfid);
+    if (has_pending) {
+        usleep(50000); /* sleep 50 ms to catch more pending extents */
+    }
+
+    arraylist_t* pending_list = NULL;
+    int rc = unifyfs_inode_get_pending_extents(gfid, &pending_list);
+    if (NULL != pending_list) {
+        LOGDBG("processing pending sync for gfid=%d", gfid);
+
+        /* iterate through pending list to count total number of extents
+         * we will add locally (and possibly send to owner) */
+        unsigned int total_extents = 0;
+        int n_items = arraylist_size(pending_list);
+        for (int i = 0; i < n_items; i++) {
+            void* item = arraylist_get(pending_list, i);
+            if (NULL != item) {
+                pending_extents_item* pei = (pending_extents_item*) item;
+                total_extents += pei->num_extents;
+            }
+        }
+
+        /* allocate array for all the extents and then copy the sub-arrays
+         * from the pending list */
+        extent_metadata* combined_extents = calloc((size_t)total_extents,
+                                                   sizeof(extent_metadata));
+        if (NULL == combined_extents) {
+            LOGERR("failed to allocate for combined extents");
+            ret = ENOMEM;
+        } else {
+            unsigned int n_copied = 0;
+            for (int i = 0; i < n_items; i++) {
+                void* item = arraylist_get(pending_list, i);
+                if (NULL != item) {
+                    pending_extents_item* pei = (pending_extents_item*) item;
+                    memcpy(combined_extents + n_copied, pei->extents,
+                           pei->num_extents * sizeof(extent_metadata));
+                    n_copied += pei->num_extents;
+                    free(pei->extents);
+                }
+            }
+
+            /* add the combined list to local inode */
+            ret = unifyfs_inode_add_extents(gfid, total_extents,
+                                            combined_extents);
+
+            if ((ret == UNIFYFS_SUCCESS) && !is_owner) {
+                /* send the combined list to the owner */
+                ret = unifyfs_invoke_add_extents_rpc(gfid, total_extents,
+                                                     combined_extents);
+            }
+        }
+
+        /* iterate through pending list to send responses to client reqs */
+        for (int i = 0; i < n_items; i++) {
+            void* item = arraylist_get(pending_list, i);
+            if (NULL != item) {
+                pending_extents_item* pei = (pending_extents_item*) item;
+                client_rpc_req_t* creq = pei->client_req;
+
+                /* send rpc response to requesting client */
+                unifyfs_fsync_out_t out;
+                out.ret = (int32_t) ret;
+                hg_return_t hret = margo_respond(creq->handle, &out);
+                if (hret != HG_SUCCESS) {
+                    LOGERR("margo_respond() failed");
+                }
+
+                /* cleanup req */
+                margo_destroy(creq->handle);
+                free(creq);
+            }
+        }
+
+        /* this frees the list and each of the items */
+        arraylist_free(pending_list);
+    } else if (rc != UNIFYFS_SUCCESS) {
+        ret = rc;
+        LOGERR("failed to get pending extents list for gfid=%d- rc=%d",
+               gfid, ret);
+    }
+
+    return ret;
+}
+
 static int process_service_requests(void)
 {
     /* assume we'll succeed */
@@ -1504,6 +1614,9 @@ static int process_service_requests(void)
         case UNIFYFS_SERVER_BCAST_RPC_LAMINATE:
             rret = process_laminate_bcast_rpc(req);
             break;
+        case UNIFYFS_SERVER_BCAST_RPC_METAGET:
+            rret = process_metaget_bcast_rpc(req);
+            break;
         case UNIFYFS_SERVER_BCAST_RPC_TRANSFER:
             rret = process_transfer_bcast_rpc(req);
             break;
@@ -1513,8 +1626,8 @@ static int process_service_requests(void)
         case UNIFYFS_SERVER_BCAST_RPC_UNLINK:
             rret = process_unlink_bcast_rpc(req);
             break;
-        case UNIFYFS_SERVER_BCAST_RPC_METAGET:
-            rret = process_metaget_bcast_rpc(req);
+        case UNIFYFS_SERVER_PENDING_SYNC:
+            rret = process_pending_sync(req);
             break;
         default:
             LOGERR("unsupported server rpc request type %d", req->req_type);
