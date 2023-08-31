@@ -74,11 +74,11 @@ int MPI_Init_thread(int* argc, char*** argv, int required, int* provided)
     return unifyfs_mpi_init(argc, argv, required, provided);
 }
 
-void mpi_init_thread_(int required, int* provided, MPI_Fint* ierr)
+void mpi_init_thread_(MPI_Fint* required, MPI_Fint* provided, MPI_Fint* ierr)
 {
     int argc = 0;
     char** argv = NULL;
-    int rc = unifyfs_mpi_init(&argc, &argv, required, provided);
+    int rc = unifyfs_mpi_init(&argc, &argv, *((int*)required), provided);
 
     if (NULL != ierr) {
         *ierr = (MPI_Fint)rc;
