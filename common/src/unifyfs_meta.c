@@ -12,9 +12,10 @@
  * Please read https://github.com/LLNL/UnifyFS/LICENSE for full license text.
  */
 
+#include <assert.h>
 #include <endian.h>
+#include <openssl/evp.h>
 #include <string.h>
-#include <openssl/md5.h>
 
 #include "unifyfs_meta.h"
 
@@ -39,9 +40,13 @@ uint64_t compute_path_md5(const char* path)
 {
     unsigned long len;
     unsigned char digested[16] = {0};
+    unsigned int digestSize;
+    /* digestSize is set by EVP_Digest().  For MD5 digests, it should always
+     * be 16. */
 
     len = strlen(path);
-    MD5((const unsigned char*) path, len, digested);
+    EVP_Digest(path, len, digested, &digestSize, EVP_md5(), NULL);
+    assert(digestSize == 16);
 
     /* construct uint64_t hash from first 8 digest bytes */
     uint64_t* digest_value = (uint64_t*) digested;

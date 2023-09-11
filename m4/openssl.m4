@@ -13,6 +13,20 @@ AC_DEFUN([UNIFYFS_AC_OPENSSL], [
      couldn't find a suitable openssl-devel
    ]))])
 
+
+
+
+  AC_CHECK_LIB([crypto], [EVP_Digest],
+    [
+      AM_CONDITIONAL([HAVE_OPENSSL_EVP], [true])
+    ],
+    [
+      AC_MSG_ERROR([couldn't find a sufficiently new OpenSSL installation])
+    ],
+    []
+  )
+
+
   # restore flags
   CFLAGS=$OPENSSL_OLD_CFLAGS
   CXXFLAGS=$OPENSSL_OLD_CXXFLAGS
