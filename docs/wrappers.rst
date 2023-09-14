@@ -100,7 +100,7 @@ unifyfs_list.txt
 The unifyfs_list.txt_ file specifies the set of wrappers in UnifyFS. Most but
 not all such wrappers are supported. The command to build unifyfs list:
 
-.. code-block::
+.. code-block:: Bash
 
     grep UNIFYFS_WRAP ../src/\*.c > unifyfs_list.txt
 
