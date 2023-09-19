@@ -223,6 +223,7 @@ after ``./autogen.sh`` has been run.
 ----------
 
 .. _configure-options-label:
+
 -----------------
 Configure Options
 -----------------
