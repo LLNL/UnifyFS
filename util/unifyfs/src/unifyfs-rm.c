@@ -663,11 +663,11 @@ static int flux_read_resource(unifyfs_resource_t* resource)
     }
     pclose(pipe_fp);
 
-    // remove the trailing ']'
-    nodelist_str[strlen(nodelist_str)-1] = 0;
     // get the node ids, i.e., the list in []
     char* node_ids = strstr(nodelist_str, "[");
     if (node_ids) {
+        // remove the trailing "]\n"
+        nodelist_str[strlen(nodelist_str)-2] = 0;
         char* host = calloc(1, (node_ids-nodelist_str)+2);
         strncpy(host, nodelist_str, (node_ids-nodelist_str));
 
