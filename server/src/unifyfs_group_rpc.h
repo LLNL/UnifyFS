@@ -31,29 +31,26 @@ typedef struct coll_request {
     unifyfs_tree_t tree;
     hg_handle_t    progress_hdl;
     hg_handle_t    resp_hdl;
-    size_t         output_sz;    /* size of output struct */
-    void*          output;       /* output struct (type is dependent on rpc) */
+    size_t         output_sz;       /* size of output struct */
+    void*          output;          /* output struct (type depends on rpc) */
     void*          input;
-    void*          bulk_buf;     /* allocated buffer for bulk data */
+    void*          bulk_buf;        /* allocated buffer for bulk data */
     hg_bulk_t      bulk_in;
     hg_bulk_t      bulk_forward;
     margo_request  progress_req;
     margo_request* child_reqs;
     hg_handle_t*   child_hdls;
 
-    int            auto_cleanup;  /* if true, bcast_progress_rpc() will
-                                   * call collective_cleanup() on this
-                                   * struct.  This is the default behavior. */
-    ABT_cond       child_resp_valid; /* bcast_progress_rpc() will signal this
-                                      * condition variable when all the child
-                                      * responses have been processed.
-                                      * Intended to provide a mechanism for the
-                                      * server that originated a bcast RPC to
-                                      * wait for all the results to come
-                                      * back. */
-    ABT_mutex      child_resp_valid_mut;
-    /* The mutex associated with the above condition variable. */
-
+    int            auto_cleanup;    /* If set (non-zero), bcast_progress_rpc()
+                                     * will call collective_cleanup(). This is
+                                     * the default behavior. */
+    ABT_cond       resp_valid_cond; /* bcast_progress_rpc() will signal this
+                                     * condition variable when all the child
+                                     * responses have been processed.
+                                     * Provides a mechanism for the root
+                                     * server for a bcast RPC to wait for all
+                                     * the results to come back. */
+    ABT_mutex      resp_valid_sync; /* mutex for above condition variable */
 } coll_request;
 
 /* set collective output return value to local result value */
@@ -75,18 +72,22 @@ void collective_cleanup(coll_request* coll_req);
  */
 int invoke_bcast_progress_rpc(coll_request* coll_req);
 
+
+/**
+ * @brief Broadcast that all servers have completed bootstrapping
+ *
+ * @return success|failure
+ */
+int unifyfs_invoke_broadcast_bootstrap_complete(void);
+
 /**
  * @brief Broadcast file extents metadata to all servers
  *
  * @param gfid     target file
- * @param len      length of file extents array
- * @param extents  array of extents to broadcast
  *
  * @return success|failure
  */
-int unifyfs_invoke_broadcast_extents(int gfid,
-                                     unsigned int len,
-                                     struct extent_tree_node* extents);
+int unifyfs_invoke_broadcast_extents(int gfid);
 
 /**
  * @brief Broadcast file attributes metadata to all servers

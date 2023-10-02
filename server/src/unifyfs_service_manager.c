@@ -42,9 +42,9 @@ typedef struct {
     pthread_t thrd;
     pid_t tid;
 
-    /* pthread mutex and condition variable for work notification */
-    pthread_mutex_t thrd_lock;
-    pthread_cond_t thrd_cond;
+    /* mutex and condition variable for work notification */
+    ABT_mutex thrd_lock;
+    ABT_cond thrd_cond;
 
     /* thread status */
     int initialized;
@@ -54,7 +54,7 @@ typedef struct {
     /* thread return status code */
     int sm_exit_rc;
 
-    /* argobots mutex for synchronizing access to request state between
+    /* mutex for synchronizing access to request state between
      * margo rpc handler ULTs and SM thread */
     ABT_mutex reqs_sync;
 
@@ -75,7 +75,7 @@ svcmgr_state_t* sm; // = NULL
 do { \
     if ((NULL != sm) && sm->initialized) { \
         /*LOGDBG("locking SM state");*/ \
-        pthread_mutex_lock(&(sm->thrd_lock)); \
+        ABT_mutex_lock(sm->thrd_lock); \
     } \
 } while (0)
 
@@ -83,7 +83,7 @@ do { \
 do { \
     if ((NULL != sm) && sm->initialized) { \
         /*LOGDBG("unlocking SM state");*/ \
-        pthread_mutex_unlock(&(sm->thrd_lock)); \
+        ABT_mutex_unlock(sm->thrd_lock); \
     } \
 } while (0)
 
@@ -110,7 +110,7 @@ static inline void signal_svcmgr(void)
     if (this_thread != sm->tid) {
         /* signal svcmgr to begin processing the requests we just added */
         LOGDBG("signaling new service requests");
-        pthread_cond_signal(&(sm->thrd_cond));
+        ABT_cond_signal(sm->thrd_cond);
     }
 }
 
@@ -173,31 +173,20 @@ int svcmgr_init(void)
         return ENOMEM;
     }
 
-    /* initialize lock for shared data structures of the
+    /* create mutex locks for thread and request data structures of the
      * service manager */
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-    int rc = pthread_mutex_init(&(sm->thrd_lock), &attr);
-    if (rc != 0) {
-        LOGERR("pthread_mutex_init failed for service manager rc=%d (%s)",
-               rc, strerror(rc));
-        svcmgr_fini();
-        return rc;
-    }
+    ABT_mutex_create(&(sm->thrd_lock));
+    ABT_mutex_create(&(sm->reqs_sync));
 
     /* initialize condition variable to synchronize work
      * notifications for the request manager thread */
-    rc = pthread_cond_init(&(sm->thrd_cond), NULL);
-    if (rc != 0) {
-        LOGERR("pthread_cond_init failed for service manager rc=%d (%s)",
-               rc, strerror(rc));
-        pthread_mutex_destroy(&(sm->thrd_lock));
+    int rc = ABT_cond_create(&(sm->thrd_cond));
+    if (rc != ABT_SUCCESS) {
+        LOGERR("ABT_cond_create() failed for service manager rc=%d", rc);
+        ABT_mutex_free(&(sm->thrd_lock));
         svcmgr_fini();
-        return rc;
+        return UNIFYFS_ERROR_MARGO;
     }
-
-    ABT_mutex_create(&(sm->reqs_sync));
 
     /* allocate a list to track chunk reads */
     sm->chunk_reads = arraylist_create(0);
@@ -249,10 +238,10 @@ int svcmgr_fini(void)
         if (sm->initialized) {
             /* join thread before cleaning up state */
             if (sm->tid != -1) {
-                pthread_mutex_lock(&(sm->thrd_lock));
+                ABT_mutex_lock(sm->thrd_lock);
                 sm->time_to_exit = 1;
-                pthread_cond_signal(&(sm->thrd_cond));
-                pthread_mutex_unlock(&(sm->thrd_lock));
+                ABT_cond_signal(sm->thrd_cond);
+                ABT_mutex_unlock(sm->thrd_lock);
                 pthread_join(sm->thrd, NULL);
             }
         }
@@ -273,15 +262,10 @@ int svcmgr_fini(void)
             arraylist_free(sm->svc_reqs);
         }
 
-        int abt_err = ABT_mutex_free(&(sm->reqs_sync));
-        if (ABT_SUCCESS != abt_err) {
-            /* All we can really do here is log the error */
-            LOGERR("Error code returned from ABT_mutex_free(): %d", abt_err);
-        }
-
         if (sm->initialized) {
-            pthread_mutex_destroy(&(sm->thrd_lock));
-            pthread_cond_destroy(&(sm->thrd_cond));
+            ABT_mutex_free(&(sm->reqs_sync));
+            ABT_mutex_free(&(sm->thrd_lock));
+            ABT_cond_free(&(sm->thrd_cond));
         }
 
         /* free the service manager struct allocated during init */
@@ -1058,32 +1042,6 @@ static int process_metaset_rpc(server_rpc_req_t* req)
     return ret;
 }
 
-static int process_server_pid_rpc(server_rpc_req_t* req)
-{
-    /* get input parameters */
-    server_pid_in_t* in = req->input;
-    int src_rank = (int) in->rank;
-    int pid = (int) in->pid;
-    margo_free_input(req->handle, in);
-    free(in);
-
-    /* do pid report */
-    int ret = unifyfs_report_server_pid(src_rank, pid);
-
-    /* send rpc response */
-    server_pid_out_t out;
-    out.ret = (int32_t) ret;
-    hg_return_t hret = margo_respond(req->handle, &out);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_respond() failed");
-    }
-
-    /* cleanup req */
-    margo_destroy(req->handle);
-
-    return ret;
-}
-
 static int process_transfer_rpc(server_rpc_req_t* req)
 {
     /* get target file and requested file size */
@@ -1139,6 +1097,21 @@ static int process_truncate_rpc(server_rpc_req_t* req)
 
     /* cleanup req */
     margo_destroy(req->handle);
+
+    return ret;
+}
+
+static int process_bootstrap_bcast_rpc(server_rpc_req_t* req)
+{
+    /* signal bootstrap completion */
+    int ret = unifyfs_signal_bootstrap_complete();
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("unifyfs_signal_bootstrap_complete() failed - rc=%d", ret);
+    }
+    collective_set_local_retval(req->coll, ret);
+
+    /* create a ULT to finish broadcast operation */
+    ret = invoke_bcast_progress_rpc(req->coll);
 
     return ret;
 }
@@ -1596,14 +1569,14 @@ static int process_service_requests(void)
         case UNIFYFS_SERVER_RPC_METASET:
             rret = process_metaset_rpc(req);
             break;
-        case UNIFYFS_SERVER_RPC_PID_REPORT:
-            rret = process_server_pid_rpc(req);
-            break;
         case UNIFYFS_SERVER_RPC_TRANSFER:
             rret = process_transfer_rpc(req);
             break;
         case UNIFYFS_SERVER_RPC_TRUNCATE:
             rret = process_truncate_rpc(req);
+            break;
+        case UNIFYFS_SERVER_BCAST_RPC_BOOTSTRAP:
+            rret = process_bootstrap_bcast_rpc(req);
             break;
         case UNIFYFS_SERVER_BCAST_RPC_EXTENTS:
             rret = process_extents_bcast_rpc(req);
@@ -1727,12 +1700,11 @@ void* service_manager_thread(void* arg)
             timeout.tv_nsec -= 1000000000;
             timeout.tv_sec++;
         }
-        int wait_rc = pthread_cond_timedwait(&(sm->thrd_cond),
-                                             &(sm->thrd_lock),
-                                             &timeout);
-        if (0 == wait_rc) {
+        int wait_rc = ABT_cond_timedwait(sm->thrd_cond, sm->thrd_lock,
+                                         &timeout);
+        if (ABT_SUCCESS == wait_rc) {
             LOGDBG("SM got work");
-        } else if (ETIMEDOUT != wait_rc) {
+        } else if (ABT_ERR_COND_TIMEDOUT != wait_rc) {
             LOGERR("SM work condition wait failed (rc=%d)", wait_rc);
         }
 

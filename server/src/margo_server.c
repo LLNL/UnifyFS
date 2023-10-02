@@ -155,6 +155,12 @@ static void register_server_server_rpcs(margo_instance_id mid)
                        bcast_progress_in_t, bcast_progress_out_t,
                        bcast_progress_rpc);
 
+    unifyfsd_rpc_context->rpcs.bootstrap_complete_bcast_id =
+        MARGO_REGISTER(mid, "bootstrap_complete_bcast_rpc",
+                       bootstrap_complete_bcast_in_t,
+                       bootstrap_complete_bcast_out_t,
+                       bootstrap_complete_bcast_rpc);
+
     unifyfsd_rpc_context->rpcs.chunk_read_request_id =
         MARGO_REGISTER(mid, "chunk_read_request_rpc",
                        chunk_read_request_in_t, chunk_read_request_out_t,
@@ -534,7 +540,7 @@ int margo_connect_servers(void)
 
     /* allocate array of structs to record address for each server */
     server_infos = (server_info_t*) calloc(glb_num_servers,
-        sizeof(server_info_t));
+                                           sizeof(server_info_t));
     if (NULL == server_infos) {
         LOGERR("failed to allocate server_info array");
         return ENOMEM;
