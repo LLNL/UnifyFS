@@ -32,6 +32,7 @@
 typedef struct ServerRpcIds {
     /* server-server rpcs */
     hg_id_t bcast_progress_id;
+    hg_id_t bootstrap_complete_bcast_id;
     hg_id_t chunk_read_request_id;
     hg_id_t chunk_read_response_id;
     hg_id_t extent_add_id;

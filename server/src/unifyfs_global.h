@@ -208,8 +208,12 @@ bool check_pending_metaget(int gfid);
 unifyfs_rc clear_pending_metaget(int gfid);
 
 
-/* publish the pids of all servers to a shared file */
-int unifyfs_publish_server_pids(void);
+
+/* notify local server main thread that bootstrap is complete */
+int unifyfs_signal_bootstrap_complete(void);
+
+/* participate in collective server bootstrap completion process */
+int unifyfs_complete_bootstrap(void);
 
 /* report the pid for a server with given rank */
 int unifyfs_report_server_pid(int rank, int pid);
