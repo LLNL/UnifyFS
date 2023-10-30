@@ -42,9 +42,9 @@ typedef enum {
     UNIFYFS_SERVER_RPC_LAMINATE,
     UNIFYFS_SERVER_RPC_METAGET,
     UNIFYFS_SERVER_RPC_METASET,
-    UNIFYFS_SERVER_RPC_PID_REPORT,
     UNIFYFS_SERVER_RPC_TRANSFER,
     UNIFYFS_SERVER_RPC_TRUNCATE,
+    UNIFYFS_SERVER_BCAST_RPC_BOOTSTRAP,
     UNIFYFS_SERVER_BCAST_RPC_EXTENTS,
     UNIFYFS_SERVER_BCAST_RPC_FILEATTR,
     UNIFYFS_SERVER_BCAST_RPC_LAMINATE,
@@ -185,6 +185,13 @@ MERCURY_GEN_PROC(bcast_progress_in_t,
 MERCURY_GEN_PROC(bcast_progress_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(bcast_progress_rpc)
+
+/* Broadcast 'bootstrap complete' to all servers */
+MERCURY_GEN_PROC(bootstrap_complete_bcast_in_t,
+                 ((int32_t)(root)))
+MERCURY_GEN_PROC(bootstrap_complete_bcast_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(bootstrap_complete_bcast_rpc)
 
 /* Broadcast file extents to all servers */
 MERCURY_GEN_PROC(extent_bcast_in_t,

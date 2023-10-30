@@ -224,14 +224,14 @@ static hg_handle_t create_handle(hg_id_t id)
     return handle;
 }
 
-static int forward_to_server(
-    hg_handle_t hdl,
-    void* input_ptr,
-    double timeout_msec)
+static int forward_to_server(hg_handle_t hdl,
+                             void* input_ptr,
+                             double timeout_msec)
 {
     hg_return_t hret = margo_forward_timed(hdl, input_ptr, timeout_msec);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_forward_timed() failed - %s", HG_Error_to_string(hret));
+        //margo_state_dump(client_rpc_context->mid, "-", 0, NULL);
         return UNIFYFS_ERROR_MARGO;
     }
     return UNIFYFS_SUCCESS;

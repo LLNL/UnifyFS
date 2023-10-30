@@ -212,10 +212,12 @@ static int merge_metaget_all_bcast_outputs(
      * and update the string offsets stored in the child file attrs' filename
      * members. */
 
-    uint64_t parent_filenames_len = p_out->filenames?strlen(p_out->filenames):0;
-    uint64_t child_filenames_len = c_out->filenames?strlen(c_out->filenames):0;
+    uint64_t parent_filenames_len =
+        p_out->filenames ? strlen(p_out->filenames) : 0;
+    uint64_t child_filenames_len =
+        c_out->filenames ? strlen(c_out->filenames) : 0;
 
-    char* new_filenames = calloc(parent_filenames_len + child_filenames_len +1,
+    char* new_filenames = calloc(parent_filenames_len+child_filenames_len+1,
                                  sizeof(char));
     if (!new_filenames) {
         free(parent_attr_list);
@@ -291,6 +293,17 @@ static int get_child_response(coll_request* coll_req,
             void* output = coll_req->output;
 
             switch (coll_req->req_type) {
+            case UNIFYFS_SERVER_BCAST_RPC_BOOTSTRAP: {
+                bootstrap_complete_bcast_out_t* cbbo =
+                    (bootstrap_complete_bcast_out_t*) out;
+                bootstrap_complete_bcast_out_t* bbo =
+                    (bootstrap_complete_bcast_out_t*) output;
+                child_ret = cbbo->ret;
+                if ((NULL != bbo) && (child_ret != UNIFYFS_SUCCESS)) {
+                    bbo->ret = child_ret;
+                }
+                break;
+            }
             case UNIFYFS_SERVER_BCAST_RPC_EXTENTS: {
                 extent_bcast_out_t* cebo = (extent_bcast_out_t*) out;
                 extent_bcast_out_t* ebo  = (extent_bcast_out_t*) output;
@@ -489,16 +502,16 @@ static coll_request* collective_create(server_rpc_e req_type,
          * before calling bcast_progress_rpc(). */
 
 
-        int rc = ABT_mutex_create(&coll_req->child_resp_valid_mut);
+        int rc = ABT_mutex_create(&coll_req->resp_valid_sync);
         if (ABT_SUCCESS != rc) {
             LOGERR("ABT_mutex_create failed");
             free(coll_req);
             return NULL;
         }
-        rc = ABT_cond_create(&coll_req->child_resp_valid);
+        rc = ABT_cond_create(&coll_req->resp_valid_cond);
         if (ABT_SUCCESS != rc) {
             LOGERR("ABT_cond_create failed");
-            ABT_mutex_free(&coll_req->child_resp_valid_mut);
+            ABT_mutex_free(&coll_req->resp_valid_sync);
             free(coll_req);
             return NULL;
         }
@@ -507,8 +520,8 @@ static coll_request* collective_create(server_rpc_e req_type,
                                    UNIFYFS_BCAST_K_ARY, &(coll_req->tree));
         if (rc) {
             LOGERR("unifyfs_tree_init() failed");
-            ABT_mutex_free(&coll_req->child_resp_valid_mut);
-            ABT_cond_free(&coll_req->child_resp_valid);
+            ABT_mutex_free(&coll_req->resp_valid_sync);
+            ABT_cond_free(&coll_req->resp_valid_cond);
             free(coll_req);
             return NULL;
         }
@@ -522,8 +535,8 @@ static coll_request* collective_create(server_rpc_e req_type,
                 free(coll_req->child_hdls);
                 free(coll_req->child_reqs);
                 /* Note: calling free() on NULL is explicitly allowed */
-                ABT_mutex_free(&coll_req->child_resp_valid_mut);
-                ABT_cond_free(&coll_req->child_resp_valid);
+                ABT_mutex_free(&coll_req->resp_valid_sync);
+                ABT_cond_free(&coll_req->resp_valid_cond);
                 free(coll_req);
                 return NULL;
             }
@@ -601,8 +614,8 @@ void collective_cleanup(coll_request* coll_req)
     }
 
     /* Release the Argobots mutex and condition variable */
-    ABT_cond_free(&coll_req->child_resp_valid);
-    ABT_mutex_free(&coll_req->child_resp_valid_mut);
+    ABT_cond_free(&coll_req->resp_valid_cond);
+    ABT_mutex_free(&coll_req->resp_valid_sync);
 
     /* free allocated memory */
     if (NULL != coll_req->input) {
@@ -644,6 +657,8 @@ static int collective_forward(coll_request* coll_req)
         /* invoke bcast request rpc on child */
         margo_request* creq = coll_req->child_reqs + i;
         hg_handle_t* chdl = coll_req->child_hdls + i;
+        LOGDBG("BCAST_RPC: collective(%p) forwarding to child[%d]",
+               coll_req, i);
         int rc = forward_child_request(coll_req->input, *chdl, creq);
         if (rc != UNIFYFS_SUCCESS) {
             LOGERR("forward to child[%d] failed", i);
@@ -664,6 +679,12 @@ void collective_set_local_retval(coll_request* coll_req, int val)
     }
 
     switch (coll_req->req_type) {
+    case UNIFYFS_SERVER_BCAST_RPC_BOOTSTRAP: {
+        bootstrap_complete_bcast_out_t* bbo =
+            (bootstrap_complete_bcast_out_t*) output;
+        bbo->ret = val;
+        break;
+    }
     case UNIFYFS_SERVER_BCAST_RPC_EXTENTS: {
         extent_bcast_out_t* ebo = (extent_bcast_out_t*) output;
         ebo->ret = val;
@@ -723,7 +744,7 @@ int collective_finish(coll_request* coll_req)
      * then send the output back to the caller.  If we're at the root
      * of the tree, though, there might be output data, but no place
      * to send it. */
-    if ((NULL != coll_req->output) && (NULL != coll_req->resp_hdl)) {
+    if ((NULL != coll_req->output) && (HG_HANDLE_NULL != coll_req->resp_hdl)) {
         hg_return_t hret = margo_respond(coll_req->resp_hdl, coll_req->output);
         if (hret != HG_SUCCESS) {
             LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
@@ -735,14 +756,14 @@ int collective_finish(coll_request* coll_req)
 
     /* Signal the condition variable in case there are other threads
      * waiting for the child responses */
-    ABT_mutex_lock(coll_req->child_resp_valid_mut);
-    ABT_cond_signal(coll_req->child_resp_valid);
+    ABT_mutex_lock(coll_req->resp_valid_sync);
+    ABT_cond_signal(coll_req->resp_valid_cond);
     /* There should only be a single thread waiting on the CV, so we don't
      * need to use ABT_cond_broadcast() */
-    ABT_mutex_unlock(coll_req->child_resp_valid_mut);
+    ABT_mutex_unlock(coll_req->resp_valid_sync);
     /* Locking the mutex before signaling is required in order to ensure
      * that the waiting thread has had a chance to actually call
-     * ABT_cond_wait() before this thread signals the CV. */
+     * ABT_cond_timedwait() before this thread signals the CV. */
 
     return ret;
 }
@@ -792,18 +813,9 @@ int invoke_bcast_progress_rpc(coll_request* coll_req)
 static void bcast_progress_rpc(hg_handle_t handle)
 {
     /* assume we'll succeed */
-    int32_t ret = UNIFYFS_SUCCESS;
+    int ret = UNIFYFS_SUCCESS;
     coll_request* coll = NULL;
-
-    bool cleanup_collective = ((NULL != coll) && (coll->auto_cleanup));
-    /* We have to check the auto_cleanup variable now because in the case
-     * where auto_cleanup is false, another thread will be freeing the
-     * collective.  And once the memory is freed, we can't read the
-     * auto_cleanup variable.
-     *
-     * There's a condition variable that's signaled by collective_finish(),
-     * and the memory won't be freed until some time after that happens, so
-     * it's safe to check the variable up here. */
+    bool cleanup_collective = false;
 
     bcast_progress_in_t in;
     hg_return_t hret = margo_get_input(handle, &in);
@@ -811,19 +823,31 @@ static void bcast_progress_rpc(hg_handle_t handle)
         LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
-        /* call collective_finish() to progress bcast operation */
         coll = (coll_request*) in.coll_req;
+        margo_free_input(handle, &in);
+
+        cleanup_collective = ((NULL != coll) && (coll->auto_cleanup));
+        /* We have to check the auto_cleanup variable now because in the case
+         * where auto_cleanup is false, another thread will be freeing the
+         * collective.  And once the memory is freed, we can't read the
+         * auto_cleanup variable.
+         *
+         * There's a condition variable that's signaled by collective_finish(),
+         * and the memory won't be freed until some time after that happens, so
+         * it's safe to check the variable up here. */
+
+        /* call collective_finish() to progress bcast operation */
         LOGDBG("BCAST_RPC: bcast progress collective(%p)", coll);
         ret = collective_finish(coll);
         if (ret != UNIFYFS_SUCCESS) {
-            LOGERR("collective_finish() failed for coll_req(%p) (rc=%d)",
+            LOGERR("collective_finish() failed for collective(%p) (rc=%d)",
                    coll, ret);
         }
     }
 
     /* finish rpc */
     bcast_progress_out_t out;
-    out.ret = ret;
+    out.ret = (int32_t) ret;
     hret = margo_respond(handle, &out);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
@@ -834,11 +858,138 @@ static void bcast_progress_rpc(hg_handle_t handle)
     }
 
     /* free margo resources */
-    margo_free_input(handle, &in);
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(bcast_progress_rpc)
 
+
+/***************************************************
+ * Broadcast server bootstrap completion
+ ***************************************************/
+
+/* bootstrap complete broadcast rpc handler */
+static void bootstrap_complete_bcast_rpc(hg_handle_t handle)
+{
+    LOGDBG("BCAST_RPC: bootstrap handler");
+
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
+
+    coll_request* coll = NULL;
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
+    bootstrap_complete_bcast_in_t* in = calloc(1, sizeof(*in));
+    bootstrap_complete_bcast_out_t* out = calloc(1, sizeof(*out));
+    if ((NULL == req) || (NULL == in) || (NULL == out)) {
+        ret = ENOMEM;
+    } else {
+        /* get input params */
+        hg_return_t hret = margo_get_input(handle, in);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
+            ret = UNIFYFS_ERROR_MARGO;
+        } else {
+            hg_id_t op_hgid =
+                unifyfsd_rpc_context->rpcs.bootstrap_complete_bcast_id;
+            server_rpc_e rpc = UNIFYFS_SERVER_BCAST_RPC_BOOTSTRAP;
+            coll = collective_create(rpc, handle, op_hgid, (int)(in->root),
+                                     (void*)in, (void*)out, sizeof(*out),
+                                     HG_BULK_NULL, HG_BULK_NULL, NULL);
+            if (NULL == coll) {
+                ret = ENOMEM;
+            } else {
+                ret = collective_forward(coll);
+                if (ret == UNIFYFS_SUCCESS) {
+                    req->req_type = rpc;
+                    req->coll = coll;
+                    req->handle = handle;
+                    req->input = (void*) in;
+                    ret = sm_submit_service_request(req);
+                    if (ret != UNIFYFS_SUCCESS) {
+                        LOGERR("failed to submit coll request to svcmgr");
+                    }
+                }
+            }
+        }
+    }
+
+    if (ret != UNIFYFS_SUCCESS) {
+        /* report failure back to caller */
+        bootstrap_complete_bcast_out_t bbo;
+        bbo.ret = (int32_t)ret;
+        hg_return_t hret = margo_respond(handle, &bbo);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
+        }
+
+        if (NULL != coll) {
+            collective_cleanup(coll);
+        } else {
+            margo_destroy(handle);
+        }
+    }
+}
+DEFINE_MARGO_RPC_HANDLER(bootstrap_complete_bcast_rpc)
+
+/* Execute broadcast tree for 'bootstrap complete' notification */
+int unifyfs_invoke_broadcast_bootstrap_complete(void)
+{
+    /* assuming success */
+    int ret = UNIFYFS_SUCCESS;
+
+    LOGDBG("BCAST_RPC: starting bootstrap complete");
+    coll_request* coll = NULL;
+    bootstrap_complete_bcast_in_t* in = calloc(1, sizeof(*in));
+    if (NULL == in) {
+        ret = ENOMEM;
+    } else {
+        /* set input params */
+        in->root = (int32_t) glb_pmi_rank;
+        hg_id_t op_hgid =
+            unifyfsd_rpc_context->rpcs.bootstrap_complete_bcast_id;
+        server_rpc_e rpc = UNIFYFS_SERVER_BCAST_RPC_BOOTSTRAP;
+        coll = collective_create(rpc, HG_HANDLE_NULL, op_hgid,
+                                 glb_pmi_rank, (void*)in,
+                                 NULL, sizeof(bootstrap_complete_bcast_out_t),
+                                 HG_BULK_NULL, HG_BULK_NULL, NULL);
+        if (NULL == coll) {
+            ret = ENOMEM;
+        } else {
+            ret = collective_forward(coll);
+            if (ret == UNIFYFS_SUCCESS) {
+                /* avoid cleanup by the progress rpc */
+                coll->auto_cleanup = 0;
+                ABT_mutex_lock(coll->resp_valid_sync);
+                ret = invoke_bcast_progress_rpc(coll);
+                if (ret == UNIFYFS_SUCCESS) {
+                    /* wait for all the child responses to come back */
+                    struct timespec timeout;
+                    clock_gettime(CLOCK_REALTIME, &timeout);
+                    timeout.tv_sec += 5; /* 5 sec */
+                    int rc = ABT_cond_timedwait(coll->resp_valid_cond,
+                                                coll->resp_valid_sync,
+                                                &timeout);
+                    if (ABT_ERR_COND_TIMEDOUT == rc) {
+                        LOGERR("timeout");
+                        ret = UNIFYFS_ERROR_TIMEOUT;
+                    } else if (rc) {
+                        LOGERR("failed to wait on condition (err=%d)", rc);
+                        ret = UNIFYFS_ERROR_MARGO;
+                    } else if (NULL != coll->output) {
+                        bootstrap_complete_bcast_out_t* out =
+                            (bootstrap_complete_bcast_out_t*) coll->output;
+                        ret = out->ret;
+                    }
+                }
+                ABT_mutex_unlock(coll->resp_valid_sync);
+            } else {
+                LOGERR("collective(%p) forward failed - cleaning up", coll);
+            }
+            collective_cleanup(coll);
+        }
+    }
+
+    return ret;
+}
 
 /*************************************************************************
  * Broadcast file extents metadata
@@ -922,7 +1073,7 @@ static void extent_bcast_rpc(hg_handle_t handle)
 DEFINE_MARGO_RPC_HANDLER(extent_bcast_rpc)
 
 /* Execute broadcast tree for extent metadata */
-int unifyfs_invoke_broadcast_extents_rpc(int gfid)
+int unifyfs_invoke_broadcast_extents(int gfid)
 {
     /* assuming success */
     int ret = UNIFYFS_SUCCESS;
@@ -1735,7 +1886,7 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
      * we need to get the output data */
     coll->auto_cleanup = 0;
 
-    ABT_mutex_lock(coll->child_resp_valid_mut);
+    ABT_mutex_lock(coll->resp_valid_sync);
     /* Have to lock the mutex before the bcast_progress_rpc call
      * so that we're sure to be waiting on the condition
      * variable before the progress thread gets to the point
@@ -1757,16 +1908,25 @@ int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
     }
 
     // Wait for all the child responses to come back
-    ABT_cond_wait(coll->child_resp_valid,
-                    coll->child_resp_valid_mut);
-    ABT_mutex_unlock(coll->child_resp_valid_mut);
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timeout.tv_sec += 10; /* 10 sec */
+    int rc = ABT_cond_timedwait(coll->resp_valid_cond,
+                                coll->resp_valid_sync,
+                                &timeout);
+    if (ABT_ERR_COND_TIMEDOUT == rc) {
+        LOGERR("timeout");
+        ret = UNIFYFS_ERROR_TIMEOUT;
+    } else if (rc) {
+        LOGERR("failed to wait on condition (err=%d)", rc);
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+    ABT_mutex_unlock(coll->resp_valid_sync);
     // Now we can get the data from the output struct
 
     if (sizeof(metaget_all_bcast_out_t) != coll->output_sz) {
-        LOGERR("Unexpected size for collective output struct. "
-                "Expected %d but value was %d",
-                sizeof(metaget_all_bcast_out_t),
-                coll->output_sz);
+        LOGERR("Unexpected size (%zu) for collective output - expected %zu",
+               coll->output_sz, sizeof(metaget_all_bcast_out_t));
     }
 
     // Pull the bulk data (the list of file_attr structs) over
@@ -1899,8 +2059,8 @@ Exit_Invoke_BMA:
              * might have been left in a locked state.  Argobots doesn't
              * provide a way to test this, so we'll do a trylock() followed
              * by an unlock to ensure it's unlocked. */
-            ABT_mutex_trylock(coll->child_resp_valid_mut);
-            ABT_mutex_unlock(coll->child_resp_valid_mut);
+            ABT_mutex_trylock(coll->resp_valid_sync);
+            ABT_mutex_unlock(coll->resp_valid_sync);
         } else {
             /* If we never got as far as creating the collective, then just
              * free the input and output structs.  (These were all initialized

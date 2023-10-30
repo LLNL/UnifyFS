@@ -82,6 +82,7 @@ int wait_for_p2p_request(p2p_request* req)
     if (hret != HG_SUCCESS) {
         LOGERR("wait on p2p request(%p) failed - %s",
                req, HG_Error_to_string(hret));
+        //margo_state_dump(unifyfsd_rpc_context->svr_mid, "-", 0, NULL);
         rc = UNIFYFS_ERROR_MARGO;
     }
 
@@ -1598,47 +1599,25 @@ static void server_pid_rpc(hg_handle_t handle)
     int ret = UNIFYFS_SUCCESS;
 
     /* get input params */
-    server_pid_in_t* in = calloc(1, sizeof(*in));
-    server_rpc_req_t* req = calloc(1, sizeof(*req));
-    if ((NULL == in) || (NULL == req)) {
-        ret = ENOMEM;
+    server_pid_in_t in;
+    hg_return_t hret = margo_get_input(handle, &in);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_get_input() failed");
+        ret = UNIFYFS_ERROR_MARGO;
     } else {
-        hg_return_t hret = margo_get_input(handle, in);
-        if (hret != HG_SUCCESS) {
-            LOGERR("margo_get_input() failed");
-            ret = UNIFYFS_ERROR_MARGO;
-        } else {
-            req->req_type = UNIFYFS_SERVER_RPC_PID_REPORT;
-            req->handle = handle;
-            req->input = (void*) in;
-            req->bulk_buf = NULL;
-            req->bulk_sz = 0;
-            ret = sm_submit_service_request(req);
-            if (ret != UNIFYFS_SUCCESS) {
-                margo_free_input(handle, in);
-            }
-        }
+        ret = unifyfs_report_server_pid(in.rank, in.pid);
+        margo_free_input(handle, &in);
     }
 
-    /* if we hit an error during request submission, respond with the error */
-    if (ret != UNIFYFS_SUCCESS) {
-        if (NULL != in) {
-            free(in);
-        }
-        if (NULL != req) {
-            free(req);
-        }
-
-        /* return to caller */
-        server_pid_out_t out;
-        out.ret = (int32_t) ret;
-        hg_return_t hret = margo_respond(handle, &out);
-        if (hret != HG_SUCCESS) {
-            LOGERR("margo_respond() failed");
-        }
-
-        /* free margo resources */
-        margo_destroy(handle);
+    /* return to caller */
+    server_pid_out_t out;
+    out.ret = (int32_t) ret;
+    hret = margo_respond(handle, &out);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_respond() failed");
     }
+
+    /* free margo resources */
+    margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(server_pid_rpc)

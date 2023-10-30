@@ -478,10 +478,10 @@ int main(int argc, char* argv[])
     /* initialize our tree that maps a gfid to its extent tree */
     unifyfs_inode_tree_init(global_inode_tree);
 
-    LOGDBG("publishing server pid");
-    rc = unifyfs_publish_server_pids();
+    LOGDBG("waiting for server bootstrapping to complete");
+    rc = unifyfs_complete_bootstrap();
     if (rc != 0) {
-        LOGERR("failed to publish server pid file: %s",
+        LOGERR("failed to complete server bootstrapping: %s",
                unifyfs_rc_enum_description(rc));
         exit(1);
     }
