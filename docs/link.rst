@@ -86,3 +86,16 @@ Note the use of the ``-I`` option to specify the location of the
 library  provides the Fortran bindings for the ``unifyfs_mount`` and
 ``unifyfs_unmount`` functions.
 
+----------
+
+----------
+LD_PRELOAD
+----------
+
+In the case where an application doesn't need to be rebuilt in order to use
+UnifyFS (e.g., files paths are set wth arguments/configs), ``LD_PRELOAD`` can be
+used at runtime to allow for UnifyFS interception of file I/O.
+
+.. code-block:: Bash
+
+    $ srun -N2 -n8 --export=ALL,LD_PRELOAD=$UNIFYFS_LIB/libunifyfs_mpi_gotcha.so myApplication
