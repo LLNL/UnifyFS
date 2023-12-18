@@ -156,7 +156,9 @@ before_script:
 # Running with lsf tag here, but this may be too vague as the job may attempt to
 # use a runner on a system the service user doesn't have permission to access.
 # If so, move this job to a specific system.
-full_clean:
+# TODO: this fails when the rm tries to run on the path this job is running
+# from. Rewrite to exclude current runner.
+.full_clean:
   stage: clean
   extends: .base-template
   variables:
@@ -166,12 +168,11 @@ full_clean:
   tags:
     - shell
   before_script: []
-  script: rm -rf ${HOME}/.jacamar-ci/*
+  script: rm -rf ${WORKSPACE}/.jacamar-ci/*
   needs: []
 
 # System specific jobs
 include:
   - local: .gitlab/ascent.yml
-  - local: .gitlab/catalyst.yml
   - local: .gitlab/lassen.yml
   - local: .gitlab/quartz.yml

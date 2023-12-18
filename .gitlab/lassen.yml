@@ -173,3 +173,76 @@ lassen-gcc-8_3_1-integ-test-scheduled-stage:
     CI_TEST_OPTIONS: ":: -s stage"
   extends: [.lsf-multi-node-template, .lassen-scheduled-batch-template, .lassen-gcc-8_3_1-template, .integ-test-template]
   needs: ["lassen-gcc-8_3_1-scheduled-build"]
+
+
+### gcc@11.2.1 ###
+.lassen-gcc-11_2_1-template:
+  variables:
+    COMPILER: gcc/11.2.1
+    CC_COMMAND: "which gcc"
+    FC_COMMAND: "which gfortran"
+    SPACK_ENV_NAME: "unifyfs-lsf-gcc11_2_1"
+
+lassen-gcc-11_2_1-install-deps:
+  extends: [.lassen-shell-template, .lassen-gcc-11_2_1-template, .install-deps-template]
+
+lassen-gcc-11_2_1-build:
+  extends: [.lassen-shell-template, .lassen-gcc-11_2_1-template, .build-template]
+  needs: ["lassen-gcc-11_2_1-install-deps"]
+
+lassen-gcc-11_2_1-unit-test:
+  extends: [.lsf-single-node-template, .lassen-batch-template, .lassen-gcc-11_2_1-template, .unit-test-template]
+  needs: ["lassen-gcc-11_2_1-build"]
+
+# Integration tests
+
+lassen-gcc-11_2_1-integ-test-writeread-posix:
+  variables:
+    CI_TEST_OPTIONS: ":: -s writeread -t posix"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-11_2_1-template, .integ-test-template]
+  needs: ["lassen-gcc-11_2_1-build"]
+
+lassen-gcc-11_2_1-integ-test-writeread-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s writeread -t mpiio"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-11_2_1-template, .integ-test-template]
+  needs: ["lassen-gcc-11_2_1-build"]
+
+lassen-gcc-11_2_1-integ-test-read-posix:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t posix"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-11_2_1-template, .integ-test-template]
+  needs: ["lassen-gcc-11_2_1-build"]
+
+lassen-gcc-11_2_1-integ-test-read-mpiio:
+  variables:
+    CI_TEST_OPTIONS: ":: -s read -t mpiio"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-11_2_1-template, .integ-test-template]
+  needs: ["lassen-gcc-11_2_1-build"]
+
+lassen-gcc-11_2_1-integ-test-pc-all:
+  variables:
+    CI_TEST_OPTIONS: ":: -s pc -t all"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-11_2_1-template, .integ-test-template]
+  needs: ["lassen-gcc-11_2_1-build"]
+
+lassen-gcc-11_2_1-integ-test-stage:
+  variables:
+    CI_TEST_OPTIONS: ":: -s stage"
+  extends: [.lsf-multi-node-template, .lassen-batch-template, .lassen-gcc-11_2_1-template, .integ-test-template]
+  needs: ["lassen-gcc-11_2_1-build"]
+
+# Larger Scheduled Stage Job(s)
+
+lassen-gcc-11_2_1-scheduled-install-deps:
+  extends: [.lassen-scheduled-shell-template, .lassen-gcc-11_2_1-template, .install-deps-template]
+
+lassen-gcc-11_2_1-scheduled-build:
+  extends: [.lassen-scheduled-shell-template, .lassen-gcc-11_2_1-template, .build-template]
+  needs: ["lassen-gcc-11_2_1-scheduled-install-deps"]
+
+lassen-gcc-11_2_1-integ-test-scheduled-stage:
+  variables:
+    CI_TEST_OPTIONS: ":: -s stage"
+  extends: [.lsf-multi-node-template, .lassen-scheduled-batch-template, .lassen-gcc-11_2_1-template, .integ-test-template]
+  needs: ["lassen-gcc-11_2_1-scheduled-build"]
