@@ -1,12 +1,11 @@
 spack:
   packages:
     all:
-      compiler: [gcc@8.3.1]
+      compiler: [gcc@12.1.1]
       providers:
-        mpi: [spectrum-mpi]
-      target: [ppc64le]
+        mpi: [mvapich2]
+      target: [x86_64_v3]
   specs:
-  - automake@1.15.1
   - gotcha@1.0.5
   - mochi-margo@0.13.1 ^mercury~boostsys ^libfabric fabrics=rxm,sockets,tcp
   - spath~mpi
