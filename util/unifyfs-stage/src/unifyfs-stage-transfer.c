@@ -25,7 +25,8 @@
 #include <unistd.h>
 
 #include <mpi.h>
-#include <openssl/md5.h>
+#include <openssl/md5.h>  // still needed for the MD5_DIGEST_LENGTH define
+#include <openssl/evp.h>
 
 #include "unifyfs-stage.h"
 
@@ -163,8 +164,9 @@ static int md5_checksum(unifyfs_stage* ctx,
     unifyfs_rc urc;
     size_t len = 0;
     off_t file_offset;
-    MD5_CTX md5;
+    EVP_MD_CTX* md5;
     unsigned char data[UNIFYFS_STAGE_MD5_BLOCKSIZE];
+    unsigned int digest_len = UNIFYFS_STAGE_MD5_BLOCKSIZE;
 
     if (is_unify_file) {
         fd = -1;
@@ -186,10 +188,12 @@ static int md5_checksum(unifyfs_stage* ctx,
         }
     }
 
-    /* NOTE: MD5_xxxx() returns 1 for success */
-    md5_rc = MD5_Init(&md5);
+    /* NOTE: EVP_DigestInit_ex() returns 1 for success */
+    md5 = EVP_MD_CTX_create();
+    md5_rc = EVP_DigestInit_ex(md5, EVP_md5(), NULL);
     if (md5_rc != 1) {
-        fprintf(stderr, "UNIFYFS-STAGE ERROR: failed to create MD5 context\n");
+        fprintf(stderr,
+                "UNIFYFS-STAGE ERROR: failed to initialize MD5 context\n");
         ret = EIO;
     } else {
         file_offset = 0;
@@ -208,7 +212,7 @@ static int md5_checksum(unifyfs_stage* ctx,
                 break;
             } else if (len) {
                 file_offset += (off_t) len;
-                md5_rc = MD5_Update(&md5, data, len);
+                md5_rc = EVP_DigestUpdate(md5, data, len);
                 if (md5_rc != 1) {
                     fprintf(stderr, "UNIFYFS-STAGE ERROR: "
                             "MD5 checksum update failed\n");
@@ -218,11 +222,13 @@ static int md5_checksum(unifyfs_stage* ctx,
             }
         } while (len != 0);
 
-        md5_rc = MD5_Final(digest, &md5);
+        md5_rc = EVP_DigestFinal_ex(md5, data, &digest_len);
         if (md5_rc != 1) {
             fprintf(stderr, "UNIFYFS-STAGE ERROR: failed to finalize MD5\n");
             ret = EIO;
         }
+
+        EVP_MD_CTX_destroy(md5);
     }
 
     if (-1 != fd) {

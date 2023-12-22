@@ -46,6 +46,7 @@
 
 // common headers
 #include "arraylist.h"
+#include "compare_fn.h"
 #include "tree.h"
 #include "unifyfs_client.h"
 #include "unifyfs_const.h"
@@ -141,7 +142,6 @@ typedef struct {
 struct reqmgr_thrd;
 
 
-
 /**
  * Structure to maintain application client state, including
  * logio and shared memory contexts, margo rpc address, etc.
@@ -200,8 +200,20 @@ unifyfs_rc cleanup_app_client(app_config* app, app_client* clnt);
 unifyfs_rc add_failed_client(int app_id, int client_id);
 
 
-/* publish the pids of all servers to a shared file */
-int unifyfs_publish_server_pids(void);
+/* methods for pending remote metaget() bookkeeping */
+unifyfs_rc add_pending_metaget(int gfid);
+
+bool check_pending_metaget(int gfid);
+
+unifyfs_rc clear_pending_metaget(int gfid);
+
+
+
+/* notify local server main thread that bootstrap is complete */
+int unifyfs_signal_bootstrap_complete(void);
+
+/* participate in collective server bootstrap completion process */
+int unifyfs_complete_bootstrap(void);
 
 /* report the pid for a server with given rank */
 int unifyfs_report_server_pid(int rank, int pid);

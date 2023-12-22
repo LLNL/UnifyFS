@@ -156,7 +156,7 @@ static int unlink_after_sync_laminate_test(char* unifyfs_root)
 
 int unlink_test(char* unifyfs_root)
 {
-    diag("Finished UNIFYFS_WRAP(unlink) tests");
+    diag("Starting UNIFYFS_WRAP(unlink) tests");
 
     char path[64];
     char dir_path[64];

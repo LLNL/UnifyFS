@@ -66,6 +66,215 @@ static int forward_child_request(void* input_ptr,
     return ret;
 }
 
+/* Helper function for the UNIFYFS_SERVER_BCAST_RPC_METAGET case in
+ * get_child_response().  Handles merging the output from a child
+ * with that from the parent. */
+static int merge_metaget_all_bcast_outputs(
+            metaget_all_bcast_out_t* p_out,
+            metaget_all_bcast_out_t* c_out,
+            hg_handle_t p_hdl,
+            hg_handle_t c_hdl)
+{
+    int ret = UNIFYFS_SUCCESS;
+    hg_return_t hret = HG_SUCCESS;
+    hg_return_t bulk_create_hret = HG_SUCCESS;
+
+    int32_t parent_num_files = p_out->num_files;
+    int32_t child_num_files = c_out->num_files;
+    hg_size_t child_buf_size = child_num_files * sizeof(unifyfs_file_attr_t);
+
+    /* Quick optimization:  If there's no files for the child or
+     * parent, we can exit now.  (In fact, trying to perform a bulk transfer
+     * of size 0 will fail, so if we don't bail now, we'd just have to have
+     * more checks for this case down below.) */
+    if ((0 == parent_num_files) && (0 == child_num_files)) {
+        return UNIFYFS_SUCCESS;
+    }
+
+    // Some variables we'll need for the bulk transfer(s)
+    unifyfs_file_attr_t* child_attr_list = NULL;
+    hg_bulk_t local_bulk;
+    const struct hg_info* info = NULL;
+    hg_addr_t server_addr;
+    margo_instance_id mid;
+
+    // If the number of child files is 0, don't bother with the bulk
+    // transfer - it will just fail with HG_INVALID_ARG
+    if (child_num_files) {
+
+        // Pull the bulk data (the list of file_attr structs) over
+        child_attr_list = calloc(child_num_files, sizeof(unifyfs_file_attr_t));
+        if (!child_attr_list) {
+            return ENOMEM;
+        }
+
+        // Figure out some margo-specific info that we need for the transfer
+        info = margo_get_info(c_hdl);
+        server_addr = info->addr;
+        mid = margo_hg_handle_get_instance(c_hdl);
+
+        hg_size_t segment_sizes[1] = { child_buf_size };
+        void* segment_ptrs[1] = { (void*)child_attr_list };
+        bulk_create_hret =
+            margo_bulk_create(mid, 1, segment_ptrs, segment_sizes,
+                              HG_BULK_WRITE_ONLY, &local_bulk);
+        if (HG_SUCCESS != bulk_create_hret) {
+            LOGERR("margo_bulk_create() failed - %s",
+                HG_Error_to_string(bulk_create_hret));
+            free(child_attr_list);
+            return UNIFYFS_ERROR_MARGO;
+        }
+
+        hret = margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
+                                   c_out->file_meta, 0, local_bulk, 0,
+                                   child_buf_size);
+        if (HG_SUCCESS != hret) {
+            LOGERR("margo_bulk_transfer() failed - %s",
+                   HG_Error_to_string(hret));
+            margo_bulk_free(local_bulk);
+            free(child_attr_list);
+            return UNIFYFS_ERROR_MARGO;
+        }
+
+        margo_bulk_free(local_bulk);
+    }
+
+    /* OK, file attrs from the child (assuming there were any files) are now
+     * stored in child_attr_list.  And if there were 0 files, then
+     * child_attr_list is NULL. */
+
+    // Now get the bulk data from the parent (assuming there is any)
+    unifyfs_file_attr_t* parent_attr_list = NULL;
+    if (parent_num_files + child_num_files > 0) {
+        parent_attr_list = calloc(parent_num_files + child_num_files,
+                                  sizeof(unifyfs_file_attr_t));
+        /* Note: Deliberately allocating enough space for the child file attrs,
+         * since we're going to be copying them in anyway.
+         * Also, we had to check to see if there actually was any need to
+         * allocate memory because if you pass 0 into calloc(), you'll likely
+         * get a NULL back, and that would confuse the error checking on the
+         * next lines. */
+        if (!parent_attr_list) {
+            free(child_attr_list);
+            return ENOMEM;
+        }
+    }
+
+    if (parent_num_files) {
+        hg_size_t parent_buf_size =
+            parent_num_files * sizeof(unifyfs_file_attr_t);
+
+        // Figure out some margo-specific info that we need for the transfer
+        info = margo_get_info(p_hdl);
+        server_addr = info->addr;
+        // address of the bulk data on the server side
+        mid = margo_hg_handle_get_instance(p_hdl);
+
+        hg_size_t segment_sizes[1] = { parent_buf_size };
+        void* segment_ptrs[1] = { (void*)parent_attr_list };
+        bulk_create_hret =
+            margo_bulk_create(mid, 1, segment_ptrs, segment_sizes,
+                              HG_BULK_WRITE_ONLY, &local_bulk);
+
+        if (HG_SUCCESS != bulk_create_hret) {
+            LOGERR("margo_bulk_create() failed - %s",
+                HG_Error_to_string(bulk_create_hret));
+            free(parent_attr_list);
+            free(child_attr_list);
+            return UNIFYFS_ERROR_MARGO;
+        }
+
+        /* It would be nice if we didn't have to actually do a margo transfer
+         * here.  The data we need exists in our current address space
+         * somewhere.  Unfortunately, we don't know where because that's
+         * hidden from us by Margo.  The best we can do is hope that Margo is
+         * optimized for this case and this transfer ends up just being a
+         * mem copy. */
+        hret = margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
+                                   p_out->file_meta, 0, local_bulk, 0,
+                                   parent_buf_size);
+        if (HG_SUCCESS != hret) {
+            LOGERR("margo_bulk_transfer() failed - %s",
+                   HG_Error_to_string(hret));
+            margo_bulk_free(local_bulk);
+            free(parent_attr_list);
+            free(child_attr_list);
+            return UNIFYFS_ERROR_MARGO;
+        }
+        margo_bulk_free(local_bulk);
+    }
+
+    /* OK, file attrs from the parent (assuming there were any files) are now
+     * stored in parent_attr_list.  And parent_attr_list is actually big
+     * enough to hold all the file attrs from the parent and child.
+     *
+     * The next step is to append the child filenames string to the parent's,
+     * and update the string offsets stored in the child file attrs' filename
+     * members. */
+
+    uint64_t parent_filenames_len =
+        p_out->filenames ? strlen(p_out->filenames) : 0;
+    uint64_t child_filenames_len =
+        c_out->filenames ? strlen(c_out->filenames) : 0;
+
+    char* new_filenames = calloc(parent_filenames_len+child_filenames_len+1,
+                                 sizeof(char));
+    if (!new_filenames) {
+        free(parent_attr_list);
+        free(child_attr_list);
+        return ENOMEM;
+    }
+
+    if (p_out->filenames) {
+        strcpy(new_filenames, p_out->filenames);
+    }
+    if (c_out->filenames) {
+        strcat(new_filenames, c_out->filenames);
+    }
+    free(p_out->filenames);
+    p_out->filenames = new_filenames;
+
+    // Now update all the offset values in the child_attr_list
+    for (unsigned int i = 0; i < child_num_files; i++) {
+        uint64_t new_offset = (uint64_t)child_attr_list[i].filename +
+                              parent_filenames_len;
+        child_attr_list[i].filename = (char*)new_offset;
+    }
+
+    /* Now we need to append the child file attrs to the parent file attrs,
+     * create a new hg_bulk and replace the old parent bulk with the new one.
+     */
+    memcpy(&parent_attr_list[parent_num_files], child_attr_list,
+           child_buf_size);
+    free(child_attr_list);
+
+    size_t parent_buf_size =
+        (parent_num_files + child_num_files) * sizeof(unifyfs_file_attr_t);
+    hg_size_t segment_sizes[1] = { parent_buf_size };
+    void* segment_ptrs[1] = { (void*)parent_attr_list };
+
+    // Save the parent's old bulk so that we can restore it if the
+    // bulk create fails, or free it if the create succeeds
+    hg_bulk_t parent_old_bulk = p_out->file_meta;
+
+    hret = margo_bulk_create(unifyfsd_rpc_context->svr_mid, 1,
+                             segment_ptrs, segment_sizes,
+                             HG_BULK_READ_ONLY, &p_out->file_meta);
+    if (hret != HG_SUCCESS) {
+        LOGERR("margo_bulk_create() failed - %s", HG_Error_to_string(hret));
+        p_out->file_meta = parent_old_bulk;
+        free(parent_attr_list);
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    margo_bulk_free(parent_old_bulk);
+
+    /* Lastly, update the num_files value */
+    p_out->num_files += child_num_files;
+
+    return ret;
+}
+
 static int get_child_response(coll_request* coll_req,
                               hg_handle_t chdl)
 {
@@ -84,6 +293,17 @@ static int get_child_response(coll_request* coll_req,
             void* output = coll_req->output;
 
             switch (coll_req->req_type) {
+            case UNIFYFS_SERVER_BCAST_RPC_BOOTSTRAP: {
+                bootstrap_complete_bcast_out_t* cbbo =
+                    (bootstrap_complete_bcast_out_t*) out;
+                bootstrap_complete_bcast_out_t* bbo =
+                    (bootstrap_complete_bcast_out_t*) output;
+                child_ret = cbbo->ret;
+                if ((NULL != bbo) && (child_ret != UNIFYFS_SUCCESS)) {
+                    bbo->ret = child_ret;
+                }
+                break;
+            }
             case UNIFYFS_SERVER_BCAST_RPC_EXTENTS: {
                 extent_bcast_out_t* cebo = (extent_bcast_out_t*) out;
                 extent_bcast_out_t* ebo  = (extent_bcast_out_t*) output;
@@ -135,6 +355,33 @@ static int get_child_response(coll_request* coll_req,
                 child_ret = cubo->ret;
                 if ((NULL != ubo) && (child_ret != UNIFYFS_SUCCESS)) {
                     ubo->ret = child_ret;
+                }
+                break;
+            }
+            case UNIFYFS_SERVER_BCAST_RPC_METAGET: {
+                // NOTE: This case is different.  It's currently the only
+                // case that actually returns more than just a single error
+                // code up the tree.
+                metaget_all_bcast_out_t* cmabo =
+                     (metaget_all_bcast_out_t*) out;
+                metaget_all_bcast_out_t* mabo  =
+                    (metaget_all_bcast_out_t*) output;
+                child_ret = cmabo->ret;
+                if ((NULL != mabo) && (child_ret != UNIFYFS_SUCCESS)) {
+                    mabo->ret = child_ret;
+                }
+                if ((NULL != cmabo) && (NULL != mabo)) {
+                    merge_metaget_all_bcast_outputs(
+                        mabo, cmabo, coll_req->progress_hdl, chdl);
+                } else {
+                    /* One or both of the output structures is missing.
+                     * (This shouldn't ever happen.) */
+                    LOGERR(
+                        "Missing required output structs when handling "
+                        "UNIFYFS_SERVER_BCAST_RPC_METAGET child responses!");
+                    LOGERR("Parent output struct: 0x%lX", (uint64_t)mabo);
+                    LOGERR("Child output struct: 0x%lX", (uint64_t)cmabo);
+                    mabo->ret = UNIFYFS_ERROR_BADCONFIG;
                 }
                 break;
             }
@@ -255,16 +502,16 @@ static coll_request* collective_create(server_rpc_e req_type,
          * before calling bcast_progress_rpc(). */
 
 
-        int rc = ABT_mutex_create(&coll_req->child_resp_valid_mut);
+        int rc = ABT_mutex_create(&coll_req->resp_valid_sync);
         if (ABT_SUCCESS != rc) {
             LOGERR("ABT_mutex_create failed");
             free(coll_req);
             return NULL;
         }
-        rc = ABT_cond_create(&coll_req->child_resp_valid);
+        rc = ABT_cond_create(&coll_req->resp_valid_cond);
         if (ABT_SUCCESS != rc) {
             LOGERR("ABT_cond_create failed");
-            ABT_mutex_free(&coll_req->child_resp_valid_mut);
+            ABT_mutex_free(&coll_req->resp_valid_sync);
             free(coll_req);
             return NULL;
         }
@@ -273,8 +520,8 @@ static coll_request* collective_create(server_rpc_e req_type,
                                    UNIFYFS_BCAST_K_ARY, &(coll_req->tree));
         if (rc) {
             LOGERR("unifyfs_tree_init() failed");
-            ABT_mutex_free(&coll_req->child_resp_valid_mut);
-            ABT_cond_free(&coll_req->child_resp_valid);
+            ABT_mutex_free(&coll_req->resp_valid_sync);
+            ABT_cond_free(&coll_req->resp_valid_cond);
             free(coll_req);
             return NULL;
         }
@@ -288,8 +535,8 @@ static coll_request* collective_create(server_rpc_e req_type,
                 free(coll_req->child_hdls);
                 free(coll_req->child_reqs);
                 /* Note: calling free() on NULL is explicitly allowed */
-                ABT_mutex_free(&coll_req->child_resp_valid_mut);
-                ABT_cond_free(&coll_req->child_resp_valid);
+                ABT_mutex_free(&coll_req->resp_valid_sync);
+                ABT_cond_free(&coll_req->resp_valid_cond);
                 free(coll_req);
                 return NULL;
             }
@@ -367,8 +614,8 @@ void collective_cleanup(coll_request* coll_req)
     }
 
     /* Release the Argobots mutex and condition variable */
-    ABT_cond_free(&coll_req->child_resp_valid);
-    ABT_mutex_free(&coll_req->child_resp_valid_mut);
+    ABT_cond_free(&coll_req->resp_valid_cond);
+    ABT_mutex_free(&coll_req->resp_valid_sync);
 
     /* free allocated memory */
     if (NULL != coll_req->input) {
@@ -410,6 +657,8 @@ static int collective_forward(coll_request* coll_req)
         /* invoke bcast request rpc on child */
         margo_request* creq = coll_req->child_reqs + i;
         hg_handle_t* chdl = coll_req->child_hdls + i;
+        LOGDBG("BCAST_RPC: collective(%p) forwarding to child[%d]",
+               coll_req, i);
         int rc = forward_child_request(coll_req->input, *chdl, creq);
         if (rc != UNIFYFS_SUCCESS) {
             LOGERR("forward to child[%d] failed", i);
@@ -430,6 +679,12 @@ void collective_set_local_retval(coll_request* coll_req, int val)
     }
 
     switch (coll_req->req_type) {
+    case UNIFYFS_SERVER_BCAST_RPC_BOOTSTRAP: {
+        bootstrap_complete_bcast_out_t* bbo =
+            (bootstrap_complete_bcast_out_t*) output;
+        bbo->ret = val;
+        break;
+    }
     case UNIFYFS_SERVER_BCAST_RPC_EXTENTS: {
         extent_bcast_out_t* ebo = (extent_bcast_out_t*) output;
         ebo->ret = val;
@@ -460,6 +715,10 @@ void collective_set_local_retval(coll_request* coll_req, int val)
         ubo->ret = val;
         break;
     }
+    case UNIFYFS_SERVER_BCAST_RPC_METAGET: {
+        metaget_all_bcast_out_t* mabo = (metaget_all_bcast_out_t*) output;
+        mabo->ret = val;
+    }
     default:
         LOGERR("invalid collective request type %d", coll_req->req_type);
         break;
@@ -485,7 +744,7 @@ int collective_finish(coll_request* coll_req)
      * then send the output back to the caller.  If we're at the root
      * of the tree, though, there might be output data, but no place
      * to send it. */
-    if ((NULL != coll_req->output) && (NULL != coll_req->resp_hdl)) {
+    if ((NULL != coll_req->output) && (HG_HANDLE_NULL != coll_req->resp_hdl)) {
         hg_return_t hret = margo_respond(coll_req->resp_hdl, coll_req->output);
         if (hret != HG_SUCCESS) {
             LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
@@ -497,14 +756,14 @@ int collective_finish(coll_request* coll_req)
 
     /* Signal the condition variable in case there are other threads
      * waiting for the child responses */
-    ABT_mutex_lock(coll_req->child_resp_valid_mut);
-    ABT_cond_signal(coll_req->child_resp_valid);
+    ABT_mutex_lock(coll_req->resp_valid_sync);
+    ABT_cond_signal(coll_req->resp_valid_cond);
     /* There should only be a single thread waiting on the CV, so we don't
      * need to use ABT_cond_broadcast() */
-    ABT_mutex_unlock(coll_req->child_resp_valid_mut);
+    ABT_mutex_unlock(coll_req->resp_valid_sync);
     /* Locking the mutex before signaling is required in order to ensure
      * that the waiting thread has had a chance to actually call
-     * ABT_cond_wait() before this thread signals the CV. */
+     * ABT_cond_timedwait() before this thread signals the CV. */
 
     return ret;
 }
@@ -554,8 +813,9 @@ int invoke_bcast_progress_rpc(coll_request* coll_req)
 static void bcast_progress_rpc(hg_handle_t handle)
 {
     /* assume we'll succeed */
-    int32_t ret = UNIFYFS_SUCCESS;
+    int ret = UNIFYFS_SUCCESS;
     coll_request* coll = NULL;
+    bool cleanup_collective = false;
 
     bcast_progress_in_t in;
     hg_return_t hret = margo_get_input(handle, &in);
@@ -563,34 +823,173 @@ static void bcast_progress_rpc(hg_handle_t handle)
         LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
         ret = UNIFYFS_ERROR_MARGO;
     } else {
-        /* call collective_finish() to progress bcast operation */
         coll = (coll_request*) in.coll_req;
+        margo_free_input(handle, &in);
+
+        cleanup_collective = ((NULL != coll) && (coll->auto_cleanup));
+        /* We have to check the auto_cleanup variable now because in the case
+         * where auto_cleanup is false, another thread will be freeing the
+         * collective.  And once the memory is freed, we can't read the
+         * auto_cleanup variable.
+         *
+         * There's a condition variable that's signaled by collective_finish(),
+         * and the memory won't be freed until some time after that happens, so
+         * it's safe to check the variable up here. */
+
+        /* call collective_finish() to progress bcast operation */
         LOGDBG("BCAST_RPC: bcast progress collective(%p)", coll);
         ret = collective_finish(coll);
         if (ret != UNIFYFS_SUCCESS) {
-            LOGERR("collective_finish() failed for coll_req(%p) (rc=%d)",
+            LOGERR("collective_finish() failed for collective(%p) (rc=%d)",
                    coll, ret);
         }
     }
 
     /* finish rpc */
     bcast_progress_out_t out;
-    out.ret = ret;
+    out.ret = (int32_t) ret;
     hret = margo_respond(handle, &out);
     if (hret != HG_SUCCESS) {
         LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
     }
 
-    if ((NULL != coll) && (coll->auto_cleanup)) {
+    if (cleanup_collective) {
         collective_cleanup(coll);
     }
 
     /* free margo resources */
-    margo_free_input(handle, &in);
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(bcast_progress_rpc)
 
+
+/***************************************************
+ * Broadcast server bootstrap completion
+ ***************************************************/
+
+/* bootstrap complete broadcast rpc handler */
+static void bootstrap_complete_bcast_rpc(hg_handle_t handle)
+{
+    LOGDBG("BCAST_RPC: bootstrap handler");
+
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
+
+    coll_request* coll = NULL;
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
+    bootstrap_complete_bcast_in_t* in = calloc(1, sizeof(*in));
+    bootstrap_complete_bcast_out_t* out = calloc(1, sizeof(*out));
+    if ((NULL == req) || (NULL == in) || (NULL == out)) {
+        ret = ENOMEM;
+    } else {
+        /* get input params */
+        hg_return_t hret = margo_get_input(handle, in);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
+            ret = UNIFYFS_ERROR_MARGO;
+        } else {
+            hg_id_t op_hgid =
+                unifyfsd_rpc_context->rpcs.bootstrap_complete_bcast_id;
+            server_rpc_e rpc = UNIFYFS_SERVER_BCAST_RPC_BOOTSTRAP;
+            coll = collective_create(rpc, handle, op_hgid, (int)(in->root),
+                                     (void*)in, (void*)out, sizeof(*out),
+                                     HG_BULK_NULL, HG_BULK_NULL, NULL);
+            if (NULL == coll) {
+                ret = ENOMEM;
+            } else {
+                ret = collective_forward(coll);
+                if (ret == UNIFYFS_SUCCESS) {
+                    req->req_type = rpc;
+                    req->coll = coll;
+                    req->handle = handle;
+                    req->input = (void*) in;
+                    ret = sm_submit_service_request(req);
+                    if (ret != UNIFYFS_SUCCESS) {
+                        LOGERR("failed to submit coll request to svcmgr");
+                    }
+                }
+            }
+        }
+    }
+
+    if (ret != UNIFYFS_SUCCESS) {
+        /* report failure back to caller */
+        bootstrap_complete_bcast_out_t bbo;
+        bbo.ret = (int32_t)ret;
+        hg_return_t hret = margo_respond(handle, &bbo);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
+        }
+
+        if (NULL != coll) {
+            collective_cleanup(coll);
+        } else {
+            margo_destroy(handle);
+        }
+    }
+}
+DEFINE_MARGO_RPC_HANDLER(bootstrap_complete_bcast_rpc)
+
+/* Execute broadcast tree for 'bootstrap complete' notification */
+int unifyfs_invoke_broadcast_bootstrap_complete(void)
+{
+    /* assuming success */
+    int ret = UNIFYFS_SUCCESS;
+
+    LOGDBG("BCAST_RPC: starting bootstrap complete");
+    coll_request* coll = NULL;
+    bootstrap_complete_bcast_in_t* in = calloc(1, sizeof(*in));
+    if (NULL == in) {
+        ret = ENOMEM;
+    } else {
+        /* set input params */
+        in->root = (int32_t) glb_pmi_rank;
+        hg_id_t op_hgid =
+            unifyfsd_rpc_context->rpcs.bootstrap_complete_bcast_id;
+        server_rpc_e rpc = UNIFYFS_SERVER_BCAST_RPC_BOOTSTRAP;
+        coll = collective_create(rpc, HG_HANDLE_NULL, op_hgid,
+                                 glb_pmi_rank, (void*)in,
+                                 NULL, sizeof(bootstrap_complete_bcast_out_t),
+                                 HG_BULK_NULL, HG_BULK_NULL, NULL);
+        if (NULL == coll) {
+            ret = ENOMEM;
+        } else {
+            ret = collective_forward(coll);
+            if (ret == UNIFYFS_SUCCESS) {
+                /* avoid cleanup by the progress rpc */
+                coll->auto_cleanup = 0;
+                ABT_mutex_lock(coll->resp_valid_sync);
+                ret = invoke_bcast_progress_rpc(coll);
+                if (ret == UNIFYFS_SUCCESS) {
+                    /* wait for all the child responses to come back */
+                    struct timespec timeout;
+                    clock_gettime(CLOCK_REALTIME, &timeout);
+                    timeout.tv_sec += 5; /* 5 sec */
+                    int rc = ABT_cond_timedwait(coll->resp_valid_cond,
+                                                coll->resp_valid_sync,
+                                                &timeout);
+                    if (ABT_ERR_COND_TIMEDOUT == rc) {
+                        LOGERR("timeout");
+                        ret = UNIFYFS_ERROR_TIMEOUT;
+                    } else if (rc) {
+                        LOGERR("failed to wait on condition (err=%d)", rc);
+                        ret = UNIFYFS_ERROR_MARGO;
+                    } else if (NULL != coll->output) {
+                        bootstrap_complete_bcast_out_t* out =
+                            (bootstrap_complete_bcast_out_t*) coll->output;
+                        ret = out->ret;
+                    }
+                }
+                ABT_mutex_unlock(coll->resp_valid_sync);
+            } else {
+                LOGERR("collective(%p) forward failed - cleaning up", coll);
+            }
+            collective_cleanup(coll);
+        }
+    }
+
+    return ret;
+}
 
 /*************************************************************************
  * Broadcast file extents metadata
@@ -674,7 +1073,7 @@ static void extent_bcast_rpc(hg_handle_t handle)
 DEFINE_MARGO_RPC_HANDLER(extent_bcast_rpc)
 
 /* Execute broadcast tree for extent metadata */
-int unifyfs_invoke_broadcast_extents_rpc(int gfid)
+int unifyfs_invoke_broadcast_extents(int gfid)
 {
     /* assuming success */
     int ret = UNIFYFS_SUCCESS;
@@ -1348,5 +1747,347 @@ int unifyfs_invoke_broadcast_unlink(int gfid)
             }
         }
     }
+    return ret;
+}
+
+/*************************************************************************
+ * Broadcast metaget all request
+ *************************************************************************/
+
+/* metaget all broacast rpc handler */
+static void metaget_all_bcast_rpc(hg_handle_t handle)
+{
+    LOGDBG("BCAST_RPC: metaget_all handler");
+
+    /* assume we'll succeed */
+    int ret = UNIFYFS_SUCCESS;
+
+    coll_request* coll = NULL;
+    server_rpc_req_t* req = calloc(1, sizeof(*req));
+    metaget_all_bcast_in_t* in = calloc(1, sizeof(*in));
+    metaget_all_bcast_out_t* out = calloc(1, sizeof(*out));
+    if ((NULL == req) || (NULL == in) || (NULL == out)) {
+        ret = ENOMEM;
+    } else {
+        /* get input params */
+        LOGDBG("BCAST_RPC: getting input params");
+        hg_return_t hret = margo_get_input(handle, in);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_get_input() failed - %s", HG_Error_to_string(hret));
+            ret = UNIFYFS_ERROR_MARGO;
+        } else {
+            LOGDBG("BCAST_RPC: creating collective");
+            hg_id_t op_hgid = unifyfsd_rpc_context->rpcs.metaget_all_bcast_id;
+            server_rpc_e rpc = UNIFYFS_SERVER_BCAST_RPC_METAGET;
+            coll = collective_create(rpc, handle, op_hgid, (int)(in->root),
+                                     (void*)in, (void*)out, sizeof(*out),
+                                     HG_BULK_NULL, HG_BULK_NULL, NULL);
+            if (NULL == coll) {
+                ret = ENOMEM;
+            } else {
+                LOGDBG("BCAST_RPC: forwarding collective");
+                ret = collective_forward(coll);
+                if (ret == UNIFYFS_SUCCESS) {
+                    req->req_type = rpc;
+                    req->coll = coll;
+                    req->handle = handle;
+                    req->input = (void*) in;
+                    req->bulk_buf = NULL;
+                    req->bulk_sz = 0;
+                    ret = sm_submit_service_request(req);
+                    if (ret != UNIFYFS_SUCCESS) {
+                        LOGERR("failed to submit coll request to svcmgr");
+                    }
+                }
+            }
+        }
+    }
+
+    if (ret != UNIFYFS_SUCCESS) {
+        /* report failure back to caller */
+        metaget_all_bcast_out_t mgabo;
+        mgabo.ret = (int32_t)ret;
+        hg_return_t hret = margo_respond(handle, &mgabo);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_respond() failed - %s", HG_Error_to_string(hret));
+        }
+
+        if (NULL != coll) {
+            collective_cleanup(coll);
+        } else {
+            margo_destroy(handle);
+        }
+    }
+
+    LOGDBG("BCAST_RPC: exiting metaget_all handler");
+
+}
+
+DEFINE_MARGO_RPC_HANDLER(metaget_all_bcast_rpc)
+
+/* Execute broadcast tree for a metaget_all operation*/
+/* Upon success, file_attrs will hold data that has been allocated with
+ * malloc() and must be freed by the caller with free().  In the event of an
+ * error, the caller must *NOT* free the pointer.
+ *
+ * Note that 0 files is still considered a successful result.  In that case,
+ * num_file_attrs will point to 0 and *file_attrs will point to NULL. */
+int unifyfs_invoke_broadcast_metaget_all(unifyfs_file_attr_t** file_attrs,
+                                         int* num_file_attrs)
+{
+    int ret = UNIFYFS_SUCCESS;
+    hg_return_t bulk_create_hret = HG_NOMEM;
+    hg_return_t bulk_transfer_hret = HG_OTHER_ERROR;
+    /* Have to assume the bulk create and bulk transfer operations failed or
+     * else we might try to clean up non-existent data down in the clean-up
+     * section. */
+
+    hg_bulk_t local_bulk;
+
+    LOGDBG("BCAST_RPC: starting metaget_all broadcast");
+
+    coll_request* coll = NULL;
+    unifyfs_file_attr_t* attr_list = NULL;
+    unifyfs_file_attr_t* local_file_attrs = NULL;
+    /* attr_list holds the metadata we received from other server processes
+     * via the broadcast RPC.  local_file_attrs holds metadata for files
+     * that the current server process owns. */
+    metaget_all_bcast_in_t* in = calloc(1, sizeof(*in));
+    metaget_all_bcast_out_t* out = calloc(1, sizeof(*out));
+    if ((NULL == in) || (NULL == out)) {
+        ret = ENOMEM;
+        goto Exit_Invoke_BMA;
+    }
+
+    /* get input params */
+    in->root = (int32_t) glb_pmi_rank;
+
+    hg_id_t op_hgid = unifyfsd_rpc_context->rpcs.metaget_all_bcast_id;
+    server_rpc_e rpc = UNIFYFS_SERVER_BCAST_RPC_METAGET;
+    coll = collective_create(rpc, HG_HANDLE_NULL, op_hgid,
+                                glb_pmi_rank, (void*)in,
+                                (void*)out, sizeof(metaget_all_bcast_out_t),
+                                HG_BULK_NULL, HG_BULK_NULL, NULL);
+    /* Note: We are passing in HG_HANDLE_NULL for the response handle
+     * because we are the root of the tree and there's nobody for us to
+     * respond to. */
+
+    if (NULL == coll) {
+        ret = ENOMEM;
+        goto Exit_Invoke_BMA;
+    }
+
+    ret = collective_forward(coll);
+    if (UNIFYFS_SUCCESS != ret) {
+        goto Exit_Invoke_BMA;
+    }
+
+    /* We don't want the progress rpc to clean up for us because
+     * we need to get the output data */
+    coll->auto_cleanup = 0;
+
+    ABT_mutex_lock(coll->resp_valid_sync);
+    /* Have to lock the mutex before the bcast_progress_rpc call
+     * so that we're sure to be waiting on the condition
+     * variable before the progress thread gets to the point
+     * where it signals the CV. */
+
+    ret = invoke_bcast_progress_rpc(coll);
+    if (UNIFYFS_SUCCESS != ret) {
+        LOGERR("invoke_bcast_progress_rpc() failed with error %d", ret);
+        goto Exit_Invoke_BMA;
+    }
+
+    /* While the broadcast RPC is running, let's fetch the metadata for
+     * all the files the server we're currently running as owns. */
+    unsigned int num_local_files = 0;
+    ret = unifyfs_get_owned_files(&num_local_files, &local_file_attrs);
+    if (UNIFYFS_SUCCESS != ret) {
+        LOGERR("unifyfs_get_owned_files() failed with error %d", ret);
+        goto Exit_Invoke_BMA;
+    }
+
+    // Wait for all the child responses to come back
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timeout.tv_sec += 10; /* 10 sec */
+    int rc = ABT_cond_timedwait(coll->resp_valid_cond,
+                                coll->resp_valid_sync,
+                                &timeout);
+    if (ABT_ERR_COND_TIMEDOUT == rc) {
+        LOGERR("timeout");
+        ret = UNIFYFS_ERROR_TIMEOUT;
+    } else if (rc) {
+        LOGERR("failed to wait on condition (err=%d)", rc);
+        ret = UNIFYFS_ERROR_MARGO;
+    }
+    ABT_mutex_unlock(coll->resp_valid_sync);
+    // Now we can get the data from the output struct
+
+    if (sizeof(metaget_all_bcast_out_t) != coll->output_sz) {
+        LOGERR("Unexpected size (%zu) for collective output - expected %zu",
+               coll->output_sz, sizeof(metaget_all_bcast_out_t));
+    }
+
+    // Pull the bulk data (the list of file_attr structs) over
+    metaget_all_bcast_out_t* results = (metaget_all_bcast_out_t*)coll->output;
+
+    /* Now check the number of files - if it's 0, then we don't need to
+     * bother with the bulk tranfser.  (In fact, if we were to try, we'd
+     * get an error.) */
+
+    if (results->num_files) {
+        hg_size_t buf_size = results->num_files * sizeof(unifyfs_file_attr_t);
+        attr_list = calloc(results->num_files, sizeof(unifyfs_file_attr_t));
+        if (NULL == attr_list) {
+            ret = ENOMEM;
+            goto Exit_Invoke_BMA;
+        }
+
+        // Figure out some margo-specific info that we need for the transfer
+        const struct hg_info* info = margo_get_info(coll->progress_hdl);
+        hg_addr_t server_addr = info->addr;
+        // address of the bulk data on the server side
+        margo_instance_id mid =
+            margo_hg_handle_get_instance(coll->progress_hdl);
+
+        bulk_create_hret =
+            margo_bulk_create(mid, 1, (void**)&attr_list, &buf_size,
+                            HG_BULK_WRITE_ONLY, &local_bulk);
+        if (HG_SUCCESS != bulk_create_hret) {
+            LOGERR("margo_bulk_create() failed - %s",
+                HG_Error_to_string(bulk_create_hret));
+            ret = UNIFYFS_ERROR_MARGO;
+            goto Exit_Invoke_BMA;
+        }
+
+        bulk_transfer_hret =
+            margo_bulk_transfer(mid, HG_BULK_PULL, server_addr,
+                                results->file_meta, 0, local_bulk, 0, buf_size);
+        if (HG_SUCCESS != bulk_transfer_hret) {
+            LOGERR("margo_bulk_transfer() failed - %s",
+                HG_Error_to_string(bulk_transfer_hret));
+            ret = UNIFYFS_ERROR_MARGO;
+            goto Exit_Invoke_BMA;
+        }
+
+        /* At this point, attr_list should have the file_attr_t  structs from
+         * all the other servers.  However, we still need to assign the
+         * filename values for each struct. */
+
+        for (unsigned int i = 0; i < results->num_files; i++) {
+            /* Remember that we abused the filename pointer to actually hold
+             * an offset into the filenames string that we sent separately.
+             * (See the comments in process_metaget_bcast_rpc()) */
+            uint64_t start_offset = (uint64_t)attr_list[i].filename;
+            uint64_t name_len;
+            if (i < (results->num_files-1)) {
+                name_len = ((uint64_t)attr_list[i+1].filename) - start_offset;
+            } else {
+                /* length is calculated differently for the last file in
+                 * file_attrs */
+                name_len = strlen(&results->filenames[start_offset]);
+            }
+            attr_list[i].filename =
+                strndup(&results->filenames[start_offset], name_len);
+            if (NULL == attr_list[i].filename) {
+                ret = ENOMEM;
+                LOGERR("strdup() failed processing filename");
+                /* If we're actually getting ENOMEM from strdup(), the error
+                 * log is probably also going to fail... */
+                goto Exit_Invoke_BMA;
+                /* Technically, attr_list probably contains valid data and we
+                 * could try to return a partial list.  If we did, though, then
+                 * we'd have ensure we checked for NULL before dereferencing
+                 * the filename pointer *EVERYWHERE* else.  Additionally, if
+                 * we've really run out of memory, then other things are
+                 * probably going to start failing pretty quickly.  In short,
+                 * trying to salvage this situation isn't worth the hassle. */
+            }
+        }
+    }
+
+    LOGINFO("Total number of files owned by the current server: %d",
+            num_local_files);
+    LOGINFO("Total number of files returned from children: %d",
+            results->num_files);
+    LOGINFO("Return code from children: %d", results->ret);
+
+    /* Need to merge the metadata for the local files with the metadata
+     * returned by the RPC */
+    if (num_local_files) {
+        size_t new_size = (results->num_files + num_local_files) *
+                          sizeof(unifyfs_file_attr_t);
+        unifyfs_file_attr_t* merged_attr_list = realloc(attr_list, new_size);
+        if (merged_attr_list) {
+            attr_list = merged_attr_list;
+        } else {
+            LOGERR("Failed to realloc() file attr list!");
+            ret = ENOMEM;
+            goto Exit_Invoke_BMA;
+            //TODO:  Make sure we clean this up in the event of an error!
+        }
+        memcpy(&attr_list[results->num_files], local_file_attrs,
+               num_local_files * sizeof(unifyfs_file_attr_t));
+    }
+
+    // Make the results visible to the caller
+    *file_attrs = attr_list;
+    *num_file_attrs = results->num_files + num_local_files;
+
+Exit_Invoke_BMA:
+    /* If we hit an error somewhere, then there's a bunch of clean-up
+     * that we need to do... */
+    if (UNIFYFS_SUCCESS != ret) {
+        if (HG_SUCCESS == bulk_transfer_hret) {
+            /* We made it past the bulk transfer before failing, which means
+             * we probably called strdup() on a bunch of filename strings.
+             * Have to free all of those... */
+            for (unsigned int i = 0; i < results->num_files; i++) {
+                free(attr_list[i].filename);
+            }
+        }
+        /* If there's been an error, we won't be returning the attr_list
+         * pointer to the caller, so make sure it's freed. */
+        free(attr_list);
+
+        if (coll) {
+            /* If we have a collective struct, then there's some more
+             * clean-up to do:
+             *
+             * Depending on where any errors occurred above, the mutex
+             * might have been left in a locked state.  Argobots doesn't
+             * provide a way to test this, so we'll do a trylock() followed
+             * by an unlock to ensure it's unlocked. */
+            ABT_mutex_trylock(coll->resp_valid_sync);
+            ABT_mutex_unlock(coll->resp_valid_sync);
+        } else {
+            /* If we never got as far as creating the collective, then just
+             * free the input and output structs.  (These were all initialized
+             * to NULL, so it's safe to call free() on them even if we never
+             * actually got around to allocating them.) */
+            free(in);
+            free(out);
+        }
+    }
+
+    if (local_file_attrs) {
+        /* If we successfully allocated memory for local_file_attrs,
+         * then we need to free it. */
+        free(local_file_attrs);
+    }
+
+    if (HG_SUCCESS == bulk_create_hret) {
+        /* If we successfully created the bulk, then we need to free it
+         * (regardless of the overall success of the function). */
+        margo_bulk_free(local_bulk);
+    }
+
+    if (coll) {
+        /* If we successfully created the collective, then we need to
+         * clean it up.  */
+        collective_cleanup(coll);
+    }
+
     return ret;
 }

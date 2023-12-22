@@ -265,13 +265,13 @@ unifyfs_rc unifyfs_initialize(const char* mountpoint,
     /* add mount point as a new directory in the file list */
     if (unifyfs_fid_from_path(client, mountpoint) < 0) {
         /* no entry exists for mount point, so create one */
-        int fid = unifyfs_fid_create_directory(client, mountpoint);
-        if (fid < 0) {
+        rc = unifyfs_fid_create_directory(client, mountpoint);
+        if (rc != UNIFYFS_SUCCESS) {
             /* if there was an error, return it */
             LOGERR("failed to create directory entry for mount point: `%s'",
                    mountpoint);
             unifyfs_client_fini(client);
-            return UNIFYFS_FAILURE;
+            return rc;
         }
     }
 

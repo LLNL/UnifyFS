@@ -44,132 +44,132 @@
 
 ##### All Quartz Jobs #####
 
-### gcc@4.9.3 ###
-.quartz-gcc-4_9_3-template:
+### gcc@10.3.1 ###
+.quartz-gcc-10_3_1-template:
   variables:
-    COMPILER: gcc/4.9.3
+    COMPILER: gcc/10.3.1
     CC_COMMAND: "which gcc"
     FC_COMMAND: "which gfortran"
-    SPACK_ENV_NAME: "unifyfs-slurm-gcc4_9_3"
+    SPACK_ENV_NAME: "unifyfs-slurm-gcc10_3_1"
 
-quartz-gcc-4_9_3-install-deps:
-  extends: [.quartz-shell-template, .quartz-gcc-4_9_3-template, .install-deps-template]
+quartz-gcc-10_3_1-install-deps:
+  extends: [.quartz-shell-template, .quartz-gcc-10_3_1-template, .install-deps-template]
 
-quartz-gcc-4_9_3-build:
-  extends: [.quartz-shell-template, .quartz-gcc-4_9_3-template, .build-template]
-  needs: ["quartz-gcc-4_9_3-install-deps"]
+quartz-gcc-10_3_1-build:
+  extends: [.quartz-shell-template, .quartz-gcc-10_3_1-template, .build-template]
+  needs: ["quartz-gcc-10_3_1-install-deps"]
 
-quartz-gcc-4_9_3-unit-test:
-  extends: [.slurm-single-node-template, .quartz-batch-template, .quartz-gcc-4_9_3-template, .unit-test-template]
-  needs: ["quartz-gcc-4_9_3-build"]
+quartz-gcc-10_3_1-unit-test:
+  extends: [.slurm-single-node-template, .quartz-batch-template, .quartz-gcc-10_3_1-template, .unit-test-template]
+  needs: ["quartz-gcc-10_3_1-build"]
 
 # Integration tests
 
-quartz-gcc-4_9_3-integ-test-writeread-posix:
+quartz-gcc-10_3_1-integ-test-writeread-posix:
   variables:
     CI_TEST_OPTIONS: ":: -s writeread -t posix"
-  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-4_9_3-template, .integ-test-template]
-  needs: ["quartz-gcc-4_9_3-build"]
+  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-10_3_1-template, .integ-test-template]
+  needs: ["quartz-gcc-10_3_1-build"]
 
-quartz-gcc-4_9_3-integ-test-writeread-mpiio:
+quartz-gcc-10_3_1-integ-test-writeread-mpiio:
   variables:
     CI_TEST_OPTIONS: ":: -s writeread -t mpiio"
-  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-4_9_3-template, .integ-test-template]
-  needs: ["quartz-gcc-4_9_3-build"]
+  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-10_3_1-template, .integ-test-template]
+  needs: ["quartz-gcc-10_3_1-build"]
 
-quartz-gcc-4_9_3-integ-test-read-posix:
+quartz-gcc-10_3_1-integ-test-read-posix:
   variables:
     CI_TEST_OPTIONS: ":: -s read -t posix"
-  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-4_9_3-template, .integ-test-template]
-  needs: ["quartz-gcc-4_9_3-build"]
+  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-10_3_1-template, .integ-test-template]
+  needs: ["quartz-gcc-10_3_1-build"]
 
-quartz-gcc-4_9_3-integ-test-read-mpiio:
+quartz-gcc-10_3_1-integ-test-read-mpiio:
   variables:
     CI_TEST_OPTIONS: ":: -s read -t mpiio"
-  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-4_9_3-template, .integ-test-template]
-  needs: ["quartz-gcc-4_9_3-build"]
+  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-10_3_1-template, .integ-test-template]
+  needs: ["quartz-gcc-10_3_1-build"]
 
-quartz-gcc-4_9_3-integ-test-pc-all:
+quartz-gcc-10_3_1-integ-test-pc-all:
   variables:
     CI_TEST_OPTIONS: ":: -s pc -t all"
-  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-4_9_3-template, .integ-test-template]
-  needs: ["quartz-gcc-4_9_3-build"]
+  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-10_3_1-template, .integ-test-template]
+  needs: ["quartz-gcc-10_3_1-build"]
 
-quartz-gcc-4_9_3-integ-test-stage:
+quartz-gcc-10_3_1-integ-test-stage:
   variables:
     CI_TEST_OPTIONS: ":: -s stage"
-  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-4_9_3-template, .integ-test-template]
-  needs: ["quartz-gcc-4_9_3-build"]
+  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-10_3_1-template, .integ-test-template]
+  needs: ["quartz-gcc-10_3_1-build"]
 
 
-### gcc@10.2.1 ###
-.quartz-gcc-10_2_1-template:
+### gcc@12.1.1 ###
+.quartz-gcc-12_1_1-template:
   variables:
-    COMPILER: gcc/10.2.1
+    COMPILER: gcc/12.1.1
     CC_COMMAND: "which gcc"
     FC_COMMAND: "which gfortran"
-    SPACK_ENV_NAME: "unifyfs-slurm-gcc10_2_1"
+    SPACK_ENV_NAME: "unifyfs-slurm-gcc12_1_1"
 
-quartz-gcc-10_2_1-install-deps:
-  extends: [.quartz-shell-template, .quartz-gcc-10_2_1-template, .install-deps-template]
+quartz-gcc-12_1_1-install-deps:
+  extends: [.quartz-shell-template, .quartz-gcc-12_1_1-template, .install-deps-template]
 
-quartz-gcc-10_2_1-build:
-  extends: [.quartz-shell-template, .quartz-gcc-10_2_1-template, .build-template]
-  needs: ["quartz-gcc-10_2_1-install-deps"]
+quartz-gcc-12_1_1-build:
+  extends: [.quartz-shell-template, .quartz-gcc-12_1_1-template, .build-template]
+  needs: ["quartz-gcc-12_1_1-install-deps"]
 
-quartz-gcc-10_2_1-unit-test:
-  extends: [.slurm-single-node-template, .quartz-batch-template, .quartz-gcc-10_2_1-template, .unit-test-template]
-  needs: ["quartz-gcc-10_2_1-build"]
+quartz-gcc-12_1_1-unit-test:
+  extends: [.slurm-single-node-template, .quartz-batch-template, .quartz-gcc-12_1_1-template, .unit-test-template]
+  needs: ["quartz-gcc-12_1_1-build"]
 
 # Integration tests
 
-quartz-gcc-10_2_1-integ-test-writeread-posix:
+quartz-gcc-12_1_1-integ-test-writeread-posix:
   variables:
     CI_TEST_OPTIONS: ":: -s writeread -t posix"
-  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-10_2_1-template, .integ-test-template]
-  needs: ["quartz-gcc-10_2_1-build"]
+  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-12_1_1-template, .integ-test-template]
+  needs: ["quartz-gcc-12_1_1-build"]
 
-quartz-gcc-10_2_1-integ-test-writeread-mpiio:
+quartz-gcc-12_1_1-integ-test-writeread-mpiio:
   variables:
     CI_TEST_OPTIONS: ":: -s writeread -t mpiio"
-  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-10_2_1-template, .integ-test-template]
-  needs: ["quartz-gcc-10_2_1-build"]
+  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-12_1_1-template, .integ-test-template]
+  needs: ["quartz-gcc-12_1_1-build"]
 
-quartz-gcc-10_2_1-integ-test-read-posix:
+quartz-gcc-12_1_1-integ-test-read-posix:
   variables:
     CI_TEST_OPTIONS: ":: -s read -t posix"
-  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-10_2_1-template, .integ-test-template]
-  needs: ["quartz-gcc-10_2_1-build"]
+  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-12_1_1-template, .integ-test-template]
+  needs: ["quartz-gcc-12_1_1-build"]
 
-quartz-gcc-10_2_1-integ-test-read-mpiio:
+quartz-gcc-12_1_1-integ-test-read-mpiio:
   variables:
     CI_TEST_OPTIONS: ":: -s read -t mpiio"
-  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-10_2_1-template, .integ-test-template]
-  needs: ["quartz-gcc-10_2_1-build"]
+  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-12_1_1-template, .integ-test-template]
+  needs: ["quartz-gcc-12_1_1-build"]
 
-quartz-gcc-10_2_1-integ-test-pc-all:
+quartz-gcc-12_1_1-integ-test-pc-all:
   variables:
     CI_TEST_OPTIONS: ":: -s pc -t all"
-  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-10_2_1-template, .integ-test-template]
-  needs: ["quartz-gcc-10_2_1-build"]
+  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-12_1_1-template, .integ-test-template]
+  needs: ["quartz-gcc-12_1_1-build"]
 
-quartz-gcc-10_2_1-integ-test-stage:
+quartz-gcc-12_1_1-integ-test-stage:
   variables:
     CI_TEST_OPTIONS: ":: -s stage"
-  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-10_2_1-template, .integ-test-template]
-  needs: ["quartz-gcc-10_2_1-build"]
+  extends: [.slurm-multi-node-template, .quartz-batch-template, .quartz-gcc-12_1_1-template, .integ-test-template]
+  needs: ["quartz-gcc-12_1_1-build"]
 
 # Larger Scheduled Stage Job(s)
 
-quartz-gcc-10_2_1-scheduled-install-deps:
-  extends: [.quartz-scheduled-shell-template, .quartz-gcc-10_2_1-template, .install-deps-template]
+quartz-gcc-12_1_1-scheduled-install-deps:
+  extends: [.quartz-scheduled-shell-template, .quartz-gcc-12_1_1-template, .install-deps-template]
 
-quartz-gcc-10_2_1-scheduled-build:
-  extends: [.quartz-scheduled-shell-template, .quartz-gcc-10_2_1-template, .build-template]
-  needs: ["quartz-gcc-10_2_1-scheduled-install-deps"]
+quartz-gcc-12_1_1-scheduled-build:
+  extends: [.quartz-scheduled-shell-template, .quartz-gcc-12_1_1-template, .build-template]
+  needs: ["quartz-gcc-12_1_1-scheduled-install-deps"]
 
-quartz-gcc-10_2_1-integ-test-scheduled-stage:
+quartz-gcc-12_1_1-integ-test-scheduled-stage:
   variables:
     CI_TEST_OPTIONS: ":: -s stage"
-  extends: [.slurm-multi-node-template, .quartz-scheduled-batch-template, .quartz-gcc-10_2_1-template, .integ-test-template]
-  needs: ["quartz-gcc-10_2_1-scheduled-build"]
+  extends: [.slurm-multi-node-template, .quartz-scheduled-batch-template, .quartz-gcc-12_1_1-template, .integ-test-template]
+  needs: ["quartz-gcc-12_1_1-scheduled-build"]

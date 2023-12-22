@@ -72,17 +72,32 @@ UNIFYFS_DEF(futimens, int,
 UNIFYFS_DEF(stat, int,
             (const char* path, struct stat* buf),
             (path, buf))
+UNIFYFS_DEF(stat64, int,
+            (const char* path, struct stat64* buf),
+            (path, buf))
 UNIFYFS_DEF(fstat, int,
             (int fd, struct stat* buf),
+            (fd, buf))
+UNIFYFS_DEF(fstat64, int,
+            (int fd, struct stat64* buf),
             (fd, buf))
 UNIFYFS_DEF(__xstat, int,
             (int vers, const char* path, struct stat* buf),
             (vers, path, buf))
+UNIFYFS_DEF(__xstat64, int,
+            (int vers, const char* path, struct stat64* buf),
+            (vers, path, buf))
 UNIFYFS_DEF(__fxstat, int,
             (int vers, int fd, struct stat* buf),
             (vers, fd, buf))
+UNIFYFS_DEF(__fxstat64, int,
+            (int vers, int fd, struct stat64* buf),
+            (vers, fd, buf))
 UNIFYFS_DEF(__lxstat, int,
             (int vers, const char* path, struct stat* buf),
+            (vers, path, buf))
+UNIFYFS_DEF(__lxstat64, int,
+            (int vers, const char* path, struct stat64* buf),
             (vers, path, buf))
 UNIFYFS_DEF(statfs, int,
             (const char* path, struct statfs* fsbuf),
@@ -220,6 +235,9 @@ UNIFYFS_DEF(seekdir, void,
             (dirp, loc))
 
 UNIFYFS_DEF(fopen, FILE*,
+            (const char* path, const char* mode),
+            (path, mode))
+UNIFYFS_DEF(fopen64, FILE*,
             (const char* path, const char* mode),
             (path, mode))
 UNIFYFS_DEF(freopen, FILE*,
@@ -364,11 +382,18 @@ struct gotcha_binding_t unifyfs_wrappers[] = {
     { "remove", UNIFYFS_WRAP(remove), &wrappee_handle_remove },
     { "utimensat", UNIFYFS_WRAP(utimensat), &wrappee_handle_utimensat },
     { "futimens", UNIFYFS_WRAP(futimens), &wrappee_handle_futimens },
+
     { "stat", UNIFYFS_WRAP(stat), &wrappee_handle_stat },
+    { "stat64", UNIFYFS_WRAP(stat64), &wrappee_handle_stat64 },
     { "fstat", UNIFYFS_WRAP(fstat), &wrappee_handle_fstat },
+    { "fstat64", UNIFYFS_WRAP(fstat64), &wrappee_handle_fstat64 },
     { "__xstat", UNIFYFS_WRAP(__xstat), &wrappee_handle___xstat },
+    { "__xstat64", UNIFYFS_WRAP(__xstat64), &wrappee_handle___xstat64 },
     { "__fxstat", UNIFYFS_WRAP(__fxstat), &wrappee_handle___fxstat },
+    { "__fxstat64", UNIFYFS_WRAP(__fxstat64), &wrappee_handle___fxstat64 },
     { "__lxstat", UNIFYFS_WRAP(__lxstat), &wrappee_handle___lxstat },
+    { "__lxstat64", UNIFYFS_WRAP(__lxstat64), &wrappee_handle___lxstat64 },
+
     { "statfs", UNIFYFS_WRAP(statfs), &wrappee_handle_statfs },
     { "fstatfs", UNIFYFS_WRAP(fstatfs), &wrappee_handle_fstatfs },
     { "creat", UNIFYFS_WRAP(creat), &wrappee_handle_creat },
@@ -413,6 +438,7 @@ struct gotcha_binding_t unifyfs_wrappers[] = {
     { "scandir", UNIFYFS_WRAP(scandir), &wrappee_handle_scandir },
     { "seekdir", UNIFYFS_WRAP(seekdir), &wrappee_handle_seekdir },
     { "fopen", UNIFYFS_WRAP(fopen), &wrappee_handle_fopen },
+    { "fopen64", UNIFYFS_WRAP(fopen64), &wrappee_handle_fopen64 },
     { "freopen", UNIFYFS_WRAP(freopen), &wrappee_handle_freopen },
     { "setvbuf", UNIFYFS_WRAP(setvbuf), &wrappee_handle_setvbuf },
     { "setbuf", UNIFYFS_WRAP(setbuf), &wrappee_handle_setbuf },

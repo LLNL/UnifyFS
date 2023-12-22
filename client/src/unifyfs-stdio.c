@@ -271,6 +271,7 @@ static int unifyfs_fopen_parse_mode(
  */
 static int unifyfs_fopen(const char* path,
                          const char* mode,
+						 int from_fopen64,
                          FILE** outstream)
 {
     /* assume that we'll fail */
@@ -290,6 +291,8 @@ static int unifyfs_fopen(const char* path,
     int open_rc = -1;
     int fid;
     off_t pos;
+    /* if called from fopen64(), add O_LARGEFILE flag when creating file */
+    int large_file_flag = from_fopen64 ? O_LARGEFILE : 0;
     if (read) {
         /* read shall fail if file does not already exist, unifyfs_fid_open
          * returns ENOENT if file does not exist w/o O_CREAT
@@ -309,26 +312,26 @@ static int unifyfs_fopen(const char* path,
              * (read/write)
              */
             open_rc = unifyfs_fid_open(posix_client, path,
-                                       O_RDWR | O_CREAT | O_TRUNC,
-                                       perms, &fid, &pos);
+                                       O_RDWR | O_CREAT | O_TRUNC |
+                                       large_file_flag, perms, &fid, &pos);
         } else {
             /* w  ==> truncate to zero length or create file for writing */
             open_rc = unifyfs_fid_open(posix_client, path,
-                                       O_WRONLY | O_CREAT | O_TRUNC,
-                                       perms, &fid, &pos);
+                                       O_WRONLY | O_CREAT | O_TRUNC |
+                                       large_file_flag, perms, &fid, &pos);
         }
     } else if (append) {
         /* force all writes to end of file when append is set */
         if (plus) {
             /* a+ ==> append, open or create file for update, initial file
              * position for reading should be at start */
-            open_rc = unifyfs_fid_open(posix_client, path, O_RDWR | O_CREAT,
-                                       perms, &fid, &pos);
+            open_rc = unifyfs_fid_open(posix_client, path, O_RDWR | O_CREAT |
+                                       large_file_flag, perms, &fid, &pos);
         } else {
             /* a ==> append, open or create file for writing, at end of file */
             open_rc = unifyfs_fid_open(posix_client, path,
-                                       O_WRONLY | O_CREAT | O_APPEND,
-                                       perms, &fid, &pos);
+                                       O_WRONLY | O_CREAT | O_APPEND |
+                                       large_file_flag, perms, &fid, &pos);
         }
     }
 
@@ -984,7 +987,7 @@ FILE* UNIFYFS_WRAP(fopen)(const char* path, const char* mode)
     char upath[UNIFYFS_MAX_FILENAME];
     if (unifyfs_intercept_path(path, upath)) {
         FILE* stream;
-        int rc = unifyfs_fopen(upath, mode, &stream);
+        int rc = unifyfs_fopen(upath, mode, 0, &stream);
         if (rc != UNIFYFS_SUCCESS) {
             errno = unifyfs_rc_errno(rc);
             return NULL;
@@ -994,6 +997,26 @@ FILE* UNIFYFS_WRAP(fopen)(const char* path, const char* mode)
     } else {
         MAP_OR_FAIL(fopen);
         FILE* ret = UNIFYFS_REAL(fopen)(path, mode);
+        return ret;
+    }
+}
+
+FILE* UNIFYFS_WRAP(fopen64)(const char* path, const char* mode)
+{
+    /* check whether we should intercept this path */
+    char upath[UNIFYFS_MAX_FILENAME];
+    if (unifyfs_intercept_path(path, upath)) {
+        FILE* stream;
+        int rc = unifyfs_fopen(upath, mode, 1, &stream);
+        if (rc != UNIFYFS_SUCCESS) {
+            errno = unifyfs_rc_errno(rc);
+            return NULL;
+        }
+        errno = 0;
+        return stream;
+    } else {
+        MAP_OR_FAIL(fopen64);
+        FILE* ret = UNIFYFS_REAL(fopen64)(path, mode);
         return ret;
     }
 }
@@ -3020,9 +3043,10 @@ match_failure:
  * considered part of the scanset.
  */
 static const u_char*
-__sccl(tab, fmt)
-char* tab;
-const u_char* fmt;
+__sccl(char* tab, const u_char* fmt)
+//__sccl(tab, fmt)
+//char* tab;
+//const u_char* fmt;
 {
     int c, n, v;
 

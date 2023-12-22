@@ -58,12 +58,15 @@
 /* file and directory operations */
 UNIFYFS_DECL(access, int, (const char* pathname, int mode));
 UNIFYFS_DECL(chmod, int, (const char* path, mode_t mode));
-UNIFYFS_DECL(__lxstat, int, (int vers, const char* path, struct stat* buf));
 UNIFYFS_DECL(remove, int, (const char* path));
 UNIFYFS_DECL(rename, int, (const char* oldpath, const char* newpath));
 UNIFYFS_DECL(stat, int, (const char* path, struct stat* buf));
-UNIFYFS_DECL(statfs, int, (const char* path, struct statfs* fsbuf));
+UNIFYFS_DECL(stat64, int, (const char* path, struct stat64* buf));
 UNIFYFS_DECL(__xstat, int, (int vers, const char* path, struct stat* buf));
+UNIFYFS_DECL(__xstat64, int, (int vers, const char* path, struct stat64* buf));
+UNIFYFS_DECL(__lxstat, int, (int vers, const char* path, struct stat* buf));
+UNIFYFS_DECL(__lxstat64, int, (int vers, const char* path, struct stat64* buf));
+UNIFYFS_DECL(statfs, int, (const char* path, struct statfs* fsbuf));
 UNIFYFS_DECL(utimensat, int, (int dirfd, const char* pathname,
                               const struct timespec times[2], int flags));
 UNIFYFS_DECL(futimens, int, (int fd, const struct timespec times[2]));
@@ -124,8 +127,10 @@ UNIFYFS_DECL(fchdir, int, (int fd));
 UNIFYFS_DECL(fchmod, int, (int fd, mode_t mode));
 UNIFYFS_DECL(flock, int, (int fd, int operation));
 UNIFYFS_DECL(fstat, int, (int fd, struct stat* buf));
-UNIFYFS_DECL(fstatfs, int, (int fd, struct statfs* fsbuf));
+UNIFYFS_DECL(fstat64, int, (int fd, struct stat64* buf));
 UNIFYFS_DECL(__fxstat, int, (int vers, int fd, struct stat* buf));
+UNIFYFS_DECL(__fxstat64, int, (int vers, int fd, struct stat64* buf));
+UNIFYFS_DECL(fstatfs, int, (int fd, struct statfs* fsbuf));
 UNIFYFS_DECL(posix_fadvise, int, (int fd, off_t offset, off_t len, int advice));
 
 /*

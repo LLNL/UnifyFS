@@ -42,9 +42,9 @@ typedef struct {
     pthread_t thrd;
     pid_t tid;
 
-    /* pthread mutex and condition variable for work notification */
-    pthread_mutex_t thrd_lock;
-    pthread_cond_t thrd_cond;
+    /* mutex and condition variable for work notification */
+    ABT_mutex thrd_lock;
+    ABT_cond thrd_cond;
 
     /* thread status */
     int initialized;
@@ -54,7 +54,7 @@ typedef struct {
     /* thread return status code */
     int sm_exit_rc;
 
-    /* argobots mutex for synchronizing access to request state between
+    /* mutex for synchronizing access to request state between
      * margo rpc handler ULTs and SM thread */
     ABT_mutex reqs_sync;
 
@@ -75,7 +75,7 @@ svcmgr_state_t* sm; // = NULL
 do { \
     if ((NULL != sm) && sm->initialized) { \
         /*LOGDBG("locking SM state");*/ \
-        pthread_mutex_lock(&(sm->thrd_lock)); \
+        ABT_mutex_lock(sm->thrd_lock); \
     } \
 } while (0)
 
@@ -83,7 +83,7 @@ do { \
 do { \
     if ((NULL != sm) && sm->initialized) { \
         /*LOGDBG("unlocking SM state");*/ \
-        pthread_mutex_unlock(&(sm->thrd_lock)); \
+        ABT_mutex_unlock(sm->thrd_lock); \
     } \
 } while (0)
 
@@ -110,7 +110,7 @@ static inline void signal_svcmgr(void)
     if (this_thread != sm->tid) {
         /* signal svcmgr to begin processing the requests we just added */
         LOGDBG("signaling new service requests");
-        pthread_cond_signal(&(sm->thrd_cond));
+        ABT_cond_signal(sm->thrd_cond);
     }
 }
 
@@ -173,31 +173,20 @@ int svcmgr_init(void)
         return ENOMEM;
     }
 
-    /* initialize lock for shared data structures of the
+    /* create mutex locks for thread and request data structures of the
      * service manager */
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-    int rc = pthread_mutex_init(&(sm->thrd_lock), &attr);
-    if (rc != 0) {
-        LOGERR("pthread_mutex_init failed for service manager rc=%d (%s)",
-               rc, strerror(rc));
-        svcmgr_fini();
-        return rc;
-    }
+    ABT_mutex_create(&(sm->thrd_lock));
+    ABT_mutex_create(&(sm->reqs_sync));
 
     /* initialize condition variable to synchronize work
      * notifications for the request manager thread */
-    rc = pthread_cond_init(&(sm->thrd_cond), NULL);
-    if (rc != 0) {
-        LOGERR("pthread_cond_init failed for service manager rc=%d (%s)",
-               rc, strerror(rc));
-        pthread_mutex_destroy(&(sm->thrd_lock));
+    int rc = ABT_cond_create(&(sm->thrd_cond));
+    if (rc != ABT_SUCCESS) {
+        LOGERR("ABT_cond_create() failed for service manager rc=%d", rc);
+        ABT_mutex_free(&(sm->thrd_lock));
         svcmgr_fini();
-        return rc;
+        return UNIFYFS_ERROR_MARGO;
     }
-
-    ABT_mutex_create(&(sm->reqs_sync));
 
     /* allocate a list to track chunk reads */
     sm->chunk_reads = arraylist_create(0);
@@ -249,10 +238,10 @@ int svcmgr_fini(void)
         if (sm->initialized) {
             /* join thread before cleaning up state */
             if (sm->tid != -1) {
-                pthread_mutex_lock(&(sm->thrd_lock));
+                ABT_mutex_lock(sm->thrd_lock);
                 sm->time_to_exit = 1;
-                pthread_cond_signal(&(sm->thrd_cond));
-                pthread_mutex_unlock(&(sm->thrd_lock));
+                ABT_cond_signal(sm->thrd_cond);
+                ABT_mutex_unlock(sm->thrd_lock);
                 pthread_join(sm->thrd, NULL);
             }
         }
@@ -273,15 +262,10 @@ int svcmgr_fini(void)
             arraylist_free(sm->svc_reqs);
         }
 
-        int abt_err = ABT_mutex_free(&(sm->reqs_sync));
-        if (ABT_SUCCESS != abt_err) {
-            /* All we can really do here is log the error */
-            LOGERR("Error code returned from ABT_mutex_free(): %d", abt_err);
-        }
-
         if (sm->initialized) {
-            pthread_mutex_destroy(&(sm->thrd_lock));
-            pthread_cond_destroy(&(sm->thrd_cond));
+            ABT_mutex_free(&(sm->reqs_sync));
+            ABT_mutex_free(&(sm->thrd_lock));
+            ABT_cond_free(&(sm->thrd_cond));
         }
 
         /* free the service manager struct allocated during init */
@@ -497,6 +481,12 @@ int sm_set_fileattr(int gfid,
         } else {
             LOGERR("failed to set attributes for gfid=%d (rc=%d, is_owner=%d)",
                    gfid, ret, is_owner);
+        }
+    } else if (is_owner && (file_op == UNIFYFS_FILE_ATTR_OP_CREATE)) {
+        /* start a broadcast rpc to inform other servers of new file */
+        int rc = unifyfs_invoke_broadcast_fileattr(gfid, file_op, attrs);
+        if (rc != UNIFYFS_SUCCESS) {
+            LOGERR("failed to broadcast new file (gfid=%d) creation", gfid);
         }
     }
     return ret;
@@ -1032,38 +1022,14 @@ static int process_metaset_rpc(server_rpc_req_t* req)
     int gfid = (int) in->gfid;
     int attr_op = (int) in->fileop;
     unifyfs_file_attr_t* attrs = &(in->attr);
+
     int ret = sm_set_fileattr(gfid, attr_op, attrs);
+
     margo_free_input(req->handle, in);
     free(in);
 
     /* send rpc response */
     metaset_out_t out;
-    out.ret = (int32_t) ret;
-    hg_return_t hret = margo_respond(req->handle, &out);
-    if (hret != HG_SUCCESS) {
-        LOGERR("margo_respond() failed");
-    }
-
-    /* cleanup req */
-    margo_destroy(req->handle);
-
-    return ret;
-}
-
-static int process_server_pid_rpc(server_rpc_req_t* req)
-{
-    /* get input parameters */
-    server_pid_in_t* in = req->input;
-    int src_rank = (int) in->rank;
-    int pid = (int) in->pid;
-    margo_free_input(req->handle, in);
-    free(in);
-
-    /* do pid report */
-    int ret = unifyfs_report_server_pid(src_rank, pid);
-
-    /* send rpc response */
-    server_pid_out_t out;
     out.ret = (int32_t) ret;
     hg_return_t hret = margo_respond(req->handle, &out);
     if (hret != HG_SUCCESS) {
@@ -1135,6 +1101,21 @@ static int process_truncate_rpc(server_rpc_req_t* req)
     return ret;
 }
 
+static int process_bootstrap_bcast_rpc(server_rpc_req_t* req)
+{
+    /* signal bootstrap completion */
+    int ret = unifyfs_signal_bootstrap_complete();
+    if (ret != UNIFYFS_SUCCESS) {
+        LOGERR("unifyfs_signal_bootstrap_complete() failed - rc=%d", ret);
+    }
+    collective_set_local_retval(req->coll, ret);
+
+    /* create a ULT to finish broadcast operation */
+    ret = invoke_bcast_progress_rpc(req->coll);
+
+    return ret;
+}
+
 static int process_extents_bcast_rpc(server_rpc_req_t* req)
 {
     /* get target file and extents */
@@ -1171,8 +1152,13 @@ static int process_fileattr_bcast_rpc(server_rpc_req_t* req)
     /* update file attributes */
     int ret = sm_set_fileattr(gfid, attr_op, attrs);
     if (ret != UNIFYFS_SUCCESS) {
-        LOGERR("set_fileattr(gfid=%d, op=%d) failed - rc=%d",
-               gfid, attr_op, ret);
+        if ((attr_op == UNIFYFS_FILE_ATTR_OP_CREATE) && (ret == EEXIST)) {
+            /* ignore duplicate creates */
+            ret = UNIFYFS_SUCCESS;
+        } else {
+            LOGWARN("set_fileattr(gfid=%d, op=%d) failed - rc=%d (%s)",
+                    gfid, attr_op, ret, unifyfs_rc_enum_description(ret));
+        }
     }
     collective_set_local_retval(req->coll, ret);
 
@@ -1320,6 +1306,215 @@ static int process_unlink_bcast_rpc(server_rpc_req_t* req)
     return ret;
 }
 
+static int process_metaget_bcast_rpc(server_rpc_req_t* req)
+{
+    /* Iterate through the global_inode_tree and copy all the file
+     * attr structs for the files this server owns */
+
+    /* The file names in the unifyfs_file_attr_t are pointers to separately
+     * allocated memory, and thus have to be handled specially.  We'll copy
+     * the filenames into a separate char[] that will be sent as an hg_string_t
+     * seprate from the bulk transfer of the unifyfs_file_attr_t structs.  We
+     * use this variable to keep track of how big that buffer needs to be.
+     */
+    uintptr_t total_name_len = 0;
+    /* Note: Using uintptr_t because this value get cast to a char* and must
+     * therefore be the same size as a pointer. */
+    char* concatenated_names = NULL;
+    size_t concatenated_names_size = 0;
+
+    unsigned int num_files = 0;
+    unifyfs_file_attr_t* attr_list;
+
+    int ret = unifyfs_get_owned_files(&num_files, &attr_list);
+    if (UNIFYFS_SUCCESS != ret) {
+        return ret;
+    }
+
+    /* Loop through the attr list and calculate the total length
+     * of all the filenames.  We'll need this down below...*/
+    for (unsigned int i = 0; i < num_files; i++) {
+        concatenated_names_size += strlen(attr_list[i].filename);
+    }
+
+    concatenated_names = calloc(concatenated_names_size+1, sizeof(char));
+    // +1 to allow space for the null terminator
+    if (!concatenated_names) {
+        free(attr_list);
+        return ENOMEM;
+    }
+
+    /* unifyfs_file_attr_t.filename is a pointer.  Since sending pointers over
+     * the network is useless, we're going to abuse this value by using it to
+     * store the offset into the separate char array that will hold the
+     * filenames.
+     * We only need the offset of the START of the filename.  The end of the
+     * filename is assumed to be 1 character before the start of the next
+     * filename or - if this is the last file - the end of the string. */
+    for (unsigned int i = 0; i < num_files; i++) {
+        size_t filename_len = strlen(attr_list[i].filename);
+        strcat(concatenated_names, attr_list[i].filename);
+        free(attr_list[i].filename);
+        attr_list[i].filename = (char*)total_name_len;
+        total_name_len += filename_len;
+    }
+
+    coll_request* coll = (coll_request*)req->coll;
+    // Do a couple of sanity checks
+    if (UNIFYFS_SERVER_BCAST_RPC_METAGET != coll->req_type) {
+        LOGERR("invalid collective request type %d",
+               coll->req_type);
+        free(attr_list);
+        free(concatenated_names);
+        return UNIFYFS_ERROR_MARGO;
+    }
+    if (sizeof(metaget_all_bcast_out_t) != coll->output_sz) {
+        LOGERR("Unexpected size for collective output struct. "
+                "Expected %d but value was %d",
+                sizeof(metaget_all_bcast_out_t),
+                coll->output_sz);
+        free(attr_list);
+        free(concatenated_names);
+        return UNIFYFS_ERROR_MARGO;
+    }
+
+    // If there are any files, then setup the bulk transfer
+    if (num_files) {
+        hg_size_t buf_size = num_files * sizeof(unifyfs_file_attr_t);
+        hg_bulk_t file_attrs_bulk;
+        hg_return_t hret =
+            margo_bulk_create(unifyfsd_rpc_context->svr_mid, 1,
+                              (void**)&attr_list, &buf_size,
+                              HG_BULK_READ_ONLY, &file_attrs_bulk);
+        if (hret != HG_SUCCESS) {
+            LOGERR("margo_bulk_create() failed - %s", HG_Error_to_string(hret));
+            free(attr_list);
+            free(concatenated_names);
+            collective_set_local_retval(req->coll, UNIFYFS_ERROR_MARGO);
+            return UNIFYFS_ERROR_MARGO;
+        }
+
+        /* set the output params */
+        metaget_all_bcast_out_t* mabo = (metaget_all_bcast_out_t*)coll->output;
+        mabo->file_meta = file_attrs_bulk;
+        mabo->num_files = num_files;
+        mabo->filenames = concatenated_names;
+    } else {
+        /* There's no files to transfer - set output params appropriately */
+        metaget_all_bcast_out_t* mabo = (metaget_all_bcast_out_t*)coll->output;
+        mabo->file_meta = HG_BULK_NULL;
+        mabo->num_files = 0;
+        mabo->filenames = NULL;
+
+        /* Also need to free attr_list and concatenated_names since they're
+         * not actually being used */
+        free(attr_list);
+        free(concatenated_names);
+    }
+
+    collective_set_local_retval(req->coll, UNIFYFS_SUCCESS);
+
+    /* create a ULT to finish broadcast operation */
+    return invoke_bcast_progress_rpc(req->coll);
+}
+
+static int process_pending_sync(server_rpc_req_t* req)
+{
+    int ret = UNIFYFS_SUCCESS;
+
+    /* get target file */
+    int* pending_gfid = req->input;
+    int gfid = *pending_gfid;
+    free(pending_gfid);
+
+    int owner_rank = hash_gfid_to_server(gfid);
+    int is_owner = (owner_rank == glb_pmi_rank);
+
+    bool has_pending = unifyfs_inode_has_pending_extents(gfid);
+    if (has_pending) {
+        usleep(50000); /* sleep 50 ms to catch more pending extents */
+    }
+
+    arraylist_t* pending_list = NULL;
+    int rc = unifyfs_inode_get_pending_extents(gfid, &pending_list);
+    if (NULL != pending_list) {
+        LOGDBG("processing pending sync for gfid=%d", gfid);
+
+        /* iterate through pending list to count total number of extents
+         * we will add locally (and possibly send to owner) */
+        unsigned int total_extents = 0;
+        int n_items = arraylist_size(pending_list);
+        for (int i = 0; i < n_items; i++) {
+            void* item = arraylist_get(pending_list, i);
+            if (NULL != item) {
+                pending_extents_item* pei = (pending_extents_item*) item;
+                total_extents += pei->num_extents;
+            }
+        }
+
+        /* allocate array for all the extents and then copy the sub-arrays
+         * from the pending list */
+        extent_metadata* combined_extents = calloc((size_t)total_extents,
+                                                   sizeof(extent_metadata));
+        if (NULL == combined_extents) {
+            LOGERR("failed to allocate for combined extents");
+            ret = ENOMEM;
+        } else {
+            unsigned int n_copied = 0;
+            for (int i = 0; i < n_items; i++) {
+                void* item = arraylist_get(pending_list, i);
+                if (NULL != item) {
+                    pending_extents_item* pei = (pending_extents_item*) item;
+                    memcpy(combined_extents + n_copied, pei->extents,
+                           pei->num_extents * sizeof(extent_metadata));
+                    n_copied += pei->num_extents;
+                    free(pei->extents);
+                }
+            }
+
+            /* add the combined list to local inode */
+            ret = unifyfs_inode_add_extents(gfid, total_extents,
+                                            combined_extents);
+
+            if ((ret == UNIFYFS_SUCCESS) && !is_owner) {
+                /* send the combined list to the owner */
+                ret = unifyfs_invoke_add_extents_rpc(gfid, total_extents,
+                                                     combined_extents);
+            }
+        }
+
+        /* iterate through pending list to send responses to client reqs */
+        for (int i = 0; i < n_items; i++) {
+            void* item = arraylist_get(pending_list, i);
+            if (NULL != item) {
+                pending_extents_item* pei = (pending_extents_item*) item;
+                client_rpc_req_t* creq = pei->client_req;
+
+                /* send rpc response to requesting client */
+                unifyfs_fsync_out_t out;
+                out.ret = (int32_t) ret;
+                hg_return_t hret = margo_respond(creq->handle, &out);
+                if (hret != HG_SUCCESS) {
+                    LOGERR("margo_respond() failed");
+                }
+
+                /* cleanup req */
+                margo_destroy(creq->handle);
+                free(creq);
+            }
+        }
+
+        /* this frees the list and each of the items */
+        arraylist_free(pending_list);
+    } else if (rc != UNIFYFS_SUCCESS) {
+        ret = rc;
+        LOGERR("failed to get pending extents list for gfid=%d- rc=%d",
+               gfid, ret);
+    }
+
+    return ret;
+}
+
 static int process_service_requests(void)
 {
     /* assume we'll succeed */
@@ -1374,14 +1569,14 @@ static int process_service_requests(void)
         case UNIFYFS_SERVER_RPC_METASET:
             rret = process_metaset_rpc(req);
             break;
-        case UNIFYFS_SERVER_RPC_PID_REPORT:
-            rret = process_server_pid_rpc(req);
-            break;
         case UNIFYFS_SERVER_RPC_TRANSFER:
             rret = process_transfer_rpc(req);
             break;
         case UNIFYFS_SERVER_RPC_TRUNCATE:
             rret = process_truncate_rpc(req);
+            break;
+        case UNIFYFS_SERVER_BCAST_RPC_BOOTSTRAP:
+            rret = process_bootstrap_bcast_rpc(req);
             break;
         case UNIFYFS_SERVER_BCAST_RPC_EXTENTS:
             rret = process_extents_bcast_rpc(req);
@@ -1392,6 +1587,9 @@ static int process_service_requests(void)
         case UNIFYFS_SERVER_BCAST_RPC_LAMINATE:
             rret = process_laminate_bcast_rpc(req);
             break;
+        case UNIFYFS_SERVER_BCAST_RPC_METAGET:
+            rret = process_metaget_bcast_rpc(req);
+            break;
         case UNIFYFS_SERVER_BCAST_RPC_TRANSFER:
             rret = process_transfer_bcast_rpc(req);
             break;
@@ -1400,6 +1598,9 @@ static int process_service_requests(void)
             break;
         case UNIFYFS_SERVER_BCAST_RPC_UNLINK:
             rret = process_unlink_bcast_rpc(req);
+            break;
+        case UNIFYFS_SERVER_PENDING_SYNC:
+            rret = process_pending_sync(req);
             break;
         default:
             LOGERR("unsupported server rpc request type %d", req->req_type);
@@ -1499,12 +1700,11 @@ void* service_manager_thread(void* arg)
             timeout.tv_nsec -= 1000000000;
             timeout.tv_sec++;
         }
-        int wait_rc = pthread_cond_timedwait(&(sm->thrd_cond),
-                                             &(sm->thrd_lock),
-                                             &timeout);
-        if (0 == wait_rc) {
+        int wait_rc = ABT_cond_timedwait(sm->thrd_cond, sm->thrd_lock,
+                                         &timeout);
+        if (ABT_SUCCESS == wait_rc) {
             LOGDBG("SM got work");
-        } else if (ETIMEDOUT != wait_rc) {
+        } else if (ABT_ERR_COND_TIMEDOUT != wait_rc) {
             LOGERR("SM work condition wait failed (rc=%d)", wait_rc);
         }
 

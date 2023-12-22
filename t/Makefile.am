@@ -134,7 +134,8 @@ test_sysio_sources = \
   sys/write-read-hole.c \
   sys/truncate.c \
   sys/unlink.c \
-  sys/chdir.c
+  sys/chdir.c \
+  sys/stat.c
 
 sys_sysio_gotcha_t_CPPFLAGS = $(test_cppflags)
 sys_sysio_gotcha_t_LDADD    = $(test_gotcha_ldadd)
@@ -184,9 +185,9 @@ unifyfs_unmount_t_LDADD    = $(test_wrap_ldadd)
 unifyfs_unmount_t_LDFLAGS  = $(test_wrap_ldflags)
 unifyfs_unmount_t_SOURCES  = unifyfs_unmount.c
 
-common_seg_tree_test_t_CPPFLAGS = $(test_cppflags)
+common_seg_tree_test_t_CPPFLAGS = $(test_cppflags) $(MARGO_CFLAGS)
 common_seg_tree_test_t_LDADD    = $(test_common_ldadd)
-common_seg_tree_test_t_LDFLAGS  = $(test_common_ldflags)
+common_seg_tree_test_t_LDFLAGS  = $(test_common_ldflags) $(MARGO_LIBS)
 common_seg_tree_test_t_SOURCES  = \
   common/seg_tree_test.c \
   ../common/src/seg_tree.c \

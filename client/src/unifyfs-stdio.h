@@ -51,6 +51,7 @@
 UNIFYFS_DECL(fclose, int, (FILE* stream));
 UNIFYFS_DECL(fflush, int, (FILE* stream));
 UNIFYFS_DECL(fopen, FILE*, (const char* path, const char* mode));
+UNIFYFS_DECL(fopen64, FILE*, (const char* path, const char* mode));
 UNIFYFS_DECL(freopen, FILE*, (const char* path, const char* mode,
                               FILE* stream));
 UNIFYFS_DECL(setbuf, void, (FILE* stream, char* buf));

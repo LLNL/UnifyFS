@@ -26,9 +26,8 @@
 #define MIN(a, b) (a < b ? a : b)
 #define MAX(a, b) (a > b ? a : b)
 
-static int unifyfs_inode_tree_compare_func(
-    struct unifyfs_inode* node1,
-    struct unifyfs_inode* node2)
+static int uit_compare_func(struct unifyfs_inode* node1,
+                            struct unifyfs_inode* node2)
 {
     if (node1->gfid > node2->gfid) {
         return 1;
@@ -39,35 +38,29 @@ static int unifyfs_inode_tree_compare_func(
     }
 }
 
-RB_PROTOTYPE(
-    rb_inode_tree, unifyfs_inode,
-    inode_tree_entry, unifyfs_inode_tree_compare_func)
-RB_GENERATE(
-    rb_inode_tree, unifyfs_inode,
-    inode_tree_entry, unifyfs_inode_tree_compare_func)
+RB_PROTOTYPE(rb_inode_tree, unifyfs_inode, inode_tree_entry, uit_compare_func)
+RB_GENERATE(rb_inode_tree, unifyfs_inode, inode_tree_entry, uit_compare_func)
 
 /* Returns 0 on success, positive non-zero error code otherwise */
-int unifyfs_inode_tree_init(
-    struct unifyfs_inode_tree* tree)
+int unifyfs_inode_tree_init(struct unifyfs_inode_tree* tree)
 {
     if (NULL == tree) {
         return EINVAL;
     }
 
     memset(tree, 0, sizeof(*tree));
-    pthread_rwlock_init(&tree->rwlock, NULL);
+    ABT_rwlock_create(&(tree->rwlock));
     RB_INIT(&tree->head);
 
     return UNIFYFS_SUCCESS;
 }
 
 /* Remove and free all nodes in the unifyfs_inode_tree. */
-void unifyfs_inode_tree_destroy(
-    struct unifyfs_inode_tree* tree)
+void unifyfs_inode_tree_destroy(struct unifyfs_inode_tree* tree)
 {
     if (NULL != tree) {
         unifyfs_inode_tree_clear(tree);
-        pthread_rwlock_destroy(&tree->rwlock);
+        ABT_rwlock_free(&(tree->rwlock));
     }
 }
 

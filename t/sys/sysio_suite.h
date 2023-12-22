@@ -74,4 +74,7 @@ int unlink_test(char* unifyfs_root);
 
 int chdir_test(char* unifyfs_root);
 
+/* Test for UNIFYFS_WRAP(stat, lstat, fstat) */
+int stat_test(char* unifyfs_root);
+
 #endif /* SYSIO_SUITE_H */

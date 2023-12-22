@@ -1,14 +1,14 @@
 spack:
   packages:
     all:
-      compiler: [gcc@4.9.3]
+      compiler: [gcc@11.2.1]
       providers:
         mpi: [spectrum-mpi]
       target: [ppc64le]
   specs:
   - automake@1.15.1
-  - gotcha@1.0.5 cflags="-std-gnu99"
-  - mochi-margo@0.13.1 cflags="-std=gnu99" ^mercury~boostsys ^libfabric fabrics=rxm,sockets,tcp
+  - gotcha@1.0.5
+  - mochi-margo@0.13.1 ^mercury~boostsys ^libfabric fabrics=rxm,sockets,tcp
   - spath~mpi
   view: true
   concretizer:

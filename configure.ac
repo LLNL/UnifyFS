@@ -105,15 +105,6 @@ AS_IF([test "x$enable_pmi" = "xyes"],[
     AM_CONDITIONAL([USE_PMI2], [false])
 ])
 
-# MDHIM support build option
-AC_ARG_ENABLE([mdhim],[AS_HELP_STRING([--enable-mdhim],[Enable MDHIM build options.])])
-AS_IF([test "x$enable_mdhim" = "xyes"],[
-    AM_CONDITIONAL([USE_MDHIM], [true])
-    UNIFYFS_AC_LEVELDB
-],[
-    AM_CONDITIONAL([USE_MDHIM], [false])
-])
-
 AC_ARG_WITH(pkgconfigdir,
     [AS_HELP_STRING([--with-pkgconfigdir=DIR],[pkgconfig file in DIR @<:@LIBDIR/pkgconfig@:>@])],
             [pkgconfigdir=$withval],
@@ -256,7 +247,14 @@ LINK_WRAPPERS+=",-wrap,munmap"
 
 # status functions
 LINK_WRAPPERS+=",-wrap,fstat"
+AC_CHECK_FUNCS(fstat64,[
+    LINK_WRAPPERS+=",-wrap,fstat64"
+],[])
 LINK_WRAPPERS+=",-wrap,stat"
+AC_CHECK_FUNCS(stat64,[
+    LINK_WRAPPERS+=",-wrap,stat64"
+],[])
+
 AC_CHECK_FUNCS(statfs,[
     LINK_WRAPPERS+=",-wrap,statfs"
 ],[])
@@ -267,11 +265,20 @@ AC_CHECK_FUNCS(fstatfs,[
 AC_CHECK_FUNCS(__lxstat,[
     LINK_WRAPPERS+=",-wrap,__lxstat"
 ],[])
+AC_CHECK_FUNCS(__lxstat64,[
+    LINK_WRAPPERS+=",-wrap,__lxstat64"
+],[])
 AC_CHECK_FUNCS(__xstat,[
     LINK_WRAPPERS+=",-wrap,__xstat"
 ],[])
+AC_CHECK_FUNCS(__xstat64,[
+    LINK_WRAPPERS+=",-wrap,__xstat64"
+],[])
 AC_CHECK_FUNCS(__fxstat,[
     LINK_WRAPPERS+=",-wrap,__fxstat"
+],[])
+AC_CHECK_FUNCS(__fxstat64,[
+    LINK_WRAPPERS+=",-wrap,__fxstat64"
 ],[])
 
 AC_CHECK_FUNCS(posix_fadvise, [
@@ -292,6 +299,7 @@ LINK_WRAPPERS+=",-wrap,rmdir"
 LINK_WRAPPERS+=",-wrap,fclose"
 LINK_WRAPPERS+=",-wrap,fflush"
 LINK_WRAPPERS+=",-wrap,fopen"
+LINK_WRAPPERS+=",-wrap,fopen64"
 LINK_WRAPPERS+=",-wrap,freopen"
 LINK_WRAPPERS+=",-wrap,setbuf"
 LINK_WRAPPERS+=",-wrap,setvbuf"
@@ -369,8 +377,6 @@ AC_SUBST(unifyfs_bin_path)
 AC_SUBST(LINK_WRAPPERS)
 
 AC_CONFIG_FILES([Makefile
-                 meta/Makefile
-                 meta/src/Makefile
                  server/Makefile
                  server/src/Makefile
                  client/Makefile

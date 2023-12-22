@@ -20,6 +20,7 @@
  */
 
 #include <time.h>
+#include <abt.h>
 #include <margo.h>
 #include <mercury.h>
 #include <mercury_proc_string.h>
@@ -41,15 +42,17 @@ typedef enum {
     UNIFYFS_SERVER_RPC_LAMINATE,
     UNIFYFS_SERVER_RPC_METAGET,
     UNIFYFS_SERVER_RPC_METASET,
-    UNIFYFS_SERVER_RPC_PID_REPORT,
     UNIFYFS_SERVER_RPC_TRANSFER,
     UNIFYFS_SERVER_RPC_TRUNCATE,
+    UNIFYFS_SERVER_BCAST_RPC_BOOTSTRAP,
     UNIFYFS_SERVER_BCAST_RPC_EXTENTS,
     UNIFYFS_SERVER_BCAST_RPC_FILEATTR,
     UNIFYFS_SERVER_BCAST_RPC_LAMINATE,
+    UNIFYFS_SERVER_BCAST_RPC_METAGET,
     UNIFYFS_SERVER_BCAST_RPC_TRANSFER,
     UNIFYFS_SERVER_BCAST_RPC_TRUNCATE,
-    UNIFYFS_SERVER_BCAST_RPC_UNLINK
+    UNIFYFS_SERVER_BCAST_RPC_UNLINK,
+    UNIFYFS_SERVER_PENDING_SYNC
 } server_rpc_e;
 
 /* structure to track server-to-server rpc request state */
@@ -183,6 +186,13 @@ MERCURY_GEN_PROC(bcast_progress_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(bcast_progress_rpc)
 
+/* Broadcast 'bootstrap complete' to all servers */
+MERCURY_GEN_PROC(bootstrap_complete_bcast_in_t,
+                 ((int32_t)(root)))
+MERCURY_GEN_PROC(bootstrap_complete_bcast_out_t,
+                 ((int32_t)(ret)))
+DECLARE_MARGO_RPC_HANDLER(bootstrap_complete_bcast_rpc)
+
 /* Broadcast file extents to all servers */
 MERCURY_GEN_PROC(extent_bcast_in_t,
                  ((int32_t)(root))
@@ -241,6 +251,23 @@ MERCURY_GEN_PROC(unlink_bcast_out_t,
                  ((int32_t)(ret)))
 DECLARE_MARGO_RPC_HANDLER(unlink_bcast_rpc)
 
+/* Broadcast request for metadata to all servers */
+/* Sends a request to all servers to reply with a the metadata for
+ * all files that they own. */
+MERCURY_GEN_PROC(metaget_all_bcast_in_t,
+                 ((int32_t)(root)))
+MERCURY_GEN_PROC(metaget_all_bcast_out_t,
+                 ((int32_t)(num_files))
+                 ((hg_bulk_t)(file_meta))
+                 ((hg_string_t)(filenames))
+                 ((int32_t)(ret)))
+/* file_meta will be an array of unifyfs_file_attr_t structs.  Since
+ * these structs store the filename in separately allocated memory, we'll
+ * have to send all the filenames separately from the array of structs.
+ * That's what filenames is for: we'll concatenate all the filenames into
+ * a single hg_string_t, send that and then recreate correct
+ * unifyfs_file_attr_t structs at the receiving end. */
+DECLARE_MARGO_RPC_HANDLER(metaget_all_bcast_rpc)
 
 #ifdef __cplusplus
 } // extern "C"

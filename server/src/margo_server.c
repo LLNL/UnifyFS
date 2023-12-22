@@ -155,6 +155,12 @@ static void register_server_server_rpcs(margo_instance_id mid)
                        bcast_progress_in_t, bcast_progress_out_t,
                        bcast_progress_rpc);
 
+    unifyfsd_rpc_context->rpcs.bootstrap_complete_bcast_id =
+        MARGO_REGISTER(mid, "bootstrap_complete_bcast_rpc",
+                       bootstrap_complete_bcast_in_t,
+                       bootstrap_complete_bcast_out_t,
+                       bootstrap_complete_bcast_rpc);
+
     unifyfsd_rpc_context->rpcs.chunk_read_request_id =
         MARGO_REGISTER(mid, "chunk_read_request_rpc",
                        chunk_read_request_in_t, chunk_read_request_out_t,
@@ -245,6 +251,10 @@ static void register_server_server_rpcs(margo_instance_id mid)
                       unifyfs_node_local_extents_get_in_t,
                       unifyfs_node_local_extents_get_out_t,
                       unifyfs_node_local_extents_get_rpc);
+    unifyfsd_rpc_context->rpcs.metaget_all_bcast_id =
+        MARGO_REGISTER(mid, "metaget_all_bcast_rpc",
+                       metaget_all_bcast_in_t, metaget_all_bcast_out_t,
+                       metaget_all_bcast_rpc);
 }
 
 /* setup_local_target - Initializes the client-server margo target */
@@ -530,7 +540,7 @@ int margo_connect_servers(void)
 
     /* allocate array of structs to record address for each server */
     server_infos = (server_info_t*) calloc(glb_num_servers,
-        sizeof(server_info_t));
+                                           sizeof(server_info_t));
     if (NULL == server_infos) {
         LOGERR("failed to allocate server_info array");
         return ENOMEM;
@@ -602,7 +612,7 @@ static int forward_to_client(hg_handle_t hdl, void* input_ptr)
     double timeout_msec = margo_client_server_timeout_msec;
     hg_return_t hret = margo_forward_timed(hdl, input_ptr, timeout_msec);
     if (hret != HG_SUCCESS) {
-        LOGERR("margo_forward_timed() failed - %s", HG_Error_to_string(hret));
+        LOGWARN("margo_forward_timed() failed - %s", HG_Error_to_string(hret));
         return UNIFYFS_ERROR_MARGO;
     }
     return UNIFYFS_SUCCESS;
@@ -633,7 +643,7 @@ int invoke_client_heartbeat_rpc(int app_id,
            app_id, client_id);
     int rc = forward_to_client(handle, &in);
     if (rc != UNIFYFS_SUCCESS) {
-        LOGERR("forward of heartbeat rpc to client failed");
+        LOGINFO("forward of heartbeat rpc to client failed");
         margo_destroy(handle);
         return rc;
     }

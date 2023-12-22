@@ -25,7 +25,7 @@ export UNIFYFS_TEST_RUN_SCRIPT=$UNIFYFS_BUILD_DIR/t/test_run_env.sh
 if test -n "$(which jsrun 2>/dev/null)"; then
     JOB_RUN_COMMAND="jsrun -r1 -n1"
 elif test -n "$(which srun 2>/dev/null)"; then
-    JOB_RUN_COMMAND="srun -n1 -N1"
+    JOB_RUN_COMMAND="srun -n1 -N1 --overlap"
 elif test -n "$(which mpirun 2>/dev/null)"; then
     JOB_RUN_COMMAND="mpirun -np 1"
     if [ $UID -eq 0 ]; then

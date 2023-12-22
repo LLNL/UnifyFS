@@ -6,6 +6,8 @@ UNIFYFS_COMMON_INSTALL_HDRS = \
 UNIFYFS_COMMON_BASE_SRCS = \
   %reldir%/arraylist.h \
   %reldir%/arraylist.c \
+  %reldir%/compare_fn.h \
+  %reldir%/compare_fn.c \
   %reldir%/ini.h \
   %reldir%/ini.c \
   %reldir%/rm_enumerator.h \
@@ -45,10 +47,10 @@ UNIFYFS_COMMON_BASE_SRCS = \
 
 UNIFYFS_COMMON_BASE_FLAGS = \
   -DSYSCONFDIR="$(sysconfdir)" \
-  $(MARGO_CFLAGS)
+  $(MARGO_CFLAGS) $(OPENSSL_CFLAGS)
 
 UNIFYFS_COMMON_BASE_LIBS = \
-  $(MARGO_LDFLAGS) $(MARGO_LIBS) -lmercury_util \
+  $(MARGO_LDFLAGS) $(MARGO_LIBS) $(OPENSSL_LIBS) -lmercury_util \
   -lm -lrt -lcrypto -lpthread
 
 UNIFYFS_COMMON_OPT_FLAGS =

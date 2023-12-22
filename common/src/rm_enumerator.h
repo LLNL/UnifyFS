@@ -33,6 +33,7 @@
     ENUMITEM(SLURM, "SchedMD SLURM")                                    \
     ENUMITEM(LSF, "IBM Spectrum LSF")                                   \
     ENUMITEM(LSF_CSM, "IBM Spectrum LSF with Cluster System Management") \
+    ENUMITEM(FLUX, "Flux")                                              \
 
 #ifdef __cplusplus
 extern "C" {
