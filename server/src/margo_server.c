@@ -26,6 +26,8 @@
 
 // global variables
 ServerRpcContext_t* unifyfsd_rpc_context;
+char* margo_init_address; // = NULL
+bool margo_use_address; // = false
 bool margo_use_tcp = true;
 bool margo_lazy_connect; // = false
 int  margo_client_server_pool_sz = UNIFYFS_MARGO_POOL_SZ;
@@ -99,31 +101,37 @@ static char* get_margo_addr_str(margo_instance_id mid)
 /* setup_remote_target - Initializes the server-server margo target */
 static margo_instance_id setup_remote_target(void)
 {
-    /* by default we try to use ofi */
-    const char* margo_protocol = margo_use_tcp ?
+    const char* server_addr = NULL;
+
+    if (margo_use_address) {
+        server_addr = margo_init_address;
+    } else {
+        /* by default we try to use ofi */
+        server_addr = margo_use_tcp ?
                      PROTOCOL_MARGO_OFI_TCP : PROTOCOL_MARGO_OFI_RMA;
-    if (!margo_protocol) {
-        /* when ofi is not available, fallback to using bmi */
-        LOGWARN("OFI is not available, using BMI for margo rpc");
-        margo_protocol = PROTOCOL_MARGO_BMI_TCP;
+        if (!server_addr) {
+            /* when ofi is not available, fallback to using bmi */
+            LOGWARN("OFI is not available, using BMI for margo rpc");
+            server_addr = PROTOCOL_MARGO_BMI_TCP;
+        }
     }
 
     /* initialize margo */
-    margo_instance_id mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
+    margo_instance_id mid = margo_init(server_addr, MARGO_SERVER_MODE,
         margo_use_progress_thread, margo_server_server_pool_sz);
     if (mid == MARGO_INSTANCE_NULL) {
         LOGERR("margo_init(%s, SERVER_MODE, %d, %d) failed",
-               margo_protocol, margo_use_progress_thread,
+               server_addr, margo_use_progress_thread,
                margo_server_server_pool_sz);
-        if (margo_protocol == PROTOCOL_MARGO_OFI_TCP) {
+        if (server_addr == PROTOCOL_MARGO_OFI_TCP) {
             /* try "ofi+sockets" instead */
-            margo_protocol = PROTOCOL_MARGO_OFI_SOCKETS;
-            mid = margo_init(margo_protocol, MARGO_SERVER_MODE,
+            server_addr = PROTOCOL_MARGO_OFI_SOCKETS;
+            mid = margo_init(server_addr, MARGO_SERVER_MODE,
                              margo_use_progress_thread,
                              margo_server_server_pool_sz);
             if (mid == MARGO_INSTANCE_NULL) {
                 LOGERR("margo_init(%s, SERVER_MODE, %d, %d) failed",
-                       margo_protocol, margo_use_progress_thread,
+                       server_addr, margo_use_progress_thread,
                        margo_server_server_pool_sz);
                 return mid;
             }

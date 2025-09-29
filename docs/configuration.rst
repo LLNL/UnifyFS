@@ -128,13 +128,14 @@ files.
 .. table:: ``[margo]`` section - margo server NA settings
    :widths: auto
 
-   ==============  ====  =================================================================================
-   Key             Type  Description
-   ==============  ====  =================================================================================
-   tcp             BOOL  Use TCP for server-to-server rpcs (default: on, turn off to enable libfabric RMA)
-   client_timeout  INT   timeout in milliseconds for rpcs between client and server (default: 5000)
-   server_timeout  INT   timeout in milliseconds for rpcs between servers (default: 15000)
-   ==============  ====  =================================================================================
+   ==============  ======  ====================================================================================
+   Key             Type    Description
+   ==============  ======  ====================================================================================
+   tcp             BOOL    Use TCP for server-to-server rpcs (default: on, turn off to enable libfabric RMA)
+   client_timeout  INT     timeout in milliseconds for rpcs between client and server (default: 5000)
+   server_timeout  INT     timeout in milliseconds for rpcs between servers (default: 15000)
+   server_address  STRING  Mercury address string to use for Margo initialization of inter-server communication
+   ==============  ======  ====================================================================================
 
 
 -----------
